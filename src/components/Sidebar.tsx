@@ -1,15 +1,16 @@
 // Patent Pending — US 63/993,589 (Feb 28, 2026)
 // PrismOS Sidebar — Navigation, Spectrum Graph, Active Agents
 
-import type { Agent, SpectrumNode } from "../types";
+import type { Agent, SpectrumNode, GraphStats } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import SpectrumGraphView from "./SpectrumGraphView";
 
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: "chat" | "settings") => void;
+  onNavigate: (view: "chat" | "settings" | "spectrum" | "sandbox") => void;
   agents: Agent[];
   nodes: SpectrumNode[];
+  graphStats: GraphStats;
 }
 
 export default function Sidebar({
@@ -17,6 +18,7 @@ export default function Sidebar({
   onNavigate,
   agents,
   nodes,
+  graphStats,
 }: SidebarProps) {
   return (
     <div className="sidebar">
@@ -37,6 +39,20 @@ export default function Sidebar({
             Intent Console
           </button>
           <button
+            className={`sidebar-item ${currentView === "spectrum" ? "active" : ""}`}
+            onClick={() => onNavigate("spectrum")}
+          >
+            <span className="sidebar-item-icon">🌈</span>
+            Spectrum Explorer
+          </button>
+          <button
+            className={`sidebar-item ${currentView === "sandbox" ? "active" : ""}`}
+            onClick={() => onNavigate("sandbox")}
+          >
+            <span className="sidebar-item-icon">🔒</span>
+            Sandbox Prisms
+          </button>
+          <button
             className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}
             onClick={() => onNavigate("settings")}
           >
@@ -45,10 +61,13 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Spectrum Graph */}
+        {/* Spectrum Graph Summary */}
         <div className="sidebar-section">
           <div className="sidebar-section-title">
-            Spectrum Graph ({nodes.length})
+            Spectrum Graph
+            <span className="sidebar-badge">
+              {graphStats.nodes}N · {graphStats.edges}E
+            </span>
           </div>
           <SpectrumGraphView nodes={nodes} />
         </div>

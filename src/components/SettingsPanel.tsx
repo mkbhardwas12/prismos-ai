@@ -1,18 +1,20 @@
 // Patent Pending — US 63/993,589 (Feb 28, 2026)
 // PrismOS Settings Panel — Configuration UI
 
-import type { AppSettings } from "../types";
+import type { AppSettings, GraphStats } from "../types";
 
 interface SettingsPanelProps {
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
   ollamaConnected: boolean;
+  graphStats: GraphStats;
 }
 
 export default function SettingsPanel({
   settings,
   onSettingsChange,
   ollamaConnected,
+  graphStats,
 }: SettingsPanelProps) {
   function update(key: keyof AppSettings, value: string | number) {
     onSettingsChange({ ...settings, [key]: value });
@@ -96,6 +98,14 @@ export default function SettingsPanel({
             <input
               className="settings-input"
               value={ollamaConnected ? "✅ Connected" : "❌ Offline — run: ollama serve"}
+              readOnly
+            />
+          </div>
+          <div className="settings-item">
+            <label>Spectrum Graph</label>
+            <input
+              className="settings-input"
+              value={`${graphStats.nodes} nodes · ${graphStats.edges} edges`}
               readOnly
             />
           </div>

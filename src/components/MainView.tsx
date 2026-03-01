@@ -1,7 +1,7 @@
 // Patent Pending — US 63/993,589 (Feb 28, 2026)
 // PrismOS Main View — Intent Console + Conversation
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import IntentInput from "./IntentInput";
 import type { AppSettings, Message } from "../types";
@@ -21,11 +21,58 @@ export default function MainView({
   const [isProcessing, setIsProcessing] = useState(false);
   const conversationRef = useRef<HTMLDivElement>(null);
 
+  // Load conversation history from Spectrum Graph on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await invoke<string>("search_spectrum_nodes", {
+          query: "conversation",
+        });
+        const nodes = JSON.parse(result) as Array<{
+          id: string;
+          label: string;
+          content: string;
+          created_at: string;
+        }>;
+
+        // Reconstruct messages from saved conversations (most recent 20)
+        const restored: Message[] = [];
+        for (const node of nodes.slice(0, 20).reverse()) {
+          const parts = node.content.split("\n\nA: ");
+          if (parts.length === 2) {
+            const question = parts[0].replace(/^Q: /, "");
+            restored.push({
+              id: `hist-user-${node.id}`,
+              role: "user",
+              content: question,
+              timestamp: new Date(node.created_at),
+            });
+            restored.push({
+              id: `hist-ai-${node.id}`,
+              role: "ai",
+              content: parts[1],
+              timestamp: new Date(node.created_at),
+            });
+          }
+        }
+        if (restored.length > 0) {
+          setMessages(restored);
+        }
+      } catch {
+        // No history — that's fine
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (conversationRef.current) {
       conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const clearConversation = useCallback(() => {
+    setMessages([]);
+  }, []);
 
   async function handleIntent(input: string) {
     const userMsg: Message = {
@@ -75,13 +122,24 @@ export default function MainView({
     <>
       <div className="main-header">
         <h2>◈ Intent Console</h2>
-        <div className="ollama-status">
-          <span
-            className={`status-dot ${ollamaConnected ? "connected" : ""}`}
-          />
-          {ollamaConnected
-            ? `Ollama · ${settings.defaultModel}`
-            : "Ollama Offline"}
+        <div className="header-actions">
+          {messages.length > 0 && (
+            <button
+              className="toolbar-btn"
+              onClick={clearConversation}
+              title="Clear conversation"
+            >
+              🗑️ Clear
+            </button>
+          )}
+          <div className="ollama-status">
+            <span
+              className={`status-dot ${ollamaConnected ? "connected" : ""}`}
+            />
+            {ollamaConnected
+              ? `Ollama · ${settings.defaultModel}`
+              : "Ollama Offline"}
+          </div>
         </div>
       </div>
 
@@ -124,7 +182,14 @@ export default function MainView({
         ) : (
           messages.map((msg) => (
             <div key={msg.id} className={`message message-${msg.role}`}>
-              <div className="message-bubble">{msg.content}</div>
+              <div className="message-bubble">
+                {msg.content.split("\n").map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < msg.content.split("\n").length - 1 && <br />}
+                  </span>
+                ))}
+              </div>
               <div className="message-meta">
                 {msg.role === "ai" ? "◈ PrismOS" : "You"} ·{" "}
                 {msg.timestamp.toLocaleTimeString()}

@@ -6,14 +6,17 @@ import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "./components/Sidebar";
 import MainView from "./components/MainView";
 import SettingsPanel from "./components/SettingsPanel";
-import type { Agent, SpectrumNode, AppSettings } from "./types";
+import SpectrumExplorer from "./components/SpectrumExplorer";
+import SandboxPanel from "./components/SandboxPanel";
+import type { Agent, SpectrumNode, AppSettings, GraphStats } from "./types";
 
-type View = "chat" | "settings";
+type View = "chat" | "settings" | "spectrum" | "sandbox";
 
 function App() {
   const [view, setView] = useState<View>("chat");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [nodes, setNodes] = useState<SpectrumNode[]>([]);
+  const [graphStats, setGraphStats] = useState<GraphStats>({ nodes: 0, edges: 0 });
   const [ollamaConnected, setOllamaConnected] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     ollamaUrl: "http://localhost:11434",
@@ -40,6 +43,15 @@ function App() {
     }
   }, []);
 
+  const loadGraphStats = useCallback(async () => {
+    try {
+      const result = await invoke<string>("get_graph_stats");
+      setGraphStats(JSON.parse(result));
+    } catch (e) {
+      console.error("Failed to load graph stats:", e);
+    }
+  }, []);
+
   const checkOllama = useCallback(async () => {
     try {
       const connected = await invoke<boolean>("check_ollama_status");
@@ -49,14 +61,52 @@ function App() {
     }
   }, []);
 
+  const refreshData = useCallback(() => {
+    loadNodes();
+    loadGraphStats();
+  }, [loadNodes, loadGraphStats]);
+
   useEffect(() => {
     loadAgents();
     loadNodes();
+    loadGraphStats();
     checkOllama();
 
     const interval = setInterval(checkOllama, 30000);
     return () => clearInterval(interval);
-  }, [loadAgents, loadNodes, checkOllama]);
+  }, [loadAgents, loadNodes, loadGraphStats, checkOllama]);
+
+  function renderView() {
+    switch (view) {
+      case "chat":
+        return (
+          <MainView
+            ollamaConnected={ollamaConnected}
+            settings={settings}
+            onNodeAdded={refreshData}
+          />
+        );
+      case "spectrum":
+        return (
+          <SpectrumExplorer
+            nodes={nodes}
+            stats={graphStats}
+            onDataChanged={refreshData}
+          />
+        );
+      case "sandbox":
+        return <SandboxPanel />;
+      case "settings":
+        return (
+          <SettingsPanel
+            settings={settings}
+            onSettingsChange={setSettings}
+            ollamaConnected={ollamaConnected}
+            graphStats={graphStats}
+          />
+        );
+    }
+  }
 
   return (
     <div className="app-layout">
@@ -65,22 +115,9 @@ function App() {
         onNavigate={setView}
         agents={agents}
         nodes={nodes}
+        graphStats={graphStats}
       />
-      <div className="main-content">
-        {view === "chat" ? (
-          <MainView
-            ollamaConnected={ollamaConnected}
-            settings={settings}
-            onNodeAdded={loadNodes}
-          />
-        ) : (
-          <SettingsPanel
-            settings={settings}
-            onSettingsChange={setSettings}
-            ollamaConnected={ollamaConnected}
-          />
-        )}
-      </div>
+      <div className="main-content">{renderView()}</div>
     </div>
   );
 }

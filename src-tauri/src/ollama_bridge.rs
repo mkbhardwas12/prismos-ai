@@ -24,6 +24,7 @@ struct GenerateRequest {
 struct GenerateResponse {
     response: String,
     #[serde(default)]
+    #[allow(dead_code)]
     done: bool,
 }
 

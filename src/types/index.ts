@@ -28,6 +28,11 @@ export interface SpectrumEdge {
   created_at: string;
 }
 
+export interface GraphStats {
+  nodes: number;
+  edges: number;
+}
+
 export interface ParsedIntent {
   raw: string;
   intent_type: string;
@@ -43,7 +48,7 @@ export interface OllamaModel {
 
 export interface Message {
   id: string;
-  role: "user" | "ai";
+  role: "user" | "ai" | "system";
   content: string;
   timestamp: Date;
   agent?: string;
@@ -62,6 +67,7 @@ export interface Prism {
   status: string;
   created_at: string;
   checkpoints: Checkpoint[];
+  side_effects: SideEffect[];
 }
 
 export interface Checkpoint {
@@ -69,4 +75,25 @@ export interface Checkpoint {
   prism_id: string;
   state_hash: string;
   created_at: string;
+}
+
+export interface SideEffect {
+  effect_type: string;
+  description: string;
+  reversible: boolean;
+}
+
+export interface PrismResult {
+  success: boolean;
+  output: string;
+  side_effects: SideEffect[];
+}
+
+export interface YouPortPackage {
+  id: string;
+  created_at: string;
+  payload: string;
+  checksum: string;
+  version: string;
+  format: string;
 }

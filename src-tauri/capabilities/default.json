@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "description": "PrismOS default capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open"
+  ]
+}

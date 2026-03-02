@@ -433,6 +433,7 @@ impl RefractiveEngine {
     }
 
     /// Select the appropriate agent based on intent type
+    #[allow(dead_code)]
     fn select_agent(&self, intent: &ParsedIntent) -> (String, String) {
         match intent.intent_type {
             IntentType::Query => (

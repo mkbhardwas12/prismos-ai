@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/assets/prismos-icon.png" width="100" alt="PrismOS Logo" />
+  <img src="src/assets/prismos-icon.svg" width="100" alt="PrismOS Logo" />
 </p>
 
 <h1 align="center">PrismOS</h1>
@@ -43,7 +43,7 @@ PrismOS is a **desktop AI operating system** that runs **entirely on your machin
 |---------|-------------|
 | **Spectrum Graph™** | Persistent multi-dimensional knowledge graph |
 | **Refractive Core™** | Intent processing through spectral analysis |
-| **Multi-Agent Collaboration** | Five specialized AI agents (Planner, Researcher, Coder, Reviewer, Executor) that collaborate via structured messaging, voting, debate, and consensus |
+| **Multi-Agent Collaboration** | Five specialized AI agents (Orchestrator, Reasoner, Tool Smith, Memory Keeper, Sentinel) that collaborate via structured messaging, voting, debate, and consensus |
 | **Sandbox Prisms** | WASM-based isolated execution environments with HMAC-SHA256 verification, allow-lists, fuel metering, and auto-rollback |
 | **You-Port™** | Encrypted personality migration |
 | **Voice I/O** | Hands-free interaction via Web Speech API — all processing stays on your device |
@@ -153,11 +153,11 @@ Five specialized agents work together using a formal state-graph workflow:
 
 | Agent | Role | Specialty |
 |-------|------|-----------|
-| **Planner** | Orchestrator | Breaks down complex intents into actionable steps |
-| **Researcher** | Information | Retrieves and synthesizes knowledge from the graph |
-| **Coder** | Implementation | Generates and evaluates code solutions |
-| **Reviewer** | Quality | Reviews outputs for accuracy and safety |
-| **Executor** | Action | Executes approved plans in sandbox environments |
+| **Orchestrator** | Coordinator | Routes intents and coordinates agent workflows |
+| **Reasoner** | Analysis | Deep reasoning, LLM inference, and knowledge synthesis |
+| **Tool Smith** | Execution | Generates solutions and executes sandboxed operations |
+| **Memory Keeper** | Persistence | Manages Spectrum Graph storage and retrieval |
+| **Sentinel** | Security | Reviews actions for safety, privacy, and system health |
 
 Agents collaborate through **structured debate** with argument types (Position, Challenge, Rebuttal, Support, Concession) and reach consensus through voting.
 
@@ -296,14 +296,14 @@ PrismOS/
 │   ├── tauri.conf.json           # Tauri config (v0.2.0)
 │   ├── capabilities/             # Tauri 2.0 permissions
 │   └── src/
-│       ├── lib.rs                # 41 Tauri IPC commands
+│       ├── lib.rs                # 47 Tauri IPC commands
 │       ├── main.rs               # Tauri entry point
-│       ├── spectrum_graph.rs     # Spectrum Graph™ engine (1,730 lines)
+│       ├── spectrum_graph.rs     # Spectrum Graph™ engine
 │       ├── refractive_core.rs    # Refractive Core™ pipeline
-│       ├── sandbox.rs            # Sandbox Prisms security
+│       ├── intent_lens.rs        # Intent parsing & classification
+│       ├── sandbox_prism.rs      # Sandbox Prisms + WASM isolation
 │       ├── you_port.rs           # You-Port™ encrypted migration
-│       ├── db.rs                 # SQLite schema & migrations
-│       ├── ollama.rs             # Ollama HTTP client
+│       ├── ollama_bridge.rs      # Ollama HTTP client
 │       └── agents/               # LangGraph multi-agent system
 │           ├── mod.rs            # Module exports
 │           ├── graph.rs          # DAG execution engine
@@ -311,10 +311,15 @@ PrismOS/
 │           ├── nodes.rs          # 5 agent implementations
 │           └── langgraph_workflow.rs  # State-graph + debate engine
 │
+├── agents/                       # Python agent prototypes
+│   ├── prismos_agents.py         # Agent CLI runner
+│   ├── tool_smith.py             # Tool Smith sandbox stub
+│   └── requirements.txt          # Python dependencies
 ├── tests/                        # Test documentation
 │   └── README.md                 # Manual test checklist
 ├── docs/                         # Architecture diagrams
-│   └── diagrams/                 # SVG diagrams
+│   ├── architecture.svg          # Full architecture diagram
+│   └── diagrams/                 # SVG diagrams (8 files)
 ├── CHANGELOG.md                  # Version history
 ├── CONTRIBUTING.md               # Contributor guide
 ├── LICENSE                       # MIT License
@@ -326,15 +331,16 @@ PrismOS/
 
 ## 🔌 Tauri IPC Commands
 
-PrismOS exposes **41 Tauri commands** for frontend–backend communication:
+PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 
 <details>
-<summary>Click to expand full command list (41 commands)</summary>
+<summary>Click to expand full command list (47 commands)</summary>
 
 | Category | Command | Description |
 |----------|---------|-------------|
 | **Refractive Core** | `refract_intent` | Full Refractive Core pipeline with collaboration |
-| **Core** | `process_intent` | Legacy intent processing (fallback) |
+| **Core** | `process_intent` | Intent processing |
+| **Core** | `process_intent_full` | Full pipeline with metadata |
 | **Core** | `get_graph_stats` | Node/edge counts |
 | **Core** | `check_ollama_status` | Verify Ollama connectivity |
 | **Core** | `query_ollama` | Direct LLM query |
@@ -345,26 +351,29 @@ PrismOS exposes **41 Tauri commands** for frontend–backend communication:
 | **Graph CRUD** | `get_spectrum_graph` | Get full graph snapshot |
 | **Graph CRUD** | `search_spectrum_nodes` | Full-text search |
 | **Graph CRUD** | `delete_spectrum_node` | Remove node + edges |
-| **Graph CRUD** | `get_connections` | Get neighboring nodes |
+| **Graph CRUD** | `get_node_connections` | Get neighboring nodes |
 | **Graph CRUD** | `update_edge_weight` | Reinforce edge weight |
-| **Graph CRUD** | `anticipate_needs` | Anticipatory intelligence |
-| **Spectral** | `refract_query` | Spectral refraction |
-| **Spectral** | `get_spectral_profile` | 7-dimensional profile |
-| **Spectral** | `get_spectral_clusters` | Cluster by spectra |
-| **Spectral** | `spectral_search` | Search by dimension |
+| **Graph CRUD** | `update_spectrum_node` | Update node content |
+| **Spectral** | `query_spectrum_intent` | Spectral intent query |
+| **Spectral** | `anticipate_needs` | Anticipatory intelligence |
+| **Spectral** | `get_graph_metrics` | Graph analytics |
+| **Spectral** | `decay_graph_edges` | Temporal edge decay |
 | **Persistence** | `persist_graph` | Save to SQLite |
 | **Persistence** | `load_graph` | Load from SQLite |
+| **Persistence** | `get_feedback_count` | Feedback statistics |
+| **Persistence** | `get_recent_intents` | Recent intent log |
 | **Persistence** | `export_graph` | Encrypted export |
 | **Persistence** | `import_graph` | Encrypted import |
 | **Persistence** | `clear_graph` | Clear all data |
 | **Agents** | `get_active_agents` | List agent status |
-| **Agents** | `run_langgraph_workflow` | Execute workflow |
+| **Agents** | `run_collaboration` | Execute LangGraph workflow |
+| **Agents** | `get_workflow_graph` | Get workflow DAG |
+| **Agents** | `get_debate_log` | Get debate transcript |
 | **Ollama** | `list_ollama_models` | Available models |
-| **Ollama** | `set_ollama_model` | Switch model |
 | **Sandbox** | `create_sandbox` | Create sandbox instance |
 | **Sandbox** | `execute_sandbox` | Run in sandbox |
+| **Sandbox** | `execute_in_sandbox` | Execute WASM module |
 | **Sandbox** | `rollback_sandbox` | Rollback to checkpoint |
-| **Sandbox** | `get_sandbox_status` | Sandbox diagnostics |
 | **You-Port** | `save_state` | Encrypt + save state |
 | **You-Port** | `load_state` | Decrypt + load state |
 | **You-Port** | `has_saved_state` | Check for saved state |
@@ -484,13 +493,13 @@ PrismOS exposes **41 Tauri commands** for frontend–backend communication:
 
 | Metric | Value |
 |--------|-------|
-| TypeScript files | 13 |
-| Rust source files | 10 |
+| TypeScript files | 16 |
+| Rust source files | 13 |
 | CSS lines | 3,400+ |
-| Tauri IPC commands | 41 |
+| Tauri IPC commands | 47 |
 | Agent count | 5 |
 | Spectral dimensions | 7 |
-| Total source lines | ~12,000+ |
+| Total source lines | ~14,900+ |
 
 ---
 

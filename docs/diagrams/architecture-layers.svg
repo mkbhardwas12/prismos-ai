@@ -57,7 +57,7 @@
   <rect x="60" y="205" width="780" height="60" rx="10" fill="url(#l4)" filter="url(#shadow)" opacity="0.95"/>
   <text x="80" y="232" fill="#fff" font-size="13" font-weight="700">L4</text>
   <text x="115" y="232" fill="#fff" font-size="15" font-weight="700">Sandbox Prisms</text>
-  <text x="80" y="253" fill="#ffe8e0" font-size="12">HMAC-SHA256 Code Signing · Syscall Allow-Lists · Anomaly Detection · WASM-Ready · Auto-Rollback</text>
+  <text x="80" y="253" fill="#ffe8e0" font-size="12">HMAC-SHA256 Code Signing · Syscall Allow-Lists · Anomaly Detection · WASM Isolated · Auto-Rollback</text>
   <text x="750" y="240" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
 
   <!-- Layer 3 — Agent Mesh -->
@@ -86,5 +86,5 @@
   <text x="870" y="300" fill="#4a6a80" font-size="28" text-anchor="middle" transform="rotate(90, 870, 300)">▲  DATA  ▲</text>
 
   <!-- Footer -->
-  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">Patent Pending — US [application number] · All layers fully implemented in v0.1.0-alpha</text>
+  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">Patent Pending — US [application number] · All layers fully implemented in v0.2.0</text>
 </svg>

@@ -1769,6 +1769,7 @@ impl SpectrumGraph {
 
     /// Export the current graph as a portable sync package (unencrypted JSON).
     /// Used for cross-device sync where You-Port encryption wraps the transport.
+    #[allow(dead_code)]
     pub fn export_sync_package(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let snapshot = self.get_full_graph()?;
         let package = serde_json::json!({

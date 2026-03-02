@@ -106,6 +106,76 @@ async fn check_ollama_status() -> Result<bool, String> {
 }
 
 #[tauri::command]
+async fn launch_ollama() -> Result<String, String> {
+    // Try to start ollama serve as a detached background process
+    use std::process::Command;
+
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, use cmd /c start to spawn detached
+        Command::new("cmd")
+            .args(["/C", "start", "/B", "ollama", "serve"])
+            .spawn()
+            .map_err(|e| format!("Failed to launch Ollama: {}. Is Ollama installed?", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // On macOS, try launching the app first, then fallback to CLI
+        let app_result = Command::new("open")
+            .args(["-a", "Ollama"])
+            .spawn();
+        if app_result.is_err() {
+            Command::new("ollama")
+                .arg("serve")
+                .spawn()
+                .map_err(|e| format!("Failed to launch Ollama: {}. Is Ollama installed?", e))?;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("ollama")
+            .arg("serve")
+            .spawn()
+            .map_err(|e| format!("Failed to launch Ollama: {}. Is Ollama installed?", e))?;
+    }
+
+    // Wait a moment for the server to start, then check
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    let available = ollama_bridge::is_available()
+        .await
+        .unwrap_or(false);
+
+    if available {
+        Ok("Ollama started successfully".to_string())
+    } else {
+        Ok("Ollama process launched — it may take a few seconds to be ready".to_string())
+    }
+}
+
+#[tauri::command]
+async fn pull_ollama_model(model: String) -> Result<String, String> {
+    // Pull a model using the Ollama API
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("http://localhost:11434/api/pull")
+        .json(&serde_json::json!({ "name": model, "stream": false }))
+        .timeout(std::time::Duration::from_secs(600)) // 10 min timeout for large models
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to Ollama: {}. Is Ollama running?", e))?;
+
+    if resp.status().is_success() {
+        Ok(format!("Model '{}' pulled successfully", model))
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Failed to pull model '{}': {}", model, body))
+    }
+}
+
+#[tauri::command]
 async fn list_ollama_models() -> Result<String, String> {
     let models = ollama_bridge::list_models()
         .await
@@ -794,6 +864,8 @@ pub fn run() {
             get_debate_log,
             // Ollama
             check_ollama_status,
+            launch_ollama,
+            pull_ollama_model,
             list_ollama_models,
             // Sandbox (Patent 63/993,589 — WASM Isolation + Cryptographic Signing)
             create_sandbox,

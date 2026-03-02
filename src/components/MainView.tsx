@@ -15,6 +15,8 @@ interface MainViewProps {
   onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
 }
 
+type SetupStep = "install" | "start" | "model" | "ready";
+
 export default function MainView({
   ollamaConnected,
   settings,
@@ -24,6 +26,39 @@ export default function MainView({
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingIntent, setPendingIntent] = useState("");
   const conversationRef = useRef<HTMLDivElement>(null);
+
+  // Ollama setup wizard state
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [launchStatus, setLaunchStatus] = useState<string | null>(null);
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullStatus, setPullStatus] = useState<string | null>(null);
+  const [hasModels, setHasModels] = useState<boolean | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  // Determine which setup step the user is on
+  const getSetupStep = useCallback((): SetupStep => {
+    if (ollamaConnected && hasModels) return "ready";
+    if (ollamaConnected && hasModels === false) return "model";
+    if (ollamaConnected) return "model"; // Connected but haven't checked models yet
+    return "start"; // Ollama not connected
+  }, [ollamaConnected, hasModels]);
+
+  // Check if Ollama has models when it connects
+  useEffect(() => {
+    if (ollamaConnected) {
+      (async () => {
+        try {
+          const result = await invoke<string>("list_ollama_models");
+          const models = JSON.parse(result);
+          setHasModels(Array.isArray(models) && models.length > 0);
+        } catch {
+          setHasModels(false);
+        }
+      })();
+    } else {
+      setHasModels(null);
+    }
+  }, [ollamaConnected]);
 
   // Voice output (TTS) — speaks AI responses aloud when enabled
   const voiceOutput = useVoice(() => {}, settings.voiceOutputEnabled ?? false);
@@ -80,6 +115,55 @@ export default function MainView({
   const clearConversation = useCallback(() => {
     setMessages([]);
   }, []);
+
+  // ── Ollama Setup Actions ──
+  const handleStartOllama = useCallback(async () => {
+    setIsLaunching(true);
+    setLaunchStatus(null);
+    try {
+      const result = await invoke<string>("launch_ollama");
+      setLaunchStatus(result);
+      // Poll for connection a few times
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const connected = await invoke<boolean>("check_ollama_status");
+          if (connected) {
+            setLaunchStatus("✅ Ollama is running!");
+            break;
+          }
+        } catch { /* keep trying */ }
+      }
+    } catch (e) {
+      setLaunchStatus(`❌ ${String(e)}`);
+    } finally {
+      setIsLaunching(false);
+    }
+  }, []);
+
+  const handleRetryConnection = useCallback(async () => {
+    setIsRetrying(true);
+    try {
+      await invoke<boolean>("check_ollama_status");
+    } catch { /* ignore */ }
+    // Parent checkOllama interval will pick up the change
+    setTimeout(() => setIsRetrying(false), 2000);
+  }, []);
+
+  const handlePullModel = useCallback(async () => {
+    const model = settings.defaultModel || "llama3.2";
+    setIsPulling(true);
+    setPullStatus(`Pulling ${model}... this may take a few minutes`);
+    try {
+      const result = await invoke<string>("pull_ollama_model", { model });
+      setPullStatus(`✅ ${result}`);
+      setHasModels(true);
+    } catch (e) {
+      setPullStatus(`❌ ${String(e)}`);
+    } finally {
+      setIsPulling(false);
+    }
+  }, [settings.defaultModel]);
 
   async function handleIntent(input: string) {
     const userMsg: Message = {
@@ -207,32 +291,142 @@ export default function MainView({
               happens on your device — your data never leaves.
             </p>
 
-            {/* Ollama offline banner */}
-            {!ollamaConnected && (
-              <div className="ollama-offline-banner" role="alert">
-                <div className="ollama-offline-icon">⚡</div>
-                <div className="ollama-offline-content">
-                  <strong>Ollama is not running</strong>
-                  <span>PrismOS needs Ollama for local AI inference. Start it to unlock all features.</span>
-                </div>
-                <div className="ollama-offline-actions">
-                  <button
-                    className="ollama-start-btn"
-                    onClick={() => {
-                      // Try to open terminal with ollama serve command
-                      try {
-                        navigator.clipboard.writeText("ollama serve");
-                      } catch { /* ignore */ }
-                      window.open("https://ollama.com", "_blank");
-                    }}
-                    title="Visit ollama.com to download, then run 'ollama serve'"
-                  >
-                    🚀 Get Ollama
-                  </button>
-                  <div className="ollama-offline-hint">
-                    Run <code>ollama serve</code> in your terminal
+            {/* ── Ollama Setup Wizard ── */}
+            {getSetupStep() !== "ready" && (
+              <div className="ollama-setup-wizard" role="alert">
+                <div className="setup-wizard-header">
+                  <span className="setup-wizard-icon">🚀</span>
+                  <div>
+                    <strong className="setup-wizard-title">Quick Setup</strong>
+                    <span className="setup-wizard-subtitle">Get PrismOS running in 3 steps</span>
                   </div>
                 </div>
+
+                <div className="setup-steps">
+                  {/* Step 1: Install Ollama */}
+                  <div className={`setup-step ${ollamaConnected ? "step-done" : "step-active"}`}>
+                    <div className="step-indicator">
+                      {ollamaConnected ? (
+                        <span className="step-check">✓</span>
+                      ) : (
+                        <span className="step-number">1</span>
+                      )}
+                    </div>
+                    <div className="step-content">
+                      <div className="step-label">Install Ollama</div>
+                      <div className="step-desc">One-click installer — downloads in seconds</div>
+                      {!ollamaConnected && (
+                        <button
+                          className="step-action-btn"
+                          onClick={() => window.open("https://ollama.com", "_blank")}
+                        >
+                          ⬇️ Download from ollama.com
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Step 2: Start Ollama */}
+                  <div className={`setup-step ${ollamaConnected ? "step-done" : getSetupStep() === "start" ? "step-active" : "step-pending"}`}>
+                    <div className="step-indicator">
+                      {ollamaConnected ? (
+                        <span className="step-check">✓</span>
+                      ) : (
+                        <span className="step-number">2</span>
+                      )}
+                    </div>
+                    <div className="step-content">
+                      <div className="step-label">Start Ollama</div>
+                      <div className="step-desc">
+                        {ollamaConnected
+                          ? "Connected and running"
+                          : "Open the Ollama app, or click below to start it"}
+                      </div>
+                      {!ollamaConnected && (
+                        <div className="step-actions">
+                          <button
+                            className="step-action-btn step-action-primary"
+                            onClick={handleStartOllama}
+                            disabled={isLaunching}
+                          >
+                            {isLaunching ? (
+                              <><span className="btn-spinner" /> Starting…</>
+                            ) : (
+                              "▶️ Start Ollama"
+                            )}
+                          </button>
+                          <button
+                            className="step-action-btn step-action-secondary"
+                            onClick={handleRetryConnection}
+                            disabled={isRetrying}
+                          >
+                            {isRetrying ? "Checking…" : "🔄 Retry Connection"}
+                          </button>
+                        </div>
+                      )}
+                      {launchStatus && (
+                        <div className={`step-status ${launchStatus.startsWith("✅") ? "step-status-ok" : launchStatus.startsWith("❌") ? "step-status-err" : "step-status-info"}`}>
+                          {launchStatus}
+                        </div>
+                      )}
+                      {!ollamaConnected && !isLaunching && (
+                        <div className="step-hint">
+                          Or run <code>ollama serve</code> in your terminal
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Step 3: Pull a model */}
+                  <div className={`setup-step ${hasModels ? "step-done" : ollamaConnected ? "step-active" : "step-pending"}`}>
+                    <div className="step-indicator">
+                      {hasModels ? (
+                        <span className="step-check">✓</span>
+                      ) : (
+                        <span className="step-number">3</span>
+                      )}
+                    </div>
+                    <div className="step-content">
+                      <div className="step-label">Pull a Model</div>
+                      <div className="step-desc">
+                        {hasModels
+                          ? `Model ready — ${settings.defaultModel}`
+                          : `Download an AI model to use locally`}
+                      </div>
+                      {ollamaConnected && !hasModels && (
+                        <div className="step-actions">
+                          <button
+                            className="step-action-btn step-action-primary"
+                            onClick={handlePullModel}
+                            disabled={isPulling}
+                          >
+                            {isPulling ? (
+                              <><span className="btn-spinner" /> Pulling…</>
+                            ) : (
+                              `📦 Pull ${settings.defaultModel || "llama3.2"}`
+                            )}
+                          </button>
+                        </div>
+                      )}
+                      {pullStatus && (
+                        <div className={`step-status ${pullStatus.startsWith("✅") ? "step-status-ok" : pullStatus.startsWith("❌") ? "step-status-err" : "step-status-info"}`}>
+                          {pullStatus}
+                        </div>
+                      )}
+                      {!ollamaConnected && (
+                        <div className="step-hint">Complete step 2 first</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* All set — ready indicator */}
+            {getSetupStep() === "ready" && (
+              <div className="ollama-ready-banner">
+                <span className="ready-icon">✅</span>
+                <span className="ready-text">Ollama connected · <strong>{settings.defaultModel}</strong> ready — start typing below!</span>
               </div>
             )}
 

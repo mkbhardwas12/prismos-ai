@@ -1,30 +1,41 @@
 // Patent Pending — US [application number] (Feb 28, 2026)
-// Spectrum Graph — Persistent Knowledge Graph with Vector + Relational Layers
+// Spectrum Graph — Persistent Multi-Layered Knowledge Graph
 //
-// The Spectrum Graph is PrismOS's persistent memory system, combining:
-// - SQLite relational layer for structured data and metadata
-// - Graph edges for relationship mapping between knowledge nodes
-// - (Planned) LanceDB vector layer for semantic similarity search
+// The Spectrum Graph is PrismOS's persistent memory system per Patent [application number].
+// Architecture:
+//   Layer 1 — SQLite relational store: nodes (life facets), edges, metadata
+//   Layer 2 — Intent weight layer: dynamic edge weights with closed-loop feedback
+//   Layer 3 — Temporal decay layer: recency-weighted relevance scoring
+//   Layer 4 — Anticipation layer: pattern-based need prediction
+//
+// Nodes represent "life facets" — work, health, finance, social, learning, etc.
+// Edges carry dynamic intent weights updated through closed-loop feedback.
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use uuid::Uuid;
 
 // ─── Data Models ───────────────────────────────────────────────────────────────
 
+/// A node in the Spectrum Graph representing a life facet or knowledge fragment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpectrumNode {
     pub id: String,
     pub label: String,
     pub content: String,
-    pub node_type: String,
+    pub node_type: String, // facet types: work, health, finance, social, learning, memory, task, note
+    pub layer: String,     // graph layer: core, context, ephemeral
+    pub access_count: u32,
+    pub last_accessed: String,
     pub created_at: String,
     pub updated_at: String,
     pub connections: Vec<String>,
 }
 
+/// A directed edge with dynamic intent weight and feedback tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpectrumEdge {
     pub id: String,
@@ -32,8 +43,65 @@ pub struct SpectrumEdge {
     pub target_id: String,
     pub relation: String,
     pub weight: f64,
+    pub momentum: f64,       // rate of weight change (closed-loop feedback velocity)
+    pub reinforcements: u32, // number of times this edge was reinforced
+    pub last_reinforced: String,
     pub created_at: String,
 }
+
+/// Full graph snapshot for frontend visualization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphSnapshot {
+    pub nodes: Vec<SpectrumNode>,
+    pub edges: Vec<SpectrumEdge>,
+    pub stats: GraphMetrics,
+}
+
+/// Extended graph metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphMetrics {
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub avg_edge_weight: f64,
+    pub strongest_edge_weight: f64,
+    pub facet_distribution: HashMap<String, usize>,
+    pub most_connected_node: Option<String>,
+    pub graph_density: f64,
+}
+
+/// An anticipated need predicted from graph patterns
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnticipatedNeed {
+    pub suggestion: String,
+    pub facet: String,
+    pub confidence: f64,
+    pub related_nodes: Vec<String>,
+    pub reasoning: String,
+}
+
+/// Intent query result with relevance scoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntentQueryResult {
+    pub node: SpectrumNode,
+    pub relevance_score: f64,
+    pub path_strength: f64,
+    pub temporal_boost: f64,
+}
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
+
+/// Weight decay factor per day of inactivity (closed-loop temporal decay)
+const WEIGHT_DECAY_PER_DAY: f64 = 0.02;
+/// Minimum edge weight before pruning consideration
+const MIN_EDGE_WEIGHT: f64 = 0.05;
+/// Maximum edge weight (prevents runaway reinforcement)
+const MAX_EDGE_WEIGHT: f64 = 10.0;
+/// Reinforcement boost per feedback signal
+const REINFORCEMENT_DELTA: f64 = 0.15;
+/// Momentum smoothing factor (exponential moving average)
+const MOMENTUM_ALPHA: f64 = 0.3;
+/// Temporal boost half-life in hours for query relevance
+const TEMPORAL_HALF_LIFE_HOURS: f64 = 168.0; // 1 week
 
 // ─── Spectrum Graph Engine ─────────────────────────────────────────────────────
 
@@ -42,63 +110,124 @@ pub struct SpectrumGraph {
 }
 
 impl SpectrumGraph {
-    /// Initialize the Spectrum Graph with SQLite backend
+    /// Initialize the Spectrum Graph with full multi-layered SQLite backend
     pub fn new(app_dir: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let db_path = app_dir.join("spectrum_graph.db");
         let conn = Connection::open(db_path)?;
 
         // Enable WAL mode for better concurrent read performance
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
 
         conn.execute_batch(
             "
+            -- Layer 1: Core relational store
             CREATE TABLE IF NOT EXISTS nodes (
-                id          TEXT PRIMARY KEY,
-                label       TEXT NOT NULL,
-                content     TEXT NOT NULL,
-                node_type   TEXT NOT NULL DEFAULT 'note',
-                embedding   BLOB,
-                created_at  TEXT NOT NULL,
-                updated_at  TEXT NOT NULL
+                id              TEXT PRIMARY KEY,
+                label           TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                node_type       TEXT NOT NULL DEFAULT 'note',
+                layer           TEXT NOT NULL DEFAULT 'context',
+                embedding       BLOB,
+                access_count    INTEGER NOT NULL DEFAULT 0,
+                last_accessed   TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
             );
 
+            -- Layer 2: Intent-weighted edges with feedback tracking
             CREATE TABLE IF NOT EXISTS edges (
-                id          TEXT PRIMARY KEY,
-                source_id   TEXT NOT NULL,
-                target_id   TEXT NOT NULL,
-                relation    TEXT NOT NULL DEFAULT 'related',
-                weight      REAL NOT NULL DEFAULT 1.0,
-                created_at  TEXT NOT NULL,
+                id              TEXT PRIMARY KEY,
+                source_id       TEXT NOT NULL,
+                target_id       TEXT NOT NULL,
+                relation        TEXT NOT NULL DEFAULT 'related',
+                weight          REAL NOT NULL DEFAULT 1.0,
+                momentum        REAL NOT NULL DEFAULT 0.0,
+                reinforcements  INTEGER NOT NULL DEFAULT 0,
+                last_reinforced TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
                 FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
                 FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
             );
 
-            CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
-            CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
-            CREATE INDEX IF NOT EXISTS idx_nodes_type   ON nodes(node_type);
-            CREATE INDEX IF NOT EXISTS idx_nodes_updated ON nodes(updated_at);
+            -- Layer 3: Intent history for pattern mining
+            CREATE TABLE IF NOT EXISTS intent_log (
+                id              TEXT PRIMARY KEY,
+                raw_input       TEXT NOT NULL,
+                intent_type     TEXT NOT NULL,
+                matched_nodes   TEXT NOT NULL DEFAULT '[]',
+                confidence      REAL NOT NULL DEFAULT 0.0,
+                created_at      TEXT NOT NULL
+            );
+
+            -- Layer 4: Feedback signals for closed-loop learning
+            CREATE TABLE IF NOT EXISTS feedback (
+                id              TEXT PRIMARY KEY,
+                edge_id         TEXT NOT NULL,
+                signal          REAL NOT NULL,
+                source          TEXT NOT NULL DEFAULT 'implicit',
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY (edge_id) REFERENCES edges(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_edges_source      ON edges(source_id);
+            CREATE INDEX IF NOT EXISTS idx_edges_target       ON edges(target_id);
+            CREATE INDEX IF NOT EXISTS idx_edges_weight       ON edges(weight DESC);
+            CREATE INDEX IF NOT EXISTS idx_nodes_type         ON nodes(node_type);
+            CREATE INDEX IF NOT EXISTS idx_nodes_layer        ON nodes(layer);
+            CREATE INDEX IF NOT EXISTS idx_nodes_updated      ON nodes(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_nodes_access       ON nodes(access_count DESC);
+            CREATE INDEX IF NOT EXISTS idx_intent_log_type    ON intent_log(intent_type);
+            CREATE INDEX IF NOT EXISTS idx_intent_log_time    ON intent_log(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_feedback_edge      ON feedback(edge_id);
             ",
         )?;
+
+        // Migrate existing tables: add new columns if they don't exist
+        // (safe for fresh installs — ALTER TABLE on existing DBs)
+        let _ = conn.execute_batch(
+            "
+            ALTER TABLE nodes ADD COLUMN layer TEXT NOT NULL DEFAULT 'context';
+            ALTER TABLE nodes ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE nodes ADD COLUMN last_accessed TEXT NOT NULL DEFAULT '';
+            ALTER TABLE edges ADD COLUMN momentum REAL NOT NULL DEFAULT 0.0;
+            ALTER TABLE edges ADD COLUMN reinforcements INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE edges ADD COLUMN last_reinforced TEXT NOT NULL DEFAULT '';
+            ",
+        ); // Ignore errors — columns may already exist
 
         Ok(Self { conn })
     }
 
-    // ─── Node Operations ───────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+    //  NODE OPERATIONS — Life Facet Management
+    // ═══════════════════════════════════════════════════════════════════════
 
-    /// Add a new knowledge node to the graph
+    /// Add a new knowledge node (life facet) to the graph
     pub fn add_node(
         &self,
         label: &str,
         content: &str,
         node_type: &str,
     ) -> Result<SpectrumNode, Box<dyn std::error::Error + Send + Sync>> {
+        self.add_node_with_layer(label, content, node_type, "context")
+    }
+
+    /// Add a node with explicit layer assignment
+    pub fn add_node_with_layer(
+        &self,
+        label: &str,
+        content: &str,
+        node_type: &str,
+        layer: &str,
+    ) -> Result<SpectrumNode, Box<dyn std::error::Error + Send + Sync>> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
 
         self.conn.execute(
-            "INSERT INTO nodes (id, label, content, node_type, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, label, content, node_type, now, now],
+            "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6, ?6)",
+            params![id, label, content, node_type, layer, now],
         )?;
 
         Ok(SpectrumNode {
@@ -106,45 +235,74 @@ impl SpectrumGraph {
             label: label.to_string(),
             content: content.to_string(),
             node_type: node_type.to_string(),
+            layer: layer.to_string(),
+            access_count: 0,
+            last_accessed: now.clone(),
             created_at: now.clone(),
             updated_at: now,
             connections: vec![],
         })
     }
 
-    /// Retrieve all nodes ordered by most recently updated
+    /// Retrieve all nodes with connections populated, ordered by recency
     pub fn get_all_nodes(
         &self,
     ) -> Result<Vec<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, label, content, node_type, created_at, updated_at
-             FROM nodes ORDER BY updated_at DESC LIMIT 200",
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes ORDER BY updated_at DESC LIMIT 500",
         )?;
 
-        let nodes = stmt
+        let mut nodes: Vec<SpectrumNode> = stmt
             .query_map([], |row| {
                 Ok(SpectrumNode {
                     id: row.get(0)?,
                     label: row.get(1)?,
                     content: row.get(2)?,
                     node_type: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
                     connections: vec![],
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Populate connection IDs for each node
+        for node in &mut nodes {
+            let mut edge_stmt = self.conn.prepare(
+                "SELECT CASE WHEN source_id = ?1 THEN target_id ELSE source_id END
+                 FROM edges WHERE source_id = ?1 OR target_id = ?1",
+            )?;
+            node.connections = edge_stmt
+                .query_map(params![node.id], |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+        }
+
         Ok(nodes)
     }
 
-    /// Get a single node by ID
+    /// Get a single node by ID, incrementing access count (closed-loop signal)
     pub fn get_node(
         &self,
         id: &str,
     ) -> Result<Option<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+
+        // Increment access count — implicit feedback signal
+        self.conn.execute(
+            "UPDATE nodes SET access_count = access_count + 1, last_accessed = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+
         let mut stmt = self.conn.prepare(
-            "SELECT id, label, content, node_type, created_at, updated_at
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
              FROM nodes WHERE id = ?1",
         )?;
 
@@ -154,14 +312,27 @@ impl SpectrumGraph {
                 label: row.get(1)?,
                 content: row.get(2)?,
                 node_type: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
+                layer: row.get(4)?,
+                access_count: row.get(5)?,
+                last_accessed: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
                 connections: vec![],
             })
         })?;
 
         match rows.next() {
-            Some(node) => Ok(Some(node?)),
+            Some(node) => {
+                let mut n = node?;
+                let mut edge_stmt = self.conn.prepare(
+                    "SELECT CASE WHEN source_id = ?1 THEN target_id ELSE source_id END
+                     FROM edges WHERE source_id = ?1 OR target_id = ?1",
+                )?;
+                n.connections = edge_stmt
+                    .query_map(params![n.id], |row| row.get(0))?
+                    .collect::<Result<Vec<String>, _>>()?;
+                Ok(Some(n))
+            }
             None => Ok(None),
         }
     }
@@ -173,9 +344,11 @@ impl SpectrumGraph {
     ) -> Result<Vec<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
         let pattern = format!("%{}%", query);
         let mut stmt = self.conn.prepare(
-            "SELECT id, label, content, node_type, created_at, updated_at
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
              FROM nodes WHERE label LIKE ?1 OR content LIKE ?1
-             ORDER BY updated_at DESC LIMIT 50",
+             ORDER BY COALESCE(access_count, 0) DESC, updated_at DESC LIMIT 50",
         )?;
 
         let nodes = stmt
@@ -185,8 +358,11 @@ impl SpectrumGraph {
                     label: row.get(1)?,
                     content: row.get(2)?,
                     node_type: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
                     connections: vec![],
                 })
             })?
@@ -195,7 +371,7 @@ impl SpectrumGraph {
         Ok(nodes)
     }
 
-    /// Delete a node and all its edges
+    /// Delete a node and all its edges (cascade)
     pub fn delete_node(
         &self,
         id: &str,
@@ -209,9 +385,26 @@ impl SpectrumGraph {
         Ok(())
     }
 
-    // ─── Edge Operations ───────────────────────────────────────────────────
+    /// Update a node's content and touch its timestamp (used by Tauri command)
+    pub fn update_node(
+        &self,
+        id: &str,
+        label: &str,
+        content: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE nodes SET label = ?1, content = ?2, updated_at = ?3 WHERE id = ?4",
+            params![label, content, now, id],
+        )?;
+        Ok(())
+    }
 
-    /// Add a relationship edge between two nodes
+    // ═══════════════════════════════════════════════════════════════════════
+    //  EDGE OPERATIONS — Dynamic Intent Weights
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Add a relationship edge between two nodes with initial weight
     pub fn add_edge(
         &self,
         source_id: &str,
@@ -221,11 +414,12 @@ impl SpectrumGraph {
     ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
+        let clamped = weight.clamp(MIN_EDGE_WEIGHT, MAX_EDGE_WEIGHT);
 
         self.conn.execute(
-            "INSERT INTO edges (id, source_id, target_id, relation, weight, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, source_id, target_id, relation, weight, now],
+            "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0.0, 0, ?6, ?6)",
+            params![id, source_id, target_id, relation, clamped, now],
         )?;
 
         Ok(SpectrumEdge {
@@ -233,8 +427,125 @@ impl SpectrumGraph {
             source_id: source_id.to_string(),
             target_id: target_id.to_string(),
             relation: relation.to_string(),
-            weight,
+            weight: clamped,
+            momentum: 0.0,
+            reinforcements: 0,
+            last_reinforced: now.clone(),
             created_at: now,
+        })
+    }
+
+    /// Get or create an edge between two nodes (upsert pattern)
+    pub fn get_or_create_edge(
+        &self,
+        source_id: &str,
+        target_id: &str,
+        relation: &str,
+    ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
+        // Check if edge already exists
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source_id, target_id, relation, weight,
+                    COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
+                    COALESCE(last_reinforced, created_at), created_at
+             FROM edges
+             WHERE (source_id = ?1 AND target_id = ?2) OR (source_id = ?2 AND target_id = ?1)
+             LIMIT 1",
+        )?;
+
+        let mut rows = stmt.query_map(params![source_id, target_id], |row| {
+            Ok(SpectrumEdge {
+                id: row.get(0)?,
+                source_id: row.get(1)?,
+                target_id: row.get(2)?,
+                relation: row.get(3)?,
+                weight: row.get(4)?,
+                momentum: row.get(5)?,
+                reinforcements: row.get(6)?,
+                last_reinforced: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+
+        match rows.next() {
+            Some(edge) => Ok(edge?),
+            None => self.add_edge(source_id, target_id, relation, 1.0),
+        }
+    }
+
+    /// **Closed-Loop Feedback**: Update edge weight with reinforcement signal
+    ///
+    /// This is the core mechanism: edges strengthen when the user
+    /// follows predicted paths, and weaken through temporal decay.
+    /// Uses exponential moving average momentum for smooth adaptation.
+    pub fn update_edge_weight(
+        &self,
+        edge_id: &str,
+        feedback_signal: f64, // positive = reinforce, negative = weaken
+    ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+
+        // Fetch current edge state
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source_id, target_id, relation, weight,
+                    COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
+                    COALESCE(last_reinforced, created_at), created_at
+             FROM edges WHERE id = ?1",
+        )?;
+
+        let edge: SpectrumEdge = stmt
+            .query_row(params![edge_id], |row| {
+                Ok(SpectrumEdge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    relation: row.get(3)?,
+                    weight: row.get(4)?,
+                    momentum: row.get(5)?,
+                    reinforcements: row.get(6)?,
+                    last_reinforced: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })?;
+
+        // Apply temporal decay since last reinforcement
+        let decay = self.calculate_temporal_decay(&edge.last_reinforced);
+        let decayed_weight = edge.weight * decay;
+
+        // Compute new momentum (EMA of feedback signals)
+        let new_momentum =
+            MOMENTUM_ALPHA * feedback_signal + (1.0 - MOMENTUM_ALPHA) * edge.momentum;
+
+        // Apply reinforcement delta scaled by signal strength
+        let weight_delta = REINFORCEMENT_DELTA * feedback_signal;
+        let new_weight = (decayed_weight + weight_delta).clamp(MIN_EDGE_WEIGHT, MAX_EDGE_WEIGHT);
+
+        let new_reinforcements = edge.reinforcements + 1;
+
+        // Persist updated edge
+        self.conn.execute(
+            "UPDATE edges SET weight = ?1, momentum = ?2, reinforcements = ?3, last_reinforced = ?4
+             WHERE id = ?5",
+            params![new_weight, new_momentum, new_reinforcements, now, edge_id],
+        )?;
+
+        // Log feedback signal for analytics
+        let fb_id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO feedback (id, edge_id, signal, source, created_at)
+             VALUES (?1, ?2, ?3, 'closed_loop', ?4)",
+            params![fb_id, edge_id, feedback_signal, now],
+        )?;
+
+        Ok(SpectrumEdge {
+            id: edge.id,
+            source_id: edge.source_id,
+            target_id: edge.target_id,
+            relation: edge.relation,
+            weight: new_weight,
+            momentum: new_momentum,
+            reinforcements: new_reinforcements,
+            last_reinforced: now,
+            created_at: edge.created_at,
         })
     }
 
@@ -244,8 +555,11 @@ impl SpectrumGraph {
         node_id: &str,
     ) -> Result<Vec<SpectrumEdge>, Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, source_id, target_id, relation, weight, created_at
-             FROM edges WHERE source_id = ?1 OR target_id = ?1",
+            "SELECT id, source_id, target_id, relation, weight,
+                    COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
+                    COALESCE(last_reinforced, created_at), created_at
+             FROM edges WHERE source_id = ?1 OR target_id = ?1
+             ORDER BY weight DESC",
         )?;
 
         let edges = stmt
@@ -256,7 +570,10 @@ impl SpectrumGraph {
                     target_id: row.get(2)?,
                     relation: row.get(3)?,
                     weight: row.get(4)?,
-                    created_at: row.get(5)?,
+                    momentum: row.get(5)?,
+                    reinforcements: row.get(6)?,
+                    last_reinforced: row.get(7)?,
+                    created_at: row.get(8)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -264,7 +581,408 @@ impl SpectrumGraph {
         Ok(edges)
     }
 
-    /// Get graph statistics
+    /// Get all edges in the graph
+    pub fn get_all_edges(
+        &self,
+    ) -> Result<Vec<SpectrumEdge>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source_id, target_id, relation, weight,
+                    COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
+                    COALESCE(last_reinforced, created_at), created_at
+             FROM edges ORDER BY weight DESC LIMIT 1000",
+        )?;
+
+        let edges = stmt
+            .query_map([], |row| {
+                Ok(SpectrumEdge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    relation: row.get(3)?,
+                    weight: row.get(4)?,
+                    momentum: row.get(5)?,
+                    reinforcements: row.get(6)?,
+                    last_reinforced: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(edges)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  QUERY INTENT — Graph-Aware Semantic Retrieval
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Query the Spectrum Graph for nodes relevant to a parsed intent.
+    /// Combines text matching, edge weight traversal, temporal boosting,
+    /// and access frequency into a unified relevance score.
+    pub fn query_intent(
+        &self,
+        raw_input: &str,
+        intent_type: &str,
+        entities: &[String],
+    ) -> Result<Vec<IntentQueryResult>, Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+
+        // Log this intent for pattern mining
+        let log_id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO intent_log (id, raw_input, intent_type, matched_nodes, confidence, created_at)
+             VALUES (?1, ?2, ?3, '[]', 0.0, ?4)",
+            params![log_id, raw_input, intent_type, now],
+        )?;
+
+        // Build search terms from entities and raw input words
+        let mut search_terms: Vec<String> = entities.to_vec();
+        for word in raw_input.split_whitespace() {
+            let lower = word.to_lowercase();
+            if lower.len() > 3 && !search_terms.contains(&lower) {
+                search_terms.push(lower);
+            }
+        }
+
+        // Phase 1: Direct text match scoring
+        let mut results: Vec<IntentQueryResult> = Vec::new();
+        let mut seen_ids: Vec<String> = Vec::new();
+
+        for term in &search_terms {
+            let pattern = format!("%{}%", term);
+            let mut stmt = self.conn.prepare(
+                "SELECT id, label, content, node_type,
+                        COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                        COALESCE(last_accessed, updated_at), created_at, updated_at
+                 FROM nodes WHERE label LIKE ?1 OR content LIKE ?1
+                 LIMIT 30",
+            )?;
+
+            let nodes: Vec<SpectrumNode> = stmt
+                .query_map(params![pattern], |row| {
+                    Ok(SpectrumNode {
+                        id: row.get(0)?,
+                        label: row.get(1)?,
+                        content: row.get(2)?,
+                        node_type: row.get(3)?,
+                        layer: row.get(4)?,
+                        access_count: row.get(5)?,
+                        last_accessed: row.get(6)?,
+                        created_at: row.get(7)?,
+                        updated_at: row.get(8)?,
+                        connections: vec![],
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            for node in nodes {
+                if seen_ids.contains(&node.id) {
+                    // Boost existing result for multi-term match
+                    if let Some(r) = results.iter_mut().find(|r| r.node.id == node.id) {
+                        r.relevance_score += 0.2;
+                    }
+                    continue;
+                }
+                seen_ids.push(node.id.clone());
+
+                let temporal_boost = self.calculate_temporal_boost(&node.updated_at);
+                let access_boost = (node.access_count as f64).ln().max(0.0) * 0.05;
+
+                results.push(IntentQueryResult {
+                    relevance_score: 0.5 + access_boost,
+                    path_strength: 0.0,
+                    temporal_boost,
+                    node,
+                });
+            }
+        }
+
+        // Phase 2: Graph traversal — boost nodes connected to matched nodes via strong edges
+        let matched_ids: Vec<String> = results.iter().map(|r| r.node.id.clone()).collect();
+        for mid in &matched_ids {
+            let edges = self.get_connections(mid)?;
+            for edge in &edges {
+                let neighbor_id = if edge.source_id == *mid {
+                    &edge.target_id
+                } else {
+                    &edge.source_id
+                };
+
+                // Apply temporal decay to edge weight
+                let decay = self.calculate_temporal_decay(&edge.last_reinforced);
+                let effective_weight = edge.weight * decay;
+
+                if let Some(r) = results.iter_mut().find(|r| r.node.id == *neighbor_id) {
+                    r.path_strength += effective_weight * 0.3;
+                } else if effective_weight > 0.3 {
+                    // Pull in strongly connected neighbors not yet in results
+                    if let Ok(Some(neighbor)) = self.get_node_without_access(neighbor_id) {
+                        let temporal_boost = self.calculate_temporal_boost(&neighbor.updated_at);
+                        results.push(IntentQueryResult {
+                            relevance_score: 0.2,
+                            path_strength: effective_weight * 0.3,
+                            temporal_boost,
+                            node: neighbor,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Compute final scores and sort
+        for r in &mut results {
+            r.relevance_score = r.relevance_score + r.path_strength + r.temporal_boost * 0.1;
+        }
+        results.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(20);
+
+        // Update intent log with matched node IDs
+        let matched: Vec<String> = results.iter().map(|r| r.node.id.clone()).collect();
+        let matched_json = serde_json::to_string(&matched).unwrap_or_default();
+        let avg_conf = if results.is_empty() {
+            0.0
+        } else {
+            results.iter().map(|r| r.relevance_score).sum::<f64>() / results.len() as f64
+        };
+        self.conn.execute(
+            "UPDATE intent_log SET matched_nodes = ?1, confidence = ?2 WHERE id = ?3",
+            params![matched_json, avg_conf, log_id],
+        )?;
+
+        Ok(results)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ANTICIPATE NEEDS — Predictive Intent Engine
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Analyze graph patterns to predict what the user might need next.
+    /// Uses: recent intent history, high-momentum edges, access patterns,
+    /// and temporal clustering to generate anticipatory suggestions.
+    pub fn anticipate_needs(
+        &self,
+    ) -> Result<Vec<AnticipatedNeed>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut needs: Vec<AnticipatedNeed> = Vec::new();
+
+        // Strategy 1: High-momentum edges indicate emerging interests
+        let mut stmt = self.conn.prepare(
+            "SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
+                    COALESCE(e.momentum, 0.0), COALESCE(e.reinforcements, 0),
+                    ns.label AS source_label, ns.node_type AS source_type,
+                    nt.label AS target_label, nt.node_type AS target_type
+             FROM edges e
+             JOIN nodes ns ON e.source_id = ns.id
+             JOIN nodes nt ON e.target_id = nt.id
+             WHERE COALESCE(e.momentum, 0.0) > 0.1
+             ORDER BY COALESCE(e.momentum, 0.0) DESC LIMIT 5",
+        )?;
+
+        let momentum_edges: Vec<(String, String, String, String, f64, f64, String, String)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(7)?,  // source_label
+                    row.get::<_, String>(8)?,  // source_type
+                    row.get::<_, String>(9)?,  // target_label
+                    row.get::<_, String>(10)?, // target_type
+                    row.get::<_, f64>(4)?,     // weight
+                    row.get::<_, f64>(5)?,     // momentum
+                    row.get::<_, String>(1)?,  // source_id
+                    row.get::<_, String>(2)?,  // target_id
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (src_label, src_type, tgt_label, tgt_type, weight, momentum, src_id, tgt_id) in
+            &momentum_edges
+        {
+            needs.push(AnticipatedNeed {
+                suggestion: format!(
+                    "Growing connection between \"{}\" and \"{}\" (momentum: {:.2})",
+                    src_label, tgt_label, momentum
+                ),
+                facet: tgt_type.clone(),
+                confidence: (*momentum * 0.5 + *weight * 0.1).min(0.95),
+                related_nodes: vec![src_id.clone(), tgt_id.clone()],
+                reasoning: format!(
+                    "Edge weight {:.2} with momentum {:.2} suggests increasing relevance between {} and {} facets",
+                    weight, momentum, src_type, tgt_type
+                ),
+            });
+        }
+
+        // Strategy 2: Recently accessed but unconnected nodes may need linking
+        let mut stmt2 = self.conn.prepare(
+            "SELECT n.id, n.label, n.node_type, COALESCE(n.access_count, 0)
+             FROM nodes n
+             WHERE COALESCE(n.access_count, 0) > 2
+               AND n.id NOT IN (SELECT source_id FROM edges UNION SELECT target_id FROM edges)
+             ORDER BY COALESCE(n.access_count, 0) DESC LIMIT 3",
+        )?;
+
+        let orphan_nodes: Vec<(String, String, String, u32)> = stmt2
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, u32>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (id, label, node_type, access_count) in &orphan_nodes {
+            needs.push(AnticipatedNeed {
+                suggestion: format!(
+                    "\"{}\" is frequently accessed ({} times) but has no connections — consider linking it",
+                    label, access_count
+                ),
+                facet: node_type.clone(),
+                confidence: (*access_count as f64 * 0.1).min(0.8),
+                related_nodes: vec![id.clone()],
+                reasoning: format!(
+                    "Node accessed {} times without graph connections suggests missing relationships",
+                    access_count
+                ),
+            });
+        }
+
+        // Strategy 3: Recent intent patterns — detect repeated intent types
+        let mut stmt3 = self.conn.prepare(
+            "SELECT intent_type, COUNT(*) as cnt
+             FROM intent_log
+             WHERE created_at > datetime('now', '-7 days')
+             GROUP BY intent_type
+             ORDER BY cnt DESC LIMIT 3",
+        )?;
+
+        let intent_patterns: Vec<(String, u32)> = stmt3
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (intent_type, count) in &intent_patterns {
+            if *count > 3 {
+                needs.push(AnticipatedNeed {
+                    suggestion: format!(
+                        "You've been doing a lot of \"{}\" lately ({} times this week). Need help organizing?",
+                        intent_type, count
+                    ),
+                    facet: "meta".to_string(),
+                    confidence: (*count as f64 * 0.05).min(0.85),
+                    related_nodes: vec![],
+                    reasoning: format!(
+                        "Pattern: {} '{}' intents in the past 7 days indicates focused activity",
+                        count, intent_type
+                    ),
+                });
+            }
+        }
+
+        // Sort by confidence descending
+        needs.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        needs.truncate(10);
+
+        Ok(needs)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  GRAPH SNAPSHOT — Full Graph for Visualization
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Get the complete graph snapshot for frontend rendering
+    pub fn get_full_graph(&self) -> Result<GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+        let nodes = self.get_all_nodes()?;
+        let edges = self.get_all_edges()?;
+        let stats = self.get_metrics()?;
+
+        Ok(GraphSnapshot {
+            nodes,
+            edges,
+            stats,
+        })
+    }
+
+    /// Compute extended graph metrics
+    pub fn get_metrics(&self) -> Result<GraphMetrics, Box<dyn std::error::Error + Send + Sync>> {
+        let node_count: usize =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM nodes", [], |row| row.get(0))?;
+        let edge_count: usize =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
+
+        let avg_edge_weight: f64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(AVG(weight), 0.0) FROM edges",
+                [],
+                |row| row.get(0),
+            )?;
+
+        let strongest_edge_weight: f64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(weight), 0.0) FROM edges",
+                [],
+                |row| row.get(0),
+            )?;
+
+        // Facet distribution
+        let mut stmt = self
+            .conn
+            .prepare("SELECT node_type, COUNT(*) FROM nodes GROUP BY node_type")?;
+        let facet_distribution: HashMap<String, usize> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Most connected node
+        let most_connected_node: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT n.label FROM nodes n
+                 LEFT JOIN (
+                     SELECT source_id AS nid, COUNT(*) AS c FROM edges GROUP BY source_id
+                     UNION ALL
+                     SELECT target_id AS nid, COUNT(*) AS c FROM edges GROUP BY target_id
+                 ) ec ON n.id = ec.nid
+                 GROUP BY n.id
+                 ORDER BY COALESCE(SUM(ec.c), 0) DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+
+        // Graph density = edges / (nodes * (nodes - 1) / 2)
+        let max_edges = if node_count > 1 {
+            node_count * (node_count - 1) / 2
+        } else {
+            1
+        };
+        let graph_density = edge_count as f64 / max_edges as f64;
+
+        Ok(GraphMetrics {
+            node_count,
+            edge_count,
+            avg_edge_weight,
+            strongest_edge_weight,
+            facet_distribution,
+            most_connected_node,
+            graph_density,
+        })
+    }
+
+    /// Get basic stats (backwards compatible)
     pub fn stats(&self) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
         let node_count: usize =
             self.conn
@@ -273,5 +991,89 @@ impl SpectrumGraph {
             self.conn
                 .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
         Ok((node_count, edge_count))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  INTERNAL HELPERS — Temporal Decay & Boosting
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Calculate temporal decay factor for an edge based on time since last reinforcement
+    fn calculate_temporal_decay(&self, last_reinforced: &str) -> f64 {
+        if last_reinforced.is_empty() {
+            return 0.9; // Default for edges without reinforcement timestamps
+        }
+        match last_reinforced.parse::<DateTime<Utc>>() {
+            Ok(dt) => {
+                let days_elapsed = (Utc::now() - dt).num_hours() as f64 / 24.0;
+                (1.0 - WEIGHT_DECAY_PER_DAY * days_elapsed).max(0.1)
+            }
+            Err(_) => 0.9,
+        }
+    }
+
+    /// Calculate temporal relevance boost for a node based on recency
+    fn calculate_temporal_boost(&self, updated_at: &str) -> f64 {
+        match updated_at.parse::<DateTime<Utc>>() {
+            Ok(dt) => {
+                let hours_elapsed = (Utc::now() - dt).num_hours() as f64;
+                // Exponential decay with configurable half-life
+                (0.5_f64).powf(hours_elapsed / TEMPORAL_HALF_LIFE_HOURS)
+            }
+            Err(_) => 0.1,
+        }
+    }
+
+    /// Get a node without incrementing access count (internal use only)
+    fn get_node_without_access(
+        &self,
+        id: &str,
+    ) -> Result<Option<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes WHERE id = ?1",
+        )?;
+
+        let mut rows = stmt.query_map(params![id], |row| {
+            Ok(SpectrumNode {
+                id: row.get(0)?,
+                label: row.get(1)?,
+                content: row.get(2)?,
+                node_type: row.get(3)?,
+                layer: row.get(4)?,
+                access_count: row.get(5)?,
+                last_accessed: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+                connections: vec![],
+            })
+        })?;
+
+        match rows.next() {
+            Some(node) => Ok(Some(node?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Apply temporal decay to all edges (maintenance task)
+    pub fn decay_all_edges(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+        let edges = self.get_all_edges()?;
+        let mut updated: u32 = 0;
+
+        for edge in &edges {
+            let decay = self.calculate_temporal_decay(&edge.last_reinforced);
+            let new_weight = (edge.weight * decay).max(MIN_EDGE_WEIGHT);
+
+            if (new_weight - edge.weight).abs() > 0.001 {
+                self.conn.execute(
+                    "UPDATE edges SET weight = ?1 WHERE id = ?2",
+                    params![new_weight, edge.id],
+                )?;
+                updated += 1;
+            }
+        }
+
+        Ok(updated)
     }
 }

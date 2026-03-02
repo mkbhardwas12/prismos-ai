@@ -7,10 +7,11 @@ import Sidebar from "./components/Sidebar";
 import MainView from "./components/MainView";
 import SettingsPanel from "./components/SettingsPanel";
 import SpectrumExplorer from "./components/SpectrumExplorer";
+import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
 import type { Agent, SpectrumNode, AppSettings, GraphStats } from "./types";
 
-type View = "chat" | "settings" | "spectrum" | "sandbox";
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph";
 
 function App() {
   const [view, setView] = useState<View>("chat");
@@ -86,6 +87,8 @@ function App() {
             onNodeAdded={refreshData}
           />
         );
+      case "graph":
+        return <SpectrumGraphView />;
       case "spectrum":
         return (
           <SpectrumExplorer

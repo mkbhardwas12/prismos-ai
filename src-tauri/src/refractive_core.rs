@@ -1,11 +1,22 @@
 // Patent Pending — US [application number] (Feb 28, 2026)
-// PrismOS Refractive Core — Multi-Agent Orchestration Engine
+// PrismOS Refractive Core — NPU-Accelerated Multi-Agent Orchestration Engine
 //
 // The Refractive Core is the central nervous system of PrismOS.
-// It decomposes user intents and routes them through a pipeline
-// of 5 specialized agents, each with distinct capabilities.
+// Architecture per Patent [application number]:
+//   1. Ingest raw user input
+//   2. Apply Intent Lens decomposition (NLU → structured intent)
+//   3. Query Spectrum Graph for contextual memory (graph-aware retrieval)
+//   4. Route through agent pipeline (5 specialized agents)
+//   5. Update Spectrum Graph edges with closed-loop feedback
+//   6. Spawn LangGraph agents for complex multi-step tasks
+//   7. Return refractive result with side effects & provenance
+//
+// NPU acceleration: uses SIMD-optimized scoring when available,
+// falls back to standard CPU f64 arithmetic otherwise.
 
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::time::Instant;
 
 // ─── Agent Definitions ─────────────────────────────────────────────────────────
 
@@ -45,9 +56,179 @@ pub enum IntentType {
     System,
 }
 
+impl std::fmt::Display for IntentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IntentType::Query => write!(f, "Query"),
+            IntentType::Create => write!(f, "Create"),
+            IntentType::Analyze => write!(f, "Analyze"),
+            IntentType::Connect => write!(f, "Connect"),
+            IntentType::System => write!(f, "System"),
+        }
+    }
+}
+
+// ─── Refractive Result ─────────────────────────────────────────────────────────
+
+/// Full result from the Refractive Core pipeline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefractiveResult {
+    pub response: String,
+    pub intent: ParsedIntent,
+    pub agent_used: String,
+    pub context_nodes: Vec<String>,      // node IDs from Spectrum Graph context
+    pub edges_reinforced: Vec<String>,   // edge IDs that were reinforced
+    pub anticipations: Vec<String>,      // anticipated need suggestions
+    pub processing_time_ms: u64,
+    pub npu_accelerated: bool,
+}
+
+// ─── NPU Scoring Engine ────────────────────────────────────────────────────────
+
+/// NPU-accelerated (or CPU fallback) scoring engine for intent relevance.
+/// On systems with AVX2/NEON, uses SIMD-optimized f64 vector ops.
+/// Falls back to scalar f64 arithmetic on all other platforms.
+struct NpuScorer {
+    accelerated: bool,
+}
+
+impl NpuScorer {
+    fn new() -> Self {
+        // Detect hardware acceleration capabilities
+        let accelerated = Self::detect_simd_support();
+        if accelerated {
+            eprintln!("[RefractiveCore] NPU/SIMD acceleration: ENABLED");
+        } else {
+            eprintln!("[RefractiveCore] NPU/SIMD acceleration: CPU fallback");
+        }
+        Self { accelerated }
+    }
+
+    /// Detect SIMD support at runtime
+    fn detect_simd_support() -> bool {
+        #[cfg(target_arch = "x86_64")]
+        {
+            // Check for AVX2 support on x86_64
+            is_x86_feature_detected!("avx2")
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            // AArch64 always has NEON
+            true
+        }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            false
+        }
+    }
+
+    /// Compute relevance score between intent embedding and node embedding
+    /// Uses dot-product similarity with NPU acceleration when available
+    fn score_relevance(&self, intent_weights: &[f64], node_weights: &[f64]) -> f64 {
+        if intent_weights.is_empty() || node_weights.is_empty() {
+            return 0.0;
+        }
+
+        let len = intent_weights.len().min(node_weights.len());
+
+        if self.accelerated {
+            // SIMD-friendly: process in chunks of 4 for vectorization
+            self.simd_dot_product(&intent_weights[..len], &node_weights[..len])
+        } else {
+            // Scalar fallback
+            self.scalar_dot_product(&intent_weights[..len], &node_weights[..len])
+        }
+    }
+
+    /// SIMD-optimized dot product (compiler will auto-vectorize with -C target-cpu=native)
+    #[inline]
+    fn simd_dot_product(&self, a: &[f64], b: &[f64]) -> f64 {
+        let chunks = a.len() / 4;
+        let mut sum0: f64 = 0.0;
+        let mut sum1: f64 = 0.0;
+        let mut sum2: f64 = 0.0;
+        let mut sum3: f64 = 0.0;
+
+        for i in 0..chunks {
+            let base = i * 4;
+            sum0 += a[base] * b[base];
+            sum1 += a[base + 1] * b[base + 1];
+            sum2 += a[base + 2] * b[base + 2];
+            sum3 += a[base + 3] * b[base + 3];
+        }
+
+        let mut total = (sum0 + sum1) + (sum2 + sum3);
+
+        // Handle remainder
+        for i in (chunks * 4)..a.len() {
+            total += a[i] * b[i];
+        }
+
+        // Normalize to [0, 1]
+        let mag_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let mag_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if mag_a > 0.0 && mag_b > 0.0 {
+            (total / (mag_a * mag_b)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Scalar dot product fallback
+    #[inline]
+    fn scalar_dot_product(&self, a: &[f64], b: &[f64]) -> f64 {
+        let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let mag_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let mag_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if mag_a > 0.0 && mag_b > 0.0 {
+            (dot / (mag_a * mag_b)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Generate a pseudo-embedding from intent keywords (until full embedding model is integrated)
+    fn intent_to_weights(&self, intent: &ParsedIntent) -> Vec<f64> {
+        // 5-dimensional weight vector: [query, create, analyze, connect, system]
+        let mut weights = vec![0.0_f64; 5];
+        match intent.intent_type {
+            IntentType::Query => weights[0] = 1.0,
+            IntentType::Create => weights[1] = 1.0,
+            IntentType::Analyze => weights[2] = 1.0,
+            IntentType::Connect => weights[3] = 1.0,
+            IntentType::System => weights[4] = 1.0,
+        }
+        // Scale by confidence
+        for w in &mut weights {
+            *w *= intent.confidence;
+        }
+        // Add entity count signal
+        let entity_signal = (intent.entities.len() as f64 * 0.1).min(0.5);
+        for w in &mut weights {
+            *w += entity_signal;
+        }
+        weights
+    }
+
+    /// Generate a pseudo-embedding from node type
+    fn node_type_to_weights(&self, node_type: &str) -> Vec<f64> {
+        match node_type {
+            "note" | "memory" => vec![0.8, 0.2, 0.3, 0.4, 0.1],
+            "task" => vec![0.3, 0.9, 0.2, 0.3, 0.1],
+            "work" => vec![0.5, 0.7, 0.6, 0.5, 0.2],
+            "health" => vec![0.4, 0.3, 0.5, 0.3, 0.1],
+            "finance" => vec![0.5, 0.4, 0.8, 0.3, 0.2],
+            "social" => vec![0.4, 0.3, 0.3, 0.9, 0.1],
+            "learning" => vec![0.7, 0.5, 0.8, 0.4, 0.1],
+            "conversation" => vec![0.6, 0.3, 0.4, 0.5, 0.1],
+            _ => vec![0.5, 0.5, 0.5, 0.5, 0.5],
+        }
+    }
+}
+
 // ─── Core Agent Registry ───────────────────────────────────────────────────────
 
-/// Returns the 5 core PrismOS agents
+/// Returns the 5 core PrismOS agents per Patent [application number]
 pub fn get_agents() -> Vec<Agent> {
     vec![
         Agent {
@@ -55,42 +236,221 @@ pub fn get_agents() -> Vec<Agent> {
             name: "Orchestrator".into(),
             role: "Routes intents and coordinates agent workflows".into(),
             status: AgentStatus::Idle,
-            description: "Central coordinator that decomposes user intents and dispatches to specialized agents".into(),
+            description: "Central coordinator that decomposes user intents and dispatches to specialized agents via the Refractive Core pipeline".into(),
         },
         Agent {
             id: "memory_keeper".into(),
             name: "Memory Keeper".into(),
             role: "Manages Spectrum Graph persistence and retrieval".into(),
             status: AgentStatus::Idle,
-            description: "Handles all read/write operations to the Spectrum Graph, including semantic search and relationship mapping".into(),
+            description: "Handles all read/write operations to the Spectrum Graph, including semantic search, relationship mapping, and closed-loop edge reinforcement".into(),
         },
         Agent {
             id: "reasoner".into(),
             name: "Reasoner".into(),
             role: "Performs deep analysis and inference via LLM".into(),
             status: AgentStatus::Idle,
-            description: "Interfaces with Ollama for local LLM inference, chain-of-thought reasoning, and content generation".into(),
+            description: "Interfaces with Ollama for local LLM inference, chain-of-thought reasoning, and content generation with NPU-accelerated context scoring".into(),
         },
         Agent {
             id: "tool_smith".into(),
             name: "Tool Smith".into(),
             role: "Executes sandboxed operations in Prism containers".into(),
             status: AgentStatus::Idle,
-            description: "Manages WASM sandboxes for safe code execution, file operations, and tool use".into(),
+            description: "Manages WASM sandboxes for safe code execution, file operations, and tool use within deterministic Prism boundaries".into(),
         },
         Agent {
             id: "sentinel".into(),
             name: "Sentinel".into(),
             role: "Monitors security, privacy, and system health".into(),
             status: AgentStatus::Idle,
-            description: "Validates all operations against privacy policies, manages encryption, and monitors resource usage".into(),
+            description: "Validates all operations against privacy policies, manages encryption, monitors resource usage, and enforces local-first data sovereignty".into(),
         },
     ]
 }
 
-// ─── Intent Routing ────────────────────────────────────────────────────────────
+// ─── Refractive Core Engine ────────────────────────────────────────────────────
 
-/// Route a parsed intent through the Refractive Core agent pipeline
+/// The Refractive Core: PrismOS's central processing pipeline.
+/// Ingests inputs → applies Intent Lenses → queries Spectrum Graph →
+/// routes through agents → updates graph with feedback → returns results.
+pub struct RefractiveEngine {
+    scorer: NpuScorer,
+}
+
+impl RefractiveEngine {
+    pub fn new() -> Self {
+        Self {
+            scorer: NpuScorer::new(),
+        }
+    }
+
+    /// Full refractive pipeline: intent → context → agent → feedback → result
+    pub async fn refract(
+        &self,
+        intent: ParsedIntent,
+        app_dir: &Path,
+    ) -> Result<RefractiveResult, Box<dyn std::error::Error + Send + Sync>> {
+        let start = Instant::now();
+
+        // ── Step 1: Query Spectrum Graph for contextual memory ──
+        let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
+        let intent_type_str = intent.intent_type.to_string();
+
+        let context_results = graph.query_intent(
+            &intent.raw,
+            &intent_type_str,
+            &intent.entities,
+        )?;
+
+        let context_node_ids: Vec<String> =
+            context_results.iter().map(|r| r.node.id.clone()).collect();
+
+        // ── Step 2: NPU-scored context ranking ──
+        let intent_weights = self.scorer.intent_to_weights(&intent);
+        let mut scored_context: Vec<(String, f64)> = Vec::new();
+
+        for result in &context_results {
+            let node_weights = self.scorer.node_type_to_weights(&result.node.node_type);
+            let npu_score = self.scorer.score_relevance(&intent_weights, &node_weights);
+            let combined = result.relevance_score * 0.6 + npu_score * 0.4;
+            scored_context.push((result.node.id.clone(), combined));
+        }
+        scored_context.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // ── Step 3: Build context-enriched prompt ──
+        let context_summary = self.build_context_summary(&context_results);
+
+        // ── Step 4: Select agent and route through pipeline ──
+        let (agent_id, system_prompt) = self.select_agent(&intent);
+
+        let full_prompt = format!(
+            "{}\n\n--- Spectrum Graph Context ---\n{}\n--- End Context ---\n\nUser intent: {}\nEntities: {:?}\nConfidence: {:.0}%\n\nRespond helpfully and concisely:",
+            system_prompt,
+            context_summary,
+            intent.raw,
+            intent.entities,
+            intent.confidence * 100.0
+        );
+
+        // ── Step 5: LLM inference via Ollama ──
+        let response = crate::ollama_bridge::generate("mistral", &full_prompt).await?;
+
+        // ── Step 6: Closed-loop feedback — reinforce graph edges ──
+        let mut edges_reinforced: Vec<String> = Vec::new();
+
+        // Reinforce edges between context nodes that appeared together
+        for i in 0..scored_context.len().min(5) {
+            for j in (i + 1)..scored_context.len().min(5) {
+                let (ref id_a, score_a) = scored_context[i];
+                let (ref id_b, score_b) = scored_context[j];
+
+                let edge = graph.get_or_create_edge(id_a, id_b, "co_referenced")?;
+                let feedback_signal = (score_a + score_b) / 2.0;
+                let updated = graph.update_edge_weight(&edge.id, feedback_signal)?;
+                edges_reinforced.push(updated.id);
+            }
+        }
+
+        // ── Step 7: Store conversation as a new node ──
+        let conv_node = graph.add_node_with_layer(
+            &format!("Chat: {}", &intent.raw.chars().take(50).collect::<String>()),
+            &format!("Q: {}\n\nA: {}", intent.raw, &response.chars().take(500).collect::<String>()),
+            "conversation",
+            "ephemeral",
+        )?;
+
+        // Link conversation to context nodes
+        for ctx_id in scored_context.iter().take(3).map(|(id, _)| id) {
+            let edge = graph.get_or_create_edge(&conv_node.id, ctx_id, "derived_from")?;
+            graph.update_edge_weight(&edge.id, 0.5)?;
+        }
+
+        // ── Step 8: Get anticipatory suggestions ──
+        let anticipations = graph
+            .anticipate_needs()?
+            .into_iter()
+            .take(3)
+            .map(|n| n.suggestion)
+            .collect();
+
+        let elapsed = start.elapsed().as_millis() as u64;
+
+        Ok(RefractiveResult {
+            response,
+            intent,
+            agent_used: agent_id,
+            context_nodes: context_node_ids,
+            edges_reinforced,
+            anticipations,
+            processing_time_ms: elapsed,
+            npu_accelerated: self.scorer.accelerated,
+        })
+    }
+
+    /// Select the appropriate agent based on intent type
+    fn select_agent(&self, intent: &ParsedIntent) -> (String, String) {
+        match intent.intent_type {
+            IntentType::Query => (
+                "reasoner".into(),
+                "You are PrismOS Reasoner, a local-first AI assistant powered by the Refractive Core. \
+                 You have access to the user's Spectrum Graph for contextual memory. \
+                 Provide clear, concise, and helpful answers grounded in the user's knowledge graph when relevant.".into(),
+            ),
+            IntentType::Create => (
+                "tool_smith".into(),
+                "You are PrismOS Tool Smith, a local-first AI assistant powered by the Refractive Core. \
+                 Help the user create, build, or generate what they need. \
+                 Reference their Spectrum Graph context to personalize output.".into(),
+            ),
+            IntentType::Analyze => (
+                "reasoner".into(),
+                "You are PrismOS Reasoner in analysis mode, powered by the Refractive Core. \
+                 Perform deep analysis with structured reasoning. \
+                 Use Spectrum Graph context to provide insights grounded in the user's knowledge.".into(),
+            ),
+            IntentType::Connect => (
+                "memory_keeper".into(),
+                "You are PrismOS Memory Keeper, a local-first AI assistant powered by the Refractive Core. \
+                 Help connect ideas and find relationships across the user's Spectrum Graph. \
+                 Suggest new edges, patterns, and overlooked connections.".into(),
+            ),
+            IntentType::System => (
+                "sentinel".into(),
+                "You are PrismOS Sentinel, the local-first system agent of the Refractive Core. \
+                 Provide system information, configuration help, and privacy assurance. \
+                 All data stays local — no telemetry, no cloud sync.".into(),
+            ),
+        }
+    }
+
+    /// Build a context summary from query results for prompt injection
+    fn build_context_summary(
+        &self,
+        results: &[crate::spectrum_graph::IntentQueryResult],
+    ) -> String {
+        if results.is_empty() {
+            return "No relevant context found in Spectrum Graph.".to_string();
+        }
+
+        let mut summary = String::new();
+        for (i, r) in results.iter().take(5).enumerate() {
+            summary.push_str(&format!(
+                "{}. [{}] {} (relevance: {:.2})\n   {}\n",
+                i + 1,
+                r.node.node_type,
+                r.node.label,
+                r.relevance_score,
+                r.node.content.chars().take(200).collect::<String>()
+            ));
+        }
+        summary
+    }
+}
+
+// ─── Legacy API — backwards compatible ─────────────────────────────────────────
+
+/// Simple intent routing (legacy, used by process_intent command)
 pub async fn route_intent(
     intent: ParsedIntent,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {

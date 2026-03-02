@@ -1,13 +1,12 @@
 // Patent Pending — US [application number] (Feb 28, 2026)
-// PrismOS Sidebar — Navigation, Spectrum Graph, Active Agents
+// PrismOS Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
 import type { Agent, SpectrumNode, GraphStats } from "../types";
 import ActiveAgents from "./ActiveAgents";
-import SpectrumGraphView from "./SpectrumGraphView";
 
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: "chat" | "settings" | "spectrum" | "sandbox") => void;
+  onNavigate: (view: "chat" | "settings" | "spectrum" | "sandbox" | "graph") => void;
   agents: Agent[];
   nodes: SpectrumNode[];
   graphStats: GraphStats;
@@ -39,6 +38,13 @@ export default function Sidebar({
             Intent Console
           </button>
           <button
+            className={`sidebar-item ${currentView === "graph" ? "active" : ""}`}
+            onClick={() => onNavigate("graph")}
+          >
+            <span className="sidebar-item-icon">🕸️</span>
+            Spectrum Graph
+          </button>
+          <button
             className={`sidebar-item ${currentView === "spectrum" ? "active" : ""}`}
             onClick={() => onNavigate("spectrum")}
           >
@@ -61,15 +67,43 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Spectrum Graph Summary */}
+        {/* Spectrum Graph Mini Summary */}
         <div className="sidebar-section">
           <div className="sidebar-section-title">
-            Spectrum Graph
+            Graph Overview
             <span className="sidebar-badge">
               {graphStats.nodes}N · {graphStats.edges}E
             </span>
           </div>
-          <SpectrumGraphView nodes={nodes} />
+          <div className="spectrum-view">
+            {nodes.length === 0 ? (
+              <div className="spectrum-empty">
+                No nodes yet. Start a conversation to build your graph.
+              </div>
+            ) : (
+              <ul className="spectrum-node-list">
+                {nodes.slice(0, 12).map((node) => (
+                  <li
+                    key={node.id}
+                    className="spectrum-node-item"
+                    title={`${node.node_type}: ${node.content.slice(0, 100)}`}
+                  >
+                    <span className={`spectrum-node-dot type-${node.node_type}`} />
+                    <span>{node.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {nodes.length > 12 && (
+              <button
+                className="sidebar-item"
+                onClick={() => onNavigate("graph")}
+                style={{ fontSize: "0.75rem", opacity: 0.7 }}
+              >
+                View all {nodes.length} nodes →
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Active Agents */}

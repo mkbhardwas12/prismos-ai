@@ -107,6 +107,29 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-logo-img {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.header-icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.msg-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-right: 2px;
 }
 
 .sidebar-version {
@@ -253,12 +276,20 @@ body {
 }
 
 .welcome-icon {
-  font-size: 56px;
   margin-bottom: 16px;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  display: flex;
+  justify-content: center;
+}
+
+.welcome-logo-img {
+  width: 160px;
+  height: 160px;
+}
+
+.sg-empty-logo {
+  width: 140px;
+  height: 140px;
+  opacity: 0.7;
 }
 
 .welcome-message h1 {

@@ -3,6 +3,7 @@
 
 import type { Agent, SpectrumNode, GraphStats } from "../types";
 import ActiveAgents from "./ActiveAgents";
+import prismosIcon from "../assets/prismos-icon.svg";
 
 interface SidebarProps {
   currentView: string;
@@ -22,7 +23,7 @@ export default function Sidebar({
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <span className="sidebar-logo">◈ PrismOS</span>
+        <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" /> PrismOS</span>
         <span className="sidebar-version">v0.1.0</span>
       </div>
 

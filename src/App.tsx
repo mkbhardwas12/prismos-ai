@@ -9,11 +9,14 @@ import SettingsPanel from "./components/SettingsPanel";
 import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
+import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, HandoffResult } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph";
 
 function App() {
+  const [ready, setReady] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState("Initializing...");
   const [view, setView] = useState<View>("chat");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [nodes, setNodes] = useState<SpectrumNode[]>([]);
@@ -23,6 +26,7 @@ function App() {
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
   const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>({
     ollamaUrl: "http://localhost:11434",
     defaultModel: "mistral",
@@ -92,31 +96,48 @@ function App() {
   }, [loadAgents, loadNodes, loadGraphStats]);
 
   useEffect(() => {
-    loadAgents();
-    loadNodes();
-    loadGraphStats();
-    checkOllama();
-
-    // ── You-Port: Auto-restore previous session ──
+    // ── Startup sequence with loading screen ──
     (async () => {
       try {
-        const hasSaved = await invoke<boolean>("has_saved_state");
-        if (hasSaved) {
-          const resultJson = await invoke<string>("load_state");
-          const result: HandoffResult = JSON.parse(resultJson);
-          if (result.success) {
-            setToast({
-              message: `🔐 Restored from last session — ${result.nodes_count} nodes, ${result.edges_count} edges`,
-              visible: true,
-            });
-            // Refresh all data after restore
-            loadNodes();
-            loadGraphStats();
-            setGraphRefreshKey((k) => k + 1);
+        setLoadingStatus("Loading agents...");
+        await loadAgents();
+
+        setLoadingStatus("Loading Spectrum Graph...");
+        await loadNodes();
+        await loadGraphStats();
+
+        setLoadingStatus("Checking Ollama...");
+        await checkOllama();
+
+        // ── You-Port: Auto-restore previous session ──
+        setLoadingStatus("Checking saved state...");
+        try {
+          const hasSaved = await invoke<boolean>("has_saved_state");
+          if (hasSaved) {
+            setLoadingStatus("Restoring session...");
+            const resultJson = await invoke<string>("load_state");
+            const result: HandoffResult = JSON.parse(resultJson);
+            if (result.success) {
+              setToast({
+                message: `🔐 Restored from last session — ${result.nodes_count} nodes, ${result.edges_count} edges`,
+                visible: true,
+              });
+              await loadNodes();
+              await loadGraphStats();
+              setGraphRefreshKey((k) => k + 1);
+            }
           }
+        } catch (e) {
+          console.error("You-Port restore failed:", e);
         }
+
+        setLoadingStatus("Ready!");
       } catch (e) {
-        console.error("You-Port restore failed:", e);
+        console.error("Startup error:", e);
+        setErrorBanner(`Startup warning: ${e}`);
+      } finally {
+        // Small delay for loading animation smoothness
+        setTimeout(() => setReady(true), 400);
       }
     })();
 
@@ -179,6 +200,20 @@ function App() {
     }
   }
 
+  // ── Loading screen ──
+  if (!ready) {
+    return (
+      <div className="app-loading">
+        <img src={prismosIcon} alt="PrismOS" className="app-loading-logo" />
+        <div className="app-loading-text">PrismOS</div>
+        <div className="app-loading-bar">
+          <div className="app-loading-bar-fill" />
+        </div>
+        <div className="app-loading-status">{loadingStatus}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-layout">
       <Sidebar
@@ -189,7 +224,17 @@ function App() {
         graphStats={graphStats}
         collaboration={lastCollaboration}
       />
-      <div className="main-content">{renderView()}</div>
+      <div className="main-content">
+        {/* Global error banner */}
+        {errorBanner && (
+          <div className="error-banner">
+            <span className="error-banner-icon">⚠️</span>
+            <span className="error-banner-text">{errorBanner}</span>
+            <button className="error-banner-close" onClick={() => setErrorBanner(null)}>×</button>
+          </div>
+        )}
+        {renderView()}
+      </div>
 
       {/* You-Port session restore toast */}
       {toast?.visible && (

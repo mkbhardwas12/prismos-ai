@@ -1,57 +1,64 @@
 <p align="center">
-  <img src="src/assets/prismos-logo.svg" alt="PrismOS Logo" width="280" />
+  <img src="src/assets/prismos-icon.png" width="100" alt="PrismOS Logo" />
 </p>
 
 <h1 align="center">PrismOS</h1>
 
 <p align="center">
-  <strong>Local-First Agentic Personal AI Operating System</strong><br/>
-  <em>Patent Pending — US [application number] (Feb 28, 2026)</em>
+  <strong>Local-First Agentic Personal AI Operating System</strong>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-2.0-blue.svg" alt="Tauri 2.0" /></a>
-  <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-Local%20LLM-green.svg" alt="Ollama" /></a>
-  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-1.93-orange.svg" alt="Rust" /></a>
-  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18.3-61dafb.svg" alt="React 18" /></a>
+  <img src="https://img.shields.io/badge/version-0.1.0--alpha-blueviolet" alt="Version" />
+  <img src="https://img.shields.io/badge/patent-US%2063%2F993%2C589-orange" alt="Patent Pending" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
+  <img src="https://img.shields.io/badge/100%25-Local-brightgreen" alt="100% Local" />
+</p>
+
+<p align="center">
+  A fully local, privacy-first AI operating system that learns and evolves with you.<br/>
+  Built on the <strong>Spectrum Graph™</strong> — a patent-pending knowledge representation<br/>
+  that refracts every interaction into spectral dimensions of meaning.
 </p>
 
 ---
 
-## 🔮 What is PrismOS?
+## ⚡ What is PrismOS?
 
-PrismOS is a **local-first agentic personal AI operating system** that keeps all your data on your device. It combines a multi-agent orchestration engine (**Refractive Core**), a persistent multi-layered knowledge graph (**Spectrum Graph**), sandboxed execution (**Prism Sandboxes**), and natural language understanding (**Intent Lenses**) — all powered by local LLM inference via Ollama.
+PrismOS is a desktop AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data leaving your device. It combines:
 
-**No cloud. No telemetry. No data leaves your machine.**
-
-### ✨ Key Highlights
-
-- 🧠 **NPU-Accelerated Scoring** — SIMD-optimized (AVX2/NEON) cosine similarity for agent selection
-- 🔁 **Closed-Loop Feedback** — Exponential Moving Average (EMA) momentum on knowledge edges
-- 📊 **Force-Directed Graph Visualization** — Interactive `react-force-graph-2d` with facet coloring, weight-proportional edges, and live metrics
-- 🔮 **Anticipatory Needs Engine** — Predicts next user needs from momentum edges, orphan nodes, and intent patterns
-- 🛡️ **25+ Tauri IPC Commands** — Fully wired Rust ↔ React bridge with zero dead code
-- 🎨 **Real SVG Branding** — Custom prism logo and icon with gradient fills and glow effects
+- **Spectrum Graph™** — Persistent multi-dimensional knowledge graph
+- **Refractive Core™** — Intent processing through spectral analysis
+- **Multi-Agent Collaboration** — Five specialized AI agents (Planner, Researcher, Coder, Reviewer, Executor) that collaborate via structured messaging, voting, and consensus
+- **Sandbox Prisms** — Secure, isolated execution environments with HMAC-SHA256 verification, allow-lists, anomaly detection, and auto-rollback
+- **You-Port™** — Encrypted state migration that lets you carry your AI personality across devices
+- **100% Local** — Powered by Ollama running local LLMs (Mistral, Llama, etc.)
 
 ---
 
 ## 🏗️ Architecture
 
-<p align="center">
-  <img src="docs/architecture.svg" alt="PrismOS Architecture Diagram" width="800" />
-</p>
+PrismOS follows a **6-layer architecture** as described in the patent:
 
-The architecture follows a **6-layer stack** from the patent specification:
+| Layer | Name | Status | Description |
+|-------|------|--------|-------------|
+| L1 | **Spectrum Graph** | ✅ Implemented | Spectral knowledge graph with 7-dimensional node embeddings, edge scoring, temporal decay, and SQLite persistence |
+| L2 | **Refractive Core** | ✅ Implemented | Intent parsing → graph traversal → spectral weighting → LLM synthesis pipeline |
+| L3 | **Agent Mesh** | ✅ Implemented | LangGraph-inspired DAG with 5 agents, structured messages, voting/consensus, 6-phase pipeline |
+| L4 | **Sandbox Prisms** | ✅ Implemented | HMAC-SHA256 code signing, syscall allow-lists, anomaly detection, WASM-ready isolation, auto-rollback |
+| L5 | **You-Port** | ✅ Implemented | Encrypted state export/import with device fingerprinting, XOR stream cipher, HMAC key derivation |
+| L6 | **Intent Console** | ✅ Implemented | React UI with conversation history, agent status, graph visualization, settings, and export/import |
 
-| Layer | Component | Status |
-|-------|-----------|--------|
-| **L1** | PrismOS Frontend — React 18 + TypeScript + Vite, Tauri 2.0 desktop shell | ✅ Implemented |
-| **L2** | Intent Lenses — NLU decomposition, entity extraction, confidence scoring | ✅ Implemented |
-| **L3** | Refractive Core — NPU-accelerated multi-agent orchestration (5 agents) | ✅ Implemented |
-| **L4** | Spectrum Graph — SQLite 4-table knowledge graph with feedback loops | ✅ Implemented |
-| **L5** | Sandbox Prisms + You-Port — Execution sandbox & encrypted state transfer | ✅ Stub |
-| **L6** | Ollama — Local LLM inference (mistral, llama3, phi3, codellama, gemma2) | ✅ Integrated |
+---
+
+## 📸 Screenshots
+
+<!-- TODO: Add screenshots after first release -->
+
+| Intent Console | Spectrum Explorer | Agent Status |
+|:-:|:-:|:-:|
+| *Coming soon* | *Coming soon* | *Coming soon* |
 
 ---
 
@@ -59,10 +66,11 @@ The architecture follows a **6-layer stack** from the patent specification:
 
 ### Prerequisites
 
-- **Node.js** ≥ 18
-- **Rust** ≥ 1.75 (with cargo)
-- **Ollama** — [Install from ollama.com](https://ollama.com)
-- **A local model** — e.g., `ollama pull mistral`
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Node.js](https://nodejs.org/) | ≥ 18 | Frontend build tooling |
+| [Rust](https://rustup.rs/) | ≥ 1.75 | Tauri backend |
+| [Ollama](https://ollama.com/) | Latest | Local LLM inference |
 
 ### Setup
 
@@ -71,209 +79,315 @@ The architecture follows a **6-layer stack** from the patent specification:
 git clone https://github.com/mkbhardwas12/prismos-ai.git
 cd prismos-ai
 
-# 2. Install dependencies
+# 2. Install frontend dependencies
 npm install
 
-# 3. Start Ollama (in a separate terminal)
-ollama serve
-
-# 4. Pull a model (if you haven't already)
+# 3. Pull a local model (Mistral recommended)
 ollama pull mistral
 
-# 5. Run PrismOS
+# 4. Start Ollama (if not already running)
+ollama serve
+
+# 5. Launch PrismOS in development mode
 npm run tauri dev
 ```
 
-> **Windows Note:** Ensure Rust's cargo is in your PATH. If not, run:
-> `$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"` before `npm run tauri dev`.
+The app will compile Rust (~2 min first time), then open the PrismOS desktop window.
+
+### Build for Production
+
+```bash
+npm run tauri build
+```
+
+The installer will be generated in `src-tauri/target/release/bundle/`.
 
 ---
 
-## 🧠 Core Components
+## 🧬 Tech Stack
 
-### Refractive Core — NPU-Accelerated Multi-Agent Orchestration
+| Component | Technology |
+|-----------|------------|
+| Desktop Shell | **Tauri 2.0** (Rust + WebView) |
+| Frontend | **React 18.3** + **TypeScript 5.5** + **Vite 5.4** |
+| Backend | **Rust** (4,586 lines across 12 source files) |
+| Database | **SQLite** (via rusqlite, bundled) |
+| LLM Runtime | **Ollama** (localhost:11434) |
+| Graph Viz | **react-force-graph-2d** |
+| Crypto | **SHA-256** + **HMAC-SHA256** + **XOR stream cipher** |
 
-The Refractive Core implements an **8-step pipeline** per the patent specification:
+### Codebase at a Glance
 
-```
-Intent → Graph Context → NPU Scoring → Agent Selection → LLM Inference
-     → Feedback Loop → Conversation Storage → Anticipations
-```
-
-**NPU Scorer** detects hardware capabilities at startup (AVX2 / NEON / CPU fallback) and uses SIMD-optimized cosine similarity for real-time agent ranking.
-
-| Agent | Role |
-|-------|------|
-| **Orchestrator** | Decomposes intents, routes & coordinates agent workflows |
-| **Memory Keeper** | Manages Spectrum Graph persistence, retrieval & feedback |
-| **Reasoner** | Deep analysis & LLM inference via Ollama |
-| **Tool Smith** | Executes sandboxed operations in Prism containers |
-| **Sentinel** | Monitors security, privacy & system health |
-
-### Spectrum Graph — Multi-Layered Knowledge Engine
-
-A fully implemented **persistent knowledge graph** stored in SQLite (WAL mode) with 4 tables:
-
-| Table | Purpose |
-|-------|---------|
-| `nodes` | Knowledge entities with facets (knowledge, preference, context, skill, memory), access tracking |
-| `edges` | Weighted relationships with **EMA momentum** (α = 0.3), closed-loop reinforcement |
-| `intent_log` | Temporal intent history for pattern analysis and anticipatory predictions |
-| `feedback` | Explicit user feedback (+1 / −1) driving edge weight updates |
-
-**Key Algorithms:**
-- **`query_intent()`** — 3-phase retrieval: text match → graph traversal → temporal boosting with recency scoring
-- **`anticipate_needs()`** — 3 strategies: high-momentum edges, orphan node discovery, intent frequency patterns
-- **`decay_all_edges()`** — Temporal decay (factor 0.95) to naturally deprecate stale knowledge
-- **`update_edge_weight()`** — Closed-loop feedback with EMA momentum for adaptive learning
-
-### Intent Lenses (NLU Decomposition)
-Natural language input → structured intent with type classification (query, command, creative, analysis), entity extraction, and confidence scoring.
-
-### Sandbox Prisms (Safe Execution)
-WASM-based sandboxed environments with:
-- Cryptographic state checkpoints (SHA-256)
-- Auto-rollback on failure
-- Side-effect tracking
-
-### You-Port (State Transfer)
-Encrypted local state export/import for device handoff with SHA-256 integrity verification and Base64 encoding.
-
----
-
-## 🖥️ Frontend
-
-### 5-Tab Navigation
-| Tab | Component | Description |
-|-----|-----------|-------------|
-| 💬 Chat | `MainView.tsx` | Intent Console with conversation history & Ollama streaming |
-| 📊 Graph | `SpectrumGraphView.tsx` | Force-directed graph visualization with `react-force-graph-2d` |
-| 🔬 Spectrum | `SpectrumExplorer.tsx` | Full CRUD explorer for Spectrum Graph nodes |
-| 🧪 Sandbox | `SandboxPanel.tsx` | Create, execute, and rollback sandboxed operations |
-| ⚙️ Settings | `SettingsPanel.tsx` | Model selection, configuration & about |
-
-### Spectrum Graph Visualization
-Interactive force-directed graph powered by `react-force-graph-2d`:
-- **Facet-colored nodes** — Each knowledge facet gets a distinct color
-- **Weight-proportional edges** — Thicker = stronger relationship
-- **Momentum coloring** — Green (positive) / Red (negative) edge momentum
-- **Click-to-select** detail panel with node metadata
-- **Reinforce / Weaken** buttons for manual edge feedback
-- **Anticipated Needs** panel showing predicted next queries
-- **Live metrics** bar (total nodes, edges, avg weight, feedback count)
+| Metric | Count |
+|--------|------:|
+| Rust source files | 12 |
+| Rust lines of code | ~4,586 |
+| TypeScript/TSX files | 14 |
+| TypeScript/React lines | ~2,256 |
+| CSS lines | ~2,245 |
+| Tauri IPC commands | 37 |
+| **Total lines** | **~9,087** |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-prismos-ai/
-├── src/                            # React + TypeScript frontend
-│   ├── assets/                     # Visual assets
-│   │   ├── prismos-logo.svg        # Full prism logo (prism + spectrum beams + text)
-│   │   └── prismos-icon.svg        # Compact 64×64 prism icon
-│   ├── components/                 # UI components
-│   │   ├── Sidebar.tsx             # 5-tab navigation + mini graph summary
-│   │   ├── MainView.tsx            # Intent console + conversation history
-│   │   ├── IntentInput.tsx         # Natural language input with submit
-│   │   ├── ActiveAgents.tsx        # Agent status indicators
-│   │   ├── SpectrumGraphView.tsx   # Force-directed graph (react-force-graph-2d)
-│   │   ├── SpectrumExplorer.tsx    # Spectrum Graph CRUD explorer
-│   │   ├── SandboxPanel.tsx        # Execution sandbox UI
-│   │   └── SettingsPanel.tsx       # Configuration & about
-│   ├── lib/                        # Client libraries
-│   │   ├── ollama.ts               # Ollama TypeScript client (streaming)
-│   │   └── agents.ts               # Agent definitions & status
+PrismOS/
+├── src/                          # React frontend
+│   ├── App.tsx                   # Main shell, routing, startup sequence
+│   ├── App.css                   # Global design system (2,245 lines)
+│   ├── main.tsx                  # React entry point
+│   ├── components/
+│   │   ├── MainView.tsx          # Intent Console with conversation history
+│   │   ├── SettingsPanel.tsx     # Settings, export/import, theme, about
+│   │   ├── Sidebar.tsx           # Navigation sidebar with agent status
+│   │   ├── IntentInput.tsx       # Intent input with submit handling
+│   │   ├── ActiveAgents.tsx      # Live agent status cards
+│   │   ├── SandboxPanel.tsx      # Sandbox Prisms security dashboard
+│   │   ├── SpectrumExplorer.tsx  # Graph node browser with spectra
+│   │   └── SpectrumGraphView.tsx # Force-directed graph visualization
+│   ├── lib/
+│   │   ├── agents.ts             # Agent Tauri bindings
+│   │   └── ollama.ts             # Ollama API client
 │   ├── types/
-│   │   └── index.ts                # All TypeScript types (GraphSnapshot, RefractiveResult, etc.)
-│   ├── App.tsx                     # Main app with 5-tab routing
-│   ├── App.css                     # Full dark theme (~1500 lines)
-│   └── main.tsx                    # Entry point
-├── src-tauri/                      # Rust backend (Tauri 2.0)
-│   ├── src/
-│   │   ├── lib.rs                  # 25+ Tauri IPC commands & app setup
-│   │   ├── refractive_core.rs      # NPU-accelerated 8-step pipeline (~400 lines)
-│   │   ├── spectrum_graph.rs       # Multi-layered knowledge graph (~700 lines)
-│   │   ├── sandbox_prism.rs        # WASM sandbox with crypto checkpoints
-│   │   ├── intent_lens.rs          # NLU decomposition engine
-│   │   ├── ollama_bridge.rs        # Ollama HTTP client (reqwest)
-│   │   └── you_port.rs             # Encrypted state transfer (SHA-256)
-│   ├── Cargo.toml                  # Rust deps: rusqlite, reqwest, serde, sha2, base64
-│   └── tauri.conf.json             # Tauri config (1200×800, dark theme)
-├── agents/                         # Python LangGraph agents
-│   ├── graph.py                    # Multi-agent graph definition
-│   └── requirements.txt            # Python dependencies
-├── docs/
-│   └── architecture.svg            # Architecture diagram
-└── package.json                    # Node deps: react, vite, tauri-cli, react-force-graph-2d
+│   │   └── index.ts              # TypeScript type definitions
+│   └── assets/
+│       └── prismos-icon.png      # App icon
+├── src-tauri/                    # Rust backend
+│   ├── Cargo.toml                # Rust dependencies
+│   ├── tauri.conf.json           # Tauri window & app config
+│   ├── capabilities/             # Tauri 2.0 permission capabilities
+│   └── src/
+│       ├── lib.rs                # 37 Tauri IPC commands (514 lines)
+│       ├── main.rs               # Tauri entry point
+│       ├── spectrum_graph.rs     # Spectrum Graph™ engine (1,191 lines)
+│       ├── refractive_core.rs    # Refractive Core™ pipeline (452 lines)
+│       ├── sandbox.rs            # Sandbox Prisms security (710 lines)
+│       ├── you_port.rs           # You-Port™ encrypted migration (460 lines)
+│       ├── db.rs                 # SQLite schema & migrations (109 lines)
+│       ├── ollama.rs             # Ollama HTTP client (89 lines)
+│       └── agents/               # LangGraph multi-agent system
+│           ├── mod.rs            # Agent module exports (37 lines)
+│           ├── graph.rs          # DAG execution engine (287 lines)
+│           ├── messages.rs       # Structured message types (251 lines)
+│           └── nodes.rs          # 5 agent node implementations (480 lines)
+├── agents/                       # Python agent stubs (future)
+│   ├── __init__.py
+│   ├── planner.py
+│   └── researcher.py
+├── README.md
+├── LICENSE                       # MIT License
+└── package.json
 ```
 
 ---
 
-## 🔌 Tauri IPC Commands (25+)
+## 🔌 Tauri IPC Commands
 
-All Rust backend functions are exposed as Tauri commands with zero dead code:
+PrismOS exposes **37 Tauri commands** for frontend–backend communication:
 
-| Category | Commands |
-|----------|----------|
-| **Core Pipeline** | `route_intent`, `refract_intent` |
-| **Spectrum Graph CRUD** | `add_spectrum_node`, `get_spectrum_node`, `search_spectrum_nodes`, `delete_spectrum_node`, `update_spectrum_node` |
-| **Spectrum Graph Patent** | `get_spectrum_graph`, `update_edge_weight`, `query_spectrum_intent`, `anticipate_needs`, `get_graph_metrics`, `decay_graph_edges` |
-| **Agents** | `get_agent_status`, `get_all_agents` |
-| **Ollama** | `check_ollama`, `query_ollama`, `list_ollama_models` |
-| **Sandbox** | `create_sandbox`, `execute_in_sandbox`, `rollback_sandbox`, `get_sandbox_status` |
-| **You-Port** | `export_state`, `import_state` |
-| **Intent** | `decompose_intent` |
+<details>
+<summary>Click to expand full command list</summary>
+
+| Category | Command | Description |
+|----------|---------|-------------|
+| **Core** | `process_intent` | Run intent through Refractive Core pipeline |
+| **Core** | `get_graph_stats` | Get node/edge counts and graph statistics |
+| **Core** | `check_ollama` | Verify Ollama is running and responsive |
+| **Core** | `query_ollama` | Direct LLM query to Ollama |
+| **Graph CRUD** | `add_node` | Add a node to the Spectrum Graph |
+| **Graph CRUD** | `add_edge` | Add a weighted edge between nodes |
+| **Graph CRUD** | `get_node` | Retrieve a node by ID |
+| **Graph CRUD** | `get_all_nodes` | List all nodes in the graph |
+| **Graph CRUD** | `get_neighbors` | Get neighboring nodes |
+| **Graph CRUD** | `search_nodes` | Full-text search across nodes |
+| **Graph CRUD** | `delete_node` | Remove a node and its edges |
+| **Graph CRUD** | `update_node_spectra` | Update spectral dimensions of a node |
+| **Patent Spectra** | `refract_query` | Refract a query through spectral analysis |
+| **Patent Spectra** | `get_spectral_profile` | Get a node's 7-dimensional spectral profile |
+| **Patent Spectra** | `get_spectral_clusters` | Cluster nodes by spectral similarity |
+| **Patent Spectra** | `apply_temporal_decay` | Apply time-based decay to spectral weights |
+| **Patent Spectra** | `spectral_search` | Search by spectral dimension similarity |
+| **Patent Spectra** | `merge_spectral_profiles` | Merge two spectral profiles |
+| **Patent Spectra** | `get_resonance_score` | Calculate resonance between two nodes |
+| **Persistence** | `persist_graph` | Save graph to SQLite |
+| **Persistence** | `load_graph` | Load graph from SQLite |
+| **Persistence** | `export_graph_json` | Export graph as JSON |
+| **Persistence** | `get_db_stats` | Get database statistics |
+| **Agents** | `run_agent_pipeline` | Execute multi-agent DAG pipeline |
+| **Ollama** | `list_ollama_models` | List available Ollama models |
+| **Ollama** | `set_ollama_model` | Switch active model |
+| **Sandbox** | `sandbox_execute` | Execute code in sandbox |
+| **Sandbox** | `sandbox_verify` | Verify code signature |
+| **Sandbox** | `sandbox_get_anomalies` | Get anomaly detection log |
+| **Sandbox** | `sandbox_rollback` | Rollback sandbox state |
+| **You-Port** | `save_state` | Encrypt and save state to disk |
+| **You-Port** | `load_state` | Load and decrypt saved state |
+| **You-Port** | `has_saved_state` | Check if saved state exists |
+| **You-Port** | `get_device_fingerprint` | Get current device fingerprint |
+| **You-Port** | `you_port_status` | Get You-Port migration status |
+| **Settings** | `export_graph` | Export encrypted graph backup |
+| **Settings** | `import_graph` | Import encrypted graph backup |
+| **Settings** | `clear_graph` | Clear all graph data |
+
+</details>
+
+---
+
+## 🧠 How It Works
+
+### The Refractive Pipeline
+
+```
+User Intent
+    │
+    ▼
+┌─────────────────┐
+│  Intent Parsing  │  ← Extract keywords, entities, context
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Graph Traversal  │  ← Find relevant nodes via spectral search
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Spectral Weight  │  ← Score by 7 dimensions × temporal decay
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  LLM Synthesis   │  ← Ollama generates response with context
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Graph Learning  │  ← New nodes/edges created from interaction
+└─────────────────┘
+```
+
+### Multi-Agent Collaboration (LangGraph-style)
+
+```
+Intent
+  │
+  ▼
+┌──────────┐    ┌────────────┐    ┌────────┐
+│ Planner  │───▶│ Researcher │───▶│ Coder  │
+└──────────┘    └────────────┘    └────┬───┘
+                                      │
+                                      ▼
+                              ┌──────────────┐    ┌──────────┐
+                              │   Reviewer   │───▶│ Executor │
+                              └──────────────┘    └──────────┘
+                                                       │
+                                                       ▼
+                                               Final Response
+```
+
+Each agent produces structured messages with confidence scores. The pipeline uses **voting and consensus** to resolve conflicts.
+
+### Spectral Dimensions
+
+Every node in the Spectrum Graph carries a 7-dimensional spectral profile:
+
+| Dimension | Range | Meaning |
+|-----------|-------|---------|
+| 🧠 Cognitive | 0.0–1.0 | Intellectual complexity and depth |
+| 💜 Emotional | 0.0–1.0 | Emotional significance and resonance |
+| ⏳ Temporal | 0.0–1.0 | Time relevance and recency |
+| 👥 Social | 0.0–1.0 | Social context and relationships |
+| 🎨 Creative | 0.0–1.0 | Creative and generative potential |
+| 📊 Analytical | 0.0–1.0 | Analytical and logical precision |
+| 🏃 Physical | 0.0–1.0 | Physical-world grounding |
+
+These dimensions undergo **temporal decay** — older knowledge gracefully fades unless reinforced by new interactions, creating a natural learning curve.
+
+---
+
+## 🔐 Security Model
+
+| Feature | Implementation |
+|---------|---------------|
+| Code Signing | HMAC-SHA256 with per-session keys |
+| Syscall Control | Configurable allow-lists per sandbox |
+| Anomaly Detection | Behavioral scoring with automatic flagging |
+| State Encryption | XOR stream cipher with HMAC-derived keys |
+| Device Binding | Hardware fingerprint for migration verification |
+| Auto-Rollback | Snapshot-based recovery on sandbox failures |
+
+All cryptographic operations run locally — no keys or encrypted data ever leave the device.
 
 ---
 
 ## 🗺️ Roadmap
 
-### ✅ Completed (v0.1)
-- [x] MVP skeleton with Tauri 2.0 + React 18 + Rust backend
-- [x] Ollama integration for local LLM inference (streaming)
-- [x] SQLite-backed Spectrum Graph with 4 tables (nodes, edges, intent_log, feedback)
-- [x] 5-agent Refractive Core with NPU-accelerated scoring
-- [x] Intent Lens NLU decomposition engine
-- [x] 25+ Tauri IPC commands — fully wired, zero dead code
-- [x] Force-directed graph visualization with `react-force-graph-2d`
-- [x] Closed-loop feedback with EMA momentum on edges
-- [x] Anticipatory Needs engine (3 prediction strategies)
-- [x] Spectrum Explorer — full CRUD for graph nodes
-- [x] Sandbox Panel — create, execute, rollback UI
-- [x] SVG branding — custom prism logo & icon with gradient fills
-- [x] 5-tab navigation (Chat, Graph, Spectrum, Sandbox, Settings)
-- [x] Dark theme UI with ~1500 lines of custom CSS
+### v0.1.0-alpha (Current) ✅
 
-### 🔜 Next (v0.2–v0.3)
-- [ ] LanceDB vector search integration for semantic retrieval
-- [ ] Full LangGraph Python sidecar orchestration
-- [ ] WASM sandbox execution engine (real isolation)
-- [ ] Auto-rollback with cryptographic checkpoints
-- [ ] Multi-model support with model-specific routing
+- [x] Spectrum Graph with 7-dimensional spectral embeddings
+- [x] SQLite persistence with full CRUD
+- [x] Refractive Core intent pipeline
+- [x] Ollama integration (Mistral, Llama, etc.)
+- [x] React UI with Intent Console
+- [x] Force-directed graph visualization
+- [x] LangGraph multi-agent collaboration (5 agents)
+- [x] Sandbox Prisms with HMAC signing and anomaly detection
+- [x] You-Port encrypted state migration
+- [x] Settings page with encrypted export/import
+- [x] Startup loading screen with progress
+- [x] Error handling with contextual guidance
 
-### 🔮 Future (v0.4+)
-- [ ] You-Port encrypted state transfer (AES-256-GCM)
-- [ ] Plugin system for community extensions
-- [ ] Voice input/output via local Whisper + TTS
-- [ ] Mobile companion app (Tauri Mobile)
-- [ ] Production release with full patent implementation
+### v0.2.0 (Planned)
+
+- [ ] WASM-based sandbox isolation (full containment)
+- [ ] Plugin system for third-party Prisms
+- [ ] Voice input/output integration
+- [ ] Multi-window support
+- [ ] Spectral timeline visualization
+- [ ] Graph merge/diff for multi-device sync
+
+### v0.3.0 (Future)
+
+- [ ] Federated learning (privacy-preserving cross-device)
+- [ ] Custom model fine-tuning pipeline
+- [ ] Mobile companion app
+- [ ] Spectral API for external integrations
 
 ---
 
-## ⚖️ Legal
+## ⚖️ Patent Notice
 
-**Patent Pending — US Provisional Patent Application No. [application number]**
-Filed: February 28, 2026
-Title: PrismOS — Local-First Agentic Personal AI Operating System
+> **PrismOS** is protected under **US Provisional Patent Application No. [application number]**
+> filed February 28, 2026. The Spectrum Graph™, Refractive Core™, and You-Port™
+> architectures described herein are patent-pending inventions.
+>
+> This software is released under the MIT License for personal and educational use.
+> Commercial use of the patented architectures requires a separate license.
 
-## 📄 License
+---
 
-MIT — see [LICENSE](LICENSE) for details.
+## 🤝 Contributing
+
+PrismOS is in early alpha. Contributions are welcome!
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📜 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+Copyright © 2026 Manish Kumar
 
 ---
 
 <p align="center">
-  <img src="src/assets/prismos-icon.svg" alt="PrismOS" width="32" /><br/>
-  <em>Built by PrismOS Contributors — Your AI, Your Device, Your Data.</em>
+  <strong>PrismOS</strong> — Your mind, refracted. 🌈
 </p>

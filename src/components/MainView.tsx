@@ -140,10 +140,14 @@ export default function MainView({
         setMessages((prev) => [...prev, aiMsg]);
         onIntentProcessed();
       } catch (fallbackErr) {
+        const errorStr = String(fallbackErr);
+        const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
         const errorMsg: Message = {
           id: crypto.randomUUID(),
-          role: "ai",
-          content: `⚠️ Unable to process intent: ${fallbackErr}\n\nMake sure Ollama is running with a model installed:\n\n  ollama pull ${settings.defaultModel}\n  ollama serve`,
+          role: "system",
+          content: isOllamaError
+            ? `⚠️ Cannot connect to Ollama.\n\nMake sure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nThen try again.`
+            : `⚠️ Unable to process intent.\n\n${errorStr}\n\nCheck that Ollama is running with:\n  ollama serve`,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMsg]);

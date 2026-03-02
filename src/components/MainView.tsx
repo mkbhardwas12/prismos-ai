@@ -34,6 +34,7 @@ export default function MainView({
   const [pullStatus, setPullStatus] = useState<string | null>(null);
   const [hasModels, setHasModels] = useState<boolean | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [wizardExpanded, setWizardExpanded] = useState(false);
 
   // Determine which setup step the user is on
   const getSetupStep = useCallback((): SetupStep => {
@@ -293,15 +294,22 @@ export default function MainView({
 
             {/* ── Ollama Setup Wizard ── */}
             {getSetupStep() !== "ready" && (
-              <div className="ollama-setup-wizard" role="alert">
-                <div className="setup-wizard-header">
+              <div className={`ollama-setup-wizard ${wizardExpanded ? "wizard-expanded" : "wizard-collapsed"}`} role="alert">
+                <div className="setup-wizard-header" onClick={() => setWizardExpanded(v => !v)} style={{ cursor: "pointer" }}>
                   <span className="setup-wizard-icon">🚀</span>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <strong className="setup-wizard-title">Quick Setup</strong>
-                    <span className="setup-wizard-subtitle">Get PrismOS running in 3 steps</span>
+                    <span className="setup-wizard-subtitle">
+                      {wizardExpanded
+                        ? "Get PrismOS running in 3 steps"
+                        : `Step ${getSetupStep() === "start" ? "2" : "3"} — ${getSetupStep() === "start" ? "Start Ollama to continue" : "Pull a model to get started"}`
+                      }
+                    </span>
                   </div>
+                  <span className="wizard-toggle-icon">{wizardExpanded ? "▲" : "▼"}</span>
                 </div>
 
+                {wizardExpanded && (
                 <div className="setup-steps">
                   {/* Step 1: Install Ollama */}
                   <div className={`setup-step ${ollamaConnected ? "step-done" : "step-active"}`}>
@@ -419,6 +427,7 @@ export default function MainView({
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 

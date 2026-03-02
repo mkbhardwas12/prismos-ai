@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0--alpha-blueviolet" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.1.0--alpha-0096c7" alt="Version" />
   <img src="https://img.shields.io/badge/patent-US%2063%2F993%2C589-orange" alt="Patent Pending" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
@@ -41,14 +41,9 @@ PrismOS is a desktop AI operating system that runs **entirely on your machine** 
 
 PrismOS follows a **6-layer architecture** as described in the patent:
 
-| Layer | Name | Status | Description |
-|-------|------|--------|-------------|
-| L1 | **Spectrum Graph** | ✅ Implemented | Spectral knowledge graph with 7-dimensional node embeddings, edge scoring, temporal decay, and SQLite persistence |
-| L2 | **Refractive Core** | ✅ Implemented | Intent parsing → graph traversal → spectral weighting → LLM synthesis pipeline |
-| L3 | **Agent Mesh** | ✅ Implemented | LangGraph-inspired DAG with 5 agents, structured messages, voting/consensus, 6-phase pipeline |
-| L4 | **Sandbox Prisms** | ✅ Implemented | HMAC-SHA256 code signing, syscall allow-lists, anomaly detection, WASM-ready isolation, auto-rollback |
-| L5 | **You-Port** | ✅ Implemented | Encrypted state export/import with device fingerprinting, XOR stream cipher, HMAC key derivation |
-| L6 | **Intent Console** | ✅ Implemented | React UI with conversation history, agent status, graph visualization, settings, and export/import |
+<p align="center">
+  <img src="docs/diagrams/architecture-layers.svg" width="800" alt="PrismOS 6-Layer Architecture" />
+</p>
 
 ---
 
@@ -106,27 +101,9 @@ The installer will be generated in `src-tauri/target/release/bundle/`.
 
 ## 🧬 Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| Desktop Shell | **Tauri 2.0** (Rust + WebView) |
-| Frontend | **React 18.3** + **TypeScript 5.5** + **Vite 5.4** |
-| Backend | **Rust** (4,586 lines across 12 source files) |
-| Database | **SQLite** (via rusqlite, bundled) |
-| LLM Runtime | **Ollama** (localhost:11434) |
-| Graph Viz | **react-force-graph-2d** |
-| Crypto | **SHA-256** + **HMAC-SHA256** + **XOR stream cipher** |
-
-### Codebase at a Glance
-
-| Metric | Count |
-|--------|------:|
-| Rust source files | 12 |
-| Rust lines of code | ~4,586 |
-| TypeScript/TSX files | 14 |
-| TypeScript/React lines | ~2,256 |
-| CSS lines | ~2,245 |
-| Tauri IPC commands | 37 |
-| **Total lines** | **~9,087** |
+<p align="center">
+  <img src="docs/diagrams/tech-stack.svg" width="720" alt="Tech Stack" />
+</p>
 
 ---
 
@@ -239,86 +216,29 @@ PrismOS exposes **37 Tauri commands** for frontend–backend communication:
 
 ### The Refractive Pipeline
 
-```
-User Intent
-    │
-    ▼
-┌─────────────────┐
-│  Intent Parsing  │  ← Extract keywords, entities, context
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Graph Traversal  │  ← Find relevant nodes via spectral search
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Spectral Weight  │  ← Score by 7 dimensions × temporal decay
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  LLM Synthesis   │  ← Ollama generates response with context
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Graph Learning  │  ← New nodes/edges created from interaction
-└─────────────────┘
-```
+<p align="center">
+  <img src="docs/diagrams/refractive-pipeline.svg" width="620" alt="Refractive Pipeline" />
+</p>
 
 ### Multi-Agent Collaboration (LangGraph-style)
 
-```
-Intent
-  │
-  ▼
-┌──────────┐    ┌────────────┐    ┌────────┐
-│ Planner  │───▶│ Researcher │───▶│ Coder  │
-└──────────┘    └────────────┘    └────┬───┘
-                                      │
-                                      ▼
-                              ┌──────────────┐    ┌──────────┐
-                              │   Reviewer   │───▶│ Executor │
-                              └──────────────┘    └──────────┘
-                                                       │
-                                                       ▼
-                                               Final Response
-```
-
-Each agent produces structured messages with confidence scores. The pipeline uses **voting and consensus** to resolve conflicts.
+<p align="center">
+  <img src="docs/diagrams/multi-agent-pipeline.svg" width="760" alt="Multi-Agent Collaboration Pipeline" />
+</p>
 
 ### Spectral Dimensions
 
-Every node in the Spectrum Graph carries a 7-dimensional spectral profile:
-
-| Dimension | Range | Meaning |
-|-----------|-------|---------|
-| 🧠 Cognitive | 0.0–1.0 | Intellectual complexity and depth |
-| 💜 Emotional | 0.0–1.0 | Emotional significance and resonance |
-| ⏳ Temporal | 0.0–1.0 | Time relevance and recency |
-| 👥 Social | 0.0–1.0 | Social context and relationships |
-| 🎨 Creative | 0.0–1.0 | Creative and generative potential |
-| 📊 Analytical | 0.0–1.0 | Analytical and logical precision |
-| 🏃 Physical | 0.0–1.0 | Physical-world grounding |
-
-These dimensions undergo **temporal decay** — older knowledge gracefully fades unless reinforced by new interactions, creating a natural learning curve.
+<p align="center">
+  <img src="docs/diagrams/spectral-dimensions.svg" width="700" alt="Spectral Dimensions" />
+</p>
 
 ---
 
 ## 🔐 Security Model
 
-| Feature | Implementation |
-|---------|---------------|
-| Code Signing | HMAC-SHA256 with per-session keys |
-| Syscall Control | Configurable allow-lists per sandbox |
-| Anomaly Detection | Behavioral scoring with automatic flagging |
-| State Encryption | XOR stream cipher with HMAC-derived keys |
-| Device Binding | Hardware fingerprint for migration verification |
-| Auto-Rollback | Snapshot-based recovery on sandbox failures |
-
-All cryptographic operations run locally — no keys or encrypted data ever leave the device.
+<p align="center">
+  <img src="docs/diagrams/security-model.svg" width="720" alt="Security Model" />
+</p>
 
 ---
 

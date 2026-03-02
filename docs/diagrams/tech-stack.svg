@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 340" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="tbg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#162230"/>
+    </linearGradient>
+    <filter id="ts">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="820" height="340" rx="12" fill="url(#tbg)"/>
+
+  <!-- Title -->
+  <text x="410" y="38" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Tech Stack</text>
+
+  <!-- Row 1 -->
+  <!-- Tauri -->
+  <rect x="30" y="65" width="180" height="105" rx="10" fill="#0d2535" stroke="#e76f51" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="120" y="95" text-anchor="middle" fill="#e76f51" font-size="26">⚙️</text>
+  <text x="120" y="118" text-anchor="middle" fill="#e76f51" font-size="14" font-weight="700">Tauri 2.0</text>
+  <text x="120" y="136" text-anchor="middle" fill="#8ab4c4" font-size="11">Desktop Shell</text>
+  <text x="120" y="153" text-anchor="middle" fill="#5a8aa0" font-size="10">Rust + WebView</text>
+
+  <!-- React -->
+  <rect x="225" y="65" width="180" height="105" rx="10" fill="#0d2535" stroke="#00b4d8" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="315" y="95" text-anchor="middle" fill="#00b4d8" font-size="26">⚛️</text>
+  <text x="315" y="118" text-anchor="middle" fill="#00b4d8" font-size="14" font-weight="700">React 18.3</text>
+  <text x="315" y="136" text-anchor="middle" fill="#8ab4c4" font-size="11">Frontend UI</text>
+  <text x="315" y="153" text-anchor="middle" fill="#5a8aa0" font-size="10">TypeScript 5.5 + Vite 5.4</text>
+
+  <!-- Rust -->
+  <rect x="420" y="65" width="180" height="105" rx="10" fill="#0d2535" stroke="#f4a261" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="510" y="95" text-anchor="middle" fill="#f4a261" font-size="26">🦀</text>
+  <text x="510" y="118" text-anchor="middle" fill="#f4a261" font-size="14" font-weight="700">Rust</text>
+  <text x="510" y="136" text-anchor="middle" fill="#8ab4c4" font-size="11">Backend Engine</text>
+  <text x="510" y="153" text-anchor="middle" fill="#5a8aa0" font-size="10">4,586 lines · 12 files</text>
+
+  <!-- Ollama -->
+  <rect x="615" y="65" width="180" height="105" rx="10" fill="#0d2535" stroke="#06d6a0" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="705" y="95" text-anchor="middle" fill="#06d6a0" font-size="26">🤖</text>
+  <text x="705" y="118" text-anchor="middle" fill="#06d6a0" font-size="14" font-weight="700">Ollama</text>
+  <text x="705" y="136" text-anchor="middle" fill="#8ab4c4" font-size="11">LLM Runtime</text>
+  <text x="705" y="153" text-anchor="middle" fill="#5a8aa0" font-size="10">localhost:11434</text>
+
+  <!-- Row 2 -->
+  <!-- SQLite -->
+  <rect x="100" y="190" width="180" height="105" rx="10" fill="#0d2535" stroke="#2a9d8f" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="190" y="220" text-anchor="middle" fill="#2a9d8f" font-size="26">🗄️</text>
+  <text x="190" y="243" text-anchor="middle" fill="#2a9d8f" font-size="14" font-weight="700">SQLite</text>
+  <text x="190" y="261" text-anchor="middle" fill="#8ab4c4" font-size="11">Database</text>
+  <text x="190" y="278" text-anchor="middle" fill="#5a8aa0" font-size="10">rusqlite · bundled</text>
+
+  <!-- Force Graph -->
+  <rect x="320" y="190" width="180" height="105" rx="10" fill="#0d2535" stroke="#e9c46a" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="410" y="220" text-anchor="middle" fill="#e9c46a" font-size="26">📊</text>
+  <text x="410" y="243" text-anchor="middle" fill="#e9c46a" font-size="14" font-weight="700">Force Graph</text>
+  <text x="410" y="261" text-anchor="middle" fill="#8ab4c4" font-size="11">Visualization</text>
+  <text x="410" y="278" text-anchor="middle" fill="#5a8aa0" font-size="10">react-force-graph-2d</text>
+
+  <!-- Crypto -->
+  <rect x="540" y="190" width="180" height="105" rx="10" fill="#0d2535" stroke="#0096c7" stroke-width="1.5" filter="url(#ts)"/>
+  <text x="630" y="220" text-anchor="middle" fill="#0096c7" font-size="26">🔐</text>
+  <text x="630" y="243" text-anchor="middle" fill="#0096c7" font-size="14" font-weight="700">Crypto</text>
+  <text x="630" y="261" text-anchor="middle" fill="#8ab4c4" font-size="11">SHA-256 · HMAC</text>
+  <text x="630" y="278" text-anchor="middle" fill="#5a8aa0" font-size="10">XOR stream cipher</text>
+
+  <!-- Footer -->
+  <text x="410" y="328" text-anchor="middle" fill="#4a7a90" font-size="11">~9,087 total lines of code · 37 Tauri IPC commands · 100% local execution</text>
+</svg>

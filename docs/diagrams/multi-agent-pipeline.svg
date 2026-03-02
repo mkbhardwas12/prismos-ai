@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 480" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="abg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#162230"/>
+    </linearGradient>
+    <linearGradient id="planner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00b4d8"/>
+      <stop offset="100%" style="stop-color:#0096c7"/>
+    </linearGradient>
+    <linearGradient id="researcher" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2a9d8f"/>
+      <stop offset="100%" style="stop-color:#21867a"/>
+    </linearGradient>
+    <linearGradient id="coder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e9c46a"/>
+      <stop offset="100%" style="stop-color:#ddb44e"/>
+    </linearGradient>
+    <linearGradient id="reviewer" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4a261"/>
+      <stop offset="100%" style="stop-color:#e68a45"/>
+    </linearGradient>
+    <linearGradient id="executor" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06d6a0"/>
+      <stop offset="100%" style="stop-color:#05b88a"/>
+    </linearGradient>
+    <linearGradient id="consensus" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e76f51"/>
+      <stop offset="100%" style="stop-color:#d45a3c"/>
+    </linearGradient>
+    <filter id="as">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrW" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8aa0"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#06d6a0"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="860" height="480" rx="12" fill="url(#abg)"/>
+
+  <!-- Title -->
+  <text x="430" y="38" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Multi-Agent Collaboration Pipeline</text>
+
+  <!-- Intent Entry -->
+  <rect x="50" y="72" width="140" height="46" rx="23" fill="#1a3a50" stroke="#00b4d8" stroke-width="2" filter="url(#as)"/>
+  <text x="120" y="100" text-anchor="middle" fill="#00b4d8" font-size="14" font-weight="700">💬 Intent</text>
+
+  <!-- Arrow: Intent → Planner -->
+  <line x1="190" y1="95" x2="235" y2="95" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
+
+  <!-- Phase 1: Planner -->
+  <rect x="242" y="62" width="150" height="68" rx="12" fill="url(#planner)" filter="url(#as)"/>
+  <text x="317" y="89" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🗺️ Planner</text>
+  <text x="317" y="108" text-anchor="middle" fill="#c5eeff" font-size="10">Break down task</text>
+  <text x="317" y="121" text-anchor="middle" fill="#c5eeff" font-size="10">Create execution plan</text>
+
+  <!-- Arrow: Planner → Researcher -->
+  <line x1="392" y1="95" x2="437" y2="95" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
+
+  <!-- Phase 2: Researcher -->
+  <rect x="444" y="62" width="150" height="68" rx="12" fill="url(#researcher)" filter="url(#as)"/>
+  <text x="519" y="89" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🔍 Researcher</text>
+  <text x="519" y="108" text-anchor="middle" fill="#c5f5ee" font-size="10">Query Spectrum Graph</text>
+  <text x="519" y="121" text-anchor="middle" fill="#c5f5ee" font-size="10">Gather context &amp; facts</text>
+
+  <!-- Arrow: Researcher → Coder -->
+  <line x1="594" y1="95" x2="639" y2="95" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
+
+  <!-- Phase 3: Coder -->
+  <rect x="646" y="62" width="150" height="68" rx="12" fill="url(#coder)" filter="url(#as)"/>
+  <text x="721" y="89" text-anchor="middle" fill="#1a1a1a" font-size="15" font-weight="700">⚡ Coder</text>
+  <text x="721" y="108" text-anchor="middle" fill="#4a3800" font-size="10">Generate solution</text>
+  <text x="721" y="121" text-anchor="middle" fill="#4a3800" font-size="10">Write code / content</text>
+
+  <!-- Arrow: Coder → Reviewer (down and left) -->
+  <path d="M 721 130 L 721 170 L 519 170 L 519 200" stroke="#5a8aa0" stroke-width="2.5" fill="none" marker-end="url(#arrW)"/>
+
+  <!-- Phase 4: Reviewer -->
+  <rect x="444" y="205" width="150" height="68" rx="12" fill="url(#reviewer)" filter="url(#as)"/>
+  <text x="519" y="232" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🔎 Reviewer</text>
+  <text x="519" y="251" text-anchor="middle" fill="#fff5e5" font-size="10">Validate &amp; critique</text>
+  <text x="519" y="264" text-anchor="middle" fill="#fff5e5" font-size="10">Score confidence</text>
+
+  <!-- Arrow: Reviewer → Executor -->
+  <line x1="594" y1="239" x2="639" y2="239" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
+
+  <!-- Phase 5: Executor -->
+  <rect x="646" y="205" width="150" height="68" rx="12" fill="url(#executor)" filter="url(#as)"/>
+  <text x="721" y="232" text-anchor="middle" fill="#0a2e1f" font-size="15" font-weight="700">🚀 Executor</text>
+  <text x="721" y="251" text-anchor="middle" fill="#0a4030" font-size="10">Execute in sandbox</text>
+  <text x="721" y="264" text-anchor="middle" fill="#0a4030" font-size="10">Produce final output</text>
+
+  <!-- Consensus Box -->
+  <rect x="242" y="190" width="150" height="100" rx="12" fill="url(#consensus)" filter="url(#as)"/>
+  <text x="317" y="222" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🗳️ Consensus</text>
+  <text x="317" y="245" text-anchor="middle" fill="#ffe8e0" font-size="10">Voting engine</text>
+  <text x="317" y="260" text-anchor="middle" fill="#ffe8e0" font-size="10">Conflict resolution</text>
+  <text x="317" y="275" text-anchor="middle" fill="#ffe8e0" font-size="10">Confidence scoring</text>
+
+  <!-- Dashed connections: each agent ↔ consensus -->
+  <line x1="317" y1="130" x2="317" y2="190" stroke="#e76f51" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="392" y1="240" x2="444" y2="240" stroke="#e76f51" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+  <!-- Arrow: Executor → Final Response -->
+  <line x1="721" y1="273" x2="721" y2="330" stroke="#06d6a0" stroke-width="2.5" marker-end="url(#arrG)"/>
+
+  <!-- Final Response -->
+  <rect x="621" y="335" width="200" height="46" rx="23" fill="#0d3025" stroke="#06d6a0" stroke-width="2" filter="url(#as)"/>
+  <text x="721" y="363" text-anchor="middle" fill="#06d6a0" font-size="14" font-weight="700">✅ Final Response</text>
+
+  <!-- Structured Message legend -->
+  <rect x="50" y="340" width="520" height="110" rx="10" fill="#0d1f2d" stroke="#2a4a5a" stroke-width="1"/>
+  <text x="70" y="365" fill="#8ab4c4" font-size="13" font-weight="700">Structured Message Format</text>
+
+  <rect x="70" y="378" width="90" height="24" rx="4" fill="#0096c7" opacity="0.3"/>
+  <text x="115" y="395" text-anchor="middle" fill="#00b4d8" font-size="10" font-weight="600">agent_role</text>
+
+  <rect x="170" y="378" width="90" height="24" rx="4" fill="#2a9d8f" opacity="0.3"/>
+  <text x="215" y="395" text-anchor="middle" fill="#2a9d8f" font-size="10" font-weight="600">content</text>
+
+  <rect x="270" y="378" width="90" height="24" rx="4" fill="#e9c46a" opacity="0.3"/>
+  <text x="315" y="395" text-anchor="middle" fill="#e9c46a" font-size="10" font-weight="600">confidence</text>
+
+  <rect x="370" y="378" width="90" height="24" rx="4" fill="#f4a261" opacity="0.3"/>
+  <text x="415" y="395" text-anchor="middle" fill="#f4a261" font-size="10" font-weight="600">metadata</text>
+
+  <rect x="470" y="378" width="90" height="24" rx="4" fill="#e76f51" opacity="0.3"/>
+  <text x="515" y="395" text-anchor="middle" fill="#e76f51" font-size="10" font-weight="600">vote</text>
+
+  <text x="70" y="432" fill="#5a8aa0" font-size="11">Each agent emits typed messages with confidence [0.0–1.0]. The consensus engine resolves conflicts via weighted voting.</text>
+
+  <!-- Footer -->
+  <text x="430" y="470" text-anchor="middle" fill="#4a7a90" font-size="11">LangGraph-inspired DAG · 5 Agents · 6 Phases · Voting &amp; Consensus</text>
+</svg>

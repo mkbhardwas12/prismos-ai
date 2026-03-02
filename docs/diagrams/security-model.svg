@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 380" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="secbg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#162230"/>
+    </linearGradient>
+    <filter id="scs">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="820" height="380" rx="12" fill="url(#secbg)"/>
+
+  <!-- Title -->
+  <text x="410" y="38" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Security Model</text>
+  <text x="410" y="58" text-anchor="middle" fill="#5a8aa0" font-size="12">All cryptographic operations run locally — no keys or data ever leave the device</text>
+
+  <!-- Row 1: Code Signing -->
+  <rect x="30" y="80" width="240" height="100" rx="10" fill="#0d2535" stroke="#00b4d8" stroke-width="1.5" filter="url(#scs)"/>
+  <text x="150" y="108" text-anchor="middle" fill="#00b4d8" font-size="24">🔏</text>
+  <text x="150" y="130" text-anchor="middle" fill="#00b4d8" font-size="14" font-weight="700">Code Signing</text>
+  <text x="150" y="150" text-anchor="middle" fill="#7ab4cc" font-size="11">HMAC-SHA256</text>
+  <text x="150" y="166" text-anchor="middle" fill="#5a8aa0" font-size="10">Per-session signing keys</text>
+
+  <!-- Row 1: Syscall Control -->
+  <rect x="290" y="80" width="240" height="100" rx="10" fill="#0d2535" stroke="#2a9d8f" stroke-width="1.5" filter="url(#scs)"/>
+  <text x="410" y="108" text-anchor="middle" fill="#2a9d8f" font-size="24">🛡️</text>
+  <text x="410" y="130" text-anchor="middle" fill="#2a9d8f" font-size="14" font-weight="700">Syscall Control</text>
+  <text x="410" y="150" text-anchor="middle" fill="#7ac4b8" font-size="11">Configurable allow-lists</text>
+  <text x="410" y="166" text-anchor="middle" fill="#5a8aa0" font-size="10">Per-sandbox restrictions</text>
+
+  <!-- Row 1: Anomaly Detection -->
+  <rect x="550" y="80" width="240" height="100" rx="10" fill="#0d2535" stroke="#e9c46a" stroke-width="1.5" filter="url(#scs)"/>
+  <text x="670" y="108" text-anchor="middle" fill="#e9c46a" font-size="24">🔍</text>
+  <text x="670" y="130" text-anchor="middle" fill="#e9c46a" font-size="14" font-weight="700">Anomaly Detection</text>
+  <text x="670" y="150" text-anchor="middle" fill="#c4a84a" font-size="11">Behavioral scoring</text>
+  <text x="670" y="166" text-anchor="middle" fill="#5a8aa0" font-size="10">Automatic flagging &amp; alerts</text>
+
+  <!-- Row 2: State Encryption -->
+  <rect x="30" y="200" width="240" height="100" rx="10" fill="#0d2535" stroke="#f4a261" stroke-width="1.5" filter="url(#scs)"/>
+  <text x="150" y="228" text-anchor="middle" fill="#f4a261" font-size="24">🔐</text>
+  <text x="150" y="250" text-anchor="middle" fill="#f4a261" font-size="14" font-weight="700">State Encryption</text>
+  <text x="150" y="270" text-anchor="middle" fill="#c48a51" font-size="11">XOR stream cipher</text>
+  <text x="150" y="286" text-anchor="middle" fill="#5a8aa0" font-size="10">HMAC-derived encryption keys</text>
+
+  <!-- Row 2: Device Binding -->
+  <rect x="290" y="200" width="240" height="100" rx="10" fill="#0d2535" stroke="#e76f51" stroke-width="1.5" filter="url(#scs)"/>
+  <text x="410" y="228" text-anchor="middle" fill="#e76f51" font-size="24">📱</text>
+  <text x="410" y="250" text-anchor="middle" fill="#e76f51" font-size="14" font-weight="700">Device Binding</text>
+  <text x="410" y="270" text-anchor="middle" fill="#c46a51" font-size="11">Hardware fingerprint</text>
+  <text x="410" y="286" text-anchor="middle" fill="#5a8aa0" font-size="10">Migration verification</text>
+
+  <!-- Row 2: Auto-Rollback -->
+  <rect x="550" y="200" width="240" height="100" rx="10" fill="#0d2535" stroke="#06d6a0" stroke-width="1.5" filter="url(#scs)"/>
+  <text x="670" y="228" text-anchor="middle" fill="#06d6a0" font-size="24">⏪</text>
+  <text x="670" y="250" text-anchor="middle" fill="#06d6a0" font-size="14" font-weight="700">Auto-Rollback</text>
+  <text x="670" y="270" text-anchor="middle" fill="#06b888" font-size="11">Snapshot-based recovery</text>
+  <text x="670" y="286" text-anchor="middle" fill="#5a8aa0" font-size="10">Automatic on sandbox failures</text>
+
+  <!-- Bottom bar -->
+  <rect x="30" y="322" width="760" height="36" rx="8" fill="#0a1e2a" stroke="#1a3a50" stroke-width="1"/>
+  <text x="410" y="345" text-anchor="middle" fill="#2a9d8f" font-size="12" font-weight="600">🔒  Zero Cloud · Zero Telemetry · 100% On-Device · All Keys Local · No Data Exfiltration</text>
+
+  <!-- Footer -->
+  <text x="410" y="375" text-anchor="middle" fill="#4a7a90" font-size="11">Sandbox Prisms + You-Port™ encryption — Patent Pending US 63/993,589</text>
+</svg>

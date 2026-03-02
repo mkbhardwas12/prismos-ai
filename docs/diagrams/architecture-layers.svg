@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#1a2a3a"/>
+    </linearGradient>
+    <linearGradient id="l6" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00b4d8"/>
+      <stop offset="100%" style="stop-color:#0096c7"/>
+    </linearGradient>
+    <linearGradient id="l5" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0096c7"/>
+      <stop offset="100%" style="stop-color:#0077b6"/>
+    </linearGradient>
+    <linearGradient id="l4" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e76f51"/>
+      <stop offset="100%" style="stop-color:#f4845f"/>
+    </linearGradient>
+    <linearGradient id="l3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e9c46a"/>
+      <stop offset="100%" style="stop-color:#f4a261"/>
+    </linearGradient>
+    <linearGradient id="l2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2a9d8f"/>
+      <stop offset="100%" style="stop-color:#219ebc"/>
+    </linearGradient>
+    <linearGradient id="l1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#06d6a0"/>
+      <stop offset="100%" style="stop-color:#2a9d8f"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" rx="12" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="450" y="42" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">PrismOS — 6-Layer Architecture</text>
+
+  <!-- Layer 6 — Intent Console -->
+  <rect x="60" y="65" width="780" height="60" rx="10" fill="url(#l6)" filter="url(#shadow)" opacity="0.95"/>
+  <text x="80" y="92" fill="#fff" font-size="13" font-weight="700">L6</text>
+  <text x="115" y="92" fill="#fff" font-size="15" font-weight="700">Intent Console</text>
+  <text x="80" y="113" fill="#e0f7ff" font-size="12">React UI · Conversation History · Graph Visualization · Settings · Export/Import</text>
+  <text x="750" y="100" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
+
+  <!-- Layer 5 — You-Port -->
+  <rect x="60" y="135" width="780" height="60" rx="10" fill="url(#l5)" filter="url(#shadow)" opacity="0.95"/>
+  <text x="80" y="162" fill="#fff" font-size="13" font-weight="700">L5</text>
+  <text x="115" y="162" fill="#fff" font-size="15" font-weight="700">You-Port™</text>
+  <text x="80" y="183" fill="#cce5ff" font-size="12">Encrypted State Migration · Device Fingerprinting · XOR Stream Cipher · HMAC Key Derivation</text>
+  <text x="750" y="170" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
+
+  <!-- Layer 4 — Sandbox Prisms -->
+  <rect x="60" y="205" width="780" height="60" rx="10" fill="url(#l4)" filter="url(#shadow)" opacity="0.95"/>
+  <text x="80" y="232" fill="#fff" font-size="13" font-weight="700">L4</text>
+  <text x="115" y="232" fill="#fff" font-size="15" font-weight="700">Sandbox Prisms</text>
+  <text x="80" y="253" fill="#ffe8e0" font-size="12">HMAC-SHA256 Code Signing · Syscall Allow-Lists · Anomaly Detection · WASM-Ready · Auto-Rollback</text>
+  <text x="750" y="240" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
+
+  <!-- Layer 3 — Agent Mesh -->
+  <rect x="60" y="275" width="780" height="60" rx="10" fill="url(#l3)" filter="url(#shadow)" opacity="0.95"/>
+  <text x="80" y="302" fill="#1a1a1a" font-size="13" font-weight="700">L3</text>
+  <text x="115" y="302" fill="#1a1a1a" font-size="15" font-weight="700">Agent Mesh</text>
+  <text x="80" y="323" fill="#3d2b00" font-size="12">LangGraph DAG · 5 Specialized Agents · Structured Messages · Voting &amp; Consensus · 6-Phase Pipeline</text>
+  <text x="750" y="310" fill="#1a1a1a" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
+
+  <!-- Layer 2 — Refractive Core -->
+  <rect x="60" y="345" width="780" height="60" rx="10" fill="url(#l2)" filter="url(#shadow)" opacity="0.95"/>
+  <text x="80" y="372" fill="#fff" font-size="13" font-weight="700">L2</text>
+  <text x="115" y="372" fill="#fff" font-size="15" font-weight="700">Refractive Core™</text>
+  <text x="80" y="393" fill="#d4f5ef" font-size="12">Intent Parsing → Graph Traversal → Spectral Weighting → LLM Synthesis Pipeline</text>
+  <text x="750" y="380" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
+
+  <!-- Layer 1 — Spectrum Graph -->
+  <rect x="60" y="415" width="780" height="60" rx="10" fill="url(#l1)" filter="url(#shadow)" opacity="0.95"/>
+  <text x="80" y="442" fill="#0a2e1f" font-size="13" font-weight="700">L1</text>
+  <text x="115" y="442" fill="#0a2e1f" font-size="15" font-weight="700">Spectrum Graph™</text>
+  <text x="80" y="463" fill="#0a3d2a" font-size="12">7-Dimensional Spectral Embeddings · Edge Scoring · Temporal Decay · SQLite Persistence</text>
+  <text x="750" y="450" fill="#0a2e1f" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
+
+  <!-- Side arrows -->
+  <text x="30" y="300" fill="#4a6a80" font-size="28" text-anchor="middle" transform="rotate(-90, 30, 300)">▲  USER  ▲</text>
+  <text x="870" y="300" fill="#4a6a80" font-size="28" text-anchor="middle" transform="rotate(90, 870, 300)">▲  DATA  ▲</text>
+
+  <!-- Footer -->
+  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">Patent Pending — US 63/993,589 · All layers fully implemented in v0.1.0-alpha</text>
+</svg>

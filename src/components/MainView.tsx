@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
+import { useVoice } from "../hooks/useVoice";
 import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary } from "../types";
 
 interface MainViewProps {
@@ -22,6 +23,9 @@ export default function MainView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const conversationRef = useRef<HTMLDivElement>(null);
+
+  // Voice output (TTS) — speaks AI responses aloud when enabled
+  const voiceOutput = useVoice(() => {}, settings.voiceOutputEnabled ?? false);
 
   // Load conversation history from Spectrum Graph on mount
   useEffect(() => {
@@ -118,14 +122,21 @@ export default function MainView({
         ? `\n🔮 ${result.anticipations[0]}`
         : "";
 
+      const aiContent = result.response + metaLine + collabLine + hintLine;
       const aiMsg: Message = {
         id: crypto.randomUUID(),
         role: "ai",
-        content: result.response + metaLine + collabLine + hintLine,
+        content: aiContent,
         timestamp: new Date(),
         agent: result.agent_used,
       };
       setMessages((prev) => [...prev, aiMsg]);
+
+      // Voice output — speak the AI response
+      if (settings.voiceOutputEnabled) {
+        voiceOutput.speak(result.response);
+      }
+
       onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null); // Refresh sidebar + graph + agent status
     } catch (e) {
       // Fallback to legacy process_intent if refract_intent fails
@@ -249,7 +260,26 @@ export default function MainView({
         )}
       </div>
 
-      <IntentInput onSubmit={handleIntent} isProcessing={isProcessing} />
+      {/* Voice output indicator */}
+      {voiceOutput.isSpeaking && (
+        <div className="voice-speaking-bar">
+          <span className="voice-speaking-icon">🔊</span>
+          <span className="voice-speaking-text">Speaking response...</span>
+          <button
+            className="voice-stop-btn"
+            onClick={voiceOutput.stopSpeaking}
+            title="Stop speaking"
+          >
+            ⏹ Stop
+          </button>
+        </div>
+      )}
+
+      <IntentInput
+        onSubmit={handleIntent}
+        isProcessing={isProcessing}
+        voiceEnabled={settings.voiceInputEnabled ?? false}
+      />
     </>
   );
 }

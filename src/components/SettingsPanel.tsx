@@ -31,7 +31,7 @@ export default function SettingsPanel({
   const [confirmClear, setConfirmClear] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
-  function update(key: keyof AppSettings, value: string | number) {
+  function update(key: keyof AppSettings, value: string | number | boolean) {
     onSettingsChange({ ...settings, [key]: value });
   }
 
@@ -268,6 +268,37 @@ export default function SettingsPanel({
                 ☀️ Light
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* ── Voice I/O (Patent 63/993,589) ── */}
+        <div className="settings-group">
+          <h3>🎙️ Voice Input / Output</h3>
+          <div className="settings-item">
+            <label>Voice Input (Speech-to-Text)</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.voiceInputEnabled ? "active" : ""}`}
+                onClick={() => update("voiceInputEnabled", !settings.voiceInputEnabled)}
+              >
+                {settings.voiceInputEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-item">
+            <label>Voice Output (Text-to-Speech)</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.voiceOutputEnabled ? "active" : ""}`}
+                onClick={() => update("voiceOutputEnabled", !settings.voiceOutputEnabled)}
+              >
+                {settings.voiceOutputEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            Voice uses Web Speech API — all processing stays in your browser.
+            No audio is sent to any server. Patent Pending US 63/993,589.
           </div>
         </div>
 

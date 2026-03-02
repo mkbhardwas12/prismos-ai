@@ -52,47 +52,47 @@
   <!-- Arrow: Intent → Planner -->
   <line x1="190" y1="95" x2="235" y2="95" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
 
-  <!-- Phase 1: Planner -->
+  <!-- Phase 1: Orchestrator -->
   <rect x="242" y="62" width="150" height="68" rx="12" fill="url(#planner)" filter="url(#as)"/>
-  <text x="317" y="89" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🗺️ Planner</text>
-  <text x="317" y="108" text-anchor="middle" fill="#c5eeff" font-size="10">Break down task</text>
-  <text x="317" y="121" text-anchor="middle" fill="#c5eeff" font-size="10">Create execution plan</text>
+  <text x="317" y="89" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🗂️ Orchestrator</text>
+  <text x="317" y="108" text-anchor="middle" fill="#c5eeff" font-size="10">Route &amp; coordinate</text>
+  <text x="317" y="121" text-anchor="middle" fill="#c5eeff" font-size="10">Agent workflows</text>
 
-  <!-- Arrow: Planner → Researcher -->
+  <!-- Arrow: Orchestrator → Reasoner -->
   <line x1="392" y1="95" x2="437" y2="95" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
 
-  <!-- Phase 2: Researcher -->
+  <!-- Phase 2: Reasoner -->
   <rect x="444" y="62" width="150" height="68" rx="12" fill="url(#researcher)" filter="url(#as)"/>
-  <text x="519" y="89" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🔍 Researcher</text>
-  <text x="519" y="108" text-anchor="middle" fill="#c5f5ee" font-size="10">Query Spectrum Graph</text>
-  <text x="519" y="121" text-anchor="middle" fill="#c5f5ee" font-size="10">Gather context &amp; facts</text>
+  <text x="519" y="89" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🧠 Reasoner</text>
+  <text x="519" y="108" text-anchor="middle" fill="#c5f5ee" font-size="10">Deep analysis &amp; LLM</text>
+  <text x="519" y="121" text-anchor="middle" fill="#c5f5ee" font-size="10">inference &amp; synthesis</text>
 
-  <!-- Arrow: Researcher → Coder -->
+  <!-- Arrow: Reasoner → Tool Smith -->
   <line x1="594" y1="95" x2="639" y2="95" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
 
-  <!-- Phase 3: Coder -->
+  <!-- Phase 3: Tool Smith -->
   <rect x="646" y="62" width="150" height="68" rx="12" fill="url(#coder)" filter="url(#as)"/>
-  <text x="721" y="89" text-anchor="middle" fill="#1a1a1a" font-size="15" font-weight="700">⚡ Coder</text>
-  <text x="721" y="108" text-anchor="middle" fill="#4a3800" font-size="10">Generate solution</text>
-  <text x="721" y="121" text-anchor="middle" fill="#4a3800" font-size="10">Write code / content</text>
+  <text x="721" y="89" text-anchor="middle" fill="#1a1a1a" font-size="15" font-weight="700">🔧 Tool Smith</text>
+  <text x="721" y="108" text-anchor="middle" fill="#4a3800" font-size="10">Sandboxed execution</text>
+  <text x="721" y="121" text-anchor="middle" fill="#4a3800" font-size="10">in Prism containers</text>
 
-  <!-- Arrow: Coder → Reviewer (down and left) -->
+  <!-- Arrow: Tool Smith → Memory Keeper (down and left) -->
   <path d="M 721 130 L 721 170 L 519 170 L 519 200" stroke="#5a8aa0" stroke-width="2.5" fill="none" marker-end="url(#arrW)"/>
 
-  <!-- Phase 4: Reviewer -->
+  <!-- Phase 4: Memory Keeper -->
   <rect x="444" y="205" width="150" height="68" rx="12" fill="url(#reviewer)" filter="url(#as)"/>
-  <text x="519" y="232" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">🔎 Reviewer</text>
-  <text x="519" y="251" text-anchor="middle" fill="#fff5e5" font-size="10">Validate &amp; critique</text>
-  <text x="519" y="264" text-anchor="middle" fill="#fff5e5" font-size="10">Score confidence</text>
+  <text x="519" y="232" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">💾 Mem Keeper</text>
+  <text x="519" y="251" text-anchor="middle" fill="#fff5e5" font-size="10">Graph persistence</text>
+  <text x="519" y="264" text-anchor="middle" fill="#fff5e5" font-size="10">&amp; retrieval</text>
 
-  <!-- Arrow: Reviewer → Executor -->
+  <!-- Arrow: Memory Keeper → Sentinel -->
   <line x1="594" y1="239" x2="639" y2="239" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#arrW)"/>
 
-  <!-- Phase 5: Executor -->
+  <!-- Phase 5: Sentinel -->
   <rect x="646" y="205" width="150" height="68" rx="12" fill="url(#executor)" filter="url(#as)"/>
-  <text x="721" y="232" text-anchor="middle" fill="#0a2e1f" font-size="15" font-weight="700">🚀 Executor</text>
-  <text x="721" y="251" text-anchor="middle" fill="#0a4030" font-size="10">Execute in sandbox</text>
-  <text x="721" y="264" text-anchor="middle" fill="#0a4030" font-size="10">Produce final output</text>
+  <text x="721" y="232" text-anchor="middle" fill="#0a2e1f" font-size="15" font-weight="700">🛡️ Sentinel</text>
+  <text x="721" y="251" text-anchor="middle" fill="#0a4030" font-size="10">Security &amp; privacy</text>
+  <text x="721" y="264" text-anchor="middle" fill="#0a4030" font-size="10">System health review</text>
 
   <!-- Consensus Box -->
   <rect x="242" y="190" width="150" height="100" rx="12" fill="url(#consensus)" filter="url(#as)"/>

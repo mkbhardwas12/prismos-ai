@@ -283,11 +283,13 @@ impl StateGraph {
     }
 
     /// Get outgoing edges from a node
+    #[allow(dead_code)]
     pub fn outgoing_edges(&self, node_id: &str) -> Vec<&GraphEdge> {
         self.edges.iter().filter(|e| e.from == node_id).collect()
     }
 
     /// Get a node by ID
+    #[allow(dead_code)]
     pub fn get_node(&self, id: &str) -> Option<&GraphNode> {
         self.nodes.iter().find(|n| n.id == id)
     }

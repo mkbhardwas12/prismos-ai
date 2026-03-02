@@ -257,7 +257,7 @@ impl MemoryKeeperNode {
     }
 
     /// Cast a vote — Memory Keeper checks data integrity
-    pub fn vote(proposal: &str, context_nodes: &[String]) -> Vote {
+    pub fn vote(_proposal: &str, context_nodes: &[String]) -> Vote {
         let has_context = !context_nodes.is_empty();
         Vote {
             agent: AgentRole::MemoryKeeper,

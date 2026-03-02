@@ -67,5 +67,5 @@
   <text x="630" y="278" text-anchor="middle" fill="#5a8aa0" font-size="10">XOR stream cipher</text>
 
   <!-- Footer -->
-  <text x="410" y="328" text-anchor="middle" fill="#4a7a90" font-size="11">~9,087 total lines of code · 37 Tauri IPC commands · 100% local execution</text>
+  <text x="410" y="328" text-anchor="middle" fill="#4a7a90" font-size="11">~14,900 total lines of code · 47 Tauri IPC commands · 100% local execution</text>
 </svg>

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="pg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="50%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="b1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="b2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="b3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="b4" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="b5" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ib" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#fff" stop-opacity="0.6"/>
+    </linearGradient>
+    <filter id="g"><feGaussianBlur stdDeviation="1" result="bl"/><feMerge><feMergeNode in="bl"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <!-- Input beam -->
+  <line x1="2" y1="30" x2="20" y2="30" stroke="url(#ib)" stroke-width="1.5" filter="url(#g)"/>
+  <!-- Refracted beams -->
+  <line x1="44" y1="24" x2="62" y2="14" stroke="url(#b1)" stroke-width="1" filter="url(#g)"/>
+  <line x1="44" y1="27" x2="62" y2="22" stroke="url(#b2)" stroke-width="1" filter="url(#g)"/>
+  <line x1="44" y1="30" x2="62" y2="32" stroke="url(#b3)" stroke-width="1" filter="url(#g)"/>
+  <line x1="44" y1="33" x2="62" y2="42" stroke="url(#b4)" stroke-width="1" filter="url(#g)"/>
+  <line x1="44" y1="36" x2="62" y2="50" stroke="url(#b5)" stroke-width="1" filter="url(#g)"/>
+  <!-- Prism -->
+  <polygon points="32,8 18,52 46,52" fill="url(#pg)" fill-opacity="0.15" stroke="url(#pg)" stroke-width="1.5"/>
+  <circle cx="32" cy="8" r="2" fill="url(#pg)" filter="url(#g)" opacity="0.9"/>
+</svg>

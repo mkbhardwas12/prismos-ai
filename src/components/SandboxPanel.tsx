@@ -4,6 +4,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Prism, PrismResult } from "../types";
+import prismosIcon from "../assets/prismos-icon.svg";
 
 export default function SandboxPanel() {
   const [prismName, setPrismName] = useState("");
@@ -98,7 +99,7 @@ export default function SandboxPanel() {
       <div className="sandbox-container">
         {/* Prism Controls */}
         <div className="sandbox-section">
-          <h3>◈ Execution Sandbox</h3>
+          <h3><img src={prismosIcon} alt="" className="header-icon" /> Execution Sandbox</h3>
           <p className="section-desc">
             Sandboxed execution environments with cryptographic checkpoints and
             automatic rollback on failure.

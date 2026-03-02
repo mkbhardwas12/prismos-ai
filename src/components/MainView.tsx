@@ -3,6 +3,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import prismosLogo from "../assets/prismos-logo.svg";
+import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import type { AppSettings, Message } from "../types";
 
@@ -121,7 +123,7 @@ export default function MainView({
   return (
     <>
       <div className="main-header">
-        <h2>◈ Intent Console</h2>
+        <h2><img src={prismosIcon} alt="" className="header-icon" /> Intent Console</h2>
         <div className="header-actions">
           {messages.length > 0 && (
             <button
@@ -146,7 +148,7 @@ export default function MainView({
       <div className="conversation-area" ref={conversationRef}>
         {messages.length === 0 ? (
           <div className="welcome-message">
-            <div className="welcome-icon">◈</div>
+            <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS" className="welcome-logo-img" /></div>
             <h1>Welcome to PrismOS</h1>
             <p>
               Your local-first agentic AI operating system. All processing
@@ -191,7 +193,7 @@ export default function MainView({
                 ))}
               </div>
               <div className="message-meta">
-                {msg.role === "ai" ? "◈ PrismOS" : "You"} ·{" "}
+                {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> PrismOS</> : "You"} ·{" "}
                 {msg.timestamp.toLocaleTimeString()}
               </div>
             </div>

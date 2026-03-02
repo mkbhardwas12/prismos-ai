@@ -2,6 +2,7 @@
 // PrismOS Settings Panel — Configuration UI
 
 import type { AppSettings, GraphStats } from "../types";
+import prismosIcon from "../assets/prismos-icon.svg";
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -134,7 +135,7 @@ export default function SettingsPanel({
 
         {/* About */}
         <div className="settings-group">
-          <h3>◈ About PrismOS</h3>
+          <h3><img src={prismosIcon} alt="" className="header-icon" /> About PrismOS</h3>
           <p
             style={{
               fontSize: "13px",

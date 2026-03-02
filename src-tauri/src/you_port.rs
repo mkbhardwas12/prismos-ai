@@ -154,7 +154,7 @@ pub fn import_package(package: &YouPortPackage) -> Result<String, String> {
 
 /// Derive an encryption key from the device fingerprint and a nonce.
 /// Uses HMAC-SHA256(salt || fingerprint || nonce) to produce a 32-byte key.
-fn derive_key(device_fingerprint: &str, nonce: &str) -> Vec<u8> {
+pub fn derive_key(device_fingerprint: &str, nonce: &str) -> Vec<u8> {
     let mut mac = HmacSha256::new_from_slice(KEY_SALT)
         .expect("HMAC can take key of any size");
     mac.update(device_fingerprint.as_bytes());
@@ -166,7 +166,7 @@ fn derive_key(device_fingerprint: &str, nonce: &str) -> Vec<u8> {
 /// XOR stream cipher using HMAC-SHA256 in counter mode.
 /// Produces a keystream by computing HMAC(key, counter) for each 32-byte block,
 /// then XORs the plaintext against it. Symmetric: encrypt == decrypt.
-fn xor_stream_cipher(key: &[u8], data: &[u8]) -> Vec<u8> {
+pub fn xor_stream_cipher(key: &[u8], data: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(data.len());
     let mut offset = 0_usize;
     let mut counter = 0_u64;
@@ -193,7 +193,7 @@ fn xor_stream_cipher(key: &[u8], data: &[u8]) -> Vec<u8> {
 }
 
 /// Compute HMAC-SHA256 signature for tamper detection
-fn compute_hmac(key: &[u8], data: &[u8]) -> String {
+pub fn compute_hmac(key: &[u8], data: &[u8]) -> String {
     let mut mac = HmacSha256::new_from_slice(key)
         .expect("HMAC can take key of any size");
     mac.update(data);
@@ -202,7 +202,7 @@ fn compute_hmac(key: &[u8], data: &[u8]) -> String {
 
 /// Generate a stable device fingerprint from environment.
 /// This is NOT PII — it's a one-way hash used only for key derivation.
-fn get_device_fingerprint(app_dir: &Path) -> String {
+pub fn get_device_fingerprint(app_dir: &Path) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"PrismOS-Device-");
 
@@ -221,8 +221,23 @@ fn get_device_fingerprint(app_dir: &Path) -> String {
 }
 
 /// Hex-encode a byte slice
-fn hex_encode(bytes: &[u8]) -> String {
+pub fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Compute SHA-256 hash and return hex string
+pub fn sha256_hex(data: &[u8]) -> String {
+    hex_encode(&Sha256::digest(data))
+}
+
+/// Base64-encode a byte slice
+pub fn base64_encode(data: &[u8]) -> String {
+    BASE64.encode(data)
+}
+
+/// Base64-decode a string
+pub fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
+    BASE64.decode(data).map_err(|e| format!("Base64 decode error: {}", e))
 }
 
 // ─── State Capture ─────────────────────────────────────────────────────────────

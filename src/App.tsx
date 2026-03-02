@@ -172,6 +172,8 @@ function App() {
             onSettingsChange={setSettings}
             ollamaConnected={ollamaConnected}
             graphStats={graphStats}
+            onGraphCleared={() => { loadNodes(); loadGraphStats(); setGraphRefreshKey((k) => k + 1); }}
+            showToast={(msg) => setToast({ message: msg, visible: true })}
           />
         );
     }

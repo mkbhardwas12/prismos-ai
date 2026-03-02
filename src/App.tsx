@@ -222,10 +222,10 @@ function App() {
   // ── Loading screen ──
   if (!ready) {
     return (
-      <div className="app-loading">
+      <div className="app-loading" role="status" aria-label="Loading PrismOS" aria-live="polite">
         <img src={prismosIcon} alt="PrismOS" className="app-loading-logo" />
-        <div className="app-loading-text">PrismOS</div>
-        <div className="app-loading-bar">
+        <div className="app-loading-text" aria-hidden="true">PrismOS</div>
+        <div className="app-loading-bar" role="progressbar" aria-label="Loading progress">
           <div className="app-loading-bar-fill" />
         </div>
         <div className="app-loading-status">{loadingStatus}</div>
@@ -234,7 +234,7 @@ function App() {
   }
 
   return (
-    <div className="app-layout">
+    <div className="app-layout" role="application" aria-label="PrismOS">
       <Sidebar
         currentView={view}
         onNavigate={setView}
@@ -244,26 +244,27 @@ function App() {
         collaboration={lastCollaboration}
         debateSummary={lastDebate}
       />
-      <div className="main-content">
+      <main className="main-content" id="main-content" role="main" aria-label="Main content">
         {/* Global error banner */}
         {errorBanner && (
-          <div className="error-banner">
-            <span className="error-banner-icon">⚠️</span>
+          <div className="error-banner" role="alert" aria-live="assertive">
+            <span className="error-banner-icon" aria-hidden="true">⚠️</span>
             <span className="error-banner-text">{errorBanner}</span>
-            <button className="error-banner-close" onClick={() => setErrorBanner(null)}>×</button>
+            <button className="error-banner-close" onClick={() => setErrorBanner(null)} aria-label="Dismiss error">×</button>
           </div>
         )}
         {renderView()}
-      </div>
+      </main>
 
       {/* You-Port session restore toast */}
       {toast?.visible && (
-        <div className="youport-toast">
-          <span className="youport-toast-icon">🔒</span>
+        <div className="youport-toast" role="status" aria-live="polite">
+          <span className="youport-toast-icon" aria-hidden="true">🔒</span>
           <span className="youport-toast-msg">{toast.message}</span>
           <button
             className="youport-toast-close"
             onClick={() => setToast(null)}
+            aria-label="Dismiss notification"
           >
             ×
           </button>

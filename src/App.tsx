@@ -10,6 +10,7 @@ import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
+import ErrorBoundary from "./components/ErrorBoundary";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult } from "./types";
 
@@ -109,12 +110,12 @@ function App() {
 
   const checkOllama = useCallback(async () => {
     try {
-      const connected = await invoke<boolean>("check_ollama_status");
+      const connected = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
       setOllamaConnected(connected);
     } catch {
       setOllamaConnected(false);
     }
-  }, []);
+  }, [settings.ollamaUrl]);
 
   // Called after every intent is processed — refreshes all live data
   const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => {
@@ -284,7 +285,9 @@ function App() {
             <button className="error-banner-close" onClick={() => setErrorBanner(null)} aria-label="Dismiss error">×</button>
           </div>
         )}
-        {renderView()}
+        <ErrorBoundary fallbackView={view}>
+          {renderView()}
+        </ErrorBoundary>
       </main>
 
       {/* You-Port session restore toast */}

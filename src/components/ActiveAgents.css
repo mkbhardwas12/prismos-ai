@@ -1,0 +1,539 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACTIVE AGENTS PANEL — PrismOS (Patent [application number])
+   Includes: Agent cards, Sandbox/WASM badges, LangGraph Collaboration,
+   LangGraph Debate, Agent status bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.agents-panel {
+  padding: 0;
+}
+
+.agent-card {
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: default;
+  transition: background-color var(--transition-fast), border-left var(--transition-fast);
+  border-left: 2px solid transparent;
+}
+
+.agent-card:hover {
+  background-color: var(--bg-surface);
+  border-left-color: var(--color-primary);
+}
+
+.agent-status-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-status-indicator.idle {
+  background-color: var(--text-muted);
+}
+
+.agent-status-indicator.processing {
+  background-color: var(--color-accent);
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
+  animation: pulse 1.5s infinite;
+}
+
+.agent-status-indicator.waiting {
+  background-color: var(--color-warning);
+}
+
+.agent-status-indicator.error {
+  background-color: var(--color-error);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-role {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-sandbox-chip {
+  font-size: 10px;
+  color: var(--color-accent);
+  opacity: 0.6;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ── Sandbox Prism Badge ── */
+.sandbox-prism-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin: 4px 12px 8px;
+  background: linear-gradient(
+    135deg,
+    rgba(6, 182, 212, 0.08) 0%,
+    rgba(16, 185, 129, 0.08) 100%
+  );
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.sandbox-prism-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.sandbox-prism-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent);
+  letter-spacing: 0.02em;
+}
+
+.sandbox-prism-detail {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── WASM Isolation Badge ── */
+.wasm-isolation-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  margin: 0 12px 8px;
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.08) 0%,
+    rgba(239, 68, 68, 0.06) 100%
+  );
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.wasm-badge-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.wasm-badge-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(245, 158, 11, 0.95);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wasm-badge-detail {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.agent-wasm-chip {
+  font-size: 11px;
+  opacity: 0.8;
+  cursor: help;
+  transition: opacity 0.15s ease;
+}
+
+.agent-wasm-chip:hover {
+  opacity: 1;
+}
+
+/* ── LangGraph Collaboration Trace Panel ── */
+.collab-trace-panel {
+  margin: 4px 12px 8px;
+  padding: 10px 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.08) 0%,
+    rgba(59, 130, 246, 0.08) 100%
+  );
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 6px;
+}
+
+.collab-trace-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.collab-trace-icon {
+  font-size: 13px;
+}
+
+.collab-trace-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(37, 99, 235, 0.9);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.collab-consensus-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.02em;
+}
+
+.collab-consensus-badge.approved {
+  background: rgba(16, 185, 129, 0.15);
+  color: rgba(16, 185, 129, 0.9);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.collab-consensus-badge.rejected {
+  background: rgba(239, 68, 68, 0.15);
+  color: rgba(239, 68, 68, 0.9);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.collab-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.collab-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  padding: 2px 0;
+}
+
+.collab-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.collab-step-completed .collab-step-dot {
+  background: rgba(16, 185, 129, 0.8);
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+}
+
+.collab-step-active .collab-step-dot {
+  background: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.collab-step-pending .collab-step-dot {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.collab-step-failed .collab-step-dot {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.collab-step-agent {
+  color: var(--text-primary);
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.collab-step-action {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collab-vote-summary {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  border-top: 1px solid rgba(37, 99, 235, 0.15);
+  padding-top: 6px;
+}
+
+.collab-vote-approve {
+  color: rgba(16, 185, 129, 0.9);
+  font-weight: 600;
+}
+
+.collab-vote-reject {
+  color: rgba(239, 68, 68, 0.8);
+  font-weight: 600;
+}
+
+.collab-vote-msgs {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Agent collaboration active state */
+.agent-card.agent-collab-active {
+  border-left: 2px solid rgba(37, 99, 235, 0.6);
+}
+
+.agent-card.agent-debate-active {
+  border-left: 2px solid rgba(245, 158, 11, 0.6);
+}
+
+.agent-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.agent-collab-chip {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.agent-debate-chip {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ── LangGraph Debate Panel ── */
+.debate-panel {
+  margin: 4px 12px 8px;
+  padding: 10px 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.06) 0%,
+    rgba(234, 88, 12, 0.06) 100%
+  );
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 6px;
+}
+
+.debate-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.debate-icon {
+  font-size: 13px;
+}
+
+.debate-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(245, 158, 11, 0.9);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.debate-resolution-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.02em;
+}
+
+.debate-resolution-badge.resolved {
+  background: rgba(16, 185, 129, 0.15);
+  color: rgba(16, 185, 129, 0.9);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.debate-resolution-badge.unresolved {
+  background: rgba(245, 158, 11, 0.15);
+  color: rgba(245, 158, 11, 0.9);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.debate-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.debate-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.debate-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.debate-stat-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.debate-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.debate-tag {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.tag-position { background: rgba(59, 130, 246, 0.1); color: rgba(59, 130, 246, 0.9); }
+.tag-challenge { background: rgba(239, 68, 68, 0.1); color: rgba(239, 68, 68, 0.9); }
+.tag-rebuttal { background: rgba(245, 158, 11, 0.1); color: rgba(245, 158, 11, 0.9); }
+.tag-support { background: rgba(16, 185, 129, 0.1); color: rgba(16, 185, 129, 0.9); }
+
+.debate-arguments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(245, 158, 11, 0.15);
+  padding-top: 6px;
+}
+
+.debate-arg {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  border-left: 2px solid transparent;
+}
+
+.debate-arg-position { border-left-color: rgba(59, 130, 246, 0.6); background: rgba(59, 130, 246, 0.03); }
+.debate-arg-challenge { border-left-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.03); }
+.debate-arg-rebuttal { border-left-color: rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.03); }
+.debate-arg-support { border-left-color: rgba(16, 185, 129, 0.6); background: rgba(16, 185, 129, 0.03); }
+.debate-arg-concession { border-left-color: rgba(37, 99, 235, 0.6); background: rgba(37, 99, 235, 0.03); }
+
+.debate-arg-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.debate-arg-agent {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.debate-arg-target {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.debate-arg-confidence {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.debate-arg-content {
+  color: var(--text-secondary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ── Agent Status Bar ── */
+.agents-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 20px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.agents-status-bar.agents-active {
+  background: rgba(6, 182, 212, 0.06);
+}
+
+.agents-status-bar.agents-idle {
+  background: transparent;
+}
+
+.agents-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.agents-status-dot.active {
+  background-color: var(--color-accent);
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
+  animation: pulse 1.5s infinite;
+}
+
+.agents-status-text {
+  color: var(--text-secondary);
+}
+
+.agent-card.agent-processing {
+  background-color: rgba(6, 182, 212, 0.04);
+}
+
+.agent-role-active {
+  color: var(--color-accent) !important;
+  font-style: italic;
+}
+
+.agent-init-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] .agents-status-bar.agents-active {
+  background: rgba(8, 145, 178, 0.06);
+}

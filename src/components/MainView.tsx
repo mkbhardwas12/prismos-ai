@@ -9,6 +9,7 @@ import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import { useVoice } from "../hooks/useVoice";
 import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary } from "../types";
+import "./MainView.css";
 
 interface MainViewProps {
   ollamaConnected: boolean;
@@ -60,7 +61,7 @@ export default function MainView({
     if (ollamaConnected) {
       (async () => {
         try {
-          const result = await invoke<string>("list_ollama_models");
+          const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
           const models = JSON.parse(result);
           setHasModels(Array.isArray(models) && models.length > 0);
         } catch {
@@ -139,7 +140,7 @@ export default function MainView({
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         try {
-          const connected = await invoke<boolean>("check_ollama_status");
+          const connected = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
           if (connected) {
             setLaunchStatus("✅ Ollama is running!");
             break;
@@ -156,7 +157,7 @@ export default function MainView({
   const handleRetryConnection = useCallback(async () => {
     setIsRetrying(true);
     try {
-      await invoke<boolean>("check_ollama_status");
+      await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
     } catch { /* ignore */ }
     // Parent checkOllama interval will pick up the change
     setTimeout(() => setIsRetrying(false), 2000);
@@ -167,7 +168,7 @@ export default function MainView({
     setIsPulling(true);
     setPullStatus(`Pulling ${model}... this may take a few minutes`);
     try {
-      const result = await invoke<string>("pull_ollama_model", { model });
+      const result = await invoke<string>("pull_ollama_model", { model, ollamaUrl: settings.ollamaUrl });
       setPullStatus(`✅ ${result}`);
       setHasModels(true);
     } catch (e) {

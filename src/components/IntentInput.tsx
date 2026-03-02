@@ -7,6 +7,7 @@
 
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { useVoice } from "../hooks/useVoice";
+import "./IntentInput.css";
 
 interface IntentInputProps {
   onSubmit: (input: string) => void;

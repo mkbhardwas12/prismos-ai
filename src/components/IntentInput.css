@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTENT INPUT — PrismOS (Patent [application number])
+   Includes: Input wrapper, Voice input/output
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.intent-input-container {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.intent-input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background-color: rgba(21, 27, 35, 0.7);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 10px 14px;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  backdrop-filter: blur(8px);
+}
+
+.intent-input-wrapper:focus-within {
+  border-color: rgba(37, 99, 235, 0.4);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1), 0 4px 16px rgba(37, 99, 235, 0.08);
+  background-color: rgba(21, 27, 35, 0.85);
+}
+
+.intent-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  resize: none;
+  outline: none;
+  min-height: 24px;
+  max-height: 120px;
+  line-height: 1.5;
+}
+
+.intent-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.intent-send-btn {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  border: none;
+  border-radius: 12px;
+  color: white;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.intent-send-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+}
+
+.intent-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.intent-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.intent-hint-keys {
+  opacity: 0.7;
+}
+
+.intent-hint-sep {
+  opacity: 0.4;
+}
+
+/* ── Voice Input / Output ── */
+.intent-voice-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.intent-voice-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.intent-voice-btn.voice-active {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.15));
+  border-color: rgba(239, 68, 68, 0.5);
+  color: rgb(239, 68, 68);
+  animation: voice-glow 1.5s ease-in-out infinite;
+}
+
+.intent-voice-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@keyframes voice-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+.voice-pulse {
+  animation: voice-pulse-anim 0.8s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes voice-pulse-anim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.voice-listening-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  margin-top: 6px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 8px;
+  font-size: 12px;
+  color: rgb(239, 68, 68);
+}
+
+.voice-listening-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(239, 68, 68);
+  animation: voice-dot-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes voice-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.voice-listening-text {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.voice-interim {
+  color: var(--text-muted);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+/* Voice output (speaking) bar */
+.voice-speaking-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.06) 0%,
+    rgba(6, 182, 212, 0.06) 100%
+  );
+  border-top: 1px solid rgba(16, 185, 129, 0.15);
+  font-size: 12px;
+  color: rgba(16, 185, 129, 0.9);
+}
+
+.voice-speaking-icon {
+  font-size: 14px;
+  animation: voice-speaker-anim 1s ease-in-out infinite;
+}
+
+@keyframes voice-speaker-anim {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.voice-speaking-text {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.voice-stop-btn {
+  margin-left: auto;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  color: rgb(239, 68, 68);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.voice-stop-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] .intent-input-wrapper {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .intent-input-wrapper:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 0 20px rgba(37, 99, 235, 0.06);
+}
+
+[data-theme="light"] .intent-textarea {
+  color: #0f172a;
+}

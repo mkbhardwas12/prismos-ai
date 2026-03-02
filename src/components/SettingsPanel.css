@@ -1,0 +1,530 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SETTINGS PANEL — PrismOS (Patent [application number])
+   Includes: Settings groups, inputs, model selector, theme toggle, patent
+   notice, version banner, multi-device sync UI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.settings-panel {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.settings-group {
+  margin-bottom: 28px;
+}
+
+.settings-group h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+}
+
+.settings-item {
+  margin-bottom: 14px;
+}
+
+.settings-item label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.settings-input {
+  width: 100%;
+  background-color: rgba(21, 27, 35, 0.5);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  backdrop-filter: blur(6px);
+}
+
+.settings-input:focus {
+  border-color: rgba(37, 99, 235, 0.4);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.settings-input[readonly] {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* ── Status Banner ── */
+.settings-status {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 20px;
+  animation: youport-toast-in 0.3s ease;
+}
+
+.settings-status-success {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+.settings-status-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.settings-status-info {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+}
+
+/* ── Model Selector ── */
+.settings-model-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-model-row .settings-input {
+  flex: 1;
+}
+
+.settings-model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.settings-model-tag {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-model-tag:hover {
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+}
+
+.settings-model-tag.active {
+  background: rgba(37, 99, 235, 0.15);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* ── Action Buttons ── */
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.settings-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.15);
+}
+
+.settings-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.settings-btn-sm {
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.settings-btn-primary {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.15));
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.settings-btn-secondary {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(59, 130, 246, 0.1));
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.settings-btn-danger {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.settings-btn-danger:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+}
+
+.settings-btn-danger-confirm {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+  animation: pulse-danger 1s infinite;
+}
+
+@keyframes pulse-danger {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.15); }
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+/* ── Theme Toggle ── */
+.settings-theme-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-theme-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-theme-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.settings-theme-btn.active {
+  background: rgba(37, 99, 235, 0.15);
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+}
+
+/* ── Patent Notice ── */
+.settings-about-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.settings-patent-notice {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(245, 158, 11, 0.06));
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.settings-patent-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(37, 99, 235, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+  margin-bottom: 12px;
+}
+
+.settings-patent-notice p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 8px 0;
+}
+
+.settings-patent-notice strong {
+  color: var(--text-primary);
+}
+
+.settings-patent-legal {
+  font-size: 11px !important;
+  color: var(--text-muted) !important;
+  font-style: italic;
+}
+
+/* ── Version Banner ── */
+.settings-version-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(6, 182, 212, 0.06));
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-version-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.3));
+}
+
+.settings-version-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.settings-version-name {
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.settings-version-number {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.settings-version-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.settings-badge-patent {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(37, 99, 235, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: #fbbf24;
+}
+
+.settings-badge-local {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: #34d399;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MULTI-DEVICE SYNC UI (Patent [application number] — Graph Merge/Diff)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Strategy selector */
+.settings-sync-strategies {
+  display: flex;
+  gap: 0.5rem;
+}
+.settings-sync-strategy-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.settings-sync-strategy-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+.settings-sync-strategy-btn.active {
+  background: rgba(79, 195, 247, 0.12);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Loaded file indicator */
+.settings-sync-loaded {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(129, 199, 132, 0.08);
+  border: 1px solid rgba(129, 199, 132, 0.2);
+  border-radius: 8px;
+}
+.settings-sync-loaded-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #81c784;
+  margin-bottom: 0.5rem;
+}
+
+/* Merge preview panel */
+.settings-sync-preview {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.settings-sync-preview-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 0.75rem;
+}
+
+/* Sync stats grid */
+.settings-sync-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.sync-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+.sync-stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.sync-stat-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-text-secondary);
+}
+
+/* Conflict list */
+.settings-sync-conflicts {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(229, 115, 115, 0.06);
+  border: 1px solid rgba(229, 115, 115, 0.15);
+  border-radius: 6px;
+}
+.sync-conflicts-header { font-size: 0.8rem; font-weight: 600; color: #e57373; margin-bottom: 0.5rem; }
+.sync-conflicts-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.sync-conflict-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  flex-wrap: wrap;
+}
+.sync-conflict-type { background: rgba(79, 195, 247, 0.15); color: var(--color-primary); padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; text-transform: uppercase; font-weight: 600; }
+.sync-conflict-field { color: var(--color-text-secondary); font-size: 0.65rem; font-family: var(--font-mono); }
+.sync-conflict-values { display: flex; align-items: center; gap: 0.3rem; flex: 1; min-width: 0; }
+.sync-conflict-local,
+.sync-conflict-remote { font-size: 0.65rem; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.sync-conflict-arrow { color: var(--color-text-secondary); font-size: 0.7rem; }
+.sync-conflict-resolution { font-size: 0.6rem; font-weight: 600; padding: 1px 6px; border-radius: 3px; margin-left: auto; }
+.sync-conflict-resolution.took_remote { background: rgba(79, 195, 247, 0.15); color: #4fc3f7; }
+.sync-conflict-resolution.kept_local { background: rgba(129, 199, 132, 0.15); color: #81c784; }
+.sync-conflict-resolution.took_latest { background: rgba(255, 183, 77, 0.15); color: #ffb74d; }
+.sync-conflicts-more { font-size: 0.7rem; color: var(--color-text-secondary); text-align: center; padding: 0.3rem; }
+
+/* Merge result details */
+.settings-sync-result-details {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(129, 199, 132, 0.06);
+  border: 1px solid rgba(129, 199, 132, 0.15);
+  border-radius: 6px;
+}
+.sync-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+.sync-result-row strong {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] .settings-input {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="light"] .settings-input {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .settings-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+[data-theme="light"] .settings-group {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .settings-patent-notice {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+[data-theme="light"] .settings-badge-patent,
+[data-theme="light"] .settings-badge-local {
+  background-color: #dbeafe;
+  color: #2563eb;
+  border: 1px solid #93c5fd;
+}
+
+[data-theme="light"] .prism-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+}

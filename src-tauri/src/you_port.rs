@@ -7,22 +7,23 @@
 // Architecture per Patent [application number]:
 //   1. Serialize full Spectrum Graph (nodes + edges + metrics)
 //   2. Capture active agent states and collaboration metadata
-//   3. Encrypt using device-derived key (HMAC-SHA256 key derivation + XOR stream cipher)
+//   3. Encrypt using AES-256-GCM with HMAC-SHA256-derived key
 //   4. Sign with SHA-256 integrity checksum
 //   5. Save to local encrypted file (.prismos-state)
 //   6. On app launch, detect + decrypt + restore seamlessly
 //
-// Production path: AES-256-GCM with OS keychain integration.
-// Current: HMAC-SHA256 key derivation + XOR stream cipher — fully functional
-// encryption that protects data at rest without external crate dependencies.
+// Encryption: AES-256-GCM authenticated encryption (AEAD) — provides both
+// confidentiality and integrity in a single standard construct.
 //
 // All data stays local. No cloud. No telemetry.
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::Utc;
+use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
+use aes_gcm::{Aes256Gcm, Nonce as AesNonce};
+use aes_gcm::aead::{Aead, KeyInit as AesKeyInit};
 use hmac::{Hmac, Mac};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::path::Path;
 use uuid::Uuid;
 
@@ -34,8 +35,8 @@ type HmacSha256 = Hmac<Sha256>;
 const STATE_FILE: &str = "prismos-handoff.state";
 /// Encryption key derivation salt (unique to PrismOS)
 const KEY_SALT: &[u8] = b"PrismOS-YouPort-Default-Salt-v1";
-/// Current format version
-const FORMAT_VERSION: &str = "prismos-youport-v2";
+/// Current format version (v3 = AES-256-GCM, v2 = XOR legacy)
+const FORMAT_VERSION: &str = "prismos-youport-v3";
 
 // ─── Data Models ───────────────────────────────────────────────────────────────
 
@@ -150,12 +151,12 @@ pub fn import_package(package: &YouPortPackage) -> Result<String, String> {
     Ok(data)
 }
 
-// ─── Encryption Engine ─────────────────────────────────────────────────────────
+// ─── Encryption Engine (AES-256-GCM) ───────────────────────────────────────────
 
-/// Derive an encryption key from the device fingerprint and a nonce.
-/// Uses HMAC-SHA256(salt || fingerprint || nonce) to produce a 32-byte key.
+/// Derive a 32-byte encryption key from the device fingerprint and a nonce.
+/// Uses HMAC-SHA256(salt || fingerprint || nonce) to produce a 256-bit key.
 pub fn derive_key(device_fingerprint: &str, nonce: &str) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(KEY_SALT)
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(KEY_SALT)
         .expect("HMAC can take key of any size");
     mac.update(device_fingerprint.as_bytes());
     mac.update(b"||");
@@ -163,17 +164,52 @@ pub fn derive_key(device_fingerprint: &str, nonce: &str) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
-/// XOR stream cipher using HMAC-SHA256 in counter mode.
-/// Produces a keystream by computing HMAC(key, counter) for each 32-byte block,
-/// then XORs the plaintext against it. Symmetric: encrypt == decrypt.
+/// Encrypt data using AES-256-GCM authenticated encryption.
+/// Returns the ciphertext with the 12-byte nonce prepended.
+/// The AEAD tag provides built-in tamper detection.
+pub fn aes_encrypt(key: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
+    let cipher = <Aes256Gcm as AesKeyInit>::new_from_slice(key)
+        .map_err(|e| format!("AES key error: {}", e))?;
+
+    // Generate a 12-byte nonce from the data hash (deterministic per content + key)
+    let nonce_bytes = &Sha256::digest(data)[..12];
+    let nonce = AesNonce::from_slice(nonce_bytes);
+
+    let ciphertext = cipher.encrypt(nonce, data)
+        .map_err(|e| format!("AES encryption failed: {}", e))?;
+
+    // Prepend nonce to ciphertext so decrypt can extract it
+    let mut result = Vec::with_capacity(12 + ciphertext.len());
+    result.extend_from_slice(nonce_bytes);
+    result.extend_from_slice(&ciphertext);
+    Ok(result)
+}
+
+/// Decrypt data encrypted with aes_encrypt.
+/// Expects the 12-byte nonce prepended to the ciphertext.
+pub fn aes_decrypt(key: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.len() < 13 {
+        return Err("Ciphertext too short (missing nonce)".to_string());
+    }
+    let cipher = <Aes256Gcm as AesKeyInit>::new_from_slice(key)
+        .map_err(|e| format!("AES key error: {}", e))?;
+
+    let nonce = AesNonce::from_slice(&data[..12]);
+    let ciphertext = &data[12..];
+
+    cipher.decrypt(nonce, ciphertext)
+        .map_err(|_| "AES-GCM decryption failed — wrong key, tampered data, or different device".to_string())
+}
+
+/// Legacy XOR stream cipher — kept for backward-compatible decryption of
+/// existing v1/v2 state files. New encryptions always use AES-256-GCM.
 pub fn xor_stream_cipher(key: &[u8], data: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(data.len());
     let mut offset = 0_usize;
     let mut counter = 0_u64;
 
     while offset < data.len() {
-        // Generate 32 bytes of keystream per counter block
-        let mut mac = HmacSha256::new_from_slice(key)
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(key)
             .expect("HMAC can take key of any size");
         mac.update(&counter.to_le_bytes());
         let block = mac.finalize().into_bytes();
@@ -192,9 +228,9 @@ pub fn xor_stream_cipher(key: &[u8], data: &[u8]) -> Vec<u8> {
     result
 }
 
-/// Compute HMAC-SHA256 signature for tamper detection
+/// Compute HMAC-SHA256 signature for tamper detection (used by legacy format)
 pub fn compute_hmac(key: &[u8], data: &[u8]) -> String {
-    let mut mac = HmacSha256::new_from_slice(key)
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(key)
         .expect("HMAC can take key of any size");
     mac.update(data);
     hex_encode(&mac.finalize().into_bytes())
@@ -315,12 +351,13 @@ pub fn save_state(
     let device_fp = get_device_fingerprint(app_dir);
     let key = derive_key(&device_fp, &nonce);
 
-    // ── 5. Encrypt ──
-    let ciphertext = xor_stream_cipher(&key, plaintext_bytes);
+    // ── 5. Encrypt with AES-256-GCM (authenticated encryption) ──
+    let ciphertext = aes_encrypt(&key, plaintext_bytes)
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
     let encrypted_b64 = BASE64.encode(&ciphertext);
 
-    // ── 6. Sign the ciphertext for tamper detection ──
-    let hmac_sig = compute_hmac(&key, &ciphertext);
+    // ── 6. HMAC is no longer needed — AES-GCM provides built-in authentication ──
+    let hmac_sig = String::new(); // Kept for format compatibility
 
     // ── 7. Build encrypted package ──
     let package = EncryptedPackage {
@@ -383,8 +420,9 @@ pub fn load_state(
     let package_json = std::fs::read_to_string(&state_path)?;
     let package: EncryptedPackage = serde_json::from_str(&package_json)?;
 
-    // Verify format
-    if package.format != FORMAT_VERSION {
+    // Verify format — support both v3 (AES-GCM) and v2 (legacy XOR)
+    let is_legacy = package.format == "prismos-youport-v2";
+    if package.format != FORMAT_VERSION && !is_legacy {
         return Err(format!(
             "Unsupported state format: {} (expected {})",
             package.format, FORMAT_VERSION
@@ -396,21 +434,27 @@ pub fn load_state(
     let device_fp = get_device_fingerprint(app_dir);
     let key = derive_key(&device_fp, &package.nonce);
 
-    // ── 3. Decode and verify HMAC ──
+    // ── 3. Decode ciphertext ──
     let ciphertext = BASE64
         .decode(&package.encrypted_payload)
         .map_err(|e| format!("Failed to decode encrypted payload: {}", e))?;
 
-    let expected_hmac = compute_hmac(&key, &ciphertext);
-    if expected_hmac != package.hmac_signature {
-        return Err(
-            "HMAC verification failed — state file may be tampered or from a different device"
-                .into(),
-        );
-    }
-
-    // ── 4. Decrypt ──
-    let plaintext_bytes = xor_stream_cipher(&key, &ciphertext);
+    // ── 4. Decrypt (AES-GCM for v3, legacy XOR for v2) ──
+    let plaintext_bytes = if is_legacy {
+        // Legacy v2: verify HMAC then XOR-decrypt
+        let expected_hmac = compute_hmac(&key, &ciphertext);
+        if expected_hmac != package.hmac_signature {
+            return Err(
+                "HMAC verification failed — state file may be tampered or from a different device"
+                    .into(),
+            );
+        }
+        xor_stream_cipher(&key, &ciphertext)
+    } else {
+        // v3: AES-256-GCM handles authentication internally
+        aes_decrypt(&key, &ciphertext)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?
+    };
 
     // ── 5. Verify plaintext integrity ──
     let plaintext_checksum = hex_encode(&Sha256::digest(&plaintext_bytes));
@@ -515,18 +559,16 @@ pub fn export_sync_package(
     let key = derive_key(passphrase, &nonce);
     let checksum = sha256_hex(plaintext_bytes);
 
-    // Encrypt
-    let ciphertext = xor_stream_cipher(&key, plaintext_bytes);
+    // Encrypt with AES-256-GCM
+    let ciphertext = aes_encrypt(&key, plaintext_bytes)?;
     let encrypted_b64 = BASE64.encode(&ciphertext);
-    let hmac_sig = compute_hmac(&key, &ciphertext);
 
     let package = serde_json::json!({
-        "format": "prismos-sync-encrypted-v1",
+        "format": "prismos-sync-encrypted-v2",
         "id": Uuid::new_v4().to_string(),
         "created_at": Utc::now().to_rfc3339(),
         "encrypted_payload": encrypted_b64,
         "checksum": checksum,
-        "hmac_signature": hmac_sig,
         "nonce": nonce,
         "key_type": "passphrase",
         "stats": {
@@ -549,8 +591,9 @@ pub fn import_sync_package(
     let package: serde_json::Value = serde_json::from_str(package_json)?;
 
     let format = package["format"].as_str().unwrap_or("");
-    if format != "prismos-sync-encrypted-v1" {
-        return Err(format!("Unsupported sync format: {} (expected prismos-sync-encrypted-v1)", format).into());
+    let is_legacy_sync = format == "prismos-sync-encrypted-v1";
+    if format != "prismos-sync-encrypted-v2" && !is_legacy_sync {
+        return Err(format!("Unsupported sync format: {} (expected prismos-sync-encrypted-v2)", format).into());
     }
 
     let encrypted_b64 = package["encrypted_payload"]
@@ -558,27 +601,29 @@ pub fn import_sync_package(
         .ok_or("Missing encrypted_payload")?;
     let nonce = package["nonce"].as_str().ok_or("Missing nonce")?;
     let stored_checksum = package["checksum"].as_str().ok_or("Missing checksum")?;
-    let stored_hmac = package["hmac_signature"]
-        .as_str()
-        .ok_or("Missing hmac_signature")?;
 
     // Derive key from passphrase + nonce
     let key = derive_key(passphrase, nonce);
 
-    // Decode and verify HMAC
+    // Decode
     let ciphertext = BASE64
         .decode(encrypted_b64)
         .map_err(|e| format!("Failed to decode payload: {}", e))?;
 
-    let expected_hmac = compute_hmac(&key, &ciphertext);
-    if expected_hmac != stored_hmac {
-        return Err(
-            "HMAC verification failed — wrong passphrase or tampered file".into(),
-        );
-    }
-
-    // Decrypt
-    let plaintext_bytes = xor_stream_cipher(&key, &ciphertext);
+    // Decrypt based on format version
+    let plaintext_bytes = if is_legacy_sync {
+        let stored_hmac = package["hmac_signature"]
+            .as_str()
+            .ok_or("Missing hmac_signature")?;
+        let expected_hmac = compute_hmac(&key, &ciphertext);
+        if expected_hmac != stored_hmac {
+            return Err("HMAC verification failed — wrong passphrase or tampered file".into());
+        }
+        xor_stream_cipher(&key, &ciphertext)
+    } else {
+        aes_decrypt(&key, &ciphertext)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?
+    };
 
     // Verify integrity
     let checksum = sha256_hex(&plaintext_bytes);
@@ -624,7 +669,8 @@ pub fn preview_sync_merge(
     let package: serde_json::Value = serde_json::from_str(package_json)?;
 
     let format = package["format"].as_str().unwrap_or("");
-    if format != "prismos-sync-encrypted-v1" {
+    let is_legacy_sync = format == "prismos-sync-encrypted-v1";
+    if format != "prismos-sync-encrypted-v2" && !is_legacy_sync {
         return Err(format!("Unsupported sync format: {}", format).into());
     }
 
@@ -632,21 +678,25 @@ pub fn preview_sync_merge(
         .as_str()
         .ok_or("Missing encrypted_payload")?;
     let nonce = package["nonce"].as_str().ok_or("Missing nonce")?;
-    let stored_hmac = package["hmac_signature"]
-        .as_str()
-        .ok_or("Missing hmac_signature")?;
 
     let key = derive_key(passphrase, nonce);
     let ciphertext = BASE64
         .decode(encrypted_b64)
         .map_err(|e| format!("Failed to decode payload: {}", e))?;
 
-    let expected_hmac = compute_hmac(&key, &ciphertext);
-    if expected_hmac != stored_hmac {
-        return Err("HMAC verification failed — wrong passphrase or tampered file".into());
-    }
-
-    let plaintext_bytes = xor_stream_cipher(&key, &ciphertext);
+    let plaintext_bytes = if is_legacy_sync {
+        let stored_hmac = package["hmac_signature"]
+            .as_str()
+            .ok_or("Missing hmac_signature")?;
+        let expected_hmac = compute_hmac(&key, &ciphertext);
+        if expected_hmac != stored_hmac {
+            return Err("HMAC verification failed — wrong passphrase or tampered file".into());
+        }
+        xor_stream_cipher(&key, &ciphertext)
+    } else {
+        aes_decrypt(&key, &ciphertext)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?
+    };
     let plaintext = String::from_utf8(plaintext_bytes)?;
 
     let state: serde_json::Value = serde_json::from_str(&plaintext)?;
@@ -732,5 +782,45 @@ mod tests {
         let fp2 = get_device_fingerprint(path);
         assert_eq!(fp1, fp2);
         assert_eq!(fp1.len(), 64); // SHA-256 hex = 64 chars
+    }
+
+    #[test]
+    fn test_aes_gcm_roundtrip() {
+        let key = derive_key("test-device", "test-nonce");
+        let plaintext = b"Hello PrismOS! AES-256-GCM authenticated encryption test across multiple blocks.";
+
+        let ciphertext = aes_encrypt(&key, plaintext).expect("Encryption should succeed");
+        // AES-GCM adds 12-byte nonce + 16-byte auth tag
+        assert!(ciphertext.len() > plaintext.len());
+
+        let decrypted = aes_decrypt(&key, &ciphertext).expect("Decryption should succeed");
+        assert_eq!(&decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_aes_gcm_wrong_key_fails() {
+        let key1 = derive_key("device-A", "nonce-1");
+        let key2 = derive_key("device-B", "nonce-1");
+
+        let plaintext = b"secret data";
+        let ciphertext = aes_encrypt(&key1, plaintext).expect("Encryption should succeed");
+
+        let result = aes_decrypt(&key2, &ciphertext);
+        assert!(result.is_err(), "Decryption with wrong key should fail");
+    }
+
+    #[test]
+    fn test_aes_gcm_tampered_data_fails() {
+        let key = derive_key("device", "nonce");
+        let plaintext = b"important payload";
+        let mut ciphertext = aes_encrypt(&key, plaintext).expect("Encryption should succeed");
+
+        // Tamper with a byte in the ciphertext (after the 12-byte nonce)
+        if ciphertext.len() > 15 {
+            ciphertext[15] ^= 0xFF;
+        }
+
+        let result = aes_decrypt(&key, &ciphertext);
+        assert!(result.is_err(), "Tampered ciphertext should fail authentication");
     }
 }

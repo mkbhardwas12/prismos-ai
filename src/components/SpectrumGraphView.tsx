@@ -11,6 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import ForceGraph2D from "react-force-graph-2d";
 import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed } from "../types";
 import prismosLogo from "../assets/prismos-logo.svg";
+import "./SpectrumGraphView.css";
 
 // ─── Facet Color Palette ───────────────────────────────────────────────────────
 

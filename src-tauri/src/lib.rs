@@ -13,7 +13,13 @@ mod audit_log;
 mod model_verify;
 mod secure_enclave;
 
+use std::sync::Mutex;
+use tauri::Emitter;
 use tauri::Manager;
+
+/// Shared Spectrum Graph database — initialized once at startup, reused by all commands.
+/// Wrapped in Mutex because rusqlite::Connection is not Sync.
+pub struct DbState(pub Mutex<spectrum_graph::SpectrumGraph>);
 
 // ─── Tauri Commands ────────────────────────────────────────────────────────────
 
@@ -61,35 +67,54 @@ async fn refract_intent(app: tauri::AppHandle, input: String) -> Result<String, 
 }
 
 #[tauri::command]
-async fn query_ollama(prompt: String, model: Option<String>) -> Result<String, String> {
+async fn query_ollama(prompt: String, model: Option<String>, ollama_url: Option<String>, max_tokens: Option<u32>) -> Result<String, String> {
     let model = model.unwrap_or_else(|| "mistral".to_string());
-    ollama_bridge::generate(&model, &prompt)
+    ollama_bridge::generate(&model, &prompt, ollama_url.as_deref(), max_tokens)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn query_ollama_stream(
+    app: tauri::AppHandle,
+    prompt: String,
+    model: Option<String>,
+    ollama_url: Option<String>,
+    max_tokens: Option<u32>,
+) -> Result<String, String> {
+    let model = model.unwrap_or_else(|| "mistral".to_string());
+    let app_clone = app.clone();
+    ollama_bridge::generate_stream(
+        &model,
+        &prompt,
+        ollama_url.as_deref(),
+        max_tokens,
+        move |event| {
+            let _ = app_clone.emit("ollama-stream", &event);
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // ─── Spectrum Graph Commands ───────────────────────────────────────────────────
 
 #[tauri::command]
-async fn get_spectrum_nodes(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db =
-        spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let nodes = db.get_all_nodes().map_err(|e| e.to_string())?;
+async fn get_spectrum_nodes(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let nodes = graph.get_all_nodes().map_err(|e| e.to_string())?;
     serde_json::to_string(&nodes).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn add_spectrum_node(
-    app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
     label: String,
     content: String,
     node_type: String,
 ) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db =
-        spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let node = db
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let node = graph
         .add_node(&label, &content, &node_type)
         .map_err(|e| e.to_string())?;
     serde_json::to_string(&node).map_err(|e| e.to_string())
@@ -102,8 +127,8 @@ async fn get_active_agents(active_agent: Option<String>) -> Result<String, Strin
 }
 
 #[tauri::command]
-async fn check_ollama_status() -> Result<bool, String> {
-    ollama_bridge::is_available()
+async fn check_ollama_status(ollama_url: Option<String>) -> Result<bool, String> {
+    ollama_bridge::is_available(ollama_url.as_deref())
         .await
         .map_err(|e| e.to_string())
 }
@@ -147,7 +172,7 @@ async fn launch_ollama() -> Result<String, String> {
     // Wait a moment for the server to start, then check
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-    let available = ollama_bridge::is_available()
+    let available = ollama_bridge::is_available(None)
         .await
         .unwrap_or(false);
 
@@ -159,11 +184,12 @@ async fn launch_ollama() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn pull_ollama_model(model: String) -> Result<String, String> {
+async fn pull_ollama_model(model: String, ollama_url: Option<String>) -> Result<String, String> {
     // Pull a model using the Ollama API
+    let url = ollama_url.as_deref().unwrap_or(ollama_bridge::DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
     let resp = client
-        .post("http://localhost:11434/api/pull")
+        .post(format!("{}/api/pull", url))
         .json(&serde_json::json!({ "name": model, "stream": false }))
         .timeout(std::time::Duration::from_secs(600)) // 10 min timeout for large models
         .send()
@@ -179,8 +205,8 @@ async fn pull_ollama_model(model: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn list_ollama_models() -> Result<String, String> {
-    let models = ollama_bridge::list_models()
+async fn list_ollama_models(ollama_url: Option<String>) -> Result<String, String> {
+    let models = ollama_bridge::list_models(ollama_url.as_deref())
         .await
         .map_err(|e| e.to_string())?;
     serde_json::to_string(&models).map_err(|e| e.to_string())
@@ -207,63 +233,51 @@ async fn import_you_port(package_json: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn get_spectrum_node(app: tauri::AppHandle, id: String) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let node = db.get_node(&id).map_err(|e| e.to_string())?;
+async fn get_spectrum_node(db: tauri::State<'_, DbState>, id: String) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let node = graph.get_node(&id).map_err(|e| e.to_string())?;
     serde_json::to_string(&node).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn search_spectrum_nodes(app: tauri::AppHandle, query: String) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let nodes = db.search_nodes(&query).map_err(|e| e.to_string())?;
+async fn search_spectrum_nodes(db: tauri::State<'_, DbState>, query: String) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let nodes = graph.search_nodes(&query).map_err(|e| e.to_string())?;
     serde_json::to_string(&nodes).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn delete_spectrum_node(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    db.delete_node(&id).map_err(|e| e.to_string())
+async fn delete_spectrum_node(db: tauri::State<'_, DbState>, id: String) -> Result<(), String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    graph.delete_node(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn add_spectrum_edge(
-    app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
     source_id: String,
     target_id: String,
     relation: String,
     weight: f64,
 ) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let edge = db.add_edge(&source_id, &target_id, &relation, weight).map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let edge = graph.add_edge(&source_id, &target_id, &relation, weight).map_err(|e| e.to_string())?;
     serde_json::to_string(&edge).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_node_connections(app: tauri::AppHandle, node_id: String) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let edges = db.get_connections(&node_id).map_err(|e| e.to_string())?;
+async fn get_node_connections(db: tauri::State<'_, DbState>, node_id: String) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let edges = graph.get_connections(&node_id).map_err(|e| e.to_string())?;
     serde_json::to_string(&edges).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_graph_stats(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let (nodes, edges) = db.stats().map_err(|e| e.to_string())?;
+async fn get_graph_stats(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let (nodes, edges) = graph.stats().map_err(|e| e.to_string())?;
     serde_json::to_string(&serde_json::json!({ "nodes": nodes, "edges": edges }))
         .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn execute_sandbox(action: String, agent_id: String) -> Result<String, String> {
-    let result = sandbox_prism::sandbox_execute(&action, &agent_id);
-    serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -286,23 +300,21 @@ async fn execute_in_sandbox(action: String, agent_id: String) -> Result<String, 
 
 /// Get the full Spectrum Graph snapshot for frontend visualization
 #[tauri::command]
-async fn get_spectrum_graph(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let snapshot = db.get_full_graph().map_err(|e| e.to_string())?;
+async fn get_spectrum_graph(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let snapshot = graph.get_full_graph().map_err(|e| e.to_string())?;
     serde_json::to_string(&snapshot).map_err(|e| e.to_string())
 }
 
 /// Update edge weight with closed-loop feedback signal
 #[tauri::command]
 async fn update_edge_weight(
-    app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
     edge_id: String,
     feedback_signal: f64,
 ) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let edge = db
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let edge = graph
         .update_edge_weight(&edge_id, feedback_signal)
         .map_err(|e| e.to_string())?;
     serde_json::to_string(&edge).map_err(|e| e.to_string())
@@ -311,14 +323,13 @@ async fn update_edge_weight(
 /// Query the Spectrum Graph with intent-aware retrieval
 #[tauri::command]
 async fn query_spectrum_intent(
-    app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
     raw_input: String,
     intent_type: String,
     entities: Vec<String>,
 ) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let results = db
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let results = graph
         .query_intent(&raw_input, &intent_type, &entities)
         .map_err(|e| e.to_string())?;
     serde_json::to_string(&results).map_err(|e| e.to_string())
@@ -326,78 +337,72 @@ async fn query_spectrum_intent(
 
 /// Get anticipatory need predictions from graph patterns
 #[tauri::command]
-async fn anticipate_needs(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let needs = db.anticipate_needs().map_err(|e| e.to_string())?;
+async fn anticipate_needs(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let needs = graph.anticipate_needs().map_err(|e| e.to_string())?;
     serde_json::to_string(&needs).map_err(|e| e.to_string())
 }
 
 /// Get extended graph metrics
 #[tauri::command]
-async fn get_graph_metrics(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let metrics = db.get_metrics().map_err(|e| e.to_string())?;
+async fn get_graph_metrics(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let metrics = graph.get_metrics().map_err(|e| e.to_string())?;
     serde_json::to_string(&metrics).map_err(|e| e.to_string())
 }
 
 /// Apply temporal decay to all edges (maintenance)
 #[tauri::command]
-async fn decay_graph_edges(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let updated = db.decay_all_edges().map_err(|e| e.to_string())?;
+async fn decay_graph_edges(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let updated = graph.decay_all_edges().map_err(|e| e.to_string())?;
     Ok(format!("{{\"edges_decayed\": {}}}", updated))
 }
 
 /// Persist the Spectrum Graph to a JSON export file
 #[tauri::command]
-async fn persist_graph(app: tauri::AppHandle) -> Result<String, String> {
+async fn persist_graph(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
     let export_path = app_dir.join("spectrum_graph_export.json");
-    db.persist(&export_path).map_err(|e| e.to_string())
+    graph.persist(&export_path).map_err(|e| e.to_string())
 }
 
 /// Load a previously persisted Spectrum Graph from JSON
 #[tauri::command]
-async fn load_graph(app: tauri::AppHandle) -> Result<String, String> {
+async fn load_graph(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
     let import_path = app_dir.join("spectrum_graph_export.json");
-    db.load(&import_path).map_err(|e| e.to_string())
+    graph.load(&import_path).map_err(|e| e.to_string())
 }
 
 /// Get feedback count for analytics
 #[tauri::command]
-async fn get_feedback_count(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let count = db.get_feedback_count().map_err(|e| e.to_string())?;
+async fn get_feedback_count(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let count = graph.get_feedback_count().map_err(|e| e.to_string())?;
     Ok(format!("{{\"feedback_count\": {}}}", count))
 }
 
 /// Get recent intent log entries
 #[tauri::command]
-async fn get_recent_intents(app: tauri::AppHandle, days: u32) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let intents = db.get_recent_intents(days).map_err(|e| e.to_string())?;
+async fn get_recent_intents(db: tauri::State<'_, DbState>, days: u32) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let intents = graph.get_recent_intents(days).map_err(|e| e.to_string())?;
     serde_json::to_string(&intents).map_err(|e| e.to_string())
 }
 
 /// Update a node's label and content
 #[tauri::command]
 async fn update_spectrum_node(
-    app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
     id: String,
     label: String,
     content: String,
 ) -> Result<(), String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    db.update_node(&id, &label, &content).map_err(|e| e.to_string())
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    graph.update_node(&id, &label, &content).map_err(|e| e.to_string())
 }
 
 // ─── You-Port Encrypted State Handoff (Patent [application number]) ──────────────────────
@@ -432,32 +437,30 @@ async fn has_saved_state(app: tauri::AppHandle) -> Result<bool, String> {
 /// Export the Spectrum Graph as an encrypted JSON package (You-Port encryption)
 /// Returns the encrypted package JSON string for the user to save externally.
 #[tauri::command]
-async fn export_graph(app: tauri::AppHandle) -> Result<String, String> {
+async fn export_graph(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let snapshot = db.get_full_graph().map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let snapshot = graph.get_full_graph().map_err(|e| e.to_string())?;
 
     // Serialize the graph snapshot
     let plaintext = serde_json::to_string_pretty(&snapshot).map_err(|e| e.to_string())?;
     let plaintext_bytes = plaintext.as_bytes();
 
-    // Encrypt using You-Port encryption engine
+    // Encrypt using You-Port AES-256-GCM engine
     let nonce = uuid::Uuid::new_v4().to_string();
     let device_fp = you_port::get_device_fingerprint(&app_dir);
     let key = you_port::derive_key(&device_fp, &nonce);
     let checksum = you_port::sha256_hex(plaintext_bytes);
 
-    let ciphertext = you_port::xor_stream_cipher(&key, plaintext_bytes);
+    let ciphertext = you_port::aes_encrypt(&key, plaintext_bytes).map_err(|e| e.to_string())?;
     let encrypted_b64 = you_port::base64_encode(&ciphertext);
-    let hmac_sig = you_port::compute_hmac(&key, &ciphertext);
 
     let package = serde_json::json!({
-        "format": "prismos-graph-export-v1",
+        "format": "prismos-graph-export-v2",
         "id": uuid::Uuid::new_v4().to_string(),
         "created_at": chrono::Utc::now().to_rfc3339(),
         "encrypted_payload": encrypted_b64,
         "checksum": checksum,
-        "hmac_signature": hmac_sig,
         "nonce": nonce,
         "stats": {
             "nodes": snapshot.nodes.len(),
@@ -471,14 +474,15 @@ async fn export_graph(app: tauri::AppHandle) -> Result<String, String> {
 /// Import a Spectrum Graph from an encrypted JSON package
 /// Decrypts, verifies, and merges into the current graph.
 #[tauri::command]
-async fn import_graph(app: tauri::AppHandle, package_json: String) -> Result<String, String> {
+async fn import_graph(app: tauri::AppHandle, db_state: tauri::State<'_, DbState>, package_json: String) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
     let package: serde_json::Value =
         serde_json::from_str(&package_json).map_err(|e| format!("Invalid package JSON: {}", e))?;
 
     let format = package["format"].as_str().unwrap_or("");
-    if format != "prismos-graph-export-v1" {
+    let is_legacy_export = format == "prismos-graph-export-v1";
+    if format != "prismos-graph-export-v2" && !is_legacy_export {
         return Err(format!("Unsupported export format: {}", format));
     }
 
@@ -487,28 +491,28 @@ async fn import_graph(app: tauri::AppHandle, package_json: String) -> Result<Str
         .ok_or("Missing encrypted_payload")?;
     let nonce = package["nonce"].as_str().ok_or("Missing nonce")?;
     let stored_checksum = package["checksum"].as_str().ok_or("Missing checksum")?;
-    let stored_hmac = package["hmac_signature"]
-        .as_str()
-        .ok_or("Missing hmac_signature")?;
 
     // Derive key from device fingerprint + nonce
     let device_fp = you_port::get_device_fingerprint(&app_dir);
     let key = you_port::derive_key(&device_fp, nonce);
 
-    // Decode and verify HMAC
+    // Decode ciphertext
     let ciphertext = you_port::base64_decode(encrypted_b64)
         .map_err(|e| format!("Failed to decode payload: {}", e))?;
 
-    let expected_hmac = you_port::compute_hmac(&key, &ciphertext);
-    if expected_hmac != stored_hmac {
-        return Err(
-            "HMAC verification failed — file may be tampered or from a different device"
-                .to_string(),
-        );
-    }
-
-    // Decrypt
-    let plaintext_bytes = you_port::xor_stream_cipher(&key, &ciphertext);
+    // Decrypt based on format version
+    let plaintext_bytes = if is_legacy_export {
+        let stored_hmac = package["hmac_signature"]
+            .as_str()
+            .ok_or("Missing hmac_signature")?;
+        let expected_hmac = you_port::compute_hmac(&key, &ciphertext);
+        if expected_hmac != stored_hmac {
+            return Err("HMAC verification failed — file may be tampered or from a different device".to_string());
+        }
+        you_port::xor_stream_cipher(&key, &ciphertext)
+    } else {
+        you_port::aes_decrypt(&key, &ciphertext).map_err(|e| e.to_string())?
+    };
 
     // Verify integrity
     let checksum = you_port::sha256_hex(&plaintext_bytes);
@@ -523,15 +527,15 @@ async fn import_graph(app: tauri::AppHandle, package_json: String) -> Result<Str
     let snapshot: spectrum_graph::GraphSnapshot =
         serde_json::from_str(&plaintext).map_err(|e| format!("Failed to parse graph data: {}", e))?;
 
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let graph = db_state.0.lock().map_err(|e| e.to_string())?;
     let mut nodes_imported = 0_usize;
     let mut edges_imported = 0_usize;
 
     for node in &snapshot.nodes {
-        match db.get_node(&node.id) {
+        match graph.get_node(&node.id) {
             Ok(_) => {} // Skip existing
             Err(_) => {
-                if db.add_node_with_layer(&node.label, &node.content, &node.node_type, &node.layer).is_ok() {
+                if graph.add_node_with_layer(&node.label, &node.content, &node.node_type, &node.layer).is_ok() {
                     nodes_imported += 1;
                 }
             }
@@ -539,7 +543,7 @@ async fn import_graph(app: tauri::AppHandle, package_json: String) -> Result<Str
     }
 
     for edge in &snapshot.edges {
-        if db.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation).is_ok() {
+        if graph.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation).is_ok() {
             edges_imported += 1;
         }
     }
@@ -558,10 +562,9 @@ async fn import_graph(app: tauri::AppHandle, package_json: String) -> Result<Str
 
 /// Clear the entire Spectrum Graph (delete all nodes and edges)
 #[tauri::command]
-async fn clear_graph(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let (nodes, edges) = db.clear_graph().map_err(|e| e.to_string())?;
+async fn clear_graph(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let (nodes, edges) = graph.clear_graph().map_err(|e| e.to_string())?;
 
     let result = serde_json::json!({
         "success": true,
@@ -646,10 +649,9 @@ async fn open_graph_window(
 /// Get timeline data — spectrum nodes grouped by date with edge events.
 /// Returns nodes sorted by created_at descending for the Spectral Timeline view.
 #[tauri::command]
-async fn get_timeline_data(app: tauri::AppHandle) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let snapshot = db.get_full_graph().map_err(|e| e.to_string())?;
+async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let snapshot = graph.get_full_graph().map_err(|e| e.to_string())?;
 
     // Combine nodes and edges into a unified timeline, sorted by date
     #[derive(serde::Serialize)]
@@ -778,16 +780,16 @@ async fn preview_sync_merge(
 /// Useful for comparing two local exports.
 #[tauri::command]
 async fn diff_graph(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
     snapshot_json: String,
     strategy: String,
 ) -> Result<String, String> {
-    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let snapshot: spectrum_graph::GraphSnapshot =
         serde_json::from_str(&snapshot_json).map_err(|e| format!("Invalid snapshot JSON: {}", e))?;
     let merge_strategy = spectrum_graph::MergeStrategy::from_str(&strategy);
-    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
-    let diff = db.diff_graph(&snapshot, &merge_strategy).map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let diff = graph.diff_graph(&snapshot, &merge_strategy).map_err(|e| e.to_string())?;
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
@@ -870,9 +872,10 @@ pub fn run() {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
 
-            // Initialize Spectrum Graph database with multi-layered schema
-            let _db = spectrum_graph::SpectrumGraph::new(&app_dir)
+            // Initialize Spectrum Graph database — shared across all commands
+            let db = spectrum_graph::SpectrumGraph::new(&app_dir)
                 .expect("Failed to initialize Spectrum Graph");
+            app.manage(DbState(Mutex::new(db)));
 
             // Initialize tamper-evident audit log
             let audit = audit_log::AuditLog::new(&app_dir);
@@ -926,6 +929,7 @@ pub fn run() {
             process_intent_full,
             refract_intent,
             query_ollama,
+            query_ollama_stream,
             // Spectrum Graph — CRUD
             get_spectrum_nodes,
             get_spectrum_node,
@@ -961,7 +965,6 @@ pub fn run() {
             list_ollama_models,
             // Sandbox (Patent [application number] — WASM Isolation + Cryptographic Signing)
             create_sandbox,
-            execute_sandbox,
             execute_in_sandbox,
             rollback_sandbox,
             // You-Port (Patent [application number] — Encrypted State Migration)

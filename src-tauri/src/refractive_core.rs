@@ -556,6 +556,6 @@ pub async fn route_intent(
         system_prompt, intent.raw, intent.entities, intent.confidence * 100.0
     );
 
-    let response = crate::ollama_bridge::generate("mistral", &prompt).await?;
+    let response = crate::ollama_bridge::generate("mistral", &prompt, None, None).await?;
     Ok(response)
 }

@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import prismosIcon from "../assets/prismos-icon.svg";
+import "./Sidebar.css";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
 

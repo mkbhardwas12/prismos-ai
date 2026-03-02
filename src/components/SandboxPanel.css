@@ -1,0 +1,129 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SANDBOX PANEL — PrismOS (Patent [application number])
+   Includes: Sandbox form, Results, Prism cards
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sandbox-container {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sandbox-section {
+  margin-bottom: 28px;
+}
+
+.sandbox-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+}
+
+.section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.sandbox-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sandbox-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Results ── */
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.result-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.result-card.success {
+  border-left: 3px solid var(--color-success);
+}
+
+.result-card.failure {
+  border-left: 3px solid #ff3c3c;
+}
+
+.result-header {
+  margin-bottom: 8px;
+}
+
+.result-status {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.result-output {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.result-effects {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.effect-badge {
+  font-size: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* ── Prism Cards ── */
+.prism-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prism-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.prism-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.prism-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] .result-card.success {
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+[data-theme="light"] .result-card.failure {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+}

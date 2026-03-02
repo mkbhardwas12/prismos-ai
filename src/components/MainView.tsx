@@ -22,6 +22,7 @@ export default function MainView({
 }: MainViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState("");
   const conversationRef = useRef<HTMLDivElement>(null);
 
   // Voice output (TTS) — speaks AI responses aloud when enabled
@@ -206,33 +207,65 @@ export default function MainView({
               happens on your device — your data never leaves.
             </p>
 
-            {/* Quick-start example intents */}
+            {/* Ollama offline banner */}
+            {!ollamaConnected && (
+              <div className="ollama-offline-banner" role="alert">
+                <div className="ollama-offline-icon">⚡</div>
+                <div className="ollama-offline-content">
+                  <strong>Ollama is not running</strong>
+                  <span>PrismOS needs Ollama for local AI inference. Start it to unlock all features.</span>
+                </div>
+                <div className="ollama-offline-actions">
+                  <button
+                    className="ollama-start-btn"
+                    onClick={() => {
+                      // Try to open terminal with ollama serve command
+                      try {
+                        navigator.clipboard.writeText("ollama serve");
+                      } catch { /* ignore */ }
+                      window.open("https://ollama.com", "_blank");
+                    }}
+                    title="Visit ollama.com to download, then run 'ollama serve'"
+                  >
+                    🚀 Get Ollama
+                  </button>
+                  <div className="ollama-offline-hint">
+                    Run <code>ollama serve</code> in your terminal
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quick-start example intents — auto-fill input box */}
             <div className="welcome-examples">
-              <div className="welcome-examples-label">Try an intent to get started</div>
+              <div className="welcome-examples-label">Click an example to try it</div>
               <div className="welcome-example-chips">
                 <button
                   className="example-chip"
-                  onClick={() => handleIntent("Summarize what I worked on this week and suggest priorities for tomorrow")}
+                  onClick={() => setPendingIntent("Summarize what I worked on this week and suggest priorities for tomorrow")}
                   disabled={isProcessing}
                 >
                   <span className="example-chip-icon">📋</span>
-                  Summarize my week &amp; suggest priorities
+                  <span className="example-chip-text">Summarize my week &amp; suggest priorities</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
                 <button
                   className="example-chip"
-                  onClick={() => handleIntent("Draft a short professional bio based on my recent projects")}
+                  onClick={() => setPendingIntent("Draft a short professional bio based on my recent projects")}
                   disabled={isProcessing}
                 >
                   <span className="example-chip-icon">✍️</span>
-                  Draft a professional bio for me
+                  <span className="example-chip-text">Draft a professional bio for me</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
                 <button
                   className="example-chip"
-                  onClick={() => handleIntent("What connections exist in my knowledge graph and what patterns do you see?")}
+                  onClick={() => setPendingIntent("What connections exist in my knowledge graph and what patterns do you see?")}
                   disabled={isProcessing}
                 >
                   <span className="example-chip-icon">🔮</span>
-                  Analyze my knowledge graph patterns
+                  <span className="example-chip-text">Analyze my knowledge graph patterns</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
               </div>
             </div>
@@ -317,6 +350,8 @@ export default function MainView({
         onSubmit={handleIntent}
         isProcessing={isProcessing}
         voiceEnabled={settings.voiceInputEnabled ?? false}
+        pendingIntent={pendingIntent}
+        onPendingConsumed={() => setPendingIntent("")}
       />
     </>
   );

@@ -5,22 +5,41 @@
 // All voice processing uses the browser's built-in speech recognition —
 // no cloud transcription. Your voice data never leaves your device.
 
-import { useState, useRef, useCallback, type KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { useVoice } from "../hooks/useVoice";
 
 interface IntentInputProps {
   onSubmit: (input: string) => void;
   isProcessing: boolean;
   voiceEnabled?: boolean;
+  pendingIntent?: string;
+  onPendingConsumed?: () => void;
 }
 
 export default function IntentInput({
   onSubmit,
   isProcessing,
   voiceEnabled = true,
+  pendingIntent,
+  onPendingConsumed,
 }: IntentInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-fill input when a pending intent arrives (from example chips)
+  useEffect(() => {
+    if (pendingIntent) {
+      setInput(pendingIntent);
+      onPendingConsumed?.();
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.style.height = "auto";
+          textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+        }
+      }, 50);
+    }
+  }, [pendingIntent, onPendingConsumed]);
 
   // Voice transcript callback — auto-submits when speech is final
   const handleVoiceTranscript = useCallback(
@@ -71,7 +90,7 @@ export default function IntentInput({
           placeholder={
             voice.isListening
               ? "🎙️ Listening… speak your intent"
-              : "Ask anything — plan, create, analyze, explore…"
+              : "What would you like to do? Type anything here…"
           }
           value={voice.isListening && voice.interimTranscript ? voice.interimTranscript : input}
           onChange={(e) => {

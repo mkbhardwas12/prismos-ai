@@ -38,14 +38,45 @@ function App() {
   const [lastDebate, setLastDebate] = useState<DebateSummary | null>(null);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AppSettings>({
-    ollamaUrl: "http://localhost:11434",
-    defaultModel: "mistral",
-    theme: "dark",
-    maxTokens: 2048,
-    voiceInputEnabled: false,
-    voiceOutputEnabled: false,
+
+  // ── Settings: load from localStorage (persists across restarts) ──
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const saved = localStorage.getItem("prismos-settings");
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<AppSettings>;
+        const merged = {
+          ollamaUrl: parsed.ollamaUrl ?? "http://localhost:11434",
+          defaultModel: parsed.defaultModel ?? "mistral",
+          theme: parsed.theme ?? "dark",
+          maxTokens: parsed.maxTokens ?? 2048,
+          voiceInputEnabled: parsed.voiceInputEnabled ?? false,
+          voiceOutputEnabled: parsed.voiceOutputEnabled ?? false,
+        };
+        // Apply saved theme immediately
+        document.documentElement.setAttribute("data-theme", merged.theme);
+        return merged;
+      }
+    } catch { /* ignore corrupt data */ }
+    return {
+      ollamaUrl: "http://localhost:11434",
+      defaultModel: "mistral",
+      theme: "dark",
+      maxTokens: 2048,
+      voiceInputEnabled: false,
+      voiceOutputEnabled: false,
+    };
   });
+
+  // Persist settings whenever they change
+  const handleSettingsChange = useCallback((newSettings: AppSettings) => {
+    setSettings(newSettings);
+    try {
+      localStorage.setItem("prismos-settings", JSON.stringify(newSettings));
+    } catch { /* storage full — ignore */ }
+    // Apply theme change immediately
+    document.documentElement.setAttribute("data-theme", newSettings.theme);
+  }, []);
 
   const loadAgents = useCallback(async (activeAgent?: string | null) => {
     try {
@@ -207,7 +238,7 @@ function App() {
         return (
           <SettingsPanel
             settings={settings}
-            onSettingsChange={setSettings}
+            onSettingsChange={handleSettingsChange}
             ollamaConnected={ollamaConnected}
             graphStats={graphStats}
             onGraphCleared={() => { loadNodes(); loadGraphStats(); setGraphRefreshKey((k) => k + 1); }}

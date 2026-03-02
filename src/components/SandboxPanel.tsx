@@ -10,10 +10,11 @@ export default function SandboxPanel() {
   const [prismName, setPrismName] = useState("");
   const [task, setTask] = useState("");
   const [activePrisms, setActivePrisms] = useState<Prism[]>([]);
-  const [results, setResults] = useState<PrismResult[]>([]);
+  const [results, setResults] = useState<(PrismResult & { _key: number })[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [exportData, setExportData] = useState("");
   const [exportResult, setExportResult] = useState<string | null>(null);
+  const [nextKey, setNextKey] = useState(0);
 
   const handleCreatePrism = useCallback(async () => {
     if (!prismName.trim()) return;
@@ -38,7 +39,8 @@ export default function SandboxPanel() {
         task,
       });
       const prismResult: PrismResult = JSON.parse(result);
-      setResults((prev) => [...prev, prismResult]);
+      setResults((prev) => [...prev, { ...prismResult, _key: nextKey }]);
+      setNextKey((k) => k + 1);
       setTask("");
     } catch (e) {
       console.error("Sandbox execution failed:", e);
@@ -54,8 +56,10 @@ export default function SandboxPanel() {
           wasm_isolated: false,
           wasm_fuel_consumed: null,
           wasm_memory_limit_bytes: null,
+          _key: nextKey,
         },
       ]);
+      setNextKey((k) => k + 1);
     } finally {
       setIsExecuting(false);
     }
@@ -80,8 +84,10 @@ export default function SandboxPanel() {
           wasm_isolated: false,
           wasm_fuel_consumed: null,
           wasm_memory_limit_bytes: null,
+          _key: nextKey,
         },
       ]);
+      setNextKey((k) => k + 1);
     } catch (e) {
       console.error("Rollback failed:", e);
     }
@@ -117,14 +123,18 @@ export default function SandboxPanel() {
             automatic rollback on failure.
           </p>
 
-          <div className="sandbox-form">
+          <div className="sandbox-form" role="form" aria-label="Sandbox execution">
+            <label htmlFor="prism-name" className="sr-only">Prism name</label>
             <input
+              id="prism-name"
               className="form-input"
               placeholder="Prism name (e.g., analysis-task)"
               value={prismName}
               onChange={(e) => setPrismName(e.target.value)}
             />
+            <label htmlFor="sandbox-task" className="sr-only">Task to execute</label>
             <textarea
+              id="sandbox-task"
               className="form-textarea"
               placeholder="Task to execute in sandbox..."
               value={task}
@@ -162,9 +172,9 @@ export default function SandboxPanel() {
           <div className="sandbox-section">
             <h3>Execution Results</h3>
             <div className="results-list">
-              {results.map((r, i) => (
+              {results.map((r) => (
                 <div
-                  key={i}
+                  key={r._key}
                   className={`result-card ${r.success ? "success" : "failure"}`}
                 >
                   <div className="result-header">
@@ -215,7 +225,9 @@ export default function SandboxPanel() {
             Securely export data with SHA-256 integrity verification for
             device-to-device handoff.
           </p>
+          <label htmlFor="youport-data" className="sr-only">Data to export</label>
           <textarea
+            id="youport-data"
             className="form-textarea"
             placeholder="Data to export..."
             value={exportData}

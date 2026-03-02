@@ -1,14 +1,17 @@
 // Patent Pending — US 63/993,589 (Feb 28, 2026)
 // PrismOS Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import prismosIcon from "../assets/prismos-icon.svg";
 
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
+
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline") => void;
+  onNavigate: (view: View) => void;
   agents: Agent[];
   nodes: SpectrumNode[];
   graphStats: GraphStats;
@@ -25,141 +28,210 @@ export default function Sidebar({
   collaboration,
   debateSummary,
 }: SidebarProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on navigation (mobile)
+  const handleNavigate = useCallback((view: View) => {
+    onNavigate(view);
+    setSidebarOpen(false);
+  }, [onNavigate]);
+
+  // Keyboard shortcuts: Ctrl+1-6 for views, Escape to close sidebar
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Escape closes sidebar on mobile
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarOpen(false);
+        return;
+      }
+      // Ctrl+number shortcuts for navigation
+      if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+        const viewMap: Record<string, View> = {
+          "1": "chat",
+          "2": "graph",
+          "3": "spectrum",
+          "4": "sandbox",
+          "5": "timeline",
+          "6": "settings",
+        };
+        const view = viewMap[e.key];
+        if (view) {
+          e.preventDefault();
+          handleNavigate(view);
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen, handleNavigate]);
+
+  const openWindow = (label: string, title: string, route: string) => {
+    invoke("open_graph_window", { label, title, route }).catch(console.error);
+  };
+
   return (
-    <div className="sidebar" role="complementary" aria-label="Sidebar navigation">
-      <div className="sidebar-header">
-        <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" /> PrismOS</span>
-        <span className="sidebar-version">v0.2.0</span>
-      </div>
+    <>
+      {/* Hamburger button for mobile */}
+      <button
+        className="sidebar-collapse-btn"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+        aria-expanded={sidebarOpen}
+      >
+        {sidebarOpen ? "✕" : "☰"}
+      </button>
 
-      <nav className="sidebar-nav" aria-label="Main navigation">
-        {/* Navigation */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">Navigation</div>
-          <button
-            className={`sidebar-item ${currentView === "chat" ? "active" : ""}`}
-            onClick={() => onNavigate("chat")}
-            aria-current={currentView === "chat" ? "page" : undefined}
-          >
-            <span className="sidebar-item-icon" aria-hidden="true">💬</span>
-            Intent Console
-          </button>
-          <button
-            className={`sidebar-item ${currentView === "graph" ? "active" : ""}`}
-            onClick={() => onNavigate("graph")}
-          >
-            <span className="sidebar-item-icon">🕸️</span>
-            Spectrum Graph
-            <button
-              className="sidebar-item-window-btn"
-              title="Open in new window"
-              onClick={(e) => {
-                e.stopPropagation();
-                invoke("open_graph_window", {
-                  label: "spectrum-graph-window",
-                  title: "PrismOS — Spectrum Graph",
-                  route: "graph",
-                }).catch(console.error);
-              }}
-            >
-              ↗
-            </button>
-          </button>
-          <button
-            className={`sidebar-item ${currentView === "spectrum" ? "active" : ""}`}
-            onClick={() => onNavigate("spectrum")}
-          >
-            <span className="sidebar-item-icon">🌈</span>
-            Spectrum Explorer
-          </button>
-          <button
-            className={`sidebar-item ${currentView === "sandbox" ? "active" : ""}`}
-            onClick={() => onNavigate("sandbox")}
-          >
-            <span className="sidebar-item-icon">🔒</span>
-            Sandbox Prisms
-          </button>
-          <button
-            className={`sidebar-item ${currentView === "timeline" ? "active" : ""}`}
-            onClick={() => onNavigate("timeline")}
-          >
-            <span className="sidebar-item-icon">📅</span>
-            Spectral Timeline
-            <button
-              className="sidebar-item-window-btn"
-              title="Open in new window"
-              onClick={(e) => {
-                e.stopPropagation();
-                invoke("open_graph_window", {
-                  label: "spectral-timeline-window",
-                  title: "PrismOS — Spectral Timeline",
-                  route: "timeline",
-                }).catch(console.error);
-              }}
-            >
-              ↗
-            </button>
-          </button>
-          <button
-            className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}
-            onClick={() => onNavigate("settings")}
-          >
-            <span className="sidebar-item-icon">⚙️</span>
-            Settings
-          </button>
+      {/* Overlay for mobile sidebar */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? "visible" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
+      <div className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`} role="complementary" aria-label="Sidebar navigation">
+        <div className="sidebar-header">
+          <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" /> PrismOS</span>
+          <span className="sidebar-version">v0.2.0</span>
         </div>
 
-        {/* Spectrum Graph Mini Summary */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            Graph Overview
-            <span className="sidebar-badge">
-              {graphStats.nodes}N · {graphStats.edges}E
-            </span>
-          </div>
-          <div className="spectrum-view">
-            {nodes.length === 0 ? (
-              <div className="spectrum-empty">
-                No nodes yet. Start a conversation to build your graph.
-              </div>
-            ) : (
-              <ul className="spectrum-node-list">
-                {nodes.slice(0, 12).map((node) => (
-                  <li
-                    key={node.id}
-                    className="spectrum-node-item"
-                    title={`${node.node_type}: ${node.content.slice(0, 100)}`}
-                  >
-                    <span className={`spectrum-node-dot type-${node.node_type}`} />
-                    <span>{node.label}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {nodes.length > 12 && (
+        <nav className="sidebar-nav" aria-label="Main navigation">
+          {/* Navigation */}
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">Navigation</div>
+            <button
+              className={`sidebar-item ${currentView === "chat" ? "active" : ""}`}
+              onClick={() => handleNavigate("chat")}
+              aria-current={currentView === "chat" ? "page" : undefined}
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">💬</span>
+              Intent Console
+              <span className="kbd" aria-hidden="true">⌃1</span>
+            </button>
+
+            {/* Graph — uses sibling layout instead of nested button */}
+            <div className="sidebar-item-row">
               <button
-                className="sidebar-item"
-                onClick={() => onNavigate("graph")}
-                style={{ fontSize: "0.75rem", opacity: 0.7 }}
+                className={`sidebar-item sidebar-item-grow ${currentView === "graph" ? "active" : ""}`}
+                onClick={() => handleNavigate("graph")}
+                aria-current={currentView === "graph" ? "page" : undefined}
               >
-                View all {nodes.length} nodes →
+                <span className="sidebar-item-icon" aria-hidden="true">🕸️</span>
+                Spectrum Graph
+                <span className="kbd" aria-hidden="true">⌃2</span>
               </button>
-            )}
+              <button
+                className="sidebar-item-window-btn"
+                title="Open Spectrum Graph in new window"
+                aria-label="Open Spectrum Graph in new window"
+                onClick={() => openWindow("spectrum-graph-window", "PrismOS — Spectrum Graph", "graph")}
+              >
+                ↗
+              </button>
+            </div>
+
+            <button
+              className={`sidebar-item ${currentView === "spectrum" ? "active" : ""}`}
+              onClick={() => handleNavigate("spectrum")}
+              aria-current={currentView === "spectrum" ? "page" : undefined}
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">🌈</span>
+              Spectrum Explorer
+              <span className="kbd" aria-hidden="true">⌃3</span>
+            </button>
+            <button
+              className={`sidebar-item ${currentView === "sandbox" ? "active" : ""}`}
+              onClick={() => handleNavigate("sandbox")}
+              aria-current={currentView === "sandbox" ? "page" : undefined}
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">🔒</span>
+              Sandbox Prisms
+              <span className="kbd" aria-hidden="true">⌃4</span>
+            </button>
+
+            {/* Timeline — uses sibling layout instead of nested button */}
+            <div className="sidebar-item-row">
+              <button
+                className={`sidebar-item sidebar-item-grow ${currentView === "timeline" ? "active" : ""}`}
+                onClick={() => handleNavigate("timeline")}
+                aria-current={currentView === "timeline" ? "page" : undefined}
+              >
+                <span className="sidebar-item-icon" aria-hidden="true">📅</span>
+                Spectral Timeline
+                <span className="kbd" aria-hidden="true">⌃5</span>
+              </button>
+              <button
+                className="sidebar-item-window-btn"
+                title="Open Spectral Timeline in new window"
+                aria-label="Open Spectral Timeline in new window"
+                onClick={() => openWindow("spectral-timeline-window", "PrismOS — Spectral Timeline", "timeline")}
+              >
+                ↗
+              </button>
+            </div>
+
+            <button
+              className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}
+              onClick={() => handleNavigate("settings")}
+              aria-current={currentView === "settings" ? "page" : undefined}
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">⚙️</span>
+              Settings
+              <span className="kbd" aria-hidden="true">⌃6</span>
+            </button>
           </div>
-        </div>
 
-        {/* Active Agents */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">Active Agents</div>
-          <ActiveAgents agents={agents} collaboration={collaboration} debateSummary={debateSummary} />
-        </div>
-      </nav>
+          {/* Spectrum Graph Mini Summary */}
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">
+              Graph Overview
+              <span className="sidebar-badge">
+                {graphStats.nodes}N · {graphStats.edges}E
+              </span>
+            </div>
+            <div className="spectrum-view">
+              {nodes.length === 0 ? (
+                <div className="spectrum-empty">
+                  No nodes yet. Start a conversation to build your graph.
+                </div>
+              ) : (
+                <ul className="spectrum-node-list">
+                  {nodes.slice(0, 12).map((node) => (
+                    <li
+                      key={node.id}
+                      className="spectrum-node-item"
+                      title={`${node.node_type}: ${node.content.slice(0, 100)}`}
+                    >
+                      <span className={`spectrum-node-dot type-${node.node_type}`} />
+                      <span>{node.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {nodes.length > 12 && (
+                <button
+                  className="sidebar-item"
+                  onClick={() => handleNavigate("graph")}
+                  style={{ fontSize: "0.75rem", opacity: 0.7 }}
+                >
+                  View all {nodes.length} nodes →
+                </button>
+              )}
+            </div>
+          </div>
 
-      <div className="sidebar-footer">
-        Patent Pending — US 63/993,589
-        <br />
-        Feb 28, 2026 · Local-First AI
+          {/* Active Agents */}
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">Active Agents</div>
+            <ActiveAgents agents={agents} collaboration={collaboration} debateSummary={debateSummary} />
+          </div>
+        </nav>
+
+        <div className="sidebar-footer">
+          Patent Pending — US 63/993,589
+          <br />
+          Feb 28, 2026 · Local-First AI
+        </div>
       </div>
-    </div>
+    </>
   );
 }

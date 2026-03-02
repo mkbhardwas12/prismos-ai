@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 680" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="rpbg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#162230"/>
+    </linearGradient>
+    <linearGradient id="intentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00b4d8"/>
+      <stop offset="100%" style="stop-color:#0096c7"/>
+    </linearGradient>
+    <filter id="rpShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="rpArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8aa0"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="780" height="680" rx="12" fill="url(#rpbg)"/>
+
+  <!-- Title -->
+  <text x="390" y="36" text-anchor="middle" fill="#e0f0ff" font-size="20" font-weight="700" letter-spacing="1">Refractive Pipeline — Step by Step</text>
+
+  <!-- ── USER INTENT ── -->
+  <rect x="140" y="56" width="500" height="54" rx="27" fill="url(#intentGrad)" filter="url(#rpShadow)"/>
+  <text x="390" y="80" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">💬  USER INTENT</text>
+  <text x="390" y="98" text-anchor="middle" fill="#c5eeff" font-size="11">"Help me plan my research paper"</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="110" x2="390" y2="135" stroke="#5a8aa0" stroke-width="2.5" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 1: PARSE -->
+  <rect x="80" y="140" width="620" height="48" rx="10" fill="#0d2535" stroke="#00b4d8" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="164" r="14" fill="#00b4d8" opacity="0.9"/>
+  <text x="120" y="169" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">1</text>
+  <text x="150" y="161" fill="#00b4d8" font-size="13" font-weight="700">PARSE</text>
+  <text x="150" y="178" fill="#7ab4cc" font-size="11">Extract entities, intent type, and confidence score</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="188" x2="390" y2="202" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 2: SPECTRAL REFRACTION -->
+  <rect x="80" y="207" width="620" height="48" rx="10" fill="#0d2535" stroke="#0096c7" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="231" r="14" fill="#0096c7" opacity="0.9"/>
+  <text x="120" y="236" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">2</text>
+  <text x="150" y="228" fill="#0096c7" font-size="13" font-weight="700">SPECTRAL REFRACTION</text>
+  <text x="150" y="245" fill="#7ab4cc" font-size="11">Query Spectrum Graph for relevant context nodes</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="255" x2="390" y2="269" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 3: AGENT SELECTION -->
+  <rect x="80" y="274" width="620" height="48" rx="10" fill="#0d2535" stroke="#2a9d8f" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="298" r="14" fill="#2a9d8f" opacity="0.9"/>
+  <text x="120" y="303" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">3</text>
+  <text x="150" y="295" fill="#2a9d8f" font-size="13" font-weight="700">AGENT SELECTION</text>
+  <text x="150" y="312" fill="#7ac4b8" font-size="11">Route intent to the best-matching agent(s)</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="322" x2="390" y2="336" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 4: MULTI-AGENT COLLABORATION -->
+  <rect x="80" y="341" width="620" height="48" rx="10" fill="#0d2535" stroke="#e9c46a" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="365" r="14" fill="#e9c46a" opacity="0.9"/>
+  <text x="120" y="370" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="700">4</text>
+  <text x="150" y="362" fill="#e9c46a" font-size="13" font-weight="700">MULTI-AGENT COLLABORATION</text>
+  <text x="150" y="379" fill="#c4a84a" font-size="11">5 specialized agents discuss, debate, and refine</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="389" x2="390" y2="403" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 5: CONSENSUS -->
+  <rect x="80" y="408" width="620" height="48" rx="10" fill="#0d2535" stroke="#f4a261" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="432" r="14" fill="#f4a261" opacity="0.9"/>
+  <text x="120" y="437" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">5</text>
+  <text x="150" y="429" fill="#f4a261" font-size="13" font-weight="700">CONSENSUS</text>
+  <text x="150" y="446" fill="#c48a51" font-size="11">Voting engine + agreement scoring across agents</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="456" x2="390" y2="470" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 6: RESPONSE GENERATION -->
+  <rect x="80" y="475" width="620" height="48" rx="10" fill="#0d2535" stroke="#e76f51" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="499" r="14" fill="#e76f51" opacity="0.9"/>
+  <text x="120" y="504" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">6</text>
+  <text x="150" y="496" fill="#e76f51" font-size="13" font-weight="700">RESPONSE GENERATION</text>
+  <text x="150" y="513" fill="#c46a51" font-size="11">Context-rich answer via local Ollama LLM</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="523" x2="390" y2="537" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 7: GRAPH REINFORCEMENT -->
+  <rect x="80" y="542" width="620" height="48" rx="10" fill="#0d2535" stroke="#06d6a0" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="566" r="14" fill="#06d6a0" opacity="0.9"/>
+  <text x="120" y="571" text-anchor="middle" fill="#0a2e1f" font-size="12" font-weight="700">7</text>
+  <text x="150" y="563" fill="#06d6a0" font-size="13" font-weight="700">GRAPH REINFORCEMENT</text>
+  <text x="150" y="580" fill="#06b888" font-size="11">Strengthen relevant edges and node weights</text>
+
+  <!-- Arrow -->
+  <line x1="390" y1="590" x2="390" y2="604" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
+
+  <!-- Step 8: ANTICIPATION -->
+  <rect x="80" y="609" width="620" height="48" rx="10" fill="#0d2535" stroke="#0077b6" stroke-width="1.5" filter="url(#rpShadow)"/>
+  <circle cx="120" cy="633" r="14" fill="#0077b6" opacity="0.9"/>
+  <text x="120" y="638" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">8</text>
+  <text x="150" y="630" fill="#0077b6" font-size="13" font-weight="700">ANTICIPATION</text>
+  <text x="150" y="647" fill="#5a8aa0" font-size="11">Predict next user needs before they ask</text>
+
+  <!-- Footer -->
+  <text x="390" y="674" text-anchor="middle" fill="#4a7a90" font-size="10">Closed-Loop Feedback · Every response strengthens the graph for future interactions</text>
+</svg>

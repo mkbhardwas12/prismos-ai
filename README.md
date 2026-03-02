@@ -383,26 +383,12 @@ PrismOS exposes **41 Tauri commands** for frontend–backend communication:
 
 ### The Refractive Pipeline
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    USER INTENT                                │
-│              "Help me plan my research paper"                 │
-└───────────────────────┬──────────────────────────────────────┘
-                        ▼
-┌──────────────────────────────────────────────────────────────┐
-│  1. PARSE — Extract entities, intent type, confidence        │
-│  2. SPECTRAL REFRACTION — Query graph for context nodes      │
-│  3. AGENT SELECTION — Route to best agent(s)                 │
-│  4. MULTI-AGENT COLLABORATION — 5 agents discuss + debate    │
-│  5. CONSENSUS — Voting + agreement scoring                   │
-│  6. RESPONSE GENERATION — Context-rich answer via Ollama     │
-│  7. GRAPH REINFORCEMENT — Strengthen relevant edges          │
-│  8. ANTICIPATION — Predict next needs                        │
-└──────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/diagrams/refractive-pipeline-steps.svg" width="620" alt="Refractive Pipeline — Step by Step" />
+</p>
 
 <p align="center">
-  <img src="docs/diagrams/refractive-pipeline.svg" width="620" alt="Refractive Pipeline" />
+  <img src="docs/diagrams/refractive-pipeline.svg" width="620" alt="Refractive Pipeline Flow" />
 </p>
 
 ### Spectral Dimensions

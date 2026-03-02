@@ -230,43 +230,27 @@ impl NpuScorer {
 
 /// Returns the 5 core PrismOS agents per Patent 63/993,589
 pub fn get_agents() -> Vec<Agent> {
-    vec![
-        Agent {
-            id: "orchestrator".into(),
-            name: "Orchestrator".into(),
-            role: "Routes intents and coordinates agent workflows".into(),
-            status: AgentStatus::Idle,
-            description: "Central coordinator that decomposes user intents and dispatches to specialized agents via the Refractive Core pipeline".into(),
-        },
-        Agent {
-            id: "memory_keeper".into(),
-            name: "Memory Keeper".into(),
-            role: "Manages Spectrum Graph persistence and retrieval".into(),
-            status: AgentStatus::Idle,
-            description: "Handles all read/write operations to the Spectrum Graph, including semantic search, relationship mapping, and closed-loop edge reinforcement".into(),
-        },
-        Agent {
-            id: "reasoner".into(),
-            name: "Reasoner".into(),
-            role: "Performs deep analysis and inference via LLM".into(),
-            status: AgentStatus::Idle,
-            description: "Interfaces with Ollama for local LLM inference, chain-of-thought reasoning, and content generation with NPU-accelerated context scoring".into(),
-        },
-        Agent {
-            id: "tool_smith".into(),
-            name: "Tool Smith".into(),
-            role: "Executes sandboxed operations in Prism containers".into(),
-            status: AgentStatus::Idle,
-            description: "Manages WASM sandboxes for safe code execution, file operations, and tool use within deterministic Prism boundaries".into(),
-        },
-        Agent {
-            id: "sentinel".into(),
-            name: "Sentinel".into(),
-            role: "Monitors security, privacy, and system health".into(),
-            status: AgentStatus::Idle,
-            description: "Validates all operations against privacy policies, manages encryption, monitors resource usage, and enforces local-first data sovereignty".into(),
-        },
-    ]
+    get_agents_with_active(None)
+}
+
+/// Returns agents with one optionally marked as Processing
+pub fn get_agents_with_active(active_id: Option<&str>) -> Vec<Agent> {
+    let agents_def = vec![
+        ("orchestrator", "Orchestrator", "Routes intents and coordinates agent workflows",
+         "Central coordinator that decomposes user intents and dispatches to specialized agents via the Refractive Core pipeline"),
+        ("memory_keeper", "Memory Keeper", "Manages Spectrum Graph persistence and retrieval",
+         "Handles all read/write operations to the Spectrum Graph, including semantic search, relationship mapping, and closed-loop edge reinforcement"),
+        ("reasoner", "Reasoner", "Performs deep analysis and inference via LLM",
+         "Interfaces with Ollama for local LLM inference, chain-of-thought reasoning, and content generation with NPU-accelerated context scoring"),
+        ("tool_smith", "Tool Smith", "Executes sandboxed operations in Prism containers",
+         "Manages WASM sandboxes for safe code execution, file operations, and tool use within deterministic Prism boundaries"),
+        ("sentinel", "Sentinel", "Monitors security, privacy, and system health",
+         "Validates all operations against privacy policies, manages encryption, monitors resource usage, and enforces local-first data sovereignty"),
+    ];
+    agents_def.into_iter().map(|(id, name, role, desc)| {
+        let status = if active_id == Some(id) { AgentStatus::Processing } else { AgentStatus::Idle };
+        Agent { id: id.into(), name: name.into(), role: role.into(), status, description: desc.into() }
+    }).collect()
 }
 
 // ─── Refractive Core Engine ────────────────────────────────────────────────────
@@ -333,8 +317,22 @@ impl RefractiveEngine {
             intent.confidence * 100.0
         );
 
-        // ── Step 5: LLM inference via Ollama ──
-        let response = crate::ollama_bridge::generate("mistral", &full_prompt).await?;
+        // ── Step 5: LLM inference via Ollama (with offline fallback) ──
+        let response = match crate::ollama_bridge::generate("mistral", &full_prompt).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[RefractiveCore] Ollama unavailable, using offline mode: {}", e);
+                // Offline mode: still update graph, return a helpful message
+                format!(
+                    "⚡ [Offline Mode] I processed your intent locally through the Spectrum Graph.\n\n\
+                     Intent type: {}\nEntities: {:?}\nContext nodes found: {}\n\n\
+                     💡 Start Ollama for full AI responses: `ollama serve` then `ollama pull mistral`",
+                    intent_type_str,
+                    intent.entities,
+                    context_results.len()
+                )
+            }
+        };
 
         // ── Step 6: Closed-loop feedback — reinforce graph edges ──
         let mut edges_reinforced: Vec<String> = Vec::new();

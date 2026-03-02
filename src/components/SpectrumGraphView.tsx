@@ -62,7 +62,11 @@ interface GraphData {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export default function SpectrumGraphView() {
+interface SpectrumGraphViewProps {
+  refreshKey?: number;
+}
+
+export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps) {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [metrics, setMetrics] = useState<GraphMetrics | null>(null);
   const [anticipations, setAnticipations] = useState<AnticipatedNeed[]>([]);
@@ -126,7 +130,7 @@ export default function SpectrumGraphView() {
   useEffect(() => {
     loadGraph();
     loadAnticipations();
-  }, [loadGraph, loadAnticipations]);
+  }, [loadGraph, loadAnticipations, refreshKey]);
 
   // ─── Resize handling ──────────────────────────────────────────────────
 

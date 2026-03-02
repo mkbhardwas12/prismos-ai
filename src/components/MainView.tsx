@@ -11,13 +11,13 @@ import type { AppSettings, Message, RefractiveResult } from "../types";
 interface MainViewProps {
   ollamaConnected: boolean;
   settings: AppSettings;
-  onNodeAdded: () => void;
+  onIntentProcessed: (agentUsed?: string) => void;
 }
 
 export default function MainView({
   ollamaConnected,
   settings,
-  onNodeAdded,
+  onIntentProcessed,
 }: MainViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -114,7 +114,7 @@ export default function MainView({
         agent: result.agent_used,
       };
       setMessages((prev) => [...prev, aiMsg]);
-      onNodeAdded(); // Refresh sidebar graph stats
+      onIntentProcessed(result.agent_used); // Refresh sidebar + graph + agent status
     } catch (e) {
       // Fallback to legacy process_intent if refract_intent fails
       try {
@@ -126,7 +126,7 @@ export default function MainView({
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, aiMsg]);
-        onNodeAdded();
+        onIntentProcessed();
       } catch (fallbackErr) {
         const errorMsg: Message = {
           id: crypto.randomUUID(),

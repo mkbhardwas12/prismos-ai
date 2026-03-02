@@ -1076,4 +1076,237 @@ impl SpectrumGraph {
 
         Ok(updated)
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  PERSIST / LOAD — Explicit Graph Serialization (Patent 63/993,589)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Persist the current graph state to a JSON export file.
+    /// This is a point-in-time snapshot that can be restored via `load()`.
+    /// The SQLite database is always the source of truth; this provides
+    /// portable backup / migration support as required by the patent.
+    pub fn persist(&self, export_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let snapshot = self.get_full_graph()?;
+
+        // Add metadata envelope
+        let export = serde_json::json!({
+            "format": "prismos-spectrum-graph-v1",
+            "patent": "US 63/993,589",
+            "exported_at": Utc::now().to_rfc3339(),
+            "snapshot": snapshot,
+            "intent_log_count": self.conn.query_row(
+                "SELECT COUNT(*) FROM intent_log", [], |row| row.get::<_, usize>(0)
+            ).unwrap_or(0),
+            "feedback_count": self.conn.query_row(
+                "SELECT COUNT(*) FROM feedback", [], |row| row.get::<_, usize>(0)
+            ).unwrap_or(0),
+        });
+
+        let json = serde_json::to_string_pretty(&export)?;
+        std::fs::write(export_path, &json)?;
+
+        Ok(format!("Persisted {} nodes, {} edges to {:?}",
+            snapshot.nodes.len(), snapshot.edges.len(), export_path))
+    }
+
+    /// Load a previously persisted graph snapshot, merging into the current database.
+    /// Nodes and edges that already exist (by ID) are skipped; new ones are inserted.
+    /// This supports the You-Port device handoff pattern from the patent.
+    pub fn load(&self, import_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let json = std::fs::read_to_string(import_path)?;
+        let export: serde_json::Value = serde_json::from_str(&json)?;
+
+        let snapshot_val = export.get("snapshot")
+            .ok_or("Invalid export: missing 'snapshot' field")?;
+        let snapshot: GraphSnapshot = serde_json::from_value(snapshot_val.clone())?;
+
+        let mut nodes_imported = 0u32;
+        let mut edges_imported = 0u32;
+
+        // Import nodes (skip existing)
+        for node in &snapshot.nodes {
+            let exists: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
+                params![node.id],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                self.conn.execute(
+                    "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        node.id, node.label, node.content, node.node_type, node.layer,
+                        node.access_count, node.last_accessed, node.created_at, node.updated_at
+                    ],
+                )?;
+                nodes_imported += 1;
+            }
+        }
+
+        // Import edges (skip existing)
+        for edge in &snapshot.edges {
+            let exists: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM edges WHERE id = ?1",
+                params![edge.id],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                self.conn.execute(
+                    "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        edge.id, edge.source_id, edge.target_id, edge.relation, edge.weight,
+                        edge.momentum, edge.reinforcements, edge.last_reinforced, edge.created_at
+                    ],
+                )?;
+                edges_imported += 1;
+            }
+        }
+
+        Ok(format!("Loaded {} new nodes, {} new edges from {:?}",
+            nodes_imported, edges_imported, import_path))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  VECTOR SIMILARITY — NPU-Ready Embedding Support (Patent 63/993,589)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Store a vector embedding for a node (stored as BLOB in SQLite).
+    /// When a full embedding model (e.g., ONNX + sentence-transformers) is
+    /// integrated, this enables semantic vector search alongside the
+    /// relational graph layer.
+    #[allow(dead_code)]
+    pub fn set_node_embedding(
+        &self,
+        node_id: &str,
+        embedding: &[f64],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Serialize f64 vector as little-endian bytes
+        let bytes: Vec<u8> = embedding.iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect();
+
+        self.conn.execute(
+            "UPDATE nodes SET embedding = ?1, updated_at = ?2 WHERE id = ?3",
+            params![bytes, Utc::now().to_rfc3339(), node_id],
+        )?;
+        Ok(())
+    }
+
+    /// Retrieve a node's vector embedding
+    #[allow(dead_code)]
+    pub fn get_node_embedding(
+        &self,
+        node_id: &str,
+    ) -> Result<Option<Vec<f64>>, Box<dyn std::error::Error + Send + Sync>> {
+        let result: Option<Vec<u8>> = self.conn.query_row(
+            "SELECT embedding FROM nodes WHERE id = ?1",
+            params![node_id],
+            |row| row.get(0),
+        ).ok();
+
+        match result {
+            Some(bytes) if !bytes.is_empty() => {
+                let floats: Vec<f64> = bytes
+                    .chunks_exact(8)
+                    .map(|chunk| {
+                        let arr: [u8; 8] = chunk.try_into().unwrap();
+                        f64::from_le_bytes(arr)
+                    })
+                    .collect();
+                Ok(Some(floats))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Cosine similarity search across all nodes with embeddings.
+    /// Returns (node_id, similarity_score) pairs sorted by similarity.
+    /// This is the vector layer of the multi-layered Spectrum Graph per patent.
+    #[allow(dead_code)]
+    pub fn vector_search(
+        &self,
+        query_embedding: &[f64],
+        top_k: usize,
+    ) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, embedding FROM nodes WHERE embedding IS NOT NULL",
+        )?;
+
+        let mut results: Vec<(String, f64)> = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let bytes: Vec<u8> = row.get(1)?;
+                Ok((id, bytes))
+            })?
+            .filter_map(|r| r.ok())
+            .filter_map(|(id, bytes)| {
+                if bytes.is_empty() { return None; }
+                let embedding: Vec<f64> = bytes
+                    .chunks_exact(8)
+                    .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+                    .collect();
+                let sim = cosine_similarity(query_embedding, &embedding);
+                Some((id, sim))
+            })
+            .collect();
+
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(top_k);
+        Ok(results)
+    }
+
+    /// Get total feedback signal count for analytics
+    pub fn get_feedback_count(&self) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let count: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM feedback", [], |row| row.get(0)
+        )?;
+        Ok(count)
+    }
+
+    /// Get intent log entries for the last N days
+    pub fn get_recent_intents(
+        &self,
+        days: u32,
+    ) -> Result<Vec<(String, String, f64, String)>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT raw_input, intent_type, confidence, created_at
+             FROM intent_log
+             WHERE created_at > datetime('now', ?1)
+             ORDER BY created_at DESC LIMIT 100",
+        )?;
+
+        let param = format!("-{} days", days);
+        let rows = stmt
+            .query_map(params![param], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(rows)
+    }
+}
+
+// ─── Utility: Cosine Similarity ────────────────────────────────────────────────
+
+/// Compute cosine similarity between two vectors
+#[allow(dead_code)]
+fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
+    let len = a.len().min(b.len());
+    if len == 0 {
+        return 0.0;
+    }
+    let dot: f64 = a[..len].iter().zip(b[..len].iter()).map(|(x, y)| x * y).sum();
+    let mag_a: f64 = a[..len].iter().map(|x| x * x).sum::<f64>().sqrt();
+    let mag_b: f64 = b[..len].iter().map(|x| x * x).sum::<f64>().sqrt();
+    if mag_a > 0.0 && mag_b > 0.0 {
+        (dot / (mag_a * mag_b)).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    }
 }

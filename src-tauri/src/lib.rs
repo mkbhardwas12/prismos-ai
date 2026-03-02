@@ -13,17 +13,31 @@ use tauri::Manager;
 
 // ─── Tauri Commands ────────────────────────────────────────────────────────────
 
-/// Legacy process_intent — simple Ollama routing
+/// process_intent — Full Refractive Core pipeline (Patent 63/993,589)
+/// Parses raw input → Intent Lens → Spectrum Graph context → NPU scoring →
+/// Agent selection → LLM inference → Closed-loop feedback → Result
 #[tauri::command]
-async fn process_intent(input: String) -> Result<String, String> {
-    let lens = intent_lens::IntentLens::new();
-    let parsed = lens.parse(&input);
+async fn process_intent(app: tauri::AppHandle, input: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
-    let response = refractive_core::route_intent(parsed)
+    let result = refractive_core::process_intent_full(&input, &app_dir)
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(response)
+    // Return just the response text for backwards compatibility
+    Ok(result.response)
+}
+
+/// process_intent_full — Returns the complete RefractiveResult as JSON
+#[tauri::command]
+async fn process_intent_full(app: tauri::AppHandle, input: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let result = refractive_core::process_intent_full(&input, &app_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 /// Full Refractive Core pipeline: intent → Spectrum Graph context → agent → feedback → result
@@ -254,6 +268,42 @@ async fn decay_graph_edges(app: tauri::AppHandle) -> Result<String, String> {
     Ok(format!("{{\"edges_decayed\": {}}}", updated))
 }
 
+/// Persist the Spectrum Graph to a JSON export file
+#[tauri::command]
+async fn persist_graph(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let export_path = app_dir.join("spectrum_graph_export.json");
+    db.persist(&export_path).map_err(|e| e.to_string())
+}
+
+/// Load a previously persisted Spectrum Graph from JSON
+#[tauri::command]
+async fn load_graph(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let import_path = app_dir.join("spectrum_graph_export.json");
+    db.load(&import_path).map_err(|e| e.to_string())
+}
+
+/// Get feedback count for analytics
+#[tauri::command]
+async fn get_feedback_count(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let count = db.get_feedback_count().map_err(|e| e.to_string())?;
+    Ok(format!("{{\"feedback_count\": {}}}", count))
+}
+
+/// Get recent intent log entries
+#[tauri::command]
+async fn get_recent_intents(app: tauri::AppHandle, days: u32) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let intents = db.get_recent_intents(days).map_err(|e| e.to_string())?;
+    serde_json::to_string(&intents).map_err(|e| e.to_string())
+}
+
 /// Update a node's label and content
 #[tauri::command]
 async fn update_spectrum_node(
@@ -290,8 +340,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Core pipeline
+            // Core pipeline (Patent 63/993,589)
             process_intent,
+            process_intent_full,
             refract_intent,
             query_ollama,
             // Spectrum Graph — CRUD
@@ -311,6 +362,11 @@ pub fn run() {
             get_graph_metrics,
             decay_graph_edges,
             update_spectrum_node,
+            // Spectrum Graph — Persist / Load
+            persist_graph,
+            load_graph,
+            get_feedback_count,
+            get_recent_intents,
             // Agents
             get_active_agents,
             // Ollama

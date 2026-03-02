@@ -536,6 +536,129 @@ async fn get_debate_log() -> Result<String, String> {
     serde_json::to_string(&empty).map_err(|e| e.to_string())
 }
 
+// ─── Multi-Window Support (Patent 63/993,589 — Spectral Timeline) ──────────────
+
+/// Open a secondary window (e.g. Spectrum Graph or Spectral Timeline in its own window).
+/// Creates a new Tauri webview window pointed at the same frontend with a route hash.
+#[tauri::command]
+async fn open_graph_window(
+    app: tauri::AppHandle,
+    label: String,
+    title: String,
+    route: String,
+) -> Result<(), String> {
+    use tauri::WebviewWindowBuilder;
+    use tauri::WebviewUrl;
+
+    // Check if window with this label already exists — focus it instead
+    if let Some(existing) = app.get_webview_window(&label) {
+        existing.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    // Build the URL with route hash so the frontend can render the correct view
+    let url = format!("index.html#{}", route);
+
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title(title)
+        .inner_size(1000.0, 700.0)
+        .resizable(true)
+        .decorations(true)
+        .build()
+        .map_err(|e| format!("Failed to open window: {}", e))?;
+
+    Ok(())
+}
+
+/// Get timeline data — spectrum nodes grouped by date with edge events.
+/// Returns nodes sorted by created_at descending for the Spectral Timeline view.
+#[tauri::command]
+async fn get_timeline_data(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let snapshot = db.get_full_graph().map_err(|e| e.to_string())?;
+
+    // Combine nodes and edges into a unified timeline, sorted by date
+    #[derive(serde::Serialize)]
+    struct TimelineEvent {
+        id: String,
+        event_type: String,       // "node_created" | "node_updated" | "edge_created" | "edge_reinforced"
+        label: String,
+        description: String,
+        node_type: String,
+        layer: String,
+        timestamp: String,
+        access_count: u32,
+    }
+
+    let mut events: Vec<TimelineEvent> = Vec::new();
+
+    // Node creation events
+    for node in &snapshot.nodes {
+        events.push(TimelineEvent {
+            id: node.id.clone(),
+            event_type: "node_created".into(),
+            label: node.label.clone(),
+            description: if node.content.len() > 120 {
+                format!("{}…", &node.content[..120])
+            } else {
+                node.content.clone()
+            },
+            node_type: node.node_type.clone(),
+            layer: node.layer.clone(),
+            timestamp: node.created_at.clone(),
+            access_count: node.access_count as u32,
+        });
+
+        // If updated_at differs from created_at, add an update event
+        if node.updated_at != node.created_at {
+            events.push(TimelineEvent {
+                id: format!("{}-update", node.id),
+                event_type: "node_updated".into(),
+                label: format!("{} (updated)", node.label),
+                description: "Node content was updated".into(),
+                node_type: node.node_type.clone(),
+                layer: node.layer.clone(),
+                timestamp: node.updated_at.clone(),
+                access_count: node.access_count as u32,
+            });
+        }
+    }
+
+    // Edge creation events
+    for edge in &snapshot.edges {
+        events.push(TimelineEvent {
+            id: edge.id.clone(),
+            event_type: "edge_created".into(),
+            label: format!("{}", edge.relation),
+            description: format!("Edge created: {} → {} (weight: {:.2})", edge.source_id, edge.target_id, edge.weight),
+            node_type: "meta".into(),
+            layer: "context".into(),
+            timestamp: edge.created_at.clone(),
+            access_count: edge.reinforcements as u32,
+        });
+
+        // If last_reinforced differs from created_at, add reinforcement event
+        if edge.last_reinforced != edge.created_at {
+            events.push(TimelineEvent {
+                id: format!("{}-reinf", edge.id),
+                event_type: "edge_reinforced".into(),
+                label: format!("{} (reinforced ×{})", edge.relation, edge.reinforcements),
+                description: format!("Edge weight: {:.2}, momentum: {:.2}", edge.weight, edge.momentum),
+                node_type: "meta".into(),
+                layer: "context".into(),
+                timestamp: edge.last_reinforced.clone(),
+                access_count: edge.reinforcements as u32,
+            });
+        }
+    }
+
+    // Sort by timestamp descending (newest first)
+    events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    serde_json::to_string(&events).map_err(|e| e.to_string())
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -627,6 +750,9 @@ pub fn run() {
             export_graph,
             import_graph,
             clear_graph,
+            // Multi-Window + Spectral Timeline (Patent 63/993,589)
+            open_graph_window,
+            get_timeline_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS");

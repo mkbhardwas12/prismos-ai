@@ -190,3 +190,20 @@ export interface YouPortPackage {
   version: string;
   format: string;
 }
+
+// ─── You-Port Encrypted Handoff Types ──────────────────────────────────────────
+
+export interface HandoffResult {
+  success: boolean;
+  message: string;
+  nodes_count: number;
+  edges_count: number;
+  timestamp: string;
+}
+
+export interface AgentState {
+  agent_id: string;
+  agent_name: string;
+  status: string;
+  last_active: string | null;
+}

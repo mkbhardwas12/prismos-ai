@@ -595,6 +595,58 @@ export default function SettingsPanel({
           </div>
         </div>
 
+        {/* ── Security Status ── */}
+        <div className="settings-group">
+          <h3>🛡️ Security Status</h3>
+          <div className="security-status-grid">
+            <div className="security-check">
+              <span className="security-check-icon">✅</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Local Processing</span>
+                <span className="security-check-desc">All AI runs on your device via Ollama — nothing sent to the cloud</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">✅</span>
+              <div className="security-check-info">
+                <span className="security-check-label">WASM Sandbox</span>
+                <span className="security-check-desc">Agent code runs in isolated WebAssembly containers with strict limits</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">✅</span>
+              <div className="security-check-info">
+                <span className="security-check-label">HMAC Code Signing</span>
+                <span className="security-check-desc">Every agent action is cryptographically signed and verified</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">✅</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Auto-Rollback</span>
+                <span className="security-check-desc">Unsafe changes are automatically reversed with checkpoint recovery</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">✅</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Encrypted Storage</span>
+                <span className="security-check-desc">Graph data encrypted with HMAC-SHA256 + XOR stream cipher, device-bound</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">✅</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Zero Cloud Dependency</span>
+                <span className="security-check-desc">Works fully offline — no accounts, no telemetry, no external APIs</span>
+              </div>
+            </div>
+          </div>
+          <div className="settings-hint">
+            All protections are always active. PrismOS is designed with security-by-default — no configuration needed.
+          </div>
+        </div>
+
         {/* ── System Info ── */}
         <div className="settings-group">
           <h3>📊 System Information</h3>

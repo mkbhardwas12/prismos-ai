@@ -90,7 +90,7 @@ export default function IntentInput({
           placeholder={
             voice.isListening
               ? "🎙️ Listening… speak your intent"
-              : "What would you like to do? Type anything here…"
+              : "Ask me anything — I'll process it privately on your device…"
           }
           value={voice.isListening && voice.interimTranscript ? voice.interimTranscript : input}
           onChange={(e) => {

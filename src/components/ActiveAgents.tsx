@@ -102,13 +102,13 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
         </span>
       </div>
 
-      <div className="sandbox-prism-badge">
+      <div className="sandbox-prism-badge" title="Every AI agent runs inside an isolated security container. If anything goes wrong, changes are automatically reversed. All actions are cryptographically signed.">
         <span className="sandbox-prism-icon">🛡️</span>
         <span className="sandbox-prism-text">Protected by Sandbox Prism</span>
         <span className="sandbox-prism-detail">HMAC-SHA256 · Allow-List · Auto-Rollback</span>
       </div>
 
-      <div className="wasm-isolation-badge">
+      <div className="wasm-isolation-badge" title="Code runs in a WebAssembly sandbox — agents cannot access your files, network, or system without explicit permission. Execution time and memory are strictly limited.">
         <span className="wasm-badge-icon">🔒</span>
         <span className="wasm-badge-text">WASM Isolated</span>
         <span className="wasm-badge-detail">wasmtime · Fuel Metering · Memory Bounded · Zero Ambient Authority</span>

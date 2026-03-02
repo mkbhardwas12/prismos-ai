@@ -630,6 +630,54 @@ body {
   white-space: nowrap;
 }
 
+/* ─── WASM Isolation Badge ────────────────────────────────────────────────── */
+.wasm-isolation-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  margin: 0 12px 8px;
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.08) 0%,
+    rgba(239, 68, 68, 0.06) 100%
+  );
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.wasm-badge-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.wasm-badge-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(245, 158, 11, 0.95);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wasm-badge-detail {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.agent-wasm-chip {
+  font-size: 11px;
+  opacity: 0.8;
+  cursor: help;
+  transition: opacity 0.15s ease;
+}
+
+.agent-wasm-chip:hover {
+  opacity: 1;
+}
+
 /* ─── LangGraph Collaboration Trace Panel ─────────────────────────────────── */
 .collab-trace-panel {
   margin: 4px 12px 8px;

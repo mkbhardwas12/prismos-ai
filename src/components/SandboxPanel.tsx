@@ -51,6 +51,9 @@ export default function SandboxPanel() {
           sandbox_protected: true,
           action_signature: "",
           rollback_explanation: null,
+          wasm_isolated: false,
+          wasm_fuel_consumed: null,
+          wasm_memory_limit_bytes: null,
         },
       ]);
     } finally {
@@ -74,6 +77,9 @@ export default function SandboxPanel() {
           sandbox_protected: true,
           action_signature: "",
           rollback_explanation: null,
+          wasm_isolated: false,
+          wasm_fuel_consumed: null,
+          wasm_memory_limit_bytes: null,
         },
       ]);
     } catch (e) {

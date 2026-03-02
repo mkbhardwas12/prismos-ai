@@ -207,6 +207,14 @@ export interface Prism {
   side_effects: SideEffect[];
   action_log: SignedAction[];
   agent_id: string;
+  wasm_config: WasmIsolationConfig | null;
+}
+
+export interface WasmIsolationConfig {
+  max_memory_pages: number;
+  max_fuel: number;
+  max_execution_time_ms: number;
+  risk_tier: number;
 }
 
 export interface Checkpoint {
@@ -240,6 +248,9 @@ export interface PrismResult {
   sandbox_protected: boolean;
   action_signature: string;
   rollback_explanation: string | null;
+  wasm_isolated: boolean;
+  wasm_fuel_consumed: number | null;
+  wasm_memory_limit_bytes: number | null;
 }
 
 export interface SandboxVerdict {

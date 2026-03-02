@@ -750,7 +750,7 @@ impl WorkflowEngine {
 
             if sandbox_result.success {
                 let prompt = ReasonerNode::build_prompt(work, &intent);
-                match crate::ollama_bridge::generate("mistral", &prompt).await {
+                match crate::ollama_bridge::generate("mistral", &prompt, None, None).await {
                     Ok(r) => r,
                     Err(e) => {
                         eprintln!("[LangGraph-WF] Ollama unavailable: {}", e);

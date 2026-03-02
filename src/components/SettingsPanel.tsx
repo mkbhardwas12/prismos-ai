@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
 import prismosIcon from "../assets/prismos-icon.svg";
+import "./SettingsPanel.css";
 
 interface SecurityStatus {
   enclave: {
@@ -106,7 +107,7 @@ export default function SettingsPanel({
   // ── Load available Ollama models ──
   const loadModels = useCallback(async () => {
     try {
-      const result = await invoke<string>("list_ollama_models");
+      const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
       const parsed: OllamaModel[] = JSON.parse(result);
       setModels(parsed);
       setModelsLoaded(true);
@@ -114,7 +115,7 @@ export default function SettingsPanel({
       setModels([]);
       setModelsLoaded(true);
     }
-  }, []);
+  }, [settings.ollamaUrl]);
 
   // ── Export Graph (encrypted) ──
   const handleExportGraph = useCallback(async () => {

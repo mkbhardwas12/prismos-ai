@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import "./SpectralTimeline.css";
 
 // ─── Facet Color Palette (shared with SpectrumGraphView) ───────────────────────
 

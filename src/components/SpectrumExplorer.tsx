@@ -4,6 +4,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SpectrumNode, SpectrumEdge, GraphStats } from "../types";
+import "./SpectrumExplorer.css";
 
 interface SpectrumExplorerProps {
   nodes: SpectrumNode[];

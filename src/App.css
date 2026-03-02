@@ -318,12 +318,7 @@
   background: linear-gradient(135deg, #2563eb, #0891b2);
 }
 
-[data-theme="light"] .ollama-offline-banner {
-  background: linear-gradient(135deg, rgba(220, 38, 38, 0.05), rgba(217, 119, 6, 0.05));
-  border-color: rgba(220, 38, 38, 0.18);
-}
-
-[data-theme="light"] .ollama-offline-hint code {
+[data-theme="light"] .step-hint code {
   background: #f1f5f9;
   color: #0e7490;
 }
@@ -773,87 +768,311 @@ select:focus-visible {
   line-height: 1.5;
 }
 
-/* ── Ollama Offline Banner ──────────────────────────────────────────────────────────── */
-.ollama-offline-banner {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+/* ── Ollama Setup Wizard ─────────────────────────────────────────────────────── */
+.ollama-setup-wizard {
   max-width: 560px;
-  margin: 0 auto 24px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(245, 158, 11, 0.06));
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 14px;
+  margin: 0 auto 28px;
+  padding: 0;
+  background: rgba(21, 27, 35, 0.6);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
   animation: fadeIn 0.4s ease;
+  backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
-.ollama-offline-icon {
-  font-size: 28px;
+.setup-wizard-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.setup-wizard-icon {
+  font-size: 24px;
   flex-shrink: 0;
 }
 
-.ollama-offline-content {
-  flex: 1;
+.setup-wizard-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.setup-wizard-subtitle {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.setup-steps {
+  padding: 8px 0;
+}
+
+.setup-step {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 14px;
+  padding: 14px 20px;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-.ollama-offline-content strong {
+.setup-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 33px;
+  top: 42px;
+  bottom: -6px;
+  width: 2px;
+  background: var(--border-color);
+}
+
+.setup-step.step-done:not(:last-child)::after {
+  background: var(--color-success);
+}
+
+.step-indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.step-done .step-indicator {
+  background: rgba(16, 185, 129, 0.15);
+  border: 2px solid var(--color-success);
+}
+
+.step-active .step-indicator {
+  background: rgba(37, 99, 235, 0.12);
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.step-pending .step-indicator {
+  background: var(--bg-surface);
+  border: 2px solid var(--border-color);
+}
+
+.step-check {
+  color: var(--color-success);
+  font-size: 14px;
+}
+
+.step-number {
+  color: var(--text-secondary);
+}
+
+.step-active .step-number {
+  color: var(--color-primary);
+}
+
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-label {
   font-size: 13px;
-  color: var(--color-warning);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
 }
 
-.ollama-offline-content span {
+.step-pending .step-label {
+  color: var(--text-muted);
+}
+
+.step-desc {
   font-size: 11px;
   color: var(--text-secondary);
   line-height: 1.5;
+  margin-bottom: 6px;
 }
 
-.ollama-offline-actions {
+.step-pending .step-desc {
+  color: var(--text-muted);
+}
+
+.step-actions {
   display: flex;
-  flex-direction: column;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.step-action-btn {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
-}
-
-.ollama-start-btn {
-  padding: 8px 18px;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  border: none;
+  padding: 8px 16px;
+  border: 1px solid var(--glass-border);
   border-radius: 10px;
-  color: white;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
-.ollama-start-btn:hover {
-  opacity: 0.9;
-  transform: scale(1.03);
-  box-shadow: var(--shadow-md);
+.step-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
 }
 
-.ollama-start-btn:active {
-  transform: scale(0.98);
+.step-action-btn:active {
+  transform: scale(0.97);
 }
 
-.ollama-offline-hint {
-  font-size: 9px;
+.step-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.step-action-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.step-action-primary:hover {
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+  opacity: 0.95;
+}
+
+.step-action-secondary {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.2);
+  color: var(--color-primary);
+}
+
+.step-action-secondary:hover {
+  background: rgba(37, 99, 235, 0.14);
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.step-status {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.step-status-ok {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.step-status-err {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-error);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.step-status-info {
+  background: rgba(37, 99, 235, 0.06);
+  color: var(--color-primary);
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.step-hint {
+  font-size: 10px;
   color: var(--text-muted);
+  margin-top: 6px;
   font-family: var(--font-mono);
 }
 
-.ollama-offline-hint code {
+.step-hint code {
   background: var(--bg-surface);
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 4px;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--color-accent);
+}
+
+/* ── Ollama Ready Banner ── */
+.ollama-ready-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 480px;
+  margin: 0 auto 24px;
+  padding: 12px 20px;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+  animation: fadeIn 0.4s ease;
+}
+
+.ready-icon {
+  font-size: 18px;
+}
+
+.ready-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ready-text strong {
+  color: var(--color-success);
+}
+
+/* ── Light theme overrides for setup wizard ── */
+[data-theme="light"] .ollama-setup-wizard {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .setup-wizard-header {
+  background: rgba(37, 99, 235, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .step-action-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .step-action-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .ollama-ready-banner {
+  background: rgba(16, 185, 129, 0.04);
 }
 
 /* ── Welcome Example Intents ─────────────────────────────────────────────── */

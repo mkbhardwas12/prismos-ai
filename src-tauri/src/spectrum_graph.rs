@@ -119,6 +119,7 @@ impl SpectrumGraph {
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
 
+        // ── Step 1: Create tables (safe for both fresh and existing DBs) ──
         conn.execute_batch(
             "
             -- Layer 1: Core relational store
@@ -169,7 +170,28 @@ impl SpectrumGraph {
                 created_at      TEXT NOT NULL,
                 FOREIGN KEY (edge_id) REFERENCES edges(id) ON DELETE CASCADE
             );
+            ",
+        )?;
 
+        // ── Step 2: Migrate existing tables — add new columns if missing ──
+        // Each ALTER is its own statement so one failure doesn't block the rest.
+        // Errors are expected on fresh installs (columns already exist) — ignored.
+        let migrations = [
+            "ALTER TABLE nodes ADD COLUMN layer TEXT NOT NULL DEFAULT 'context';",
+            "ALTER TABLE nodes ADD COLUMN embedding BLOB;",
+            "ALTER TABLE nodes ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE nodes ADD COLUMN last_accessed TEXT NOT NULL DEFAULT '';",
+            "ALTER TABLE edges ADD COLUMN momentum REAL NOT NULL DEFAULT 0.0;",
+            "ALTER TABLE edges ADD COLUMN reinforcements INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE edges ADD COLUMN last_reinforced TEXT NOT NULL DEFAULT '';",
+        ];
+        for sql in &migrations {
+            let _ = conn.execute_batch(sql); // Ignore "duplicate column" errors
+        }
+
+        // ── Step 3: Create indexes (now safe — all columns guaranteed to exist) ──
+        conn.execute_batch(
+            "
             CREATE INDEX IF NOT EXISTS idx_edges_source      ON edges(source_id);
             CREATE INDEX IF NOT EXISTS idx_edges_target       ON edges(target_id);
             CREATE INDEX IF NOT EXISTS idx_edges_weight       ON edges(weight DESC);
@@ -182,19 +204,6 @@ impl SpectrumGraph {
             CREATE INDEX IF NOT EXISTS idx_feedback_edge      ON feedback(edge_id);
             ",
         )?;
-
-        // Migrate existing tables: add new columns if they don't exist
-        // (safe for fresh installs — ALTER TABLE on existing DBs)
-        let _ = conn.execute_batch(
-            "
-            ALTER TABLE nodes ADD COLUMN layer TEXT NOT NULL DEFAULT 'context';
-            ALTER TABLE nodes ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0;
-            ALTER TABLE nodes ADD COLUMN last_accessed TEXT NOT NULL DEFAULT '';
-            ALTER TABLE edges ADD COLUMN momentum REAL NOT NULL DEFAULT 0.0;
-            ALTER TABLE edges ADD COLUMN reinforcements INTEGER NOT NULL DEFAULT 0;
-            ALTER TABLE edges ADD COLUMN last_reinforced TEXT NOT NULL DEFAULT '';
-            ",
-        ); // Ignore errors — columns may already exist
 
         Ok(Self { conn })
     }

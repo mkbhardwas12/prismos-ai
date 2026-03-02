@@ -600,7 +600,7 @@ async fn get_timeline_data(app: tauri::AppHandle) -> Result<String, String> {
             event_type: "node_created".into(),
             label: node.label.clone(),
             description: if node.content.len() > 120 {
-                format!("{}…", &node.content[..120])
+                format!("{}…", node.content.chars().take(120).collect::<String>())
             } else {
                 node.content.clone()
             },

@@ -25,6 +25,7 @@ export default function SpectrumExplorer({
   const [newNodeContent, setNewNodeContent] = useState("");
   const [newNodeType, setNewNodeType] = useState("note");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -58,17 +59,22 @@ export default function SpectrumExplorer({
 
   const handleDeleteNode = useCallback(
     async (id: string) => {
-      if (!confirm("Delete this node and all its connections?")) return;
+      if (confirmDeleteId !== id) {
+        setConfirmDeleteId(id);
+        setTimeout(() => setConfirmDeleteId(null), 5000);
+        return;
+      }
       try {
         await invoke("delete_spectrum_node", { id });
         setSelectedNode(null);
         setSearchResults(null);
+        setConfirmDeleteId(null);
         onDataChanged();
       } catch (e) {
         console.error("Delete failed:", e);
       }
     },
-    [onDataChanged]
+    [onDataChanged, confirmDeleteId]
   );
 
   const handleAddNode = useCallback(async () => {
@@ -104,7 +110,9 @@ export default function SpectrumExplorer({
         {/* Search + Actions Bar */}
         <div className="explorer-toolbar">
           <div className="search-bar">
+            <label htmlFor="spectrum-search" className="sr-only">Search knowledge graph</label>
             <input
+              id="spectrum-search"
               type="text"
               className="search-input"
               placeholder="Search knowledge graph..."
@@ -141,14 +149,18 @@ export default function SpectrumExplorer({
 
         {/* Add Node Form */}
         {showAddForm && (
-          <div className="add-node-form">
+          <div className="add-node-form" role="form" aria-label="Add new node">
+            <label htmlFor="node-label" className="sr-only">Node label</label>
             <input
+              id="node-label"
               className="form-input"
               placeholder="Node label..."
               value={newNodeLabel}
               onChange={(e) => setNewNodeLabel(e.target.value)}
             />
+            <label htmlFor="node-content" className="sr-only">Node content</label>
             <textarea
+              id="node-content"
               className="form-textarea"
               placeholder="Node content..."
               value={newNodeContent}
@@ -156,7 +168,9 @@ export default function SpectrumExplorer({
               rows={3}
             />
             <div className="form-row">
+              <label htmlFor="node-type" className="sr-only">Node type</label>
               <select
+                id="node-type"
                 className="form-select"
                 value={newNodeType}
                 onChange={(e) => setNewNodeType(e.target.value)}
@@ -196,6 +210,10 @@ export default function SpectrumExplorer({
                   key={node.id}
                   className={`explorer-node-card ${selectedNode?.id === node.id ? "selected" : ""}`}
                   onClick={() => handleSelectNode(node)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSelectNode(node); } }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selectedNode?.id === node.id}
                 >
                   <div className="node-card-header">
                     <span className={`node-type-badge type-${node.node_type}`}>
@@ -222,11 +240,12 @@ export default function SpectrumExplorer({
                 <div className="detail-header">
                   <h3>{selectedNode.label}</h3>
                   <button
-                    className="toolbar-btn danger"
+                    className={`toolbar-btn ${confirmDeleteId === selectedNode.id ? "danger-confirm" : "danger"}`}
                     onClick={() => handleDeleteNode(selectedNode.id)}
-                    title="Delete node"
+                    title={confirmDeleteId === selectedNode.id ? "Click again to confirm deletion" : "Delete node"}
+                    aria-label={confirmDeleteId === selectedNode.id ? "Confirm delete" : "Delete node"}
                   >
-                    🗑️
+                    {confirmDeleteId === selectedNode.id ? "⚠️ Confirm?" : "🗑️"}
                   </button>
                 </div>
                 <div className="detail-meta">

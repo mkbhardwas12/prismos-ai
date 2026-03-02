@@ -1,7 +1,7 @@
 // Patent Pending — US 63/993,589 (Feb 28, 2026)
 // PrismOS Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
-import type { Agent, SpectrumNode, GraphStats } from "../types";
+import type { Agent, SpectrumNode, GraphStats, CollaborationSummary } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import prismosIcon from "../assets/prismos-icon.svg";
 
@@ -11,6 +11,7 @@ interface SidebarProps {
   agents: Agent[];
   nodes: SpectrumNode[];
   graphStats: GraphStats;
+  collaboration?: CollaborationSummary | null;
 }
 
 export default function Sidebar({
@@ -19,6 +20,7 @@ export default function Sidebar({
   agents,
   nodes,
   graphStats,
+  collaboration,
 }: SidebarProps) {
   return (
     <div className="sidebar">
@@ -110,7 +112,7 @@ export default function Sidebar({
         {/* Active Agents */}
         <div className="sidebar-section">
           <div className="sidebar-section-title">Active Agents</div>
-          <ActiveAgents agents={agents} />
+          <ActiveAgents agents={agents} collaboration={collaboration} />
         </div>
       </nav>
 

@@ -8,6 +8,7 @@ mod sandbox_prism;
 mod intent_lens;
 mod ollama_bridge;
 mod you_port;
+mod agents;
 
 use tauri::Manager;
 

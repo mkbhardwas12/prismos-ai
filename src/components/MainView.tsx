@@ -6,12 +6,12 @@ import { invoke } from "@tauri-apps/api/core";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
-import type { AppSettings, Message, RefractiveResult } from "../types";
+import type { AppSettings, Message, RefractiveResult, CollaborationSummary } from "../types";
 
 interface MainViewProps {
   ollamaConnected: boolean;
   settings: AppSettings;
-  onIntentProcessed: (agentUsed?: string) => void;
+  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary) => void;
 }
 
 export default function MainView({
@@ -99,7 +99,19 @@ export default function MainView({
       if (result.context_nodes?.length) metaParts.push(`${result.context_nodes.length} ctx nodes`);
       if (result.edges_reinforced?.length) metaParts.push(`${result.edges_reinforced.length} edges reinforced`);
 
+      // Collaboration trace
+      if (result.collaboration) {
+        const c = result.collaboration;
+        metaParts.push(`🔗 ${c.approve_count}/${c.vote_count} consensus`);
+        metaParts.push(`💬 ${c.message_count} agent msgs`);
+      }
+
       const metaLine = metaParts.length > 0 ? `\n\n───\n📡 ${metaParts.join(" · ")}` : "";
+
+      // Collaboration consensus line
+      const collabLine = result.collaboration
+        ? `\n${result.collaboration.consensus_approved ? '✅' : '🛡️'} ${result.collaboration.consensus_summary}`
+        : "";
 
       // Build anticipation hint
       const hintLine = result.anticipations?.length
@@ -109,12 +121,12 @@ export default function MainView({
       const aiMsg: Message = {
         id: crypto.randomUUID(),
         role: "ai",
-        content: result.response + metaLine + hintLine,
+        content: result.response + metaLine + collabLine + hintLine,
         timestamp: new Date(),
         agent: result.agent_used,
       };
       setMessages((prev) => [...prev, aiMsg]);
-      onIntentProcessed(result.agent_used); // Refresh sidebar + graph + agent status
+      onIntentProcessed(result.agent_used, result.collaboration ?? undefined); // Refresh sidebar + graph + agent status
     } catch (e) {
       // Fallback to legacy process_intent if refract_intent fails
       try {

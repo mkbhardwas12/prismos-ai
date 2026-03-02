@@ -47,7 +47,7 @@ pub struct ParsedIntent {
     pub confidence: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IntentType {
     Query,
     Create,
@@ -81,6 +81,29 @@ pub struct RefractiveResult {
     pub anticipations: Vec<String>,      // anticipated need suggestions
     pub processing_time_ms: u64,
     pub npu_accelerated: bool,
+    pub collaboration: Option<CollaborationSummary>,  // LangGraph multi-agent trace
+}
+
+/// Compact summary of multi-agent collaboration for frontend display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborationSummary {
+    pub session_id: String,
+    pub phase: String,
+    pub pipeline_trace: Vec<TraceSummary>,
+    pub consensus_approved: bool,
+    pub consensus_summary: String,
+    pub vote_count: usize,
+    pub approve_count: usize,
+    pub reject_count: usize,
+    pub message_count: usize,
+}
+
+/// A single step in the pipeline trace for the frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceSummary {
+    pub agent: String,
+    pub action: String,
+    pub status: String,
 }
 
 // ─── NPU Scoring Engine ────────────────────────────────────────────────────────
@@ -269,7 +292,7 @@ impl RefractiveEngine {
         }
     }
 
-    /// Full refractive pipeline: intent → context → agent → sandbox → feedback → result
+    /// Full refractive pipeline: intent → context → LangGraph multi-agent collaboration → result
     pub async fn refract(
         &self,
         intent: ParsedIntent,
@@ -302,142 +325,61 @@ impl RefractiveEngine {
         }
         scored_context.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        // ── Step 3: Build context-enriched prompt ──
+        // ── Step 3: Build context-enriched summary ──
         let context_summary = self.build_context_summary(&context_results);
 
-        // ── Step 4: Select agent and route through pipeline ──
-        let (agent_id, system_prompt) = self.select_agent(&intent);
+        // ── Step 4: Execute LangGraph multi-agent collaboration ──
+        // All 5 agents collaborate: Orchestrator decomposes → Reasoner analyzes →
+        // Tool Smith evaluates → Memory Keeper persists → Sentinel validates →
+        // Consensus vote → Execute through Sandbox Prism
+        eprintln!("[RefractiveCore] Launching LangGraph multi-agent collaboration...");
 
-        let full_prompt = format!(
-            "{}\n\n--- Spectrum Graph Context ---\n{}\n--- End Context ---\n\nUser intent: {}\nEntities: {:?}\nConfidence: {:.0}%\n\nRespond helpfully and concisely:",
-            system_prompt,
-            context_summary,
-            intent.raw,
-            intent.entities,
-            intent.confidence * 100.0
-        );
-
-        // ── Step 4.5: Create Sandbox Prism for this pipeline run ──
-        let prism_name = format!("refract_{}_{}", agent_id, &intent_type_str);
-        let mut prism = crate::sandbox_prism::create_prism_for_agent(&prism_name, &agent_id);
-
-        // ── Step 5: LLM inference via Ollama — THROUGH SANDBOX ──
-        // Validate LLM inference is permitted for this agent
-        let llm_action = format!("llm_inference:generate:model=mistral:agent={}", agent_id);
-        let llm_sandbox_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
-            &mut prism, &llm_action, &agent_id,
-        );
-
-        let response = if !llm_sandbox_result.success {
-            // Sandbox denied the LLM call — use the sandbox explanation
-            eprintln!(
-                "[RefractiveCore] Sandbox denied LLM inference for '{}': {}",
-                agent_id, llm_sandbox_result.output
-            );
-            format!(
-                "🛡️ [Sandbox Protected] {}\n\n\
-                 Your request was processed safely. The Sandbox Prism enforced agent boundaries.",
-                llm_sandbox_result.output
-            )
-        } else {
-            // Sandbox approved — proceed with LLM call
-            match crate::ollama_bridge::generate("mistral", &full_prompt).await {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("[RefractiveCore] Ollama unavailable, using offline mode: {}", e);
-                    format!(
-                        "⚡ [Offline Mode] I processed your intent locally through the Spectrum Graph.\n\n\
-                         Intent type: {}\nEntities: {:?}\nContext nodes found: {}\n\n\
-                         💡 Start Ollama for full AI responses: `ollama serve` then `ollama pull mistral`",
-                        intent_type_str,
-                        intent.entities,
-                        context_results.len()
-                    )
-                }
-            }
-        };
-
-        // ── Step 6: Closed-loop feedback — reinforce graph edges — THROUGH SANDBOX ──
-        let mut edges_reinforced: Vec<String> = Vec::new();
-
-        // Validate graph writes are permitted for this agent
-        let reinforce_action = format!("edge_reinforce:feedback:agent={}", agent_id);
-        let reinforce_sandbox = crate::sandbox_prism::execute_in_sandbox_for_agent(
-            &mut prism, &reinforce_action, &agent_id,
-        );
-
-        if reinforce_sandbox.success {
-            for i in 0..scored_context.len().min(5) {
-                for j in (i + 1)..scored_context.len().min(5) {
-                    let (ref id_a, score_a) = scored_context[i];
-                    let (ref id_b, score_b) = scored_context[j];
-
-                    let edge = graph.get_or_create_edge(id_a, id_b, "co_referenced")?;
-                    let feedback_signal = (score_a + score_b) / 2.0;
-                    let updated = graph.update_edge_weight(&edge.id, feedback_signal)?;
-                    edges_reinforced.push(updated.id);
-                }
-            }
-        } else {
-            eprintln!(
-                "[RefractiveCore] Sandbox denied edge reinforcement for '{}': {}",
-                agent_id, reinforce_sandbox.output
-            );
-        }
-
-        // ── Step 7: Store conversation as a new node — THROUGH SANDBOX ──
-        let store_action = format!("conversation:store_chat:agent={}", agent_id);
-        let store_sandbox = crate::sandbox_prism::execute_in_sandbox_for_agent(
-            &mut prism, &store_action, &agent_id,
-        );
-
-        if store_sandbox.success {
-            let conv_node = graph.add_node_with_layer(
-                &format!("Chat: {}", &intent.raw.chars().take(50).collect::<String>()),
-                &format!("Q: {}\n\nA: {}", intent.raw, &response.chars().take(500).collect::<String>()),
-                "conversation",
-                "ephemeral",
-            )?;
-
-            // Link conversation to context nodes — through sandbox
-            let link_action = format!("add_node:node_create:derived_from:agent={}", agent_id);
-            let link_sandbox = crate::sandbox_prism::execute_in_sandbox_for_agent(
-                &mut prism, &link_action, &agent_id,
-            );
-
-            if link_sandbox.success {
-                for ctx_id in scored_context.iter().take(3).map(|(id, _)| id) {
-                    let edge = graph.get_or_create_edge(&conv_node.id, ctx_id, "derived_from")?;
-                    graph.update_edge_weight(&edge.id, 0.5)?;
-                }
-            }
-        } else {
-            eprintln!(
-                "[RefractiveCore] Sandbox denied conversation storage for '{}': {}",
-                agent_id, store_sandbox.output
-            );
-        }
-
-        // ── Step 8: Get anticipatory suggestions ──
-        let anticipations = graph
-            .anticipate_needs()?
-            .into_iter()
-            .take(3)
-            .map(|n| n.suggestion)
-            .collect();
-
-        let elapsed = start.elapsed().as_millis() as u64;
-
-        Ok(RefractiveResult {
-            response,
+        let (mut result, session) = crate::agents::graph::execute_collaboration(
             intent,
-            agent_used: agent_id,
-            context_nodes: context_node_ids,
-            edges_reinforced,
-            anticipations,
-            processing_time_ms: elapsed,
-            npu_accelerated: self.scorer.accelerated,
-        })
+            &context_summary,
+            &context_node_ids,
+            &scored_context,
+            self.scorer.accelerated,
+            app_dir,
+        )
+        .await?;
+
+        // ── Step 5: Attach collaboration summary to result ──
+        let consensus = session.consensus.as_ref();
+        let collab_summary = CollaborationSummary {
+            session_id: session.session_id.clone(),
+            phase: format!("{:?}", session.current_phase),
+            pipeline_trace: session
+                .pipeline_trace
+                .iter()
+                .map(|s| TraceSummary {
+                    agent: s.agent.clone(),
+                    action: s.action.clone(),
+                    status: format!("{:?}", s.status),
+                })
+                .collect(),
+            consensus_approved: consensus.map(|c| c.approved).unwrap_or(false),
+            consensus_summary: consensus
+                .map(|c| c.summary.clone())
+                .unwrap_or_default(),
+            vote_count: session.votes.len(),
+            approve_count: consensus.map(|c| c.approve_count).unwrap_or(0),
+            reject_count: consensus.map(|c| c.reject_count).unwrap_or(0),
+            message_count: session.messages.len(),
+        };
+        result.collaboration = Some(collab_summary);
+
+        // Override processing time to include full collaboration
+        result.processing_time_ms = start.elapsed().as_millis() as u64;
+
+        eprintln!(
+            "[RefractiveCore] LangGraph collaboration complete in {}ms — {} messages, {} votes",
+            result.processing_time_ms,
+            session.messages.len(),
+            session.votes.len()
+        );
+
+        Ok(result)
     }
 
     /// Select the appropriate agent based on intent type

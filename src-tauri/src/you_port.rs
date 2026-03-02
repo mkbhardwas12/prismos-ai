@@ -475,6 +475,190 @@ pub fn has_saved_state(app_dir: &Path) -> bool {
     app_dir.join(STATE_FILE).exists()
 }
 
+// ─── Advanced You-Port: Cross-Device Merge (Patent [application number]) ─────────────────
+
+/// Result of a cross-device merge operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossDeviceMergeResult {
+    pub success: bool,
+    pub message: String,
+    pub merge_result: crate::spectrum_graph::MergeResult,
+    pub source_device: String,
+    pub source_timestamp: String,
+}
+
+/// Export the local graph as an encrypted sync package for another device.
+/// The exported package includes a "shared key" nonce that any PrismOS instance
+/// can use with a user-supplied passphrase for decryption.
+pub fn export_sync_package(
+    app_dir: &Path,
+    passphrase: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
+    let snapshot = graph.get_full_graph()?;
+
+    let nodes_count = snapshot.nodes.len();
+    let edges_count = snapshot.edges.len();
+
+    // Serialize the snapshot
+    let state = serde_json::json!({
+        "format": "prismos-sync-v1",
+        "exported_at": Utc::now().to_rfc3339(),
+        "source_device": get_device_fingerprint(app_dir),
+        "snapshot": snapshot,
+    });
+    let plaintext = serde_json::to_string(&state)?;
+    let plaintext_bytes = plaintext.as_bytes();
+
+    // Use passphrase-based key derivation (instead of device-bound key)
+    let nonce = Uuid::new_v4().to_string();
+    let key = derive_key(passphrase, &nonce);
+    let checksum = sha256_hex(plaintext_bytes);
+
+    // Encrypt
+    let ciphertext = xor_stream_cipher(&key, plaintext_bytes);
+    let encrypted_b64 = BASE64.encode(&ciphertext);
+    let hmac_sig = compute_hmac(&key, &ciphertext);
+
+    let package = serde_json::json!({
+        "format": "prismos-sync-encrypted-v1",
+        "id": Uuid::new_v4().to_string(),
+        "created_at": Utc::now().to_rfc3339(),
+        "encrypted_payload": encrypted_b64,
+        "checksum": checksum,
+        "hmac_signature": hmac_sig,
+        "nonce": nonce,
+        "key_type": "passphrase",
+        "stats": {
+            "nodes": nodes_count,
+            "edges": edges_count,
+        }
+    });
+
+    serde_json::to_string_pretty(&package).map_err(|e| e.into())
+}
+
+/// Import and merge a sync package from another device.
+/// Decrypts using the user-supplied passphrase, then merges with conflict resolution.
+pub fn import_sync_package(
+    app_dir: &Path,
+    package_json: &str,
+    passphrase: &str,
+    strategy: &str,
+) -> Result<CrossDeviceMergeResult, Box<dyn std::error::Error + Send + Sync>> {
+    let package: serde_json::Value = serde_json::from_str(package_json)?;
+
+    let format = package["format"].as_str().unwrap_or("");
+    if format != "prismos-sync-encrypted-v1" {
+        return Err(format!("Unsupported sync format: {} (expected prismos-sync-encrypted-v1)", format).into());
+    }
+
+    let encrypted_b64 = package["encrypted_payload"]
+        .as_str()
+        .ok_or("Missing encrypted_payload")?;
+    let nonce = package["nonce"].as_str().ok_or("Missing nonce")?;
+    let stored_checksum = package["checksum"].as_str().ok_or("Missing checksum")?;
+    let stored_hmac = package["hmac_signature"]
+        .as_str()
+        .ok_or("Missing hmac_signature")?;
+
+    // Derive key from passphrase + nonce
+    let key = derive_key(passphrase, nonce);
+
+    // Decode and verify HMAC
+    let ciphertext = BASE64
+        .decode(encrypted_b64)
+        .map_err(|e| format!("Failed to decode payload: {}", e))?;
+
+    let expected_hmac = compute_hmac(&key, &ciphertext);
+    if expected_hmac != stored_hmac {
+        return Err(
+            "HMAC verification failed — wrong passphrase or tampered file".into(),
+        );
+    }
+
+    // Decrypt
+    let plaintext_bytes = xor_stream_cipher(&key, &ciphertext);
+
+    // Verify integrity
+    let checksum = sha256_hex(&plaintext_bytes);
+    if checksum != stored_checksum {
+        return Err("Integrity checksum mismatch — decryption failed (wrong passphrase?)".into());
+    }
+
+    let plaintext = String::from_utf8(plaintext_bytes)
+        .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))?;
+
+    // Parse the sync state
+    let state: serde_json::Value = serde_json::from_str(&plaintext)?;
+    let source_device = state["source_device"].as_str().unwrap_or("unknown").to_string();
+    let source_timestamp = state["exported_at"].as_str().unwrap_or("unknown").to_string();
+
+    let snapshot_val = state.get("snapshot")
+        .ok_or("Missing snapshot in sync package")?;
+    let snapshot: crate::spectrum_graph::GraphSnapshot =
+        serde_json::from_value(snapshot_val.clone())?;
+
+    // Merge using the specified strategy
+    let merge_strategy = crate::spectrum_graph::MergeStrategy::from_str(strategy);
+    let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
+    let merge_result = graph.merge_graph(&snapshot, &merge_strategy)?;
+
+    Ok(CrossDeviceMergeResult {
+        success: merge_result.success,
+        message: merge_result.message.clone(),
+        merge_result,
+        source_device,
+        source_timestamp,
+    })
+}
+
+/// Preview a merge diff without applying changes.
+/// Returns the diff report showing what would happen if merged.
+pub fn preview_sync_merge(
+    app_dir: &Path,
+    package_json: &str,
+    passphrase: &str,
+    strategy: &str,
+) -> Result<crate::spectrum_graph::MergeDiff, Box<dyn std::error::Error + Send + Sync>> {
+    let package: serde_json::Value = serde_json::from_str(package_json)?;
+
+    let format = package["format"].as_str().unwrap_or("");
+    if format != "prismos-sync-encrypted-v1" {
+        return Err(format!("Unsupported sync format: {}", format).into());
+    }
+
+    let encrypted_b64 = package["encrypted_payload"]
+        .as_str()
+        .ok_or("Missing encrypted_payload")?;
+    let nonce = package["nonce"].as_str().ok_or("Missing nonce")?;
+    let stored_hmac = package["hmac_signature"]
+        .as_str()
+        .ok_or("Missing hmac_signature")?;
+
+    let key = derive_key(passphrase, nonce);
+    let ciphertext = BASE64
+        .decode(encrypted_b64)
+        .map_err(|e| format!("Failed to decode payload: {}", e))?;
+
+    let expected_hmac = compute_hmac(&key, &ciphertext);
+    if expected_hmac != stored_hmac {
+        return Err("HMAC verification failed — wrong passphrase or tampered file".into());
+    }
+
+    let plaintext_bytes = xor_stream_cipher(&key, &ciphertext);
+    let plaintext = String::from_utf8(plaintext_bytes)?;
+
+    let state: serde_json::Value = serde_json::from_str(&plaintext)?;
+    let snapshot_val = state.get("snapshot").ok_or("Missing snapshot")?;
+    let snapshot: crate::spectrum_graph::GraphSnapshot =
+        serde_json::from_value(snapshot_val.clone())?;
+
+    let merge_strategy = crate::spectrum_graph::MergeStrategy::from_str(strategy);
+    let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
+    graph.diff_graph(&snapshot, &merge_strategy)
+}
+
 // ─── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -2974,3 +2974,204 @@ body {
 .timeline-event-edge_reinforced .timeline-event-card {
   border-left: 3px solid #ce93d8;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MULTI-DEVICE SYNC UI (Patent [application number] — Graph Merge/Diff)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Strategy selector */
+.settings-sync-strategies {
+  display: flex;
+  gap: 0.5rem;
+}
+.settings-sync-strategy-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.settings-sync-strategy-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+.settings-sync-strategy-btn.active {
+  background: rgba(79, 195, 247, 0.12);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Loaded file indicator */
+.settings-sync-loaded {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(129, 199, 132, 0.08);
+  border: 1px solid rgba(129, 199, 132, 0.2);
+  border-radius: 8px;
+}
+.settings-sync-loaded-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #81c784;
+  margin-bottom: 0.5rem;
+}
+
+/* Merge preview panel */
+.settings-sync-preview {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.settings-sync-preview-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 0.75rem;
+}
+
+/* Sync stats grid */
+.settings-sync-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.sync-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+.sync-stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.sync-stat-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-text-secondary);
+}
+
+/* Conflict list */
+.settings-sync-conflicts {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(229, 115, 115, 0.06);
+  border: 1px solid rgba(229, 115, 115, 0.15);
+  border-radius: 6px;
+}
+.sync-conflicts-header {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e57373;
+  margin-bottom: 0.5rem;
+}
+.sync-conflicts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.sync-conflict-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  flex-wrap: wrap;
+}
+.sync-conflict-type {
+  background: rgba(79, 195, 247, 0.15);
+  color: var(--color-primary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.sync-conflict-field {
+  color: var(--color-text-secondary);
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+}
+.sync-conflict-values {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 0;
+}
+.sync-conflict-local,
+.sync-conflict-remote {
+  font-size: 0.65rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.sync-conflict-arrow {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+}
+.sync-conflict-resolution {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: auto;
+}
+.sync-conflict-resolution.took_remote {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+.sync-conflict-resolution.kept_local {
+  background: rgba(129, 199, 132, 0.15);
+  color: #81c784;
+}
+.sync-conflict-resolution.took_latest {
+  background: rgba(255, 183, 77, 0.15);
+  color: #ffb74d;
+}
+.sync-conflicts-more {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  padding: 0.3rem;
+}
+
+/* Merge result details */
+.settings-sync-result-details {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(129, 199, 132, 0.06);
+  border: 1px solid rgba(129, 199, 132, 0.15);
+  border-radius: 6px;
+}
+.sync-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+.sync-result-row strong {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}

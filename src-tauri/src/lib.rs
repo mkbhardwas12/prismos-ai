@@ -659,6 +659,65 @@ async fn get_timeline_data(app: tauri::AppHandle) -> Result<String, String> {
     serde_json::to_string(&events).map_err(|e| e.to_string())
 }
 
+// ─── Graph Merge/Diff Commands (Patent [application number] — Multi-Device Sync) ───────
+
+/// Export the local Spectrum Graph as a passphrase-encrypted sync package.
+/// The resulting file can be transferred to another PrismOS instance and
+/// merged using the same passphrase.
+#[tauri::command]
+async fn export_sync_package(app: tauri::AppHandle, passphrase: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    you_port::export_sync_package(&app_dir, &passphrase).map_err(|e| e.to_string())
+}
+
+/// Import and merge a sync package from another device.
+/// Decrypts with the passphrase, then merges using the specified strategy
+/// ("theirs", "ours", or "latest").
+#[tauri::command]
+async fn import_sync_package(
+    app: tauri::AppHandle,
+    package_json: String,
+    passphrase: String,
+    strategy: String,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let result = you_port::import_sync_package(&app_dir, &package_json, &passphrase, &strategy)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Preview a merge diff without applying any changes.
+/// Returns conflict details and what would happen under the given strategy.
+#[tauri::command]
+async fn preview_sync_merge(
+    app: tauri::AppHandle,
+    package_json: String,
+    passphrase: String,
+    strategy: String,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let diff = you_port::preview_sync_merge(&app_dir, &package_json, &passphrase, &strategy)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&diff).map_err(|e| e.to_string())
+}
+
+/// Compute a diff between the local graph and a raw (unencrypted) graph snapshot.
+/// Useful for comparing two local exports.
+#[tauri::command]
+async fn diff_graph(
+    app: tauri::AppHandle,
+    snapshot_json: String,
+    strategy: String,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let snapshot: spectrum_graph::GraphSnapshot =
+        serde_json::from_str(&snapshot_json).map_err(|e| format!("Invalid snapshot JSON: {}", e))?;
+    let merge_strategy = spectrum_graph::MergeStrategy::from_str(&strategy);
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let diff = db.diff_graph(&snapshot, &merge_strategy).map_err(|e| e.to_string())?;
+    serde_json::to_string(&diff).map_err(|e| e.to_string())
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -689,10 +748,11 @@ pub fn run() {
             }
 
             println!("╔══════════════════════════════════════════════╗");
-            println!("║  ◈ PrismOS v0.1.0 — Local-First AI OS       ║");
+            println!("║  ◈ PrismOS v0.2.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US [application number]              ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
+            println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("╚══════════════════════════════════════════════╝");
             println!("📍 Data directory: {:?}", app_dir);
 
@@ -753,6 +813,11 @@ pub fn run() {
             // Multi-Window + Spectral Timeline (Patent [application number])
             open_graph_window,
             get_timeline_data,
+            // Graph Merge/Diff — Multi-Device Sync (Patent [application number])
+            export_sync_package,
+            import_sync_package,
+            preview_sync_merge,
+            diff_graph,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS");

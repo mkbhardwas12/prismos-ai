@@ -288,3 +288,49 @@ export interface AgentState {
   status: string;
   last_active: string | null;
 }
+
+// ─── Graph Merge/Diff Types (Patent [application number] — Multi-Device Sync) ───────────
+
+export interface MergeConflict {
+  entity_type: string;
+  entity_id: string;
+  field: string;
+  local_value: string;
+  remote_value: string;
+  resolution: string;
+  resolved_value: string;
+}
+
+export interface MergeDiff {
+  nodes_only_local: number;
+  nodes_only_remote: number;
+  nodes_both: number;
+  nodes_conflicted: number;
+  edges_only_local: number;
+  edges_only_remote: number;
+  edges_both: number;
+  edges_conflicted: number;
+  conflicts: MergeConflict[];
+}
+
+export interface MergeResult {
+  success: boolean;
+  strategy: string;
+  nodes_added: number;
+  nodes_updated: number;
+  nodes_skipped: number;
+  edges_added: number;
+  edges_updated: number;
+  edges_skipped: number;
+  conflicts_resolved: number;
+  diff: MergeDiff;
+  message: string;
+}
+
+export interface CrossDeviceMergeResult {
+  success: boolean;
+  message: string;
+  merge_result: MergeResult;
+  source_device: string;
+  source_timestamp: string;
+}

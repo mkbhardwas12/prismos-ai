@@ -1328,3 +1328,456 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
         0.0
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  GRAPH MERGE/DIFF ENGINE — Multi-Device Sync (Patent [application number])
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+//  Supports three merge strategies:
+//    1. "theirs" — incoming overwrites local on conflict
+//    2. "ours"   — local wins on conflict
+//    3. "latest" — whichever was updated more recently wins
+//
+//  A "conflict" occurs when a node with the same ID exists on both sides
+//  but has different content/label/type. Edges are merged additively;
+//  if both sides have the same edge, the higher weight wins.
+
+/// Resolution strategy for merge conflicts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MergeStrategy {
+    Theirs,  // Incoming snapshot wins on conflict
+    Ours,    // Local graph wins on conflict
+    Latest,  // Most recently updated version wins
+}
+
+impl MergeStrategy {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "theirs" => MergeStrategy::Theirs,
+            "ours" => MergeStrategy::Ours,
+            "latest" | _ => MergeStrategy::Latest,
+        }
+    }
+}
+
+/// A single conflict detected during merge diff
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeConflict {
+    pub entity_type: String,        // "node" or "edge"
+    pub entity_id: String,
+    pub field: String,              // which field differs
+    pub local_value: String,
+    pub remote_value: String,
+    pub resolution: String,         // "kept_local" | "took_remote" | "took_latest"
+    pub resolved_value: String,
+}
+
+/// Full diff report between local graph and incoming snapshot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeDiff {
+    pub nodes_only_local: usize,
+    pub nodes_only_remote: usize,
+    pub nodes_both: usize,
+    pub nodes_conflicted: usize,
+    pub edges_only_local: usize,
+    pub edges_only_remote: usize,
+    pub edges_both: usize,
+    pub edges_conflicted: usize,
+    pub conflicts: Vec<MergeConflict>,
+}
+
+/// Result of a completed merge operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeResult {
+    pub success: bool,
+    pub strategy: String,
+    pub nodes_added: usize,
+    pub nodes_updated: usize,
+    pub nodes_skipped: usize,
+    pub edges_added: usize,
+    pub edges_updated: usize,
+    pub edges_skipped: usize,
+    pub conflicts_resolved: usize,
+    pub diff: MergeDiff,
+    pub message: String,
+}
+
+impl SpectrumGraph {
+    /// Compute a diff between the local graph and an incoming snapshot
+    /// without modifying any data. Returns a MergeDiff with all conflicts.
+    pub fn diff_graph(
+        &self,
+        incoming: &GraphSnapshot,
+        strategy: &MergeStrategy,
+    ) -> Result<MergeDiff, Box<dyn std::error::Error + Send + Sync>> {
+        let mut diff = MergeDiff {
+            nodes_only_local: 0,
+            nodes_only_remote: 0,
+            nodes_both: 0,
+            nodes_conflicted: 0,
+            edges_only_local: 0,
+            edges_only_remote: 0,
+            edges_both: 0,
+            edges_conflicted: 0,
+            conflicts: Vec::new(),
+        };
+
+        // Build incoming lookup maps
+        let incoming_nodes: HashMap<String, &SpectrumNode> =
+            incoming.nodes.iter().map(|n| (n.id.clone(), n)).collect();
+        let incoming_edges: HashMap<String, &SpectrumEdge> =
+            incoming.edges.iter().map(|e| (e.id.clone(), e)).collect();
+
+        // Get local data
+        let local_nodes = self.get_all_nodes()?;
+        let local_edges = self.get_all_edges()?;
+        let local_node_map: HashMap<String, &SpectrumNode> =
+            local_nodes.iter().map(|n| (n.id.clone(), n)).collect();
+        let local_edge_map: HashMap<String, &SpectrumEdge> =
+            local_edges.iter().map(|e| (e.id.clone(), e)).collect();
+
+        // --- Node diff ---
+        // Nodes only in local
+        for id in local_node_map.keys() {
+            if !incoming_nodes.contains_key(id) {
+                diff.nodes_only_local += 1;
+            }
+        }
+
+        // Nodes in incoming
+        for (id, remote_node) in &incoming_nodes {
+            match local_node_map.get(id) {
+                None => {
+                    diff.nodes_only_remote += 1;
+                }
+                Some(local_node) => {
+                    diff.nodes_both += 1;
+
+                    // Check for content conflicts
+                    if local_node.content != remote_node.content
+                        || local_node.label != remote_node.label
+                    {
+                        diff.nodes_conflicted += 1;
+
+                        let resolution = match strategy {
+                            MergeStrategy::Theirs => "took_remote".to_string(),
+                            MergeStrategy::Ours => "kept_local".to_string(),
+                            MergeStrategy::Latest => {
+                                if remote_node.updated_at > local_node.updated_at {
+                                    "took_remote".to_string()
+                                } else {
+                                    "kept_local".to_string()
+                                }
+                            }
+                        };
+
+                        let resolved_value = match resolution.as_str() {
+                            "took_remote" => remote_node.label.clone(),
+                            _ => local_node.label.clone(),
+                        };
+
+                        if local_node.label != remote_node.label {
+                            diff.conflicts.push(MergeConflict {
+                                entity_type: "node".into(),
+                                entity_id: id.clone(),
+                                field: "label".into(),
+                                local_value: local_node.label.clone(),
+                                remote_value: remote_node.label.clone(),
+                                resolution: resolution.clone(),
+                                resolved_value: resolved_value.clone(),
+                            });
+                        }
+                        if local_node.content != remote_node.content {
+                            let resolved_content = match resolution.as_str() {
+                                "took_remote" => remote_node.content.clone(),
+                                _ => local_node.content.clone(),
+                            };
+                            diff.conflicts.push(MergeConflict {
+                                entity_type: "node".into(),
+                                entity_id: id.clone(),
+                                field: "content".into(),
+                                local_value: if local_node.content.len() > 80 {
+                                    format!("{}…", &local_node.content[..80])
+                                } else {
+                                    local_node.content.clone()
+                                },
+                                remote_value: if remote_node.content.len() > 80 {
+                                    format!("{}…", &remote_node.content[..80])
+                                } else {
+                                    remote_node.content.clone()
+                                },
+                                resolution: resolution.clone(),
+                                resolved_value: if resolved_content.len() > 80 {
+                                    format!("{}…", &resolved_content[..80])
+                                } else {
+                                    resolved_content
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Edge diff ---
+        for id in local_edge_map.keys() {
+            if !incoming_edges.contains_key(id) {
+                diff.edges_only_local += 1;
+            }
+        }
+
+        for (id, remote_edge) in &incoming_edges {
+            match local_edge_map.get(id) {
+                None => {
+                    diff.edges_only_remote += 1;
+                }
+                Some(local_edge) => {
+                    diff.edges_both += 1;
+
+                    if (local_edge.weight - remote_edge.weight).abs() > 0.01
+                        || local_edge.reinforcements != remote_edge.reinforcements
+                    {
+                        diff.edges_conflicted += 1;
+
+                        let resolution = match strategy {
+                            MergeStrategy::Theirs => "took_remote".to_string(),
+                            MergeStrategy::Ours => "kept_local".to_string(),
+                            MergeStrategy::Latest => {
+                                if remote_edge.last_reinforced > local_edge.last_reinforced {
+                                    "took_remote".to_string()
+                                } else {
+                                    "kept_local".to_string()
+                                }
+                            }
+                        };
+
+                        diff.conflicts.push(MergeConflict {
+                            entity_type: "edge".into(),
+                            entity_id: id.clone(),
+                            field: "weight".into(),
+                            local_value: format!("{:.3} (×{})", local_edge.weight, local_edge.reinforcements),
+                            remote_value: format!("{:.3} (×{})", remote_edge.weight, remote_edge.reinforcements),
+                            resolution: resolution.clone(),
+                            resolved_value: match resolution.as_str() {
+                                "took_remote" => format!("{:.3}", remote_edge.weight),
+                                _ => format!("{:.3}", local_edge.weight),
+                            },
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(diff)
+    }
+
+    /// Merge an incoming graph snapshot into the local database.
+    /// Applies the specified strategy for conflict resolution.
+    pub fn merge_graph(
+        &self,
+        incoming: &GraphSnapshot,
+        strategy: &MergeStrategy,
+    ) -> Result<MergeResult, Box<dyn std::error::Error + Send + Sync>> {
+        let diff = self.diff_graph(incoming, strategy)?;
+        let now = Utc::now().to_rfc3339();
+
+        let mut nodes_added = 0_usize;
+        let mut nodes_updated = 0_usize;
+        let mut nodes_skipped = 0_usize;
+        let mut edges_added = 0_usize;
+        let mut edges_updated = 0_usize;
+        let mut edges_skipped = 0_usize;
+
+        // --- Merge nodes ---
+        for remote_node in &incoming.nodes {
+            let exists: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
+                params![remote_node.id],
+                |row| row.get(0),
+            )?;
+
+            if !exists {
+                // New node — insert directly
+                self.conn.execute(
+                    "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        remote_node.id, remote_node.label, remote_node.content,
+                        remote_node.node_type, remote_node.layer, remote_node.access_count,
+                        remote_node.last_accessed, remote_node.created_at, remote_node.updated_at
+                    ],
+                )?;
+                nodes_added += 1;
+            } else {
+                // Existing node — check for conflict
+                let local_label: String = self.conn.query_row(
+                    "SELECT label FROM nodes WHERE id = ?1",
+                    params![remote_node.id],
+                    |row| row.get(0),
+                )?;
+                let local_content: String = self.conn.query_row(
+                    "SELECT content FROM nodes WHERE id = ?1",
+                    params![remote_node.id],
+                    |row| row.get(0),
+                )?;
+                let local_updated: String = self.conn.query_row(
+                    "SELECT updated_at FROM nodes WHERE id = ?1",
+                    params![remote_node.id],
+                    |row| row.get(0),
+                )?;
+
+                if local_label == remote_node.label && local_content == remote_node.content {
+                    // No conflict — merge access_count (take max)
+                    let local_access: u32 = self.conn.query_row(
+                        "SELECT COALESCE(access_count, 0) FROM nodes WHERE id = ?1",
+                        params![remote_node.id],
+                        |row| row.get(0),
+                    )?;
+                    if remote_node.access_count > local_access {
+                        self.conn.execute(
+                            "UPDATE nodes SET access_count = ?1 WHERE id = ?2",
+                            params![remote_node.access_count, remote_node.id],
+                        )?;
+                    }
+                    nodes_skipped += 1;
+                } else {
+                    // Conflict — apply strategy
+                    let should_update = match strategy {
+                        MergeStrategy::Theirs => true,
+                        MergeStrategy::Ours => false,
+                        MergeStrategy::Latest => remote_node.updated_at > local_updated,
+                    };
+
+                    if should_update {
+                        self.conn.execute(
+                            "UPDATE nodes SET label = ?1, content = ?2, node_type = ?3, layer = ?4, updated_at = ?5
+                             WHERE id = ?6",
+                            params![
+                                remote_node.label, remote_node.content, remote_node.node_type,
+                                remote_node.layer, &now, remote_node.id
+                            ],
+                        )?;
+                        nodes_updated += 1;
+                    } else {
+                        nodes_skipped += 1;
+                    }
+                }
+            }
+        }
+
+        // --- Merge edges ---
+        for remote_edge in &incoming.edges {
+            let exists: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM edges WHERE id = ?1",
+                params![remote_edge.id],
+                |row| row.get(0),
+            )?;
+
+            if !exists {
+                // Check that both endpoints exist before inserting
+                let src_exists: bool = self.conn.query_row(
+                    "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
+                    params![remote_edge.source_id],
+                    |row| row.get(0),
+                )?;
+                let tgt_exists: bool = self.conn.query_row(
+                    "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
+                    params![remote_edge.target_id],
+                    |row| row.get(0),
+                )?;
+
+                if src_exists && tgt_exists {
+                    self.conn.execute(
+                        "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                        params![
+                            remote_edge.id, remote_edge.source_id, remote_edge.target_id,
+                            remote_edge.relation, remote_edge.weight, remote_edge.momentum,
+                            remote_edge.reinforcements, remote_edge.last_reinforced, remote_edge.created_at
+                        ],
+                    )?;
+                    edges_added += 1;
+                } else {
+                    edges_skipped += 1;
+                }
+            } else {
+                // Existing edge — compare weights
+                let local_weight: f64 = self.conn.query_row(
+                    "SELECT weight FROM edges WHERE id = ?1",
+                    params![remote_edge.id],
+                    |row| row.get(0),
+                )?;
+                let local_reinforced: String = self.conn.query_row(
+                    "SELECT COALESCE(last_reinforced, created_at) FROM edges WHERE id = ?1",
+                    params![remote_edge.id],
+                    |row| row.get(0),
+                )?;
+
+                if (local_weight - remote_edge.weight).abs() <= 0.01 {
+                    edges_skipped += 1;
+                } else {
+                    let should_update = match strategy {
+                        MergeStrategy::Theirs => true,
+                        MergeStrategy::Ours => false,
+                        MergeStrategy::Latest => remote_edge.last_reinforced > local_reinforced,
+                    };
+
+                    if should_update {
+                        self.conn.execute(
+                            "UPDATE edges SET weight = ?1, momentum = ?2, reinforcements = ?3, last_reinforced = ?4
+                             WHERE id = ?5",
+                            params![
+                                remote_edge.weight, remote_edge.momentum,
+                                remote_edge.reinforcements, remote_edge.last_reinforced,
+                                remote_edge.id
+                            ],
+                        )?;
+                        edges_updated += 1;
+                    } else {
+                        edges_skipped += 1;
+                    }
+                }
+            }
+        }
+
+        let conflicts_resolved = diff.conflicts.len();
+        let strategy_str = match strategy {
+            MergeStrategy::Theirs => "theirs",
+            MergeStrategy::Ours => "ours",
+            MergeStrategy::Latest => "latest",
+        };
+
+        let message = format!(
+            "Merge complete (strategy: {}): +{} nodes, ~{} updated, +{} edges, ~{} updated, {} conflicts resolved",
+            strategy_str, nodes_added, nodes_updated, edges_added, edges_updated, conflicts_resolved
+        );
+
+        Ok(MergeResult {
+            success: true,
+            strategy: strategy_str.to_string(),
+            nodes_added,
+            nodes_updated,
+            nodes_skipped,
+            edges_added,
+            edges_updated,
+            edges_skipped,
+            conflicts_resolved,
+            diff,
+            message,
+        })
+    }
+
+    /// Export the current graph as a portable sync package (unencrypted JSON).
+    /// Used for cross-device sync where You-Port encryption wraps the transport.
+    pub fn export_sync_package(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let snapshot = self.get_full_graph()?;
+        let package = serde_json::json!({
+            "format": "prismos-sync-v1",
+            "patent": "US [application number]",
+            "device_id": Uuid::new_v4().to_string(),
+            "exported_at": Utc::now().to_rfc3339(),
+            "snapshot": snapshot,
+        });
+        serde_json::to_string_pretty(&package).map_err(|e| e.into())
+    }
+}

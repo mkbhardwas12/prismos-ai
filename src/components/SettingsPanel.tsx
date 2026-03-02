@@ -3,7 +3,7 @@
 
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, GraphStats, OllamaModel } from "../types";
+import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
 import prismosIcon from "../assets/prismos-icon.svg";
 
 interface SettingsPanelProps {
@@ -30,6 +30,16 @@ export default function SettingsPanel({
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+
+  // ── Multi-device sync state ──
+  const [syncExporting, setSyncExporting] = useState(false);
+  const [syncImporting, setSyncImporting] = useState(false);
+  const [syncPreviewing, setSyncPreviewing] = useState(false);
+  const [syncPassphrase, setSyncPassphrase] = useState("");
+  const [syncStrategy, setSyncStrategy] = useState<"latest" | "theirs" | "ours">("latest");
+  const [syncPreview, setSyncPreview] = useState<MergeDiff | null>(null);
+  const [syncResult, setSyncResult] = useState<CrossDeviceMergeResult | null>(null);
+  const [syncFileContent, setSyncFileContent] = useState<string | null>(null);
 
   function update(key: keyof AppSettings, value: string | number | boolean) {
     onSettingsChange({ ...settings, [key]: value });
@@ -131,6 +141,110 @@ export default function SettingsPanel({
       setClearing(false);
     }
   }, [confirmClear, showStatus, onGraphCleared]);
+
+  // ── Export Sync Package (passphrase-encrypted, portable) ──
+  const handleExportSync = useCallback(async () => {
+    if (!syncPassphrase || syncPassphrase.length < 4) {
+      showStatus("⚠️ Enter a passphrase (min 4 characters) for sync encryption", "error");
+      return;
+    }
+    setSyncExporting(true);
+    try {
+      const encrypted = await invoke<string>("export_sync_package", { passphrase: syncPassphrase });
+      const blob = new Blob([encrypted], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `prismos-sync-${new Date().toISOString().slice(0, 10)}.prismos-sync`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showStatus("✅ Sync package exported (passphrase-encrypted, portable)", "success");
+    } catch (e) {
+      showStatus(`❌ Sync export failed: ${e}`, "error");
+    } finally {
+      setSyncExporting(false);
+    }
+  }, [syncPassphrase, showStatus]);
+
+  // ── Load sync file for preview/import ──
+  const handleLoadSyncFile = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".prismos-sync,.json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        setSyncFileContent(text);
+        setSyncPreview(null);
+        setSyncResult(null);
+        showStatus(`📁 Loaded sync file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`, "info");
+      } catch (err) {
+        showStatus(`❌ Failed to read file: ${err}`, "error");
+      }
+    };
+    input.click();
+  }, [showStatus]);
+
+  // ── Preview merge diff ──
+  const handlePreviewMerge = useCallback(async () => {
+    if (!syncFileContent) {
+      showStatus("⚠️ Load a sync file first", "error");
+      return;
+    }
+    if (!syncPassphrase || syncPassphrase.length < 4) {
+      showStatus("⚠️ Enter the passphrase used to encrypt this file", "error");
+      return;
+    }
+    setSyncPreviewing(true);
+    try {
+      const result = await invoke<string>("preview_sync_merge", {
+        packageJson: syncFileContent,
+        passphrase: syncPassphrase,
+        strategy: syncStrategy,
+      });
+      const diff: MergeDiff = JSON.parse(result);
+      setSyncPreview(diff);
+      setSyncResult(null);
+      showStatus("✅ Merge preview generated — review conflicts below", "success");
+    } catch (e) {
+      showStatus(`❌ Preview failed: ${e}`, "error");
+    } finally {
+      setSyncPreviewing(false);
+    }
+  }, [syncFileContent, syncPassphrase, syncStrategy, showStatus]);
+
+  // ── Apply merge ──
+  const handleApplyMerge = useCallback(async () => {
+    if (!syncFileContent) {
+      showStatus("⚠️ Load a sync file first", "error");
+      return;
+    }
+    if (!syncPassphrase) {
+      showStatus("⚠️ Enter the passphrase", "error");
+      return;
+    }
+    setSyncImporting(true);
+    try {
+      const result = await invoke<string>("import_sync_package", {
+        packageJson: syncFileContent,
+        passphrase: syncPassphrase,
+        strategy: syncStrategy,
+      });
+      const parsed: CrossDeviceMergeResult = JSON.parse(result);
+      setSyncResult(parsed);
+      setSyncPreview(parsed.merge_result.diff);
+      showStatus(`✅ ${parsed.message}`, "success");
+      if (onGraphCleared) onGraphCleared(); // refresh graph data
+    } catch (e) {
+      showStatus(`❌ Merge failed: ${e}`, "error");
+    } finally {
+      setSyncImporting(false);
+    }
+  }, [syncFileContent, syncPassphrase, syncStrategy, showStatus, onGraphCleared]);
 
   // ── Theme toggle ──
   const toggleTheme = useCallback(() => {
@@ -249,6 +363,185 @@ export default function SettingsPanel({
           </div>
         </div>
 
+        {/* ── Multi-Device Sync (Patent [application number] — Graph Merge/Diff) ── */}
+        <div className="settings-group">
+          <h3>🔄 Multi-Device Sync</h3>
+          <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
+            Sync your Spectrum Graph between devices using a shared passphrase.
+            Files are encrypted — the same passphrase must be used on both devices.
+          </div>
+
+          {/* Passphrase */}
+          <div className="settings-item">
+            <label>Sync Passphrase</label>
+            <input
+              className="settings-input"
+              type="password"
+              placeholder="Shared passphrase (min 4 chars)…"
+              value={syncPassphrase}
+              onChange={(e) => setSyncPassphrase(e.target.value)}
+            />
+          </div>
+
+          {/* Strategy */}
+          <div className="settings-item">
+            <label>Merge Strategy</label>
+            <div className="settings-sync-strategies">
+              <button
+                className={`settings-sync-strategy-btn ${syncStrategy === "latest" ? "active" : ""}`}
+                onClick={() => setSyncStrategy("latest")}
+                title="Most recently updated version wins on conflict"
+              >
+                🕐 Latest Wins
+              </button>
+              <button
+                className={`settings-sync-strategy-btn ${syncStrategy === "theirs" ? "active" : ""}`}
+                onClick={() => setSyncStrategy("theirs")}
+                title="Incoming data always overwrites local on conflict"
+              >
+                📥 Theirs Wins
+              </button>
+              <button
+                className={`settings-sync-strategy-btn ${syncStrategy === "ours" ? "active" : ""}`}
+                onClick={() => setSyncStrategy("ours")}
+                title="Local data is kept on conflict"
+              >
+                🏠 Ours Wins
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="settings-actions">
+            <button
+              className="settings-btn settings-btn-primary"
+              onClick={handleExportSync}
+              disabled={syncExporting || graphStats.nodes === 0 || syncPassphrase.length < 4}
+            >
+              {syncExporting ? "⏳ Exporting..." : "📤 Export Sync Package"}
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={handleLoadSyncFile}
+            >
+              📁 Load Sync File
+            </button>
+          </div>
+
+          {/* Loaded file actions */}
+          {syncFileContent && (
+            <div className="settings-sync-loaded">
+              <div className="settings-sync-loaded-label">
+                ✅ Sync file loaded
+              </div>
+              <div className="settings-actions">
+                <button
+                  className="settings-btn settings-btn-secondary"
+                  onClick={handlePreviewMerge}
+                  disabled={syncPreviewing || syncPassphrase.length < 4}
+                >
+                  {syncPreviewing ? "⏳ Analyzing..." : "🔍 Preview Merge"}
+                </button>
+                <button
+                  className="settings-btn settings-btn-primary"
+                  onClick={handleApplyMerge}
+                  disabled={syncImporting || syncPassphrase.length < 4}
+                >
+                  {syncImporting ? "⏳ Merging..." : "🔀 Apply Merge"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Merge Preview / Result */}
+          {syncPreview && (
+            <div className="settings-sync-preview">
+              <div className="settings-sync-preview-title">
+                {syncResult ? "✅ Merge Result" : "🔍 Merge Preview"}
+              </div>
+              <div className="settings-sync-stats">
+                <div className="sync-stat">
+                  <span className="sync-stat-value">{syncPreview.nodes_only_remote}</span>
+                  <span className="sync-stat-label">New Nodes</span>
+                </div>
+                <div className="sync-stat">
+                  <span className="sync-stat-value">{syncPreview.edges_only_remote}</span>
+                  <span className="sync-stat-label">New Edges</span>
+                </div>
+                <div className="sync-stat">
+                  <span className="sync-stat-value">{syncPreview.nodes_both}</span>
+                  <span className="sync-stat-label">Shared Nodes</span>
+                </div>
+                <div className="sync-stat">
+                  <span className="sync-stat-value">{syncPreview.nodes_conflicted + syncPreview.edges_conflicted}</span>
+                  <span className="sync-stat-label">Conflicts</span>
+                </div>
+              </div>
+
+              {/* Conflict details */}
+              {syncPreview.conflicts.length > 0 && (
+                <div className="settings-sync-conflicts">
+                  <div className="sync-conflicts-header">
+                    ⚠️ {syncPreview.conflicts.length} conflict{syncPreview.conflicts.length !== 1 ? "s" : ""} detected
+                  </div>
+                  <div className="sync-conflicts-list">
+                    {syncPreview.conflicts.slice(0, 10).map((c, i) => (
+                      <div key={i} className="sync-conflict-item">
+                        <span className="sync-conflict-type">{c.entity_type}</span>
+                        <span className="sync-conflict-field">{c.field}</span>
+                        <div className="sync-conflict-values">
+                          <span className="sync-conflict-local" title={c.local_value}>
+                            🏠 {c.local_value.slice(0, 40)}{c.local_value.length > 40 ? "…" : ""}
+                          </span>
+                          <span className="sync-conflict-arrow">→</span>
+                          <span className="sync-conflict-remote" title={c.remote_value}>
+                            📥 {c.remote_value.slice(0, 40)}{c.remote_value.length > 40 ? "…" : ""}
+                          </span>
+                        </div>
+                        <span className={`sync-conflict-resolution ${c.resolution}`}>
+                          {c.resolution === "took_remote" ? "📥 Remote" : c.resolution === "kept_local" ? "🏠 Local" : "🕐 Latest"}
+                        </span>
+                      </div>
+                    ))}
+                    {syncPreview.conflicts.length > 10 && (
+                      <div className="sync-conflicts-more">
+                        +{syncPreview.conflicts.length - 10} more conflicts…
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Merge result details */}
+              {syncResult && (
+                <div className="settings-sync-result-details">
+                  <div className="sync-result-row">
+                    <span>Strategy:</span>
+                    <strong>{syncResult.merge_result.strategy}</strong>
+                  </div>
+                  <div className="sync-result-row">
+                    <span>Nodes added / updated / skipped:</span>
+                    <strong>{syncResult.merge_result.nodes_added} / {syncResult.merge_result.nodes_updated} / {syncResult.merge_result.nodes_skipped}</strong>
+                  </div>
+                  <div className="sync-result-row">
+                    <span>Edges added / updated / skipped:</span>
+                    <strong>{syncResult.merge_result.edges_added} / {syncResult.merge_result.edges_updated} / {syncResult.merge_result.edges_skipped}</strong>
+                  </div>
+                  <div className="sync-result-row">
+                    <span>Source device:</span>
+                    <strong title={syncResult.source_device}>{syncResult.source_device.slice(0, 16)}…</strong>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="settings-hint">
+            Sync uses passphrase-based encryption — portable across devices.
+            Use "Preview Merge" to see conflicts before applying. Patent Pending US [application number].
+          </div>
+        </div>
+
         {/* ── Appearance ── */}
         <div className="settings-group">
           <h3>🎨 Appearance</h3>
@@ -309,7 +602,7 @@ export default function SettingsPanel({
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
               <span className="settings-version-name">PrismOS</span>
-              <span className="settings-version-number">v0.1.0-alpha</span>
+              <span className="settings-version-number">v0.2.0</span>
             </div>
             <div className="settings-version-badges">
               <span className="settings-badge-patent">Patent Pending</span>

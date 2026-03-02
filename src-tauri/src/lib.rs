@@ -13,6 +13,7 @@ use tauri::Manager;
 
 // ─── Tauri Commands ────────────────────────────────────────────────────────────
 
+/// Legacy process_intent — simple Ollama routing
 #[tauri::command]
 async fn process_intent(input: String) -> Result<String, String> {
     let lens = intent_lens::IntentLens::new();
@@ -25,6 +26,22 @@ async fn process_intent(input: String) -> Result<String, String> {
     Ok(response)
 }
 
+/// Full Refractive Core pipeline: intent → Spectrum Graph context → agent → feedback → result
+#[tauri::command]
+async fn refract_intent(app: tauri::AppHandle, input: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let lens = intent_lens::IntentLens::new();
+    let parsed = lens.parse(&input);
+
+    let engine = refractive_core::RefractiveEngine::new();
+    let result = engine
+        .refract(parsed, &app_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn query_ollama(prompt: String, model: Option<String>) -> Result<String, String> {
     let model = model.unwrap_or_else(|| "mistral".to_string());
@@ -32,6 +49,8 @@ async fn query_ollama(prompt: String, model: Option<String>) -> Result<String, S
         .await
         .map_err(|e| e.to_string())
 }
+
+// ─── Spectrum Graph Commands ───────────────────────────────────────────────────
 
 #[tauri::command]
 async fn get_spectrum_nodes(app: tauri::AppHandle) -> Result<String, String> {
@@ -166,6 +185,88 @@ async fn rollback_sandbox(name: String) -> Result<String, String> {
     serde_json::to_string(&checkpoint).map_err(|e| e.to_string())
 }
 
+// ─── New Spectrum Graph Commands (Patent 63/993,589) ───────────────────────────
+
+/// Get the full Spectrum Graph snapshot for frontend visualization
+#[tauri::command]
+async fn get_spectrum_graph(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let snapshot = db.get_full_graph().map_err(|e| e.to_string())?;
+    serde_json::to_string(&snapshot).map_err(|e| e.to_string())
+}
+
+/// Update edge weight with closed-loop feedback signal
+#[tauri::command]
+async fn update_edge_weight(
+    app: tauri::AppHandle,
+    edge_id: String,
+    feedback_signal: f64,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let edge = db
+        .update_edge_weight(&edge_id, feedback_signal)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&edge).map_err(|e| e.to_string())
+}
+
+/// Query the Spectrum Graph with intent-aware retrieval
+#[tauri::command]
+async fn query_spectrum_intent(
+    app: tauri::AppHandle,
+    raw_input: String,
+    intent_type: String,
+    entities: Vec<String>,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let results = db
+        .query_intent(&raw_input, &intent_type, &entities)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&results).map_err(|e| e.to_string())
+}
+
+/// Get anticipatory need predictions from graph patterns
+#[tauri::command]
+async fn anticipate_needs(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let needs = db.anticipate_needs().map_err(|e| e.to_string())?;
+    serde_json::to_string(&needs).map_err(|e| e.to_string())
+}
+
+/// Get extended graph metrics
+#[tauri::command]
+async fn get_graph_metrics(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let metrics = db.get_metrics().map_err(|e| e.to_string())?;
+    serde_json::to_string(&metrics).map_err(|e| e.to_string())
+}
+
+/// Apply temporal decay to all edges (maintenance)
+#[tauri::command]
+async fn decay_graph_edges(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let updated = db.decay_all_edges().map_err(|e| e.to_string())?;
+    Ok(format!("{{\"edges_decayed\": {}}}", updated))
+}
+
+/// Update a node's label and content
+#[tauri::command]
+async fn update_spectrum_node(
+    app: tauri::AppHandle,
+    id: String,
+    label: String,
+    content: String,
+) -> Result<(), String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    db.update_node(&id, &label, &content).map_err(|e| e.to_string())
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -175,21 +276,25 @@ pub fn run() {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
 
-            // Initialize Spectrum Graph database
+            // Initialize Spectrum Graph database with multi-layered schema
             let _db = spectrum_graph::SpectrumGraph::new(&app_dir)
                 .expect("Failed to initialize Spectrum Graph");
 
             println!("╔══════════════════════════════════════════════╗");
             println!("║  ◈ PrismOS v0.1.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US 63/993,589              ║");
+            println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("╚══════════════════════════════════════════════╝");
             println!("📍 Data directory: {:?}", app_dir);
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // Core pipeline
             process_intent,
+            refract_intent,
             query_ollama,
+            // Spectrum Graph — CRUD
             get_spectrum_nodes,
             get_spectrum_node,
             add_spectrum_node,
@@ -198,12 +303,24 @@ pub fn run() {
             add_spectrum_edge,
             get_node_connections,
             get_graph_stats,
+            // Spectrum Graph — Patent 63/993,589
+            get_spectrum_graph,
+            update_edge_weight,
+            query_spectrum_intent,
+            anticipate_needs,
+            get_graph_metrics,
+            decay_graph_edges,
+            update_spectrum_node,
+            // Agents
             get_active_agents,
+            // Ollama
             check_ollama_status,
             list_ollama_models,
+            // Sandbox
             create_sandbox,
             execute_sandbox,
             rollback_sandbox,
+            // You-Port
             export_you_port,
             import_you_port,
         ])

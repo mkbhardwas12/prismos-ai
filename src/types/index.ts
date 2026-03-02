@@ -196,6 +196,8 @@ export interface AppSettings {
   defaultModel: string;
   theme: "dark" | "light";
   maxTokens: number;
+  voiceInputEnabled: boolean;
+  voiceOutputEnabled: boolean;
 }
 
 export interface Prism {

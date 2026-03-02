@@ -284,7 +284,7 @@ PrismOS/
 │   ├── tauri.conf.json           # Tauri config (v0.2.0)
 │   ├── capabilities/             # Tauri 2.0 permissions
 │   └── src/
-│       ├── lib.rs                # 51 Tauri IPC commands
+│       ├── lib.rs                # 53 Tauri IPC commands
 │       ├── main.rs               # Tauri entry point
 │       ├── spectrum_graph.rs     # Spectrum Graph™ engine
 │       ├── refractive_core.rs    # Refractive Core™ pipeline
@@ -322,10 +322,10 @@ PrismOS/
 
 ## 🔌 Tauri IPC Commands
 
-PrismOS exposes **51 Tauri commands** for frontend–backend communication:
+PrismOS exposes **53 Tauri commands** for frontend–backend communication:
 
 <details>
-<summary>Click to expand full command list (51 commands)</summary>
+<summary>Click to expand full command list (53 commands)</summary>
 
 | Category | Command | Description |
 |----------|---------|-------------|
@@ -367,6 +367,8 @@ PrismOS exposes **51 Tauri commands** for frontend–backend communication:
 | **Sandbox** | `execute_sandbox` | Run in sandbox |
 | **Sandbox** | `execute_in_sandbox` | Execute WASM module |
 | **Sandbox** | `rollback_sandbox` | Rollback to checkpoint |
+| **You-Port** | `export_you_port` | Export You-Port package |
+| **You-Port** | `import_you_port` | Import You-Port package |
 | **You-Port** | `save_state` | Encrypt + save state |
 | **You-Port** | `load_state` | Decrypt + load state |
 | **You-Port** | `has_saved_state` | Check for saved state |
@@ -477,7 +479,7 @@ PrismOS exposes **51 Tauri commands** for frontend–backend communication:
 - [x] Tamper-evident audit log (SHA-256 hash chain)
 - [x] LLM model verification (SHA-256 fingerprint vs known-good registry)
 - [x] Hardware secure enclave abstraction (TPM/Secure Enclave + software fallback)
-- [x] 51 Tauri IPC commands, 16 Rust modules, 4,700+ CSS lines
+- [x] 53 Tauri IPC commands, 16 Rust modules, 4,100+ CSS lines
 
 ### v0.3.0 (Planned)
 
@@ -513,11 +515,11 @@ PrismOS exposes **51 Tauri commands** for frontend–backend communication:
 |--------|-------|
 | TypeScript files | 16 |
 | Rust source files | 16 |
-| CSS lines | 4,700+ |
-| Tauri IPC commands | 51 |
+| CSS lines | 4,100+ |
+| Tauri IPC commands | 53 |
 | Agent count | 5 |
 | Spectral dimensions | 7 |
-| Total source lines | ~18,000+ |
+| Total source lines | ~15,800+ |
 
 ---
 

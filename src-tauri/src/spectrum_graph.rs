@@ -1002,6 +1002,15 @@ impl SpectrumGraph {
         Ok((node_count, edge_count))
     }
 
+    /// Clear all nodes and edges from the Spectrum Graph (Patent 63/993,589)
+    /// Returns the count of deleted nodes and edges.
+    pub fn clear_graph(&self) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
+        let (nodes, edges) = self.stats()?;
+        self.conn.execute("DELETE FROM edges", [])?;
+        self.conn.execute("DELETE FROM nodes", [])?;
+        Ok((nodes, edges))
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  INTERNAL HELPERS — Temporal Decay & Boosting
     // ═══════════════════════════════════════════════════════════════════════

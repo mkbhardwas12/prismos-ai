@@ -354,6 +354,152 @@ async fn has_saved_state(app: tauri::AppHandle) -> Result<bool, String> {
     Ok(you_port::has_saved_state(&app_dir))
 }
 
+// ─── Settings Commands (Patent 63/993,589) ─────────────────────────────────────
+
+/// Export the Spectrum Graph as an encrypted JSON package (You-Port encryption)
+/// Returns the encrypted package JSON string for the user to save externally.
+#[tauri::command]
+async fn export_graph(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let snapshot = db.get_full_graph().map_err(|e| e.to_string())?;
+
+    // Serialize the graph snapshot
+    let plaintext = serde_json::to_string_pretty(&snapshot).map_err(|e| e.to_string())?;
+    let plaintext_bytes = plaintext.as_bytes();
+
+    // Encrypt using You-Port encryption engine
+    let nonce = uuid::Uuid::new_v4().to_string();
+    let device_fp = you_port::get_device_fingerprint(&app_dir);
+    let key = you_port::derive_key(&device_fp, &nonce);
+    let checksum = you_port::sha256_hex(plaintext_bytes);
+
+    let ciphertext = you_port::xor_stream_cipher(&key, plaintext_bytes);
+    let encrypted_b64 = you_port::base64_encode(&ciphertext);
+    let hmac_sig = you_port::compute_hmac(&key, &ciphertext);
+
+    let package = serde_json::json!({
+        "format": "prismos-graph-export-v1",
+        "id": uuid::Uuid::new_v4().to_string(),
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "encrypted_payload": encrypted_b64,
+        "checksum": checksum,
+        "hmac_signature": hmac_sig,
+        "nonce": nonce,
+        "stats": {
+            "nodes": snapshot.nodes.len(),
+            "edges": snapshot.edges.len(),
+        }
+    });
+
+    serde_json::to_string_pretty(&package).map_err(|e| e.to_string())
+}
+
+/// Import a Spectrum Graph from an encrypted JSON package
+/// Decrypts, verifies, and merges into the current graph.
+#[tauri::command]
+async fn import_graph(app: tauri::AppHandle, package_json: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let package: serde_json::Value =
+        serde_json::from_str(&package_json).map_err(|e| format!("Invalid package JSON: {}", e))?;
+
+    let format = package["format"].as_str().unwrap_or("");
+    if format != "prismos-graph-export-v1" {
+        return Err(format!("Unsupported export format: {}", format));
+    }
+
+    let encrypted_b64 = package["encrypted_payload"]
+        .as_str()
+        .ok_or("Missing encrypted_payload")?;
+    let nonce = package["nonce"].as_str().ok_or("Missing nonce")?;
+    let stored_checksum = package["checksum"].as_str().ok_or("Missing checksum")?;
+    let stored_hmac = package["hmac_signature"]
+        .as_str()
+        .ok_or("Missing hmac_signature")?;
+
+    // Derive key from device fingerprint + nonce
+    let device_fp = you_port::get_device_fingerprint(&app_dir);
+    let key = you_port::derive_key(&device_fp, nonce);
+
+    // Decode and verify HMAC
+    let ciphertext = you_port::base64_decode(encrypted_b64)
+        .map_err(|e| format!("Failed to decode payload: {}", e))?;
+
+    let expected_hmac = you_port::compute_hmac(&key, &ciphertext);
+    if expected_hmac != stored_hmac {
+        return Err(
+            "HMAC verification failed — file may be tampered or from a different device"
+                .to_string(),
+        );
+    }
+
+    // Decrypt
+    let plaintext_bytes = you_port::xor_stream_cipher(&key, &ciphertext);
+
+    // Verify integrity
+    let checksum = you_port::sha256_hex(&plaintext_bytes);
+    if checksum != stored_checksum {
+        return Err("Integrity checksum mismatch — decryption may have failed".to_string());
+    }
+
+    let plaintext = String::from_utf8(plaintext_bytes)
+        .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))?;
+
+    // Deserialize and merge into graph
+    let snapshot: spectrum_graph::GraphSnapshot =
+        serde_json::from_str(&plaintext).map_err(|e| format!("Failed to parse graph data: {}", e))?;
+
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let mut nodes_imported = 0_usize;
+    let mut edges_imported = 0_usize;
+
+    for node in &snapshot.nodes {
+        match db.get_node(&node.id) {
+            Ok(_) => {} // Skip existing
+            Err(_) => {
+                if db.add_node_with_layer(&node.label, &node.content, &node.node_type, &node.layer).is_ok() {
+                    nodes_imported += 1;
+                }
+            }
+        }
+    }
+
+    for edge in &snapshot.edges {
+        if db.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation).is_ok() {
+            edges_imported += 1;
+        }
+    }
+
+    let result = serde_json::json!({
+        "success": true,
+        "message": format!("Imported {} nodes, {} edges into Spectrum Graph", nodes_imported, edges_imported),
+        "nodes_imported": nodes_imported,
+        "edges_imported": edges_imported,
+        "total_nodes": snapshot.nodes.len(),
+        "total_edges": snapshot.edges.len(),
+    });
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Clear the entire Spectrum Graph (delete all nodes and edges)
+#[tauri::command]
+async fn clear_graph(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+    let (nodes, edges) = db.clear_graph().map_err(|e| e.to_string())?;
+
+    let result = serde_json::json!({
+        "success": true,
+        "message": format!("Cleared {} nodes and {} edges from Spectrum Graph", nodes, edges),
+        "nodes_cleared": nodes,
+        "edges_cleared": edges,
+    });
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -437,6 +583,10 @@ pub fn run() {
             save_state,
             load_state,
             has_saved_state,
+            // Settings (Patent 63/993,589 — Graph Export/Import/Clear)
+            export_graph,
+            import_graph,
+            clear_graph,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS");

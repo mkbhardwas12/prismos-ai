@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0--alpha-0096c7" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.2.0-0096c7" alt="Version" />
   <img src="https://img.shields.io/badge/patent-US%2063%2F993%2C589-orange" alt="Patent Pending" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
@@ -244,7 +244,7 @@ PrismOS exposes **37 Tauri commands** for frontend–backend communication:
 
 ## 🗺️ Roadmap
 
-### v0.1.0-alpha (Current) ✅
+### v0.1.0-alpha ✅
 
 - [x] Spectrum Graph with 7-dimensional spectral embeddings
 - [x] SQLite persistence with full CRUD
@@ -259,13 +259,14 @@ PrismOS exposes **37 Tauri commands** for frontend–backend communication:
 - [x] Startup loading screen with progress
 - [x] Error handling with contextual guidance
 
-### v0.2.0 (Planned)
+### v0.2.0 (Current) ✅
 
-- [ ] WASM-based sandbox isolation (full containment)
+- [x] WASM-based sandbox isolation (full wasmtime containment)
+- [x] Voice input/output integration (Web Speech API)
+- [x] Multi-window support (Tauri WebviewWindowBuilder)
+- [x] Spectral timeline visualization (time-based graph history)
+- [x] LangGraph Workflow Engine (formal state-graph, debate rounds)
 - [ ] Plugin system for third-party Prisms
-- [ ] Voice input/output integration
-- [ ] Multi-window support
-- [ ] Spectral timeline visualization
 - [ ] Graph merge/diff for multi-device sync
 
 ### v0.3.0 (Future)

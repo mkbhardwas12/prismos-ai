@@ -269,7 +269,7 @@ impl RefractiveEngine {
         }
     }
 
-    /// Full refractive pipeline: intent → context → agent → feedback → result
+    /// Full refractive pipeline: intent → context → agent → sandbox → feedback → result
     pub async fn refract(
         &self,
         intent: ParsedIntent,
@@ -317,51 +317,105 @@ impl RefractiveEngine {
             intent.confidence * 100.0
         );
 
-        // ── Step 5: LLM inference via Ollama (with offline fallback) ──
-        let response = match crate::ollama_bridge::generate("mistral", &full_prompt).await {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("[RefractiveCore] Ollama unavailable, using offline mode: {}", e);
-                // Offline mode: still update graph, return a helpful message
-                format!(
-                    "⚡ [Offline Mode] I processed your intent locally through the Spectrum Graph.\n\n\
-                     Intent type: {}\nEntities: {:?}\nContext nodes found: {}\n\n\
-                     💡 Start Ollama for full AI responses: `ollama serve` then `ollama pull mistral`",
-                    intent_type_str,
-                    intent.entities,
-                    context_results.len()
-                )
+        // ── Step 4.5: Create Sandbox Prism for this pipeline run ──
+        let prism_name = format!("refract_{}_{}", agent_id, &intent_type_str);
+        let mut prism = crate::sandbox_prism::create_prism_for_agent(&prism_name, &agent_id);
+
+        // ── Step 5: LLM inference via Ollama — THROUGH SANDBOX ──
+        // Validate LLM inference is permitted for this agent
+        let llm_action = format!("llm_inference:generate:model=mistral:agent={}", agent_id);
+        let llm_sandbox_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
+            &mut prism, &llm_action, &agent_id,
+        );
+
+        let response = if !llm_sandbox_result.success {
+            // Sandbox denied the LLM call — use the sandbox explanation
+            eprintln!(
+                "[RefractiveCore] Sandbox denied LLM inference for '{}': {}",
+                agent_id, llm_sandbox_result.output
+            );
+            format!(
+                "🛡️ [Sandbox Protected] {}\n\n\
+                 Your request was processed safely. The Sandbox Prism enforced agent boundaries.",
+                llm_sandbox_result.output
+            )
+        } else {
+            // Sandbox approved — proceed with LLM call
+            match crate::ollama_bridge::generate("mistral", &full_prompt).await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("[RefractiveCore] Ollama unavailable, using offline mode: {}", e);
+                    format!(
+                        "⚡ [Offline Mode] I processed your intent locally through the Spectrum Graph.\n\n\
+                         Intent type: {}\nEntities: {:?}\nContext nodes found: {}\n\n\
+                         💡 Start Ollama for full AI responses: `ollama serve` then `ollama pull mistral`",
+                        intent_type_str,
+                        intent.entities,
+                        context_results.len()
+                    )
+                }
             }
         };
 
-        // ── Step 6: Closed-loop feedback — reinforce graph edges ──
+        // ── Step 6: Closed-loop feedback — reinforce graph edges — THROUGH SANDBOX ──
         let mut edges_reinforced: Vec<String> = Vec::new();
 
-        // Reinforce edges between context nodes that appeared together
-        for i in 0..scored_context.len().min(5) {
-            for j in (i + 1)..scored_context.len().min(5) {
-                let (ref id_a, score_a) = scored_context[i];
-                let (ref id_b, score_b) = scored_context[j];
+        // Validate graph writes are permitted for this agent
+        let reinforce_action = format!("edge_reinforce:feedback:agent={}", agent_id);
+        let reinforce_sandbox = crate::sandbox_prism::execute_in_sandbox_for_agent(
+            &mut prism, &reinforce_action, &agent_id,
+        );
 
-                let edge = graph.get_or_create_edge(id_a, id_b, "co_referenced")?;
-                let feedback_signal = (score_a + score_b) / 2.0;
-                let updated = graph.update_edge_weight(&edge.id, feedback_signal)?;
-                edges_reinforced.push(updated.id);
+        if reinforce_sandbox.success {
+            for i in 0..scored_context.len().min(5) {
+                for j in (i + 1)..scored_context.len().min(5) {
+                    let (ref id_a, score_a) = scored_context[i];
+                    let (ref id_b, score_b) = scored_context[j];
+
+                    let edge = graph.get_or_create_edge(id_a, id_b, "co_referenced")?;
+                    let feedback_signal = (score_a + score_b) / 2.0;
+                    let updated = graph.update_edge_weight(&edge.id, feedback_signal)?;
+                    edges_reinforced.push(updated.id);
+                }
             }
+        } else {
+            eprintln!(
+                "[RefractiveCore] Sandbox denied edge reinforcement for '{}': {}",
+                agent_id, reinforce_sandbox.output
+            );
         }
 
-        // ── Step 7: Store conversation as a new node ──
-        let conv_node = graph.add_node_with_layer(
-            &format!("Chat: {}", &intent.raw.chars().take(50).collect::<String>()),
-            &format!("Q: {}\n\nA: {}", intent.raw, &response.chars().take(500).collect::<String>()),
-            "conversation",
-            "ephemeral",
-        )?;
+        // ── Step 7: Store conversation as a new node — THROUGH SANDBOX ──
+        let store_action = format!("conversation:store_chat:agent={}", agent_id);
+        let store_sandbox = crate::sandbox_prism::execute_in_sandbox_for_agent(
+            &mut prism, &store_action, &agent_id,
+        );
 
-        // Link conversation to context nodes
-        for ctx_id in scored_context.iter().take(3).map(|(id, _)| id) {
-            let edge = graph.get_or_create_edge(&conv_node.id, ctx_id, "derived_from")?;
-            graph.update_edge_weight(&edge.id, 0.5)?;
+        if store_sandbox.success {
+            let conv_node = graph.add_node_with_layer(
+                &format!("Chat: {}", &intent.raw.chars().take(50).collect::<String>()),
+                &format!("Q: {}\n\nA: {}", intent.raw, &response.chars().take(500).collect::<String>()),
+                "conversation",
+                "ephemeral",
+            )?;
+
+            // Link conversation to context nodes — through sandbox
+            let link_action = format!("add_node:node_create:derived_from:agent={}", agent_id);
+            let link_sandbox = crate::sandbox_prism::execute_in_sandbox_for_agent(
+                &mut prism, &link_action, &agent_id,
+            );
+
+            if link_sandbox.success {
+                for ctx_id in scored_context.iter().take(3).map(|(id, _)| id) {
+                    let edge = graph.get_or_create_edge(&conv_node.id, ctx_id, "derived_from")?;
+                    graph.update_edge_weight(&edge.id, 0.5)?;
+                }
+            }
+        } else {
+            eprintln!(
+                "[RefractiveCore] Sandbox denied conversation storage for '{}': {}",
+                agent_id, store_sandbox.output
+            );
         }
 
         // ── Step 8: Get anticipatory suggestions ──

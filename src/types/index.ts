@@ -116,6 +116,8 @@ export interface Prism {
   created_at: string;
   checkpoints: Checkpoint[];
   side_effects: SideEffect[];
+  action_log: SignedAction[];
+  agent_id: string;
 }
 
 export interface Checkpoint {
@@ -131,10 +133,32 @@ export interface SideEffect {
   reversible: boolean;
 }
 
+export interface SignedAction {
+  action_id: string;
+  agent_id: string;
+  action: string;
+  operation: string;
+  risk_tier: number;
+  hmac_signature: string;
+  timestamp: string;
+  verdict: "Approved" | "Denied" | "RolledBack";
+}
+
 export interface PrismResult {
   success: boolean;
   output: string;
   side_effects: SideEffect[];
+  sandbox_protected: boolean;
+  action_signature: string;
+  rollback_explanation: string | null;
+}
+
+export interface SandboxVerdict {
+  allowed: boolean;
+  operation: string | null;
+  risk_tier: number;
+  signature: string;
+  explanation: string;
 }
 
 export interface YouPortPackage {

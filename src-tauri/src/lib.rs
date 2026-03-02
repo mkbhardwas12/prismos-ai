@@ -113,8 +113,9 @@ async fn list_ollama_models() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn create_sandbox(name: String) -> Result<String, String> {
-    let prism = sandbox_prism::create_prism(&name);
+async fn create_sandbox(name: String, agent_id: Option<String>) -> Result<String, String> {
+    let aid = agent_id.unwrap_or_else(|| "unknown".to_string());
+    let prism = sandbox_prism::create_prism_for_agent(&name, &aid);
     serde_json::to_string(&prism).map_err(|e| e.to_string())
 }
 
@@ -186,9 +187,8 @@ async fn get_graph_stats(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn execute_sandbox(name: String, task: String) -> Result<String, String> {
-    let mut prism = sandbox_prism::create_prism(&name);
-    let result = sandbox_prism::execute_in_sandbox(&mut prism, &task);
+async fn execute_sandbox(action: String, agent_id: String) -> Result<String, String> {
+    let result = sandbox_prism::sandbox_execute(&action, &agent_id);
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
@@ -197,6 +197,15 @@ async fn rollback_sandbox(name: String) -> Result<String, String> {
     let mut prism = sandbox_prism::create_prism(&name);
     let checkpoint = sandbox_prism::rollback(&mut prism);
     serde_json::to_string(&checkpoint).map_err(|e| e.to_string())
+}
+
+/// execute_in_sandbox — Primary Sandbox Prism entry point (Patent 63/993,589)
+/// Validates, signs, and executes an action within the WASM-isolated Sandbox Prism.
+/// Returns a fully auditable result with HMAC-SHA256 signature and side effects.
+#[tauri::command]
+async fn execute_in_sandbox(action: String, agent_id: String) -> Result<String, String> {
+    let result = sandbox_prism::sandbox_execute(&action, &agent_id);
+    serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 // ─── New Spectrum Graph Commands (Patent 63/993,589) ───────────────────────────
@@ -372,9 +381,10 @@ pub fn run() {
             // Ollama
             check_ollama_status,
             list_ollama_models,
-            // Sandbox
+            // Sandbox (Patent 63/993,589 — WASM Isolation + Cryptographic Signing)
             create_sandbox,
             execute_sandbox,
+            execute_in_sandbox,
             rollback_sandbox,
             // You-Port
             export_you_port,

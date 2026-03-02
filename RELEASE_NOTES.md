@@ -27,9 +27,9 @@ PrismOS v0.2.0 is the **first feature-complete desktop release** of a patent-pen
 
 | | |
 |:--|:--|
-| 🔌 **51** Tauri IPC commands | 🤖 **5** autonomous AI agents |
+| 🔌 **53** Tauri IPC commands | 🤖 **5** autonomous AI agents |
 | 🦀 **16** Rust backend modules | ⚛️ **16** TypeScript components |
-| 🎨 **4,700+** lines of CSS | 📏 **18,000+** total lines of code |
+| 🎨 **4,100+** lines of CSS | 📏 **15,800+** total lines of code |
 | 🔒 **9** security layers | 🌈 **7** spectral dimensions |
 
 ---
@@ -90,7 +90,7 @@ PrismOS v0.2.0 is the **first feature-complete desktop release** of a patent-pen
 - Complete color system rewrite — modern blue glassmorphism
 - `backdrop-filter` transparency layers throughout
 - Dark-first design with full light theme parity
-- Consistent design tokens across all 4,700+ CSS lines
+- Consistent design tokens across all 4,100+ CSS lines
 
 ### 🔐 Security Hardening
 > Defense-in-depth, not defense-as-afterthought.
@@ -107,11 +107,11 @@ PrismOS v0.2.0 is the **first feature-complete desktop release** of a patent-pen
 ```
                     v0.1.0-alpha        v0.2.0
                     ────────────        ──────
-IPC Commands        30                  51          (+70%)
+IPC Commands        30                  53          (+77%)
 Rust Modules        6                   16          (+167%)
 TypeScript Files    10                  16          (+60%)
-CSS Lines           ~1,200              4,700+      (+292%)
-Total LOC           ~8,000              18,000+     (+125%)
+CSS Lines           ~1,200              4,100+      (+242%)
+Total LOC           ~8,000              15,800+     (+98%)
 Security Layers     6                   9           (+50%)
 ```
 
@@ -129,7 +129,7 @@ Security Layers     6                   9           (+50%)
 │  ├── Sandbox Prisms         WASM execution sandbox       │
 │  ├── Spectral Timeline      Time-based graph history     │
 │  └── Settings & Security    Config + security status     │
-├───────────────── 51 Tauri IPC Commands ──────────────────┤
+├─────────────────── 53 Tauri IPC Commands ──────────────────┤
 │  Rust 1.82+ Backend                  (16 Modules)        │
 │  ├── spectrum_graph.rs      SQLite knowledge store       │
 │  ├── ollama_bridge.rs       LLM inference (local)        │

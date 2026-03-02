@@ -35,9 +35,9 @@ When you ask PrismOS something, your intent passes through the "Refractive Core"
 HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 hash chains. Hardware TPM integration. LLM model verification. If one layer fails, eight others hold. AI safety shouldn't be a checkbox — it should be the architecture.
 
 **The numbers:**
-→ 51 Tauri IPC commands
+→ 53 Tauri IPC commands
 → 16 Rust backend modules
-→ 18,000+ lines of hand-written code
+→ 15,800+ lines of hand-written code
 → 5 autonomous AI agents with consensus voting
 → Patent pending (US [application number])
 
@@ -101,7 +101,7 @@ Then I built the Refractive Core.
 Your input enters a "prism" — broken across 7 spectral dimensions.
 
 5 AI agents debate your intent:
-Planner. Researcher. ToolSmith. MemoryKeeper. Critic.
+Orchestrator. Reasoner. ToolSmith. MemoryKeeper. Sentinel.
 
 They vote. They challenge each other. They reach consensus.
 
@@ -132,7 +132,7 @@ The stack:
 • wasmtime for WASM isolation
 • LangGraph for agent workflows
 
-51 IPC commands. 16 Rust modules. 18K+ LOC.
+53 IPC commands. 16 Rust modules. 15,800+ LOC.
 
 All hand-written. All local. All open source. ⚡
 ```
@@ -167,11 +167,11 @@ The core ideas:
 
 1. Spectrum Graph — Instead of flat key-value storage or vanilla vector DBs, every piece of knowledge carries 7 spectral dimensions (cognitive, emotional, temporal, social, creative, analytical, physical). The graph evolves as you use it. Think of it as a physics-inspired data structure for how humans actually think.
 
-2. Refractive Core — Your input doesn't just get sent to an LLM. It passes through a "prism" that decomposes it across those 7 dimensions, routes it through 5 specialized agents (Planner, Researcher, ToolSmith, MemoryKeeper, Critic), they debate in structured rounds with typed arguments (Position, Challenge, Rebuttal, Support, Concession), vote, and reassemble the refined output. The metaphor is light refraction — one beam in, a spectrum of processing, one coherent response out.
+2. Refractive Core — Your input doesn't just get sent to an LLM. It passes through a "prism" that decomposes it across those 7 dimensions, routes it through 5 specialized agents (Orchestrator, Reasoner, ToolSmith, MemoryKeeper, Sentinel), they debate in structured rounds with typed arguments (Position, Challenge, Rebuttal, Support, Concession), vote, and reassemble the refined output. The metaphor is light refraction — one beam in, a spectrum of processing, one coherent response out.
 
 3. Security as architecture — 9 distinct layers: HMAC-SHA256 action signing, behavioral allow-lists, wasmtime WASM sandboxing with fuel metering, statistical anomaly detection, auto-rollback checkpoints, XOR stream cipher + HMAC encryption at rest, SHA-256 hash chain audit log (tamper one entry and the chain breaks), LLM model fingerprinting against a known-good registry, and hardware TPM/Secure Enclave key derivation with software fallback.
 
-Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persistence. 51 IPC commands across 16 Rust modules. ~18K LOC total.
+Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persistence. 53 IPC commands across 16 Rust modules. ~15,800 LOC total.
 
 The guided setup wizard walks you through installing Ollama on first launch. Supports Mistral, Llama 3.x, Phi-3, Gemma 2, DeepSeek, and others.
 
@@ -199,5 +199,5 @@ Unlike cloud AI tools, PrismOS keeps everything local — your conversations, yo
 
 What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), an AI processing engine modeled on light refraction (the Refractive Core), 5 AI agents that debate and reach consensus, WASM sandboxed execution, and 9 layers of security including a tamper-evident audit log and hardware enclave integration.
 
-Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 18,000+ lines of code. Fully open source under MIT.
+Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 15,800+ lines of code. Fully open source under MIT.
 ```

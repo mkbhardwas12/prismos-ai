@@ -67,6 +67,7 @@ export default function IntentInput({
         <textarea
           ref={textareaRef}
           className="intent-input"
+          aria-label="Express your intent"
           placeholder={
             voice.isListening
               ? "🎙️ Listening... speak your intent"
@@ -104,6 +105,7 @@ export default function IntentInput({
           onClick={handleSubmit}
           disabled={!input.trim() || isProcessing}
           title="Send intent"
+          aria-label="Send intent"
         >
           ▶
         </button>
@@ -111,7 +113,7 @@ export default function IntentInput({
 
       {/* Voice listening indicator */}
       {voice.isListening && (
-        <div className="voice-listening-bar">
+        <div className="voice-listening-bar" role="status" aria-live="polite">
           <span className="voice-listening-dot" />
           <span className="voice-listening-text">Listening...</span>
           {voice.interimTranscript && (

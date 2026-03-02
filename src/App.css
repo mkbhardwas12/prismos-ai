@@ -71,6 +71,102 @@ body {
   line-height: 1.5;
 }
 
+/* ── Accessibility: Skip Navigation Link ─────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 24px;
+  border-radius: 0 0 8px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 100000;
+  text-decoration: none;
+  transition: top 0.2s ease;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ── Accessibility: Focus Visible Ring ───────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.15);
+}
+
+/* ── Accessibility: Reduced Motion ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Skeleton Loading Placeholder ────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-elevated) 50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+  width: 80%;
+}
+
+.skeleton-text-sm {
+  height: 10px;
+  margin-bottom: 6px;
+  width: 60%;
+}
+
+.skeleton-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+/* ── Screen reader only (visually hidden) ────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 /* ── App Layout ──────────────────────────────────────────────────────────── */
 .app-layout {
   display: flex;
@@ -217,8 +313,18 @@ body {
 }
 
 @keyframes page-enter {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .main-header {
@@ -2554,13 +2660,19 @@ body {
 .error-banner {
   background: rgba(239, 68, 68, 0.1);
   border-bottom: 1px solid rgba(239, 68, 68, 0.3);
-  padding: 8px 24px;
+  padding: 10px 24px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 12px;
   color: #f87171;
-  animation: fadeIn 0.3s ease;
+  animation: slideDown 0.3s ease;
+  role: alert;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .error-banner-icon {
@@ -3174,4 +3286,144 @@ body {
   color: var(--color-text);
   font-family: var(--font-mono);
   font-size: 0.72rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ENHANCED TRANSITIONS & POLISH (v0.2.0 Release)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Smooth view transitions ──────────────────────────────────────────────── */
+.view-transition-enter {
+  animation: page-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Button press feedback ────────────────────────────────────────────────── */
+.toolbar-btn:active:not(:disabled),
+.settings-btn:active:not(:disabled),
+.intent-send-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.08s ease;
+}
+
+/* ── Empty state improvements ─────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  animation: scale-in 0.4s ease;
+}
+
+.empty-state-icon {
+  font-size: 56px;
+  opacity: 0.3;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.empty-state p {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 320px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ── Notification badge pulse ─────────────────────────────────────────────── */
+.notification-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--color-error);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes badge-pop {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* ── Progress indicator ───────────────────────────────────────────────────── */
+.progress-bar {
+  width: 100%;
+  height: 3px;
+  background: var(--bg-surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.progress-bar-indeterminate .progress-bar-fill {
+  width: 30%;
+  animation: progress-slide 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  0%   { margin-left: -30%; }
+  100% { margin-left: 100%; }
+}
+
+/* ── Tooltip (CSS-only) ───────────────────────────────────────────────────── */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 1000;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── High-contrast mode support ───────────────────────────────────────────── */
+@media (forced-colors: active) {
+  .status-dot,
+  .agent-status-indicator,
+  .spectrum-node-dot {
+    forced-color-adjust: none;
+  }
 }

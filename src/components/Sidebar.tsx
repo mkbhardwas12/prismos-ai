@@ -26,21 +26,22 @@ export default function Sidebar({
   debateSummary,
 }: SidebarProps) {
   return (
-    <div className="sidebar">
+    <div className="sidebar" role="complementary" aria-label="Sidebar navigation">
       <div className="sidebar-header">
         <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" /> PrismOS</span>
         <span className="sidebar-version">v0.2.0</span>
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Main navigation">
         {/* Navigation */}
         <div className="sidebar-section">
           <div className="sidebar-section-title">Navigation</div>
           <button
             className={`sidebar-item ${currentView === "chat" ? "active" : ""}`}
             onClick={() => onNavigate("chat")}
+            aria-current={currentView === "chat" ? "page" : undefined}
           >
-            <span className="sidebar-item-icon">💬</span>
+            <span className="sidebar-item-icon" aria-hidden="true">💬</span>
             Intent Console
           </button>
           <button

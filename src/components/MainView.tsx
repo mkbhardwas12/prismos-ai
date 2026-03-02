@@ -153,12 +153,15 @@ export default function MainView({
       } catch (fallbackErr) {
         const errorStr = String(fallbackErr);
         const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
+        const isModelError = errorStr.includes("model") || errorStr.includes("not found");
         const errorMsg: Message = {
           id: crypto.randomUUID(),
           role: "system",
           content: isOllamaError
-            ? `⚠️ Cannot connect to Ollama.\n\nMake sure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nThen try again.`
-            : `⚠️ Unable to process intent.\n\n${errorStr}\n\nCheck that Ollama is running with:\n  ollama serve`,
+            ? `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`
+            : isModelError
+            ? `⚠️ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`
+            : `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify your model is downloaded: ollama list\n  • Check Settings for the correct Ollama URL\n  • Try a simpler intent to test the connection`,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMsg]);
@@ -193,7 +196,7 @@ export default function MainView({
         </div>
       </div>
 
-      <div className="conversation-area" ref={conversationRef}>
+      <div className="conversation-area" ref={conversationRef} role="log" aria-label="Conversation history" aria-live="polite">
         {messages.length === 0 ? (
           <div className="welcome-message">
             <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS" className="welcome-logo-img" /></div>
@@ -248,13 +251,14 @@ export default function MainView({
           ))
         )}
         {isProcessing && (
-          <div className="message message-ai">
+          <div className="message message-ai" role="status" aria-label="Processing your intent">
             <div className="message-bubble">
-              <div className="loading-dots">
+              <div className="loading-dots" aria-hidden="true">
                 <span />
                 <span />
                 <span />
               </div>
+              <span className="sr-only">Processing your intent...</span>
             </div>
           </div>
         )}

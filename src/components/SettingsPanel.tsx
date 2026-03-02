@@ -274,13 +274,20 @@ export default function SettingsPanel({
         {/* ── System Info ── */}
         <div className="settings-group">
           <h3>📊 System Information</h3>
-          <div className="settings-item">
-            <label>Version</label>
-            <input className="settings-input" value="0.1.0-alpha (MVP)" readOnly />
+          <div className="settings-version-banner">
+            <img src={prismosIcon} alt="" className="settings-version-icon" />
+            <div className="settings-version-info">
+              <span className="settings-version-name">PrismOS</span>
+              <span className="settings-version-number">v0.1.0-alpha</span>
+            </div>
+            <div className="settings-version-badges">
+              <span className="settings-badge-patent">Patent Pending</span>
+              <span className="settings-badge-local">100% Local</span>
+            </div>
           </div>
           <div className="settings-item">
             <label>Architecture</label>
-            <input className="settings-input" value="Tauri 2.0 + React + Rust · Local-First" readOnly />
+            <input className="settings-input" value="Tauri 2.0 + React 18 + Rust · Local-First" readOnly />
           </div>
           <div className="settings-item">
             <label>Ollama Status</label>

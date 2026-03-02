@@ -1,10 +1,31 @@
 // Patent Pending — US [application number] (Feb 28, 2026)
 // PrismOS Settings Panel — Full Configuration, Export/Import, Theme, About
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
 import prismosIcon from "../assets/prismos-icon.svg";
+
+interface SecurityStatus {
+  enclave: {
+    backend: string;
+    hardware_available: boolean;
+    key_fingerprint: string;
+    platform: string;
+    details: string;
+  };
+  audit_chain: {
+    valid: boolean;
+    entries: number;
+    message: string;
+  };
+  sandbox_active: boolean;
+  hmac_signing: boolean;
+  wasm_isolation: boolean;
+  auto_rollback: boolean;
+  encrypted_storage: boolean;
+  local_only: boolean;
+}
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -40,6 +61,37 @@ export default function SettingsPanel({
   const [syncPreview, setSyncPreview] = useState<MergeDiff | null>(null);
   const [syncResult, setSyncResult] = useState<CrossDeviceMergeResult | null>(null);
   const [syncFileContent, setSyncFileContent] = useState<string | null>(null);
+
+  // ── Security status (live from backend) ──
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [modelVerification, setModelVerification] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setSecurityLoading(true);
+      try {
+        const result = await invoke<string>("get_security_status");
+        setSecurityStatus(JSON.parse(result));
+      } catch {
+        // Fallback — backend may not be ready yet
+      } finally {
+        setSecurityLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleVerifyModel = useCallback(async () => {
+    const model = settings.defaultModel || "llama3.2";
+    setModelVerification("Verifying...");
+    try {
+      const result = await invoke<string>("verify_model", { model });
+      const parsed = JSON.parse(result);
+      setModelVerification(`${parsed.status === "Verified" ? "✅" : parsed.status === "Suspicious" ? "⚠️" : "ℹ️"} ${parsed.details}`);
+    } catch (e) {
+      setModelVerification(`❌ Verification failed: ${e}`);
+    }
+  }, [settings.defaultModel]);
 
   function update(key: keyof AppSettings, value: string | number | boolean) {
     onSettingsChange({ ...settings, [key]: value });
@@ -595,9 +647,12 @@ export default function SettingsPanel({
           </div>
         </div>
 
-        {/* ── Security Status ── */}
+        {/* ── Security Status (live from backend) ── */}
         <div className="settings-group">
           <h3>🛡️ Security Status</h3>
+          {securityLoading ? (
+            <div className="settings-hint">Loading security status…</div>
+          ) : (
           <div className="security-status-grid">
             <div className="security-check">
               <span className="security-check-icon">✅</span>
@@ -641,6 +696,41 @@ export default function SettingsPanel({
                 <span className="security-check-desc">Works fully offline — no accounts, no telemetry, no external APIs</span>
               </div>
             </div>
+            <div className="security-check">
+              <span className="security-check-icon">{securityStatus?.enclave?.hardware_available ? "🔐" : "🔑"}</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Secure Enclave</span>
+                <span className="security-check-desc">
+                  {securityStatus?.enclave
+                    ? `${securityStatus.enclave.hardware_available ? "Hardware-backed" : "Software"}: ${securityStatus.enclave.backend.replace(/([A-Z])/g, ' $1').trim()} · Key: ${securityStatus.enclave.key_fingerprint}`
+                    : "Initializing…"}
+                </span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">{securityStatus?.audit_chain?.valid ? "✅" : "⚠️"}</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Tamper-Evident Audit Log</span>
+                <span className="security-check-desc">
+                  {securityStatus?.audit_chain
+                    ? `${securityStatus.audit_chain.entries} entries · Chain ${securityStatus.audit_chain.valid ? "verified ✓" : "BROKEN ✗"}`
+                    : "Initializing…"}
+                </span>
+              </div>
+            </div>
+          </div>
+          )}
+          {/* Model Verification */}
+          <div className="settings-item" style={{ marginTop: "0.75rem" }}>
+            <label>Model Verification</label>
+            <div className="settings-model-row">
+              <button className="settings-btn settings-btn-sm" onClick={handleVerifyModel} disabled={!ollamaConnected}>
+                🔍 Verify {settings.defaultModel || "model"}
+              </button>
+            </div>
+            {modelVerification && (
+              <div className="settings-hint" style={{ marginTop: "0.5rem" }}>{modelVerification}</div>
+            )}
           </div>
           <div className="settings-hint">
             All protections are always active. PrismOS is designed with security-by-default — no configuration needed.

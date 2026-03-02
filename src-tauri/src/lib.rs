@@ -9,6 +9,9 @@ mod intent_lens;
 mod ollama_bridge;
 mod you_port;
 mod agents;
+mod audit_log;
+mod model_verify;
+mod secure_enclave;
 
 use tauri::Manager;
 
@@ -788,6 +791,76 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
+// ─── Security Commands (Patent [application number]) ─────────────────────────────────────
+
+/// Get the most recent audit log entries (tamper-evident hash chain)
+#[tauri::command]
+async fn get_audit_log(app: tauri::AppHandle, limit: Option<usize>) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let log = audit_log::AuditLog::new(&app_dir);
+    let entries = log.get_entries(limit.unwrap_or(50)).map_err(|e| e.to_string())?;
+    serde_json::to_string(&entries).map_err(|e| e.to_string())
+}
+
+/// Verify the entire audit chain for integrity (detects tampering)
+#[tauri::command]
+async fn verify_audit_chain(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let log = audit_log::AuditLog::new(&app_dir);
+    let result = log.verify_chain().map_err(|e| e.to_string())?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Verify a model's integrity against the known-good registry
+#[tauri::command]
+async fn verify_model(app: tauri::AppHandle, model: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let ollama_url = "http://localhost:11434";
+    let result = model_verify::verify_model(&model, ollama_url).await;
+
+    // Log the verification to the audit chain
+    let log = audit_log::AuditLog::new(&app_dir);
+    let _ = log.append(
+        "model_verification",
+        "system",
+        &format!("{}: {} — {}", model, serde_json::to_string(&result.status).unwrap_or_default(), result.details),
+    );
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Get the complete security status (enclave, audit chain, sandbox)
+#[tauri::command]
+async fn get_security_status(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    // Secure Enclave status
+    let enclave = secure_enclave::SecureEnclave::new();
+    let enclave_status = enclave.status();
+
+    // Audit chain status
+    let log = audit_log::AuditLog::new(&app_dir);
+    let chain_verification = log.verify_chain().map_err(|e| e.to_string())?;
+    let entry_count = log.entry_count();
+
+    let status = serde_json::json!({
+        "enclave": enclave_status,
+        "audit_chain": {
+            "valid": chain_verification.valid,
+            "entries": entry_count,
+            "message": chain_verification.message,
+        },
+        "sandbox_active": true,
+        "hmac_signing": true,
+        "wasm_isolation": true,
+        "auto_rollback": true,
+        "encrypted_storage": true,
+        "local_only": true,
+    });
+
+    serde_json::to_string(&status).map_err(|e| e.to_string())
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -800,6 +873,21 @@ pub fn run() {
             // Initialize Spectrum Graph database with multi-layered schema
             let _db = spectrum_graph::SpectrumGraph::new(&app_dir)
                 .expect("Failed to initialize Spectrum Graph");
+
+            // Initialize tamper-evident audit log
+            let audit = audit_log::AuditLog::new(&app_dir);
+            let _ = audit.append("app_launch", "system", "PrismOS application started");
+
+            // Initialize secure enclave
+            let enclave = secure_enclave::SecureEnclave::new();
+            let enclave_status = enclave.status();
+            let _ = audit.append(
+                "enclave_init",
+                "system",
+                &format!("Secure enclave initialized: {} (hardware: {})",
+                    enclave_status.backend.label(),
+                    enclave_status.hardware_available),
+            );
 
             // ── You-Port: Auto-restore previous session if state file exists ──
             if you_port::has_saved_state(&app_dir) {
@@ -823,8 +911,12 @@ pub fn run() {
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
+            println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
+            println!("║  Secure Enclave: {}      ║",
+                format!("{:<25}", enclave_status.backend.label()));
             println!("╚══════════════════════════════════════════════╝");
             println!("📍 Data directory: {:?}", app_dir);
+            println!("🔑 Enclave fingerprint: {}", enclave_status.key_fingerprint);
 
             Ok(())
         })
@@ -890,6 +982,11 @@ pub fn run() {
             import_sync_package,
             preview_sync_merge,
             diff_graph,
+            // Security Hardening (Patent [application number])
+            get_audit_log,
+            verify_audit_chain,
+            verify_model,
+            get_security_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS");

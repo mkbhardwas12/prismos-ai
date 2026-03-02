@@ -9,15 +9,25 @@ import SettingsPanel from "./components/SettingsPanel";
 import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
+import SpectralTimeline from "./components/SpectralTimeline";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult } from "./types";
 
-type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph";
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
 
 function App() {
   const [ready, setReady] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("Initializing...");
-  const [view, setView] = useState<View>("chat");
+
+  // ─── Multi-window: detect route hash to open a specific view ──
+  const initialView = (() => {
+    const hash = window.location.hash.replace("#", "");
+    const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline"];
+    if (validViews.includes(hash as View)) return hash as View;
+    return "chat" as View;
+  })();
+
+  const [view, setView] = useState<View>(initialView);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [nodes, setNodes] = useState<SpectrumNode[]>([]);
   const [graphStats, setGraphStats] = useState<GraphStats>({ nodes: 0, edges: 0 });
@@ -204,6 +214,8 @@ function App() {
             showToast={(msg) => setToast({ message: msg, visible: true })}
           />
         );
+      case "timeline":
+        return <SpectralTimeline refreshKey={graphRefreshKey} />;
     }
   }
 

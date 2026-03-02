@@ -1,13 +1,14 @@
 // Patent Pending — US [application number] (Feb 28, 2026)
 // PrismOS Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
+import { invoke } from "@tauri-apps/api/core";
 import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import prismosIcon from "../assets/prismos-icon.svg";
 
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: "chat" | "settings" | "spectrum" | "sandbox" | "graph") => void;
+  onNavigate: (view: "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline") => void;
   agents: Agent[];
   nodes: SpectrumNode[];
   graphStats: GraphStats;
@@ -28,7 +29,7 @@ export default function Sidebar({
     <div className="sidebar">
       <div className="sidebar-header">
         <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" /> PrismOS</span>
-        <span className="sidebar-version">v0.1.0</span>
+        <span className="sidebar-version">v0.2.0</span>
       </div>
 
       <nav className="sidebar-nav">
@@ -48,6 +49,20 @@ export default function Sidebar({
           >
             <span className="sidebar-item-icon">🕸️</span>
             Spectrum Graph
+            <button
+              className="sidebar-item-window-btn"
+              title="Open in new window"
+              onClick={(e) => {
+                e.stopPropagation();
+                invoke("open_graph_window", {
+                  label: "spectrum-graph-window",
+                  title: "PrismOS — Spectrum Graph",
+                  route: "graph",
+                }).catch(console.error);
+              }}
+            >
+              ↗
+            </button>
           </button>
           <button
             className={`sidebar-item ${currentView === "spectrum" ? "active" : ""}`}
@@ -62,6 +77,27 @@ export default function Sidebar({
           >
             <span className="sidebar-item-icon">🔒</span>
             Sandbox Prisms
+          </button>
+          <button
+            className={`sidebar-item ${currentView === "timeline" ? "active" : ""}`}
+            onClick={() => onNavigate("timeline")}
+          >
+            <span className="sidebar-item-icon">📅</span>
+            Spectral Timeline
+            <button
+              className="sidebar-item-window-btn"
+              title="Open in new window"
+              onClick={(e) => {
+                e.stopPropagation();
+                invoke("open_graph_window", {
+                  label: "spectral-timeline-window",
+                  title: "PrismOS — Spectral Timeline",
+                  route: "timeline",
+                }).catch(console.error);
+              }}
+            >
+              ↗
+            </button>
           </button>
           <button
             className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}

@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="agentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#312e81" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="layerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.6"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="720" rx="16" fill="#0f172a"/>
+  <rect x="1" y="1" width="898" height="718" rx="15" fill="none" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="450" y="45" text-anchor="middle" font-size="22" font-weight="700" fill="url(#headerGrad)">PrismOS Architecture</text>
+  <text x="450" y="65" text-anchor="middle" font-size="11" fill="#64748b" letter-spacing="2">PATENT PENDING — US [application number]</text>
+
+  <!-- ═══ Layer 1: Frontend ═══ -->
+  <rect x="60" y="85" width="780" height="70" rx="10" fill="#1e1b4b" fill-opacity="0.5" stroke="#7c3aed" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="115" text-anchor="middle" font-size="15" font-weight="600" fill="#c4b5fd">PrismOS Frontend</text>
+  <text x="450" y="138" text-anchor="middle" font-size="12" fill="#94a3b8">React 18 + TypeScript + Vite · Tauri 2.0 Desktop Shell</text>
+
+  <!-- Arrow down -->
+  <polygon points="450,160 440,170 460,170" fill="url(#arrowGrad)"/>
+
+  <!-- ═══ Layer 2: Intent Lenses ═══ -->
+  <rect x="120" y="175" width="660" height="60" rx="10" fill="#1e1b4b" fill-opacity="0.5" stroke="#8b5cf6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="202" text-anchor="middle" font-size="14" font-weight="600" fill="#c4b5fd">Intent Lenses</text>
+  <text x="450" y="222" text-anchor="middle" font-size="11" fill="#94a3b8">Natural Language Decomposition · Entity Extraction · Confidence Scoring</text>
+
+  <!-- Arrow down -->
+  <polygon points="450,240 440,250 460,250" fill="url(#arrowGrad)"/>
+
+  <!-- ═══ Layer 3: Refractive Core ═══ -->
+  <rect x="60" y="255" width="780" height="135" rx="10" fill="#1e1b4b" fill-opacity="0.4" stroke="#a78bfa" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="280" text-anchor="middle" font-size="14" font-weight="600" fill="#c4b5fd">Refractive Core — NPU-Accelerated Multi-Agent Orchestration</text>
+  <text x="450" y="297" text-anchor="middle" font-size="10" fill="#64748b">Closed-Loop Feedback · SIMD Scoring · LangGraph Agent Spawning</text>
+
+  <!-- Agent boxes -->
+  <rect x="85" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#6366f1" stroke-width="1"/>
+  <text x="150" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#a5b4fc">Orchestrator</text>
+  <text x="150" y="352" text-anchor="middle" font-size="9" fill="#64748b">Routes &amp; coordinates</text>
+  <text x="150" y="366" text-anchor="middle" font-size="9" fill="#64748b">agent workflows</text>
+
+  <rect x="230" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#818cf8" stroke-width="1"/>
+  <text x="295" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#a5b4fc">Memory Keeper</text>
+  <text x="295" y="352" text-anchor="middle" font-size="9" fill="#64748b">Spectrum Graph</text>
+  <text x="295" y="366" text-anchor="middle" font-size="9" fill="#64748b">persistence &amp; retrieval</text>
+
+  <rect x="375" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#818cf8" stroke-width="1"/>
+  <text x="440" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#a5b4fc">Reasoner</text>
+  <text x="440" y="352" text-anchor="middle" font-size="9" fill="#64748b">Deep analysis &amp;</text>
+  <text x="440" y="366" text-anchor="middle" font-size="9" fill="#64748b">LLM inference</text>
+
+  <rect x="520" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#818cf8" stroke-width="1"/>
+  <text x="585" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#a5b4fc">Tool Smith</text>
+  <text x="585" y="352" text-anchor="middle" font-size="9" fill="#64748b">Sandboxed execution</text>
+  <text x="585" y="366" text-anchor="middle" font-size="9" fill="#64748b">in Prism containers</text>
+
+  <rect x="665" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#818cf8" stroke-width="1"/>
+  <text x="730" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#a5b4fc">Sentinel</text>
+  <text x="730" y="352" text-anchor="middle" font-size="9" fill="#64748b">Security, privacy</text>
+  <text x="730" y="366" text-anchor="middle" font-size="9" fill="#64748b">&amp; system health</text>
+
+  <!-- Arrow down -->
+  <polygon points="450,395 440,405 460,405" fill="url(#arrowGrad)"/>
+
+  <!-- ═══ Layer 4: Spectrum Graph ═══ -->
+  <rect x="60" y="410" width="780" height="80" rx="10" fill="#0c4a6e" fill-opacity="0.3" stroke="#06b6d4" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="438" text-anchor="middle" font-size="14" font-weight="600" fill="#67e8f9">Spectrum Graph — Multi-Layered Knowledge Engine</text>
+  <text x="450" y="458" text-anchor="middle" font-size="11" fill="#94a3b8">SQLite Relational · Dynamic Intent Weights · Temporal Decay · Anticipatory Needs</text>
+  <text x="450" y="478" text-anchor="middle" font-size="10" fill="#64748b">4 Tables: nodes · edges · intent_log · feedback | Closed-Loop EMA Momentum</text>
+
+  <!-- Arrow down -->
+  <polygon points="450,495 440,505 460,505" fill="url(#arrowGrad)"/>
+
+  <!-- ═══ Layer 5: Sandbox + You-Port ═══ -->
+  <rect x="60" y="510" width="375" height="75" rx="10" fill="#14532d" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="247" y="538" text-anchor="middle" font-size="13" font-weight="600" fill="#6ee7b7">Sandbox Prisms</text>
+  <text x="247" y="556" text-anchor="middle" font-size="11" fill="#94a3b8">WASM + Crypto Checkpoints</text>
+  <text x="247" y="573" text-anchor="middle" font-size="11" fill="#94a3b8">Auto-rollback · Side-effect Tracking</text>
+
+  <rect x="465" y="510" width="375" height="75" rx="10" fill="#7c2d12" fill-opacity="0.3" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="652" y="538" text-anchor="middle" font-size="13" font-weight="600" fill="#fcd34d">You-Port</text>
+  <text x="652" y="556" text-anchor="middle" font-size="11" fill="#94a3b8">Encrypted State Transfer</text>
+  <text x="652" y="573" text-anchor="middle" font-size="11" fill="#94a3b8">SHA-256 Integrity · Base64 Encoding</text>
+
+  <!-- Arrow down -->
+  <polygon points="450,590 440,600 460,600" fill="url(#arrowGrad)"/>
+
+  <!-- ═══ Layer 6: Ollama ═══ -->
+  <rect x="120" y="605" width="660" height="65" rx="10" fill="#1a1a2e" fill-opacity="0.6" stroke="#ef4444" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="632" text-anchor="middle" font-size="14" font-weight="600" fill="#fca5a5">Ollama — Local LLM Inference</text>
+  <text x="450" y="654" text-anchor="middle" font-size="12" fill="#94a3b8">mistral · llama3 · phi3 · codellama · gemma2 — 100% On-Device</text>
+
+  <!-- Side labels -->
+  <text x="25" y="305" text-anchor="middle" font-size="9" fill="#4b5563" transform="rotate(-90,25,305)" letter-spacing="1">RUST BACKEND</text>
+  <text x="880" y="305" text-anchor="middle" font-size="9" fill="#4b5563" transform="rotate(90,880,305)" letter-spacing="1">TAURI 2.0 IPC</text>
+
+  <!-- Footer -->
+  <text x="450" y="700" text-anchor="middle" font-size="10" fill="#475569">Patent Pending — US [application number] (Feb 28, 2026) · Local-First · No Cloud · No Telemetry</text>
+</svg>

@@ -37,6 +37,16 @@ export default function MainView({
   const [isRetrying, setIsRetrying] = useState(false);
   const [wizardExpanded, setWizardExpanded] = useState(false);
 
+  // First-time setup wizard modal (shows only on first launch)
+  const [showFirstTimeWizard, setShowFirstTimeWizard] = useState(
+    () => !localStorage.getItem("prismos-setup-done")
+  );
+
+  const dismissFirstTimeWizard = useCallback(() => {
+    localStorage.setItem("prismos-setup-done", "1");
+    setShowFirstTimeWizard(false);
+  }, []);
+
   // Determine which setup step the user is on
   const getSetupStep = useCallback((): SetupStep => {
     if (ollamaConnected && hasModels) return "ready";
@@ -557,6 +567,55 @@ export default function MainView({
         pendingIntent={pendingIntent}
         onPendingConsumed={() => setPendingIntent("")}
       />
+
+      {/* ── First-Time Setup Wizard Modal (shows once) ── */}
+      {showFirstTimeWizard && (
+        <div className="ftw-overlay" onClick={dismissFirstTimeWizard}>
+          <div className="ftw-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ftw-header">
+              <img src={prismosLogo} alt="PrismOS" className="ftw-logo" />
+              <h2 className="ftw-title">Welcome to PrismOS!</h2>
+              <p className="ftw-subtitle">Your local-first AI assistant. Let's get you set up in under 2 minutes.</p>
+            </div>
+
+            <div className="ftw-steps">
+              <div className="ftw-step">
+                <div className="ftw-step-number">1</div>
+                <div className="ftw-step-body">
+                  <h3>Install Ollama</h3>
+                  <p>Ollama runs AI models on your computer — no cloud, no data sharing. It's free and takes seconds to install.</p>
+                  <button className="ftw-link-btn" onClick={() => shellOpen("https://ollama.com")}>🌐 Open ollama.com</button>
+                </div>
+              </div>
+              <div className="ftw-step">
+                <div className="ftw-step-number">2</div>
+                <div className="ftw-step-body">
+                  <h3>Start Ollama</h3>
+                  <p>After installing, just open the Ollama app. It runs quietly in the background — no setup needed.</p>
+                  <div className="ftw-code-hint">Or run <code>ollama serve</code> in a terminal</div>
+                </div>
+              </div>
+              <div className="ftw-step">
+                <div className="ftw-step-number">3</div>
+                <div className="ftw-step-body">
+                  <h3>Pull a Model</h3>
+                  <p>Download an AI model to use. We recommend starting small — it'll download automatically when you first chat.</p>
+                  <div className="ftw-code-hint">Or run <code>ollama pull llama3.2</code> in a terminal</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="ftw-footer">
+              <div className="ftw-privacy-note">
+                🔒 Everything runs locally. Your data never leaves your device.
+              </div>
+              <button className="ftw-dismiss-btn" onClick={dismissFirstTimeWizard}>
+                Got it, let's go! →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

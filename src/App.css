@@ -1098,6 +1098,246 @@ select:focus-visible {
   background: rgba(16, 185, 129, 0.04);
 }
 
+/* ── First-Time Setup Wizard Modal ───────────────────────────────────────── */
+.ftw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease;
+}
+
+.ftw-modal {
+  width: 90%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ftw-header {
+  text-align: center;
+  padding: 28px 28px 12px;
+}
+
+.ftw-logo {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 4px 12px rgba(37, 99, 235, 0.3));
+}
+
+.ftw-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+}
+
+.ftw-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ftw-steps {
+  padding: 8px 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ftw-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.ftw-step:last-child {
+  border-bottom: none;
+}
+
+.ftw-step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.ftw-step-body {
+  flex: 1;
+}
+
+.ftw-step-body h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.ftw-step-body p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 6px;
+}
+
+.ftw-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 8px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ftw-link-btn:hover {
+  background: rgba(37, 99, 235, 0.18);
+  transform: translateY(-1px);
+}
+
+.ftw-code-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ftw-code-hint code {
+  background: var(--bg-surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--color-accent);
+}
+
+.ftw-footer {
+  padding: 16px 24px 24px;
+  text-align: center;
+}
+
+.ftw-privacy-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 8px;
+}
+
+.ftw-dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+}
+
+.ftw-dismiss-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.45);
+}
+
+.ftw-dismiss-btn:active {
+  transform: scale(0.97);
+}
+
+/* Light theme overrides for first-time wizard */
+[data-theme="light"] .ftw-overlay {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .ftw-modal {
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Security Status Grid (Settings) ─────────────────────────────────────── */
+.security-status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.security-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.security-check:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.security-check-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.security-check-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.security-check-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.security-check-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+[data-theme="light"] .security-check:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
 /* ── Welcome Example Intents ─────────────────────────────────────────────── */
 .welcome-examples {
   max-width: 600px;

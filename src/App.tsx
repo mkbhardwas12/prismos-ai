@@ -9,7 +9,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, HandoffResult } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph";
 
@@ -22,6 +22,7 @@ function App() {
   const [lastActiveAgent, setLastActiveAgent] = useState<string | null>(null);
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
   const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
+  const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
   const [settings, setSettings] = useState<AppSettings>({
     ollamaUrl: "http://localhost:11434",
     defaultModel: "mistral",
@@ -96,9 +97,51 @@ function App() {
     loadGraphStats();
     checkOllama();
 
+    // ── You-Port: Auto-restore previous session ──
+    (async () => {
+      try {
+        const hasSaved = await invoke<boolean>("has_saved_state");
+        if (hasSaved) {
+          const resultJson = await invoke<string>("load_state");
+          const result: HandoffResult = JSON.parse(resultJson);
+          if (result.success) {
+            setToast({
+              message: `🔐 Restored from last session — ${result.nodes_count} nodes, ${result.edges_count} edges`,
+              visible: true,
+            });
+            // Refresh all data after restore
+            loadNodes();
+            loadGraphStats();
+            setGraphRefreshKey((k) => k + 1);
+          }
+        }
+      } catch (e) {
+        console.error("You-Port restore failed:", e);
+      }
+    })();
+
+    // ── You-Port: Auto-save state on app close ──
+    const handleBeforeUnload = () => {
+      invoke("save_state").catch((e: unknown) =>
+        console.error("You-Port save failed:", e)
+      );
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     const interval = setInterval(checkOllama, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
   }, [loadAgents, loadNodes, loadGraphStats, checkOllama]);
+
+  // Auto-hide toast after 5 seconds
+  useEffect(() => {
+    if (toast?.visible) {
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   function renderView() {
     switch (view) {
@@ -145,6 +188,20 @@ function App() {
         collaboration={lastCollaboration}
       />
       <div className="main-content">{renderView()}</div>
+
+      {/* You-Port session restore toast */}
+      {toast?.visible && (
+        <div className="youport-toast">
+          <span className="youport-toast-icon">🔒</span>
+          <span className="youport-toast-msg">{toast.message}</span>
+          <button
+            className="youport-toast-close"
+            onClick={() => setToast(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

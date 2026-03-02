@@ -91,6 +91,12 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
         <span className="sandbox-prism-detail">HMAC-SHA256 · Allow-List · Auto-Rollback</span>
       </div>
 
+      <div className="wasm-isolation-badge">
+        <span className="wasm-badge-icon">🔒</span>
+        <span className="wasm-badge-text">WASM Isolated</span>
+        <span className="wasm-badge-detail">wasmtime · Fuel Metering · Memory Bounded · Zero Ambient Authority</span>
+      </div>
+
       {/* LangGraph Collaboration Trace */}
       {collaboration && (
         <div className="collab-trace-panel">
@@ -160,8 +166,11 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
                   🔗
                 </span>
               )}
-              <div className="agent-sandbox-chip" title="All actions signed & sandboxed">
+              <div className="agent-sandbox-chip" title="WASM isolated · HMAC signed · Sandboxed">
                 ◈
+              </div>
+              <div className="agent-wasm-chip" title="True WASM isolation via wasmtime">
+                🔒
               </div>
             </div>
           </div>

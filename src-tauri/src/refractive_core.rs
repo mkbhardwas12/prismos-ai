@@ -96,6 +96,31 @@ pub struct CollaborationSummary {
     pub approve_count: usize,
     pub reject_count: usize,
     pub message_count: usize,
+    pub debate: Option<DebateFrontendSummary>,
+}
+
+/// Compact debate info for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebateFrontendSummary {
+    pub rounds: usize,
+    pub total_arguments: usize,
+    pub positions: usize,
+    pub challenges: usize,
+    pub rebuttals: usize,
+    pub supports: usize,
+    pub agreement_score: f64,
+    pub resolved: bool,
+    pub arguments: Vec<ArgumentFrontendSummary>,
+}
+
+/// A single argument for frontend display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArgumentFrontendSummary {
+    pub agent: String,
+    pub argument_type: String,
+    pub target: Option<String>,
+    pub content: String,
+    pub confidence: f64,
 }
 
 /// A single step in the pipeline trace for the frontend
@@ -334,7 +359,7 @@ impl RefractiveEngine {
         // Consensus vote → Execute through Sandbox Prism
         eprintln!("[RefractiveCore] Launching LangGraph multi-agent collaboration...");
 
-        let (mut result, session) = crate::agents::graph::execute_collaboration(
+        let (mut result, session, workflow_state) = crate::agents::graph::execute_collaboration(
             intent,
             &context_summary,
             &context_node_ids,
@@ -346,6 +371,30 @@ impl RefractiveEngine {
 
         // ── Step 5: Attach collaboration summary to result ──
         let consensus = session.consensus.as_ref();
+
+        // Extract debate data from workflow state
+        let debate_frontend = workflow_state.as_ref().and_then(|ws| {
+            ws.debate.as_ref().map(|d| {
+                DebateFrontendSummary {
+                    rounds: d.rounds_completed,
+                    total_arguments: d.arguments.len(),
+                    positions: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Position").count(),
+                    challenges: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Challenge").count(),
+                    rebuttals: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Rebuttal").count(),
+                    supports: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Support").count(),
+                    agreement_score: d.agreement_score,
+                    resolved: d.resolved,
+                    arguments: d.arguments.iter().map(|a| ArgumentFrontendSummary {
+                        agent: a.from.display_name().to_string(),
+                        argument_type: format!("{:?}", a.argument_type),
+                        target: a.target_agent.as_ref().map(|t| t.display_name().to_string()),
+                        content: a.content.clone(),
+                        confidence: a.confidence,
+                    }).collect(),
+                }
+            })
+        });
+
         let collab_summary = CollaborationSummary {
             session_id: session.session_id.clone(),
             phase: format!("{:?}", session.current_phase),
@@ -366,6 +415,7 @@ impl RefractiveEngine {
             approve_count: consensus.map(|c| c.approve_count).unwrap_or(0),
             reject_count: consensus.map(|c| c.reject_count).unwrap_or(0),
             message_count: session.messages.len(),
+            debate: debate_frontend,
         };
         result.collaboration = Some(collab_summary);
 

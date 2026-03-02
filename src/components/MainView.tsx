@@ -6,12 +6,12 @@ import { invoke } from "@tauri-apps/api/core";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
-import type { AppSettings, Message, RefractiveResult, CollaborationSummary } from "../types";
+import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary } from "../types";
 
 interface MainViewProps {
   ollamaConnected: boolean;
   settings: AppSettings;
-  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary) => void;
+  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
 }
 
 export default function MainView({
@@ -126,7 +126,7 @@ export default function MainView({
         agent: result.agent_used,
       };
       setMessages((prev) => [...prev, aiMsg]);
-      onIntentProcessed(result.agent_used, result.collaboration ?? undefined); // Refresh sidebar + graph + agent status
+      onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null); // Refresh sidebar + graph + agent status
     } catch (e) {
       // Fallback to legacy process_intent if refract_intent fails
       try {

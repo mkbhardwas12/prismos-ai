@@ -1,14 +1,80 @@
 // Patent Pending — US 63/993,589 (Feb 28, 2026)
-// PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration Trace
+// PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
-import type { Agent, CollaborationSummary } from "../types";
+import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary } from "../types";
 
 interface ActiveAgentsProps {
   agents: Agent[];
   collaboration?: CollaborationSummary | null;
+  debateSummary?: DebateSummary | null;
 }
 
-export default function ActiveAgents({ agents, collaboration }: ActiveAgentsProps) {
+function ArgumentTypeIcon({ type: argType }: { type: string }) {
+  switch (argType) {
+    case "Position": return <span title="Position">📌</span>;
+    case "Challenge": return <span title="Challenge">⚔️</span>;
+    case "Rebuttal": return <span title="Rebuttal">🔄</span>;
+    case "Support": return <span title="Support">✅</span>;
+    case "Concession": return <span title="Concession">🤝</span>;
+    default: return <span>💬</span>;
+  }
+}
+
+function DebatePanel({ debate }: { debate: DebateSummary }) {
+  return (
+    <div className="debate-panel">
+      <div className="debate-header">
+        <span className="debate-icon">⚖️</span>
+        <span className="debate-title">Agent Debate</span>
+        <span className={`debate-resolution-badge ${debate.resolved ? 'resolved' : 'unresolved'}`}>
+          {debate.resolved ? '✓ Resolved' : '⚡ Unresolved'}
+        </span>
+      </div>
+
+      <div className="debate-stats">
+        <div className="debate-stat">
+          <span className="debate-stat-value">{debate.rounds}</span>
+          <span className="debate-stat-label">Rounds</span>
+        </div>
+        <div className="debate-stat">
+          <span className="debate-stat-value">{debate.total_arguments}</span>
+          <span className="debate-stat-label">Arguments</span>
+        </div>
+        <div className="debate-stat">
+          <span className="debate-stat-value">{Math.round(debate.agreement_score * 100)}%</span>
+          <span className="debate-stat-label">Agreement</span>
+        </div>
+      </div>
+
+      <div className="debate-breakdown">
+        <span className="debate-tag tag-position">📌 {debate.positions} positions</span>
+        <span className="debate-tag tag-challenge">⚔️ {debate.challenges} challenges</span>
+        <span className="debate-tag tag-rebuttal">🔄 {debate.rebuttals} rebuttals</span>
+        <span className="debate-tag tag-support">✅ {debate.supports} supports</span>
+      </div>
+
+      {debate.arguments.length > 0 && (
+        <div className="debate-arguments">
+          {debate.arguments.map((arg: ArgumentSummary, i: number) => (
+            <div key={i} className={`debate-arg debate-arg-${arg.argument_type.toLowerCase()}`}>
+              <div className="debate-arg-header">
+                <ArgumentTypeIcon type={arg.argument_type} />
+                <span className="debate-arg-agent">{arg.agent}</span>
+                {arg.target && (
+                  <span className="debate-arg-target">→ {arg.target}</span>
+                )}
+                <span className="debate-arg-confidence">{Math.round(arg.confidence * 100)}%</span>
+              </div>
+              <div className="debate-arg-content">{arg.content}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ActiveAgents({ agents, collaboration, debateSummary }: ActiveAgentsProps) {
   if (agents.length === 0) {
     return (
       <div className="agents-panel">
@@ -30,7 +96,7 @@ export default function ActiveAgents({ agents, collaboration }: ActiveAgentsProp
         <div className="collab-trace-panel">
           <div className="collab-trace-header">
             <span className="collab-trace-icon">🔗</span>
-            <span className="collab-trace-title">LangGraph Collaboration</span>
+            <span className="collab-trace-title">LangGraph Workflow</span>
             <span className={`collab-consensus-badge ${collaboration.consensus_approved ? 'approved' : 'rejected'}`}>
               {collaboration.consensus_approved ? '✓ Approved' : '✗ Rejected'}
             </span>
@@ -52,6 +118,9 @@ export default function ActiveAgents({ agents, collaboration }: ActiveAgentsProp
         </div>
       )}
 
+      {/* Debate Panel */}
+      {debateSummary && <DebatePanel debate={debateSummary} />}
+
       {agents.map((agent) => {
         // Check if this agent was active in the last collaboration
         const traceStep = collaboration?.pipeline_trace.find(
@@ -60,10 +129,17 @@ export default function ActiveAgents({ agents, collaboration }: ActiveAgentsProp
         );
         const isCollabActive = traceStep?.status === 'Completed';
 
+        // Check if agent participated in debate
+        const debateArg = debateSummary?.arguments.find(
+          a => a.agent.toLowerCase().replace(' ', '_') === agent.id ||
+               a.agent.toLowerCase().replace(' ', '') === agent.id.replace('_', '')
+        );
+        const inDebate = !!debateArg;
+
         return (
           <div
             key={agent.id}
-            className={`agent-card ${isCollabActive ? 'agent-collab-active' : ''}`}
+            className={`agent-card ${isCollabActive ? 'agent-collab-active' : ''} ${inDebate ? 'agent-debate-active' : ''}`}
             title={agent.description}
           >
             <div
@@ -74,6 +150,11 @@ export default function ActiveAgents({ agents, collaboration }: ActiveAgentsProp
               <div className="agent-role">{agent.role}</div>
             </div>
             <div className="agent-badges">
+              {inDebate && (
+                <span className="agent-debate-chip" title={`Debated: ${debateArg?.argument_type}`}>
+                  ⚖️
+                </span>
+              )}
               {isCollabActive && (
                 <span className="agent-collab-chip" title="Participated in collaboration">
                   🔗

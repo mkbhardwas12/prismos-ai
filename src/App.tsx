@@ -33,6 +33,8 @@ function App() {
     defaultModel: "mistral",
     theme: "dark",
     maxTokens: 2048,
+    voiceInputEnabled: false,
+    voiceOutputEnabled: false,
   });
 
   const loadAgents = useCallback(async (activeAgent?: string | null) => {

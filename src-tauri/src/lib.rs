@@ -327,6 +327,33 @@ async fn update_spectrum_node(
     db.update_node(&id, &label, &content).map_err(|e| e.to_string())
 }
 
+// ─── You-Port Encrypted State Handoff (Patent [application number]) ──────────────────────
+
+/// Save complete PrismOS state to encrypted file (Spectrum Graph + agents + metadata)
+/// Called on app close or manually by the user.
+#[tauri::command]
+async fn save_state(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let result = you_port::save_state(&app_dir).map_err(|e| e.to_string())?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Load and restore PrismOS state from encrypted file.
+/// Decrypts, verifies integrity, and merges into current Spectrum Graph.
+#[tauri::command]
+async fn load_state(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let result = you_port::load_state(&app_dir).map_err(|e| e.to_string())?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Check if a saved state file exists (used on startup to decide whether to show restore toast)
+#[tauri::command]
+async fn has_saved_state(app: tauri::AppHandle) -> Result<bool, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(you_port::has_saved_state(&app_dir))
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -340,10 +367,27 @@ pub fn run() {
             let _db = spectrum_graph::SpectrumGraph::new(&app_dir)
                 .expect("Failed to initialize Spectrum Graph");
 
+            // ── You-Port: Auto-restore previous session if state file exists ──
+            if you_port::has_saved_state(&app_dir) {
+                match you_port::load_state(&app_dir) {
+                    Ok(result) if result.success => {
+                        println!("  ✅ You-Port: Restored {} nodes, {} edges from previous session",
+                            result.nodes_count, result.edges_count);
+                    }
+                    Ok(_) => {
+                        println!("  ⚠️ You-Port: No state to restore");
+                    }
+                    Err(e) => {
+                        eprintln!("  ⚠️ You-Port: Failed to restore state: {}", e);
+                    }
+                }
+            }
+
             println!("╔══════════════════════════════════════════════╗");
             println!("║  ◈ PrismOS v0.1.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US [application number]              ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
+            println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("╚══════════════════════════════════════════════╝");
             println!("📍 Data directory: {:?}", app_dir);
 
@@ -387,9 +431,12 @@ pub fn run() {
             execute_sandbox,
             execute_in_sandbox,
             rollback_sandbox,
-            // You-Port
+            // You-Port (Patent [application number] — Encrypted State Migration)
             export_you_port,
             import_you_port,
+            save_state,
+            load_state,
+            has_saved_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS");

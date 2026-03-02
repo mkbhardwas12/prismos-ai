@@ -191,6 +191,80 @@
   background: rgba(37, 99, 235, 0.08);
 }
 
+/* ── Model Dropdown: Divider ── */
+.model-dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 6px 8px;
+}
+
+/* ── Model Dropdown: Download items ── */
+.model-download-item {
+  flex-wrap: wrap;
+}
+
+.model-download-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.model-download-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+.model-download-btn {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+  transition: all var(--transition-fast);
+}
+
+.model-dropdown-item:hover .model-download-btn {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.model-dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.model-dropdown-item:disabled:hover {
+  background: none;
+}
+
+/* ── Model Pull Status ── */
+.model-pull-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  animation: processingShimmer 2s ease-in-out infinite;
+}
+
+.model-pull-spinner {
+  animation: spin 1.5s linear infinite;
+}
+
+[data-theme="light"] .model-download-btn {
+  background: rgba(37, 99, 235, 0.06);
+}
+
 .status-dot {
   width: 8px;
   height: 8px;

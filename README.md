@@ -270,7 +270,7 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 PrismOS/
 ├── src/                          # React frontend (TypeScript)
 │   ├── App.tsx                   # Main shell, routing, startup
-│   ├── App.css                   # Global design system (3,400+ lines)
+│   ├── App.css                   # Global design system (3,770+ lines)
 │   ├── main.tsx                  # React entry point
 │   ├── components/
 │   │   ├── MainView.tsx          # Intent Console + conversation
@@ -458,6 +458,13 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 - [x] Graph merge/diff for multi-device sync
 - [x] Accessibility polish (ARIA, focus management, reduced motion)
 - [x] Release readiness (CHANGELOG, CONTRIBUTING, test docs)
+- [x] Light theme + theme persistence (localStorage)
+- [x] Responsive sidebar with hamburger menu (<768px)
+- [x] Keyboard shortcuts (Ctrl+1–6 view navigation)
+- [x] Form labels, keyboard-accessible cards, 2-click delete
+- [x] Settings persistence across restarts
+- [x] UTF-8 safety fixes (prevent panics on multi-byte content)
+- [x] Consensus voting improvements (ToolSmith + MemoryKeeper)
 
 ### v0.3.0 (Planned)
 
@@ -489,17 +496,25 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 
 ♿ **Accessibility** — Skip navigation, focus-visible rings, ARIA roles, prefers-reduced-motion support, screen reader compatibility.
 
+🎨 **Light Theme** — Full light theme with 25+ component overrides. Theme toggle actually works now and persists across restarts.
+
+📱 **Responsive Sidebar** — Collapses to hamburger menu on small windows (<768px). Keyboard shortcuts Ctrl+1–6 for instant view switching.
+
+💾 **Settings Persistence** — All settings saved to localStorage — survive app restarts.
+
+🛡️ **Consensus Voting** — ToolSmith now rejects unsandboxed writes; MemoryKeeper varies confidence by context depth.
+
 ### Stats
 
 | Metric | Value |
 |--------|-------|
 | TypeScript files | 16 |
 | Rust source files | 13 |
-| CSS lines | 3,400+ |
+| CSS lines | 3,770+ |
 | Tauri IPC commands | 47 |
 | Agent count | 5 |
 | Spectral dimensions | 7 |
-| Total source lines | ~14,900+ |
+| Total source lines | ~15,400+ |
 
 ---
 

@@ -34,7 +34,21 @@ export default function MainView({
   // ── Inline model selector state ──
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<OllamaModel[]>([]);
+  const [pullingModel, setPullingModel] = useState<string | null>(null);
+  const [pullProgress, setPullProgress] = useState<string | null>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Recommended models catalog — shown in dropdown for easy install
+  const RECOMMENDED_MODELS = [
+    { name: "mistral", label: "Mistral 7B", desc: "Great all-rounder", size: "4.1 GB" },
+    { name: "llama3.2", label: "Llama 3.2 3B", desc: "Fast & lightweight", size: "2.0 GB" },
+    { name: "phi3", label: "Phi-3 3.8B", desc: "Strong reasoning", size: "2.2 GB" },
+    { name: "llama3.1", label: "Llama 3.1 8B", desc: "Best quality", size: "4.7 GB" },
+    { name: "gemma2:2b", label: "Gemma 2 2B", desc: "Ultra-light", size: "1.6 GB" },
+    { name: "deepseek-r1", label: "DeepSeek R1 8B", desc: "Chain-of-thought", size: "4.7 GB" },
+    { name: "qwen2.5", label: "Qwen 2.5 7B", desc: "Multilingual", size: "4.7 GB" },
+    { name: "codellama", label: "Code Llama 7B", desc: "Code specialist", size: "3.8 GB" },
+  ];
 
   // Ollama setup wizard state
   const [isLaunching, setIsLaunching] = useState(false);
@@ -191,6 +205,24 @@ export default function MainView({
     setModelDropdownOpen(false);
   }, [settings, onSettingsChange]);
 
+  const pullModelFromDropdown = useCallback(async (modelName: string) => {
+    setPullingModel(modelName);
+    setPullProgress("Starting download…");
+    try {
+      const result = await invoke<string>("pull_ollama_model", { model: modelName, ollamaUrl: settings.ollamaUrl });
+      setPullProgress(`✅ ${result}`);
+      // Refresh model list
+      const listResult = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
+      setAvailableModels(JSON.parse(listResult));
+      // Auto-select the newly pulled model
+      onSettingsChange({ ...settings, defaultModel: modelName });
+      setTimeout(() => { setPullingModel(null); setPullProgress(null); }, 2000);
+    } catch (e) {
+      setPullProgress(`❌ ${String(e)}`);
+      setTimeout(() => { setPullingModel(null); setPullProgress(null); }, 4000);
+    }
+  }, [settings, onSettingsChange]);
+
   const handleRetryConnection = useCallback(async () => {
     setIsRetrying(true);
     try {
@@ -333,9 +365,10 @@ export default function MainView({
             </button>
             {modelDropdownOpen && (
               <div className="model-dropdown">
-                <div className="model-dropdown-header">Select Model</div>
+                {/* ── Installed Models ── */}
+                <div className="model-dropdown-header">Installed Models</div>
                 {availableModels.length === 0 ? (
-                  <div className="model-dropdown-empty">Loading models…</div>
+                  <div className="model-dropdown-empty">Loading…</div>
                 ) : (
                   availableModels.map(m => (
                     <button
@@ -348,6 +381,35 @@ export default function MainView({
                       {settings.defaultModel === m.name && <span className="model-dropdown-check">✓</span>}
                     </button>
                   ))
+                )}
+
+                {/* ── Get More Models ── */}
+                <div className="model-dropdown-divider" />
+                <div className="model-dropdown-header">Get More Models</div>
+                {pullingModel && (
+                  <div className="model-pull-status">
+                    <span className="model-pull-spinner">⏳</span> {pullProgress}
+                  </div>
+                )}
+                {RECOMMENDED_MODELS
+                  .filter(r => !availableModels.some(m => m.name.startsWith(r.name)))
+                  .map(r => (
+                    <button
+                      key={r.name}
+                      className="model-dropdown-item model-download-item"
+                      onClick={() => pullModelFromDropdown(r.name)}
+                      disabled={pullingModel !== null}
+                    >
+                      <div className="model-download-info">
+                        <span className="model-dropdown-name">{r.label}</span>
+                        <span className="model-download-desc">{r.desc}</span>
+                      </div>
+                      <span className="model-dropdown-size">{r.size}</span>
+                      <span className="model-download-btn">{pullingModel === r.name ? "⏳" : "⬇"}</span>
+                    </button>
+                  ))}
+                {RECOMMENDED_MODELS.filter(r => !availableModels.some(m => m.name.startsWith(r.name))).length === 0 && (
+                  <div className="model-dropdown-empty">All recommended models installed ✓</div>
                 )}
               </div>
             )}

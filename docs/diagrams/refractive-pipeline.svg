@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 680" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="rbg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#162230"/>
+    </linearGradient>
+    <linearGradient id="step1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00b4d8"/>
+      <stop offset="100%" style="stop-color:#0096c7"/>
+    </linearGradient>
+    <linearGradient id="step2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2a9d8f"/>
+      <stop offset="100%" style="stop-color:#21867a"/>
+    </linearGradient>
+    <linearGradient id="step3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e9c46a"/>
+      <stop offset="100%" style="stop-color:#ddb44e"/>
+    </linearGradient>
+    <linearGradient id="step4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4a261"/>
+      <stop offset="100%" style="stop-color:#e68a45"/>
+    </linearGradient>
+    <linearGradient id="step5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06d6a0"/>
+      <stop offset="100%" style="stop-color:#05b88a"/>
+    </linearGradient>
+    <filter id="rs">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2a9d8f"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="680" rx="12" fill="url(#rbg)"/>
+
+  <!-- Title -->
+  <text x="360" y="40" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Refractive Pipeline</text>
+
+  <!-- Step 1: User Intent (top entry) -->
+  <rect x="240" y="65" width="240" height="50" rx="25" fill="url(#step1)" filter="url(#rs)"/>
+  <text x="360" y="95" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">💬 User Intent</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="360" y1="115" x2="360" y2="155" stroke="#2a9d8f" stroke-width="3" marker-end="url(#arrowTeal)"/>
+
+  <!-- Step 2: Intent Parsing -->
+  <rect x="180" y="160" width="360" height="70" rx="12" fill="url(#step1)" filter="url(#rs)" opacity="0.92"/>
+  <text x="360" y="190" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">1 ─ Intent Parsing</text>
+  <text x="360" y="215" text-anchor="middle" fill="#c5eeff" font-size="12">Extract keywords, entities, and context from raw input</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="360" y1="230" x2="360" y2="262" stroke="#2a9d8f" stroke-width="3" marker-end="url(#arrowTeal)"/>
+
+  <!-- Step 3: Graph Traversal -->
+  <rect x="180" y="267" width="360" height="70" rx="12" fill="url(#step2)" filter="url(#rs)" opacity="0.92"/>
+  <text x="360" y="297" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">2 ─ Graph Traversal</text>
+  <text x="360" y="322" text-anchor="middle" fill="#c5f5ee" font-size="12">Search Spectrum Graph for relevant nodes via spectral matching</text>
+
+  <!-- Arrow 3→4 -->
+  <line x1="360" y1="337" x2="360" y2="369" stroke="#2a9d8f" stroke-width="3" marker-end="url(#arrowTeal)"/>
+
+  <!-- Step 4: Spectral Weighting -->
+  <rect x="180" y="374" width="360" height="70" rx="12" fill="url(#step3)" filter="url(#rs)" opacity="0.92"/>
+  <text x="360" y="404" text-anchor="middle" fill="#1a1a1a" font-size="16" font-weight="700">3 ─ Spectral Weighting</text>
+  <text x="360" y="429" text-anchor="middle" fill="#4a3800" font-size="12">Score by 7 dimensions × temporal decay factor</text>
+
+  <!-- Arrow 4→5 -->
+  <line x1="360" y1="444" x2="360" y2="476" stroke="#2a9d8f" stroke-width="3" marker-end="url(#arrowTeal)"/>
+
+  <!-- Step 5: LLM Synthesis -->
+  <rect x="180" y="481" width="360" height="70" rx="12" fill="url(#step4)" filter="url(#rs)" opacity="0.92"/>
+  <text x="360" y="511" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">4 ─ LLM Synthesis</text>
+  <text x="360" y="536" text-anchor="middle" fill="#fff5e5" font-size="12">Ollama generates a context-rich response from weighted nodes</text>
+
+  <!-- Arrow 5→6 -->
+  <line x1="360" y1="551" x2="360" y2="583" stroke="#2a9d8f" stroke-width="3" marker-end="url(#arrowTeal)"/>
+
+  <!-- Step 6: Graph Learning -->
+  <rect x="180" y="588" width="360" height="70" rx="12" fill="url(#step5)" filter="url(#rs)" opacity="0.92"/>
+  <text x="360" y="618" text-anchor="middle" fill="#0a2e1f" font-size="16" font-weight="700">5 ─ Graph Learning</text>
+  <text x="360" y="643" text-anchor="middle" fill="#0a4030" font-size="12">New nodes &amp; edges created from the interaction</text>
+
+  <!-- Feedback loop arrow (right side) -->
+  <path d="M 540 625 Q 620 625 620 400 Q 620 175 540 190" stroke="#06d6a0" stroke-width="2" fill="none" stroke-dasharray="6,4" marker-end="url(#arrowTeal)"/>
+  <text x="640" y="395" fill="#06d6a0" font-size="11" font-weight="600" transform="rotate(90, 640, 395)">FEEDBACK LOOP</text>
+
+  <!-- Side labels -->
+  <rect x="30" y="170" width="120" height="30" rx="6" fill="#0d2b3e" stroke="#0077b6" stroke-width="1"/>
+  <text x="90" y="190" text-anchor="middle" fill="#00b4d8" font-size="11" font-weight="600">Refractive Core</text>
+
+  <rect x="30" y="280" width="120" height="30" rx="6" fill="#0d2b3e" stroke="#2a9d8f" stroke-width="1"/>
+  <text x="90" y="300" text-anchor="middle" fill="#2a9d8f" font-size="11" font-weight="600">Spectrum Graph</text>
+
+  <rect x="30" y="490" width="120" height="30" rx="6" fill="#0d2b3e" stroke="#f4a261" stroke-width="1"/>
+  <text x="90" y="510" text-anchor="middle" fill="#f4a261" font-size="11" font-weight="600">Ollama LLM</text>
+
+  <!-- Connector lines from side labels -->
+  <line x1="150" y1="185" x2="180" y2="195" stroke="#0077b6" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="150" y1="295" x2="180" y2="302" stroke="#2a9d8f" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="150" y1="505" x2="180" y2="516" stroke="#f4a261" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- Footer -->
+  <text x="360" y="672" text-anchor="middle" fill="#4a7a90" font-size="11">Each interaction strengthens the graph — PrismOS learns as you use it</text>
+</svg>

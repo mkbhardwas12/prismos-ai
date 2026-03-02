@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="sbg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1923"/>
+      <stop offset="100%" style="stop-color:#162230"/>
+    </linearGradient>
+    <filter id="ss">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="420" rx="12" fill="url(#sbg)"/>
+
+  <!-- Title -->
+  <text x="400" y="38" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Spectral Dimensions</text>
+  <text x="400" y="58" text-anchor="middle" fill="#5a8aa0" font-size="12">Every node carries a 7-dimensional spectral profile (0.0 – 1.0)</text>
+
+  <!-- Dimension bars -->
+  <!-- Cognitive -->
+  <text x="30" y="105" fill="#00b4d8" font-size="13" font-weight="600">🧠 Cognitive</text>
+  <rect x="160" y="90" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="90" width="464" height="28" rx="6" fill="#00b4d8" opacity="0.85"/>
+  <text x="634" y="109" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.8</text>
+  <text x="752" y="109" fill="#6a9ab0" font-size="10">Intellectual depth &amp; complexity</text>
+
+  <!-- Emotional -->
+  <text x="30" y="148" fill="#e76f51" font-size="13" font-weight="600">❤️ Emotional</text>
+  <rect x="160" y="133" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="133" width="406" height="28" rx="6" fill="#e76f51" opacity="0.85"/>
+  <text x="576" y="152" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.7</text>
+  <text x="752" y="152" fill="#6a9ab0" font-size="10">Emotional significance</text>
+
+  <!-- Temporal -->
+  <text x="30" y="191" fill="#e9c46a" font-size="13" font-weight="600">⏳ Temporal</text>
+  <rect x="160" y="176" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="176" width="348" height="28" rx="6" fill="#e9c46a" opacity="0.85"/>
+  <text x="518" y="195" text-anchor="end" fill="#1a1a1a" font-size="11" font-weight="600">0.6</text>
+  <text x="752" y="195" fill="#6a9ab0" font-size="10">Time relevance &amp; recency</text>
+
+  <!-- Social -->
+  <text x="30" y="234" fill="#f4a261" font-size="13" font-weight="600">👥 Social</text>
+  <rect x="160" y="219" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="219" width="261" height="28" rx="6" fill="#f4a261" opacity="0.85"/>
+  <text x="431" y="238" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.45</text>
+  <text x="752" y="238" fill="#6a9ab0" font-size="10">Social context &amp; relationships</text>
+
+  <!-- Creative -->
+  <text x="30" y="277" fill="#2a9d8f" font-size="13" font-weight="600">🎨 Creative</text>
+  <rect x="160" y="262" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="262" width="522" height="28" rx="6" fill="#2a9d8f" opacity="0.85"/>
+  <text x="692" y="281" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.9</text>
+  <text x="752" y="281" fill="#6a9ab0" font-size="10">Generative potential</text>
+
+  <!-- Analytical -->
+  <text x="30" y="320" fill="#0096c7" font-size="13" font-weight="600">📊 Analytical</text>
+  <rect x="160" y="305" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="305" width="435" height="28" rx="6" fill="#0096c7" opacity="0.85"/>
+  <text x="605" y="324" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.75</text>
+  <text x="752" y="324" fill="#6a9ab0" font-size="10">Logical precision</text>
+
+  <!-- Physical -->
+  <text x="30" y="363" fill="#06d6a0" font-size="13" font-weight="600">🏃 Physical</text>
+  <rect x="160" y="348" width="580" height="28" rx="6" fill="#0d2535"/>
+  <rect x="160" y="348" width="174" height="28" rx="6" fill="#06d6a0" opacity="0.85"/>
+  <text x="344" y="367" text-anchor="end" fill="#0a2e1f" font-size="11" font-weight="600">0.3</text>
+  <text x="752" y="367" fill="#6a9ab0" font-size="10">Physical-world grounding</text>
+
+  <!-- Footer -->
+  <text x="400" y="405" text-anchor="middle" fill="#4a7a90" font-size="11">Spectral values undergo temporal decay — older knowledge fades unless reinforced by new interactions</text>
+</svg>

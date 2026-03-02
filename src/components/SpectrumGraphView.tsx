@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ForceGraph2D from "react-force-graph-2d";
 import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed } from "../types";
+import prismosLogo from "../assets/prismos-logo.svg";
 
 // ─── Facet Color Palette ───────────────────────────────────────────────────────
 
@@ -256,7 +257,7 @@ export default function SpectrumGraphView() {
       <div className="sg-canvas">
         {graphData.nodes.length === 0 ? (
           <div className="sg-empty">
-            <div className="sg-empty-icon">◇</div>
+            <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS" className="sg-empty-logo" /></div>
             <h3>Spectrum Graph is empty</h3>
             <p>Start conversations or add nodes to build your knowledge graph.</p>
           </div>

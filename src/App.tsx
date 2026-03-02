@@ -9,7 +9,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
-import type { Agent, SpectrumNode, AppSettings, GraphStats } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph";
 
@@ -21,6 +21,7 @@ function App() {
   const [ollamaConnected, setOllamaConnected] = useState(false);
   const [lastActiveAgent, setLastActiveAgent] = useState<string | null>(null);
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
+  const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
   const [settings, setSettings] = useState<AppSettings>({
     ollamaUrl: "http://localhost:11434",
     defaultModel: "mistral",
@@ -67,7 +68,11 @@ function App() {
   }, []);
 
   // Called after every intent is processed — refreshes all live data
-  const onIntentProcessed = useCallback((agentUsed?: string) => {
+  const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary) => {
+    // Store latest collaboration trace for sidebar display
+    if (collaboration) {
+      setLastCollaboration(collaboration);
+    }
     // Flash the active agent in the sidebar
     if (agentUsed) {
       setLastActiveAgent(agentUsed);
@@ -137,6 +142,7 @@ function App() {
         agents={agents}
         nodes={nodes}
         graphStats={graphStats}
+        collaboration={lastCollaboration}
       />
       <div className="main-content">{renderView()}</div>
     </div>

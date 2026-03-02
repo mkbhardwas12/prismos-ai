@@ -44,6 +44,8 @@ interface GraphNode {
   content: string;
   color: string;
   val: number;
+  x?: number;
+  y?: number;
 }
 
 interface GraphLink {

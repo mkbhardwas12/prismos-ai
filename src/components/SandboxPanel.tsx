@@ -48,6 +48,9 @@ export default function SandboxPanel() {
           success: false,
           output: `Execution error: ${e}`,
           side_effects: [],
+          sandbox_protected: true,
+          action_signature: "",
+          rollback_explanation: null,
         },
       ]);
     } finally {
@@ -68,6 +71,9 @@ export default function SandboxPanel() {
           success: true,
           output: `Rolled back. Checkpoint: ${checkpoint?.state_hash?.slice(0, 16) ?? "none"}...`,
           side_effects: [],
+          sandbox_protected: true,
+          action_signature: "",
+          rollback_explanation: null,
         },
       ]);
     } catch (e) {

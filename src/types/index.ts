@@ -79,6 +79,27 @@ export interface RefractiveResult {
   anticipations: string[];
   processing_time_ms: number;
   npu_accelerated: boolean;
+  collaboration?: CollaborationSummary;
+}
+
+// ─── LangGraph Multi-Agent Collaboration Types ─────────────────────────────────
+
+export interface CollaborationSummary {
+  session_id: string;
+  phase: string;
+  pipeline_trace: TraceSummary[];
+  consensus_approved: boolean;
+  consensus_summary: string;
+  vote_count: number;
+  approve_count: number;
+  reject_count: number;
+  message_count: number;
+}
+
+export interface TraceSummary {
+  agent: string;
+  action: string;
+  status: string;
 }
 
 export interface ParsedIntent {

@@ -604,6 +604,158 @@ body {
   white-space: nowrap;
 }
 
+/* ─── LangGraph Collaboration Trace Panel ─────────────────────────────────── */
+.collab-trace-panel {
+  margin: 4px 12px 8px;
+  padding: 10px 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.08) 0%,
+    rgba(59, 130, 246, 0.08) 100%
+  );
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 6px;
+}
+
+.collab-trace-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.collab-trace-icon {
+  font-size: 13px;
+}
+
+.collab-trace-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(139, 92, 246, 0.9);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.collab-consensus-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.02em;
+}
+
+.collab-consensus-badge.approved {
+  background: rgba(16, 185, 129, 0.15);
+  color: rgba(16, 185, 129, 0.9);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.collab-consensus-badge.rejected {
+  background: rgba(239, 68, 68, 0.15);
+  color: rgba(239, 68, 68, 0.9);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.collab-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.collab-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  padding: 2px 0;
+}
+
+.collab-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.collab-step-completed .collab-step-dot {
+  background: rgba(16, 185, 129, 0.8);
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+}
+
+.collab-step-active .collab-step-dot {
+  background: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.collab-step-pending .collab-step-dot {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.collab-step-failed .collab-step-dot {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.collab-step-agent {
+  color: var(--text-primary);
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.collab-step-action {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collab-vote-summary {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+  padding-top: 6px;
+}
+
+.collab-vote-approve {
+  color: rgba(16, 185, 129, 0.9);
+  font-weight: 600;
+}
+
+.collab-vote-reject {
+  color: rgba(239, 68, 68, 0.8);
+  font-weight: 600;
+}
+
+.collab-vote-msgs {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Agent collaboration active state */
+.agent-card.agent-collab-active {
+  border-left: 2px solid rgba(139, 92, 246, 0.6);
+}
+
+.agent-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.agent-collab-chip {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SPECTRUM GRAPH VIEW
    ═══════════════════════════════════════════════════════════════════════════ */

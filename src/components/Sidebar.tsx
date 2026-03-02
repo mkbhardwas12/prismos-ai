@@ -189,33 +189,45 @@ export default function Sidebar({
               </span>
             </div>
             <div className="spectrum-view">
-              {nodes.length === 0 ? (
-                <div className="spectrum-empty">
-                  No nodes yet. Start a conversation to build your graph.
-                </div>
-              ) : (
-                <ul className="spectrum-node-list">
-                  {nodes.slice(0, 12).map((node) => (
-                    <li
-                      key={node.id}
-                      className="spectrum-node-item"
-                      title={`${node.node_type}: ${node.content.slice(0, 100)}`}
-                    >
-                      <span className={`spectrum-node-dot type-${node.node_type}`} />
-                      <span>{node.label}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {nodes.length > 12 && (
-                <button
-                  className="sidebar-item"
-                  onClick={() => handleNavigate("graph")}
-                  style={{ fontSize: "0.75rem", opacity: 0.7 }}
-                >
-                  View all {nodes.length} nodes →
-                </button>
-              )}
+              {(() => {
+                // Filter out placeholder / seed nodes with generic labels
+                const realNodes = nodes.filter(
+                  (n) => !/^(chat|how do you work|test|placeholder)/i.test(n.label.trim())
+                );
+                if (realNodes.length === 0) {
+                  return (
+                    <div className="spectrum-empty">
+                      <span className="spectrum-empty-icon" aria-hidden="true">🕸️</span>
+                      <span>Your knowledge graph is empty. Send an intent to grow it.</span>
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    <ul className="spectrum-node-list">
+                      {realNodes.slice(0, 10).map((node) => (
+                        <li
+                          key={node.id}
+                          className="spectrum-node-item"
+                          title={`${node.node_type}: ${node.content.slice(0, 100)}`}
+                        >
+                          <span className={`spectrum-node-dot type-${node.node_type}`} />
+                          <span className="spectrum-node-label">{node.label}</span>
+                          <span className="spectrum-node-type-tag">{node.node_type}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {realNodes.length > 10 && (
+                      <button
+                        className="sidebar-more-btn"
+                        onClick={() => handleNavigate("graph")}
+                      >
+                        View all {realNodes.length} nodes →
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 

@@ -203,9 +203,40 @@ export default function MainView({
             <h1>Welcome to PrismOS</h1>
             <p>
               Your local-first agentic AI operating system. All processing
-              happens on your device — your data never leaves. Express any
-              intent below to get started.
+              happens on your device — your data never leaves.
             </p>
+
+            {/* Quick-start example intents */}
+            <div className="welcome-examples">
+              <div className="welcome-examples-label">Try an intent to get started</div>
+              <div className="welcome-example-chips">
+                <button
+                  className="example-chip"
+                  onClick={() => handleIntent("Summarize what I worked on this week and suggest priorities for tomorrow")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">📋</span>
+                  Summarize my week &amp; suggest priorities
+                </button>
+                <button
+                  className="example-chip"
+                  onClick={() => handleIntent("Draft a short professional bio based on my recent projects")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">✍️</span>
+                  Draft a professional bio for me
+                </button>
+                <button
+                  className="example-chip"
+                  onClick={() => handleIntent("What connections exist in my knowledge graph and what patterns do you see?")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">🔮</span>
+                  Analyze my knowledge graph patterns
+                </button>
+              </div>
+            </div>
+
             <div className="welcome-features">
               <div className="feature-card">
                 <div className="feature-card-icon">🧠</div>
@@ -252,13 +283,16 @@ export default function MainView({
         )}
         {isProcessing && (
           <div className="message message-ai" role="status" aria-label="Processing your intent">
-            <div className="message-bubble">
-              <div className="loading-dots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
+            <div className="message-bubble processing-bubble">
+              <div className="processing-indicator">
+                <div className="processing-spinner" aria-hidden="true">
+                  <span /><span /><span />
+                </div>
+                <div className="processing-text">
+                  <span className="processing-label">Refracting your intent…</span>
+                  <span className="processing-detail">Agents collaborating · Graph context loading</span>
+                </div>
               </div>
-              <span className="sr-only">Processing your intent...</span>
             </div>
           </div>
         )}

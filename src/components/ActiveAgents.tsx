@@ -78,13 +78,30 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
   if (agents.length === 0) {
     return (
       <div className="agents-panel">
-        <div className="spectrum-empty">Initializing agents...</div>
+        <div className="spectrum-empty">
+          <span className="agent-init-spinner" aria-hidden="true" />
+          Initializing agents…
+        </div>
       </div>
     );
   }
 
+  // Count active agents
+  const processingCount = agents.filter(a => a.status === "Processing").length;
+  const isAnyActive = processingCount > 0;
+
   return (
     <div className="agents-panel">
+      {/* Live status bar */}
+      <div className={`agents-status-bar ${isAnyActive ? "agents-active" : "agents-idle"}`}>
+        <span className={`agents-status-dot ${isAnyActive ? "active" : ""}`} />
+        <span className="agents-status-text">
+          {isAnyActive
+            ? `${processingCount} agent${processingCount > 1 ? "s" : ""} working…`
+            : "All agents standing by"}
+        </span>
+      </div>
+
       <div className="sandbox-prism-badge">
         <span className="sandbox-prism-icon">🛡️</span>
         <span className="sandbox-prism-text">Protected by Sandbox Prism</span>
@@ -142,10 +159,27 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
         );
         const inDebate = !!debateArg;
 
+        // Dynamic action text based on agent role + state
+        const actionText = (() => {
+          if (agent.status === "Processing") {
+            switch (agent.id) {
+              case "orchestrator": return "Routing intent…";
+              case "reasoner": return "Analyzing context…";
+              case "memory_keeper": return "Querying graph…";
+              case "tool_smith": return "Preparing tools…";
+              case "sentinel": return "Reviewing safety…";
+              default: return "Processing…";
+            }
+          }
+          if (isCollabActive && traceStep) return traceStep.action;
+          if (inDebate && debateArg) return `Argued: ${debateArg.argument_type}`;
+          return agent.role;
+        })();
+
         return (
           <div
             key={agent.id}
-            className={`agent-card ${isCollabActive ? 'agent-collab-active' : ''} ${inDebate ? 'agent-debate-active' : ''}`}
+            className={`agent-card ${isCollabActive ? 'agent-collab-active' : ''} ${inDebate ? 'agent-debate-active' : ''} ${agent.status === 'Processing' ? 'agent-processing' : ''}`}
             title={agent.description}
           >
             <div
@@ -153,7 +187,7 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
             />
             <div className="agent-info">
               <div className="agent-name">{agent.name}</div>
-              <div className="agent-role">{agent.role}</div>
+              <div className={`agent-role ${agent.status === 'Processing' ? 'agent-role-active' : ''}`}>{actionText}</div>
             </div>
             <div className="agent-badges">
               {inDebate && (

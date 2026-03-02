@@ -70,8 +70,8 @@ export default function IntentInput({
           aria-label="Express your intent"
           placeholder={
             voice.isListening
-              ? "🎙️ Listening... speak your intent"
-              : "Express your intent... (Enter to send, Shift+Enter for newline)"
+              ? "🎙️ Listening… speak your intent"
+              : "Ask anything — plan, create, analyze, explore…"
           }
           value={voice.isListening && voice.interimTranscript ? voice.interimTranscript : input}
           onChange={(e) => {
@@ -123,9 +123,9 @@ export default function IntentInput({
       )}
 
       <div className="intent-hint">
-        {voiceEnabled && voice.sttSupported
-          ? "Type or 🎙️ speak your intent · 100% local · Patent Pending US 63/993,589"
-          : "PrismOS processes all intents locally via Ollama · 100% private · Patent Pending US 63/993,589"}
+        <span className="intent-hint-keys">Enter ↵ send · Shift+Enter ↵ newline</span>
+        <span className="intent-hint-sep">·</span>
+        <span>100% local · Patent Pending US 63/993,589</span>
       </div>
     </div>
   );

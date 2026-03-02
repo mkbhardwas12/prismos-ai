@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
     <linearGradient id="pg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="0%" stop-color="#2563eb"/>
       <stop offset="50%" stop-color="#06b6d4"/>
       <stop offset="100%" stop-color="#10b981"/>
     </linearGradient>
@@ -22,8 +22,8 @@
       <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="b5" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.8"/>
-      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="ib" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#fff" stop-opacity="0"/>

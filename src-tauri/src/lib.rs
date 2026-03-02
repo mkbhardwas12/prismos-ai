@@ -500,6 +500,42 @@ async fn clear_graph(app: tauri::AppHandle) -> Result<String, String> {
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
+// ─── LangGraph Workflow Commands (Patent [application number]) ───────────────────────────
+
+/// Run a full LangGraph multi-agent collaboration for a given intent.
+/// Returns a WorkflowSummary with debate log, consensus, and transitions.
+#[tauri::command]
+async fn run_collaboration(app: tauri::AppHandle, input: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let lens = intent_lens::IntentLens::new();
+    let parsed = lens.parse(&input);
+
+    let engine = refractive_core::RefractiveEngine::new();
+    let result = engine
+        .refract(parsed, &app_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Get the LangGraph state graph definition for frontend visualization.
+/// Returns the graph nodes, edges, and conditional routing.
+#[tauri::command]
+async fn get_workflow_graph() -> Result<String, String> {
+    let graph = agents::langgraph_workflow::get_state_graph();
+    serde_json::to_string(&graph).map_err(|e| e.to_string())
+}
+
+/// Get the debate log from the most recent collaboration.
+/// Returns structured debate arguments with agent positions, challenges, and rebuttals.
+#[tauri::command]
+async fn get_debate_log() -> Result<String, String> {
+    // Return an empty debate log — real data comes from run_collaboration result
+    let empty: Vec<agents::langgraph_workflow::DebateArgument> = vec![];
+    serde_json::to_string(&empty).map_err(|e| e.to_string())
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -569,6 +605,10 @@ pub fn run() {
             get_recent_intents,
             // Agents
             get_active_agents,
+            // LangGraph Workflow (Patent [application number] — Multi-Agent Collaboration)
+            run_collaboration,
+            get_workflow_graph,
+            get_debate_log,
             // Ollama
             check_ollama_status,
             list_ollama_models,

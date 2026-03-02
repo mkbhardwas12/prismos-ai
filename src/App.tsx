@@ -10,7 +10,7 @@ import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
 import prismosIcon from "./assets/prismos-icon.svg";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, HandoffResult } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph";
 
@@ -25,6 +25,7 @@ function App() {
   const [lastActiveAgent, setLastActiveAgent] = useState<string | null>(null);
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
   const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
+  const [lastDebate, setLastDebate] = useState<DebateSummary | null>(null);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>({
@@ -73,10 +74,14 @@ function App() {
   }, []);
 
   // Called after every intent is processed — refreshes all live data
-  const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary) => {
+  const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => {
     // Store latest collaboration trace for sidebar display
     if (collaboration) {
       setLastCollaboration(collaboration);
+    }
+    // Store latest debate summary
+    if (debate !== undefined) {
+      setLastDebate(debate);
     }
     // Flash the active agent in the sidebar
     if (agentUsed) {
@@ -223,6 +228,7 @@ function App() {
         nodes={nodes}
         graphStats={graphStats}
         collaboration={lastCollaboration}
+        debateSummary={lastDebate}
       />
       <div className="main-content">
         {/* Global error banner */}

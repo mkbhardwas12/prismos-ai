@@ -94,12 +94,80 @@ export interface CollaborationSummary {
   approve_count: number;
   reject_count: number;
   message_count: number;
+  debate: DebateSummary | null;
 }
 
 export interface TraceSummary {
   agent: string;
   action: string;
   status: string;
+}
+
+// ─── LangGraph Workflow & Debate Types ─────────────────────────────────────────
+
+export interface WorkflowSummary {
+  workflow_id: string;
+  status: string;
+  current_node: string;
+  transitions: TransitionSummary[];
+  debate_summary: DebateSummary | null;
+  consensus_approved: boolean;
+  consensus_summary: string;
+  vote_count: number;
+  approve_count: number;
+  reject_count: number;
+  message_count: number;
+  total_arguments: number;
+  agreement_score: number;
+}
+
+export interface TransitionSummary {
+  from: string;
+  to: string;
+  label: string;
+  duration_ms: number;
+}
+
+export interface DebateSummary {
+  rounds: number;
+  total_arguments: number;
+  positions: number;
+  challenges: number;
+  rebuttals: number;
+  supports: number;
+  agreement_score: number;
+  resolved: boolean;
+  arguments: ArgumentSummary[];
+}
+
+export interface ArgumentSummary {
+  agent: string;
+  argument_type: string;
+  target: string | null;
+  content: string;
+  confidence: number;
+}
+
+export interface StateGraphNode {
+  id: string;
+  node_type: string;
+  agent: string | null;
+  description: string;
+}
+
+export interface StateGraphEdge {
+  from: string;
+  to: string;
+  condition: string | null;
+  label: string;
+}
+
+export interface StateGraph {
+  id: string;
+  name: string;
+  nodes: StateGraphNode[];
+  edges: StateGraphEdge[];
+  entry_node: string;
 }
 
 export interface ParsedIntent {

@@ -34,5 +34,6 @@
 // All data stays local. No telemetry. No cloud dependency.
 
 pub mod graph;
+pub mod langgraph_workflow;
 pub mod messages;
 pub mod nodes;

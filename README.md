@@ -230,37 +230,17 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 
 ## 📸 Screenshots
 
-<!-- 
-  📝 To add screenshots:
-  1. Run PrismOS: `npm run tauri dev`
-  2. Take screenshots of each view
-  3. Save them to `docs/screenshots/` as:
-     - intent-console.png
-     - spectrum-graph.png  
-     - spectrum-explorer.png
-     - sandbox-prisms.png
-     - spectral-timeline.png
-     - settings-sync.png
-     - agent-debate.png
-     - loading-screen.png
-  4. Uncomment the image table below
--->
+> **Screenshots coming soon.** PrismOS v0.2.0 features a modern glassmorphism dark UI with full light theme support.
 
 | View | Description |
 |:----:|:-----------:|
-| **Intent Console** | Natural language chat with AI metadata, collaboration traces |
-| **Spectrum Graph** | Force-directed knowledge graph with spectral coloring |
+| **Intent Console** | Natural language chat with AI metadata, collaboration traces, and guided Ollama setup wizard |
+| **Spectrum Graph** | Force-directed knowledge graph with spectral coloring and multi-window support |
 | **Spectrum Explorer** | Node browser with CRUD, search, and spectral details |
 | **Sandbox Prisms** | Execution sandbox with results, rollback, WASM status |
 | **Spectral Timeline** | Time-based graph history with date grouping |
-| **Settings & Sync** | Configuration, encrypted export/import, multi-device sync |
+| **Settings & Security** | Configuration, encrypted export/import, multi-device sync, live security status |
 | **Agent Debate** | Live debate panel with argument types and agreement scoring |
-
-<!-- Uncomment when screenshots are added:
-| ![Intent Console](docs/screenshots/intent-console.png) | ![Spectrum Graph](docs/screenshots/spectrum-graph.png) | ![Timeline](docs/screenshots/spectral-timeline.png) |
-|:-:|:-:|:-:|
-| Intent Console | Spectrum Graph | Spectral Timeline |
--->
 
 ---
 
@@ -296,7 +276,7 @@ PrismOS/
 │   ├── tauri.conf.json           # Tauri config (v0.2.0)
 │   ├── capabilities/             # Tauri 2.0 permissions
 │   └── src/
-│       ├── lib.rs                # 47 Tauri IPC commands
+│       ├── lib.rs                # 51 Tauri IPC commands
 │       ├── main.rs               # Tauri entry point
 │       ├── spectrum_graph.rs     # Spectrum Graph™ engine
 │       ├── refractive_core.rs    # Refractive Core™ pipeline
@@ -304,6 +284,9 @@ PrismOS/
 │       ├── sandbox_prism.rs      # Sandbox Prisms + WASM isolation
 │       ├── you_port.rs           # You-Port™ encrypted migration
 │       ├── ollama_bridge.rs      # Ollama HTTP client
+│       ├── audit_log.rs          # Tamper-evident SHA-256 hash chain
+│       ├── model_verify.rs       # LLM integrity verification
+│       ├── secure_enclave.rs     # Hardware security module abstraction
 │       └── agents/               # LangGraph multi-agent system
 │           ├── mod.rs            # Module exports
 │           ├── graph.rs          # DAG execution engine
@@ -331,10 +314,10 @@ PrismOS/
 
 ## 🔌 Tauri IPC Commands
 
-PrismOS exposes **47 Tauri commands** for frontend–backend communication:
+PrismOS exposes **51 Tauri commands** for frontend–backend communication:
 
 <details>
-<summary>Click to expand full command list (47 commands)</summary>
+<summary>Click to expand full command list (51 commands)</summary>
 
 | Category | Command | Description |
 |----------|---------|-------------|
@@ -370,6 +353,8 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 | **Agents** | `get_workflow_graph` | Get workflow DAG |
 | **Agents** | `get_debate_log` | Get debate transcript |
 | **Ollama** | `list_ollama_models` | Available models |
+| **Ollama** | `launch_ollama` | Start Ollama process |
+| **Ollama** | `pull_ollama_model` | Pull model via API |
 | **Sandbox** | `create_sandbox` | Create sandbox instance |
 | **Sandbox** | `execute_sandbox` | Run in sandbox |
 | **Sandbox** | `execute_in_sandbox` | Execute WASM module |
@@ -383,6 +368,10 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 | **Sync** | `import_sync_package` | Merge sync package |
 | **Sync** | `preview_sync_merge` | Preview merge diff |
 | **Sync** | `diff_graph` | Compute graph diff |
+| **Security** | `get_audit_log` | Tamper-evident audit entries |
+| **Security** | `verify_audit_chain` | Verify hash chain integrity |
+| **Security** | `verify_model` | SHA-256 model verification |
+| **Security** | `get_security_status` | Full security status report |
 
 </details>
 
@@ -427,8 +416,9 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 | **Runtime** | wasmtime WASM | Memory + CPU isolation |
 | **Anomaly** | Statistical detection | Deviation alerting |
 | **Recovery** | Auto-rollback | Checkpoint restoration |
-| **Encryption** | XOR stream cipher + HMAC | State encryption at rest |
-
+| **Encryption** | XOR stream cipher + HMAC | State encryption at rest || **Audit** | SHA-256 hash chain | Tamper-evident action log |
+| **Model Integrity** | SHA-256 fingerprinting | LLM verification vs known-good registry |
+| **Hardware** | TPM / Secure Enclave | Hardware-backed key derivation |
 ---
 
 ## 🗺️ Roadmap
@@ -465,6 +455,18 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 - [x] Settings persistence across restarts
 - [x] UTF-8 safety fixes (prevent panics on multi-byte content)
 - [x] Consensus voting improvements (ToolSmith + MemoryKeeper)
+- [x] Modern blue glassmorphism UI overhaul (eliminate legacy colors)
+- [x] Guided Ollama onboarding wizard (Install → Start → Pull Model)
+- [x] Collapsible setup wizard with compact/expanded states
+- [x] First-time setup modal (localStorage-gated, one-time only)
+- [x] Clickable example intents on welcome screen
+- [x] Security badge tooltips with plain-English explanations
+- [x] Live Security Status dashboard in Settings
+- [x] Welcoming input placeholder with privacy messaging
+- [x] Tamper-evident audit log (SHA-256 hash chain)
+- [x] LLM model verification (SHA-256 fingerprint vs known-good registry)
+- [x] Hardware secure enclave abstraction (TPM/Secure Enclave + software fallback)
+- [x] 51 Tauri IPC commands, 16 Rust modules, 4,700+ CSS lines
 
 ### v0.3.0 (Planned)
 
@@ -509,12 +511,12 @@ PrismOS exposes **47 Tauri commands** for frontend–backend communication:
 | Metric | Value |
 |--------|-------|
 | TypeScript files | 16 |
-| Rust source files | 13 |
-| CSS lines | 3,770+ |
-| Tauri IPC commands | 47 |
+| Rust source files | 16 |
+| CSS lines | 4,700+ |
+| Tauri IPC commands | 51 |
 | Agent count | 5 |
 | Spectral dimensions | 7 |
-| Total source lines | ~15,400+ |
+| Total source lines | ~18,000+ |
 
 ---
 

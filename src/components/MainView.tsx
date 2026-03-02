@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
-import type { AppSettings, Message } from "../types";
+import type { AppSettings, Message, RefractiveResult } from "../types";
 
 interface MainViewProps {
   ollamaConnected: boolean;
@@ -87,34 +87,55 @@ export default function MainView({
     setIsProcessing(true);
 
     try {
-      const response = await invoke<string>("process_intent", { input });
+      // Use full Refractive Core pipeline (Patent 63/993,589)
+      const resultJson = await invoke<string>("refract_intent", { input });
+      const result: RefractiveResult = JSON.parse(resultJson);
+
+      // Build metadata footer
+      const metaParts: string[] = [];
+      if (result.agent_used) metaParts.push(`Agent: ${result.agent_used}`);
+      if (result.processing_time_ms) metaParts.push(`${result.processing_time_ms}ms`);
+      if (result.npu_accelerated) metaParts.push("NPU⚡");
+      if (result.context_nodes?.length) metaParts.push(`${result.context_nodes.length} ctx nodes`);
+      if (result.edges_reinforced?.length) metaParts.push(`${result.edges_reinforced.length} edges reinforced`);
+
+      const metaLine = metaParts.length > 0 ? `\n\n───\n📡 ${metaParts.join(" · ")}` : "";
+
+      // Build anticipation hint
+      const hintLine = result.anticipations?.length
+        ? `\n🔮 ${result.anticipations[0]}`
+        : "";
+
       const aiMsg: Message = {
         id: crypto.randomUUID(),
         role: "ai",
-        content: response,
+        content: result.response + metaLine + hintLine,
         timestamp: new Date(),
+        agent: result.agent_used,
       };
       setMessages((prev) => [...prev, aiMsg]);
-
-      // Auto-save conversation to Spectrum Graph
-      try {
-        await invoke("add_spectrum_node", {
-          label: input.length > 50 ? input.slice(0, 47) + "..." : input,
-          content: `Q: ${input}\n\nA: ${response}`,
-          nodeType: "conversation",
-        });
-        onNodeAdded();
-      } catch {
-        // Non-critical — don't block conversation
-      }
+      onNodeAdded(); // Refresh sidebar graph stats
     } catch (e) {
-      const errorMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "ai",
-        content: `⚠️ Unable to process intent: ${e}\n\nMake sure Ollama is running with a model installed:\n\n  ollama pull ${settings.defaultModel}\n  ollama serve`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      // Fallback to legacy process_intent if refract_intent fails
+      try {
+        const response = await invoke<string>("process_intent", { input });
+        const aiMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "ai",
+          content: response,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        onNodeAdded();
+      } catch (fallbackErr) {
+        const errorMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "ai",
+          content: `⚠️ Unable to process intent: ${fallbackErr}\n\nMake sure Ollama is running with a model installed:\n\n  ollama pull ${settings.defaultModel}\n  ollama serve`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -193,7 +214,7 @@ export default function MainView({
                 ))}
               </div>
               <div className="message-meta">
-                {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> PrismOS</> : "You"} ·{" "}
+                {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS · ${msg.agent}` : "PrismOS"}</> : "You"} ·{" "}
                 {msg.timestamp.toLocaleTimeString()}
               </div>
             </div>

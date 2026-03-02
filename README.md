@@ -1,41 +1,49 @@
 <p align="center">
-  <img src="src/assets/prismos-icon.svg" width="100" alt="PrismOS Logo" />
+  <img src="src/assets/prismos-icon.svg" width="120" alt="PrismOS Logo" />
 </p>
 
-<h1 align="center">PrismOS</h1>
+<h1 align="center">🔷 PrismOS</h1>
 
 <p align="center">
-  <strong>Local-First Agentic Personal AI Operating System</strong>
+  <strong>The Local-First AI Operating System</strong><br/>
+  <sub>Your AI. Your Data. Your Machine. Period.</sub>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.0-0096c7" alt="Version" />
-  <img src="https://img.shields.io/badge/patent%20pending-US%2063%2F993%2C589-orange" alt="Patent Pending" />
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/100%25-Local--First-brightgreen" alt="100% Local" />
-  <img src="https://img.shields.io/badge/Tauri-2.0-24C8DB" alt="Tauri 2" />
-  <img src="https://img.shields.io/badge/Rust-1.75%2B-DEA584" alt="Rust" />
+  <a href="https://github.com/mkbhardwas12/prismos-ai"><img src="https://img.shields.io/badge/v0.2.0-Release-0ea5e9?style=for-the-badge&logo=github" alt="Release" /></a>
+  <img src="https://img.shields.io/badge/Patent_Pending-US_63%2F993%2C589-10b981?style=for-the-badge" alt="Patent Pending" />
+  <img src="https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge" alt="License" />
+  <img src="https://img.shields.io/badge/100%25_Offline-Local_First-f59e0b?style=for-the-badge" alt="100% Local" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Tauri-2.0-24C8DB?style=flat-square&logo=tauri" alt="Tauri 2" />
+  <img src="https://img.shields.io/badge/React-18-61dafb?style=flat-square&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.5-3178c6?style=flat-square&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Rust-1.82+-DEA584?style=flat-square&logo=rust" alt="Rust" />
+  <img src="https://img.shields.io/badge/Platform-Win%20%7C%20Mac%20%7C%20Linux-blue?style=flat-square" alt="Platform" />
 </p>
 
 <p align="center">
   A fully local, privacy-first AI operating system that learns and evolves with you.<br/>
-  Built on the <strong>Spectrum Graph™</strong> — a patent-pending knowledge representation<br/>
+  Built on the <strong>Spectrum Graph™</strong> — a patent-pending 7-dimensional knowledge representation<br/>
   that refracts every interaction into spectral dimensions of meaning.
 </p>
 
 <p align="center">
-  <a href="#-quick-start">Quick Start</a> ·
-  <a href="#-features">Features</a> ·
-  <a href="#-architecture">Architecture</a> ·
-  <a href="#-screenshots">Screenshots</a> ·
-  <a href="#-roadmap">Roadmap</a> ·
-  <a href="#-contributing">Contributing</a>
+  <a href="#-quick-start">⚡ Quick Start</a> ·
+  <a href="#-features">✨ Features</a> ·
+  <a href="#-architecture">🏗️ Architecture</a> ·
+  <a href="#-screenshots">📸 Screenshots</a> ·
+  <a href="#-roadmap">🛤️ Roadmap</a> ·
+  <a href="#-contributing">🤝 Contributing</a>
 </p>
 
 ---
 
 ## ⚡ What is PrismOS?
+
+> **In one sentence:** A Tauri 2.0 desktop app with 5 AI agents, a physics-inspired 7D knowledge graph, WASM sandboxing, 9 security layers, and a modern glassmorphism UI — all running 100% offline.
 
 PrismOS is a **desktop AI operating system** that runs **entirely on your machine** — no cloud, no telemetry, no data leaving your device. It combines:
 
@@ -232,15 +240,15 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 
 > **Screenshots coming soon.** PrismOS v0.2.0 features a modern glassmorphism dark UI with full light theme support.
 
-| View | Description |
-|:----:|:-----------:|
-| **Intent Console** | Natural language chat with AI metadata, collaboration traces, and guided Ollama setup wizard |
-| **Spectrum Graph** | Force-directed knowledge graph with spectral coloring and multi-window support |
-| **Spectrum Explorer** | Node browser with CRUD, search, and spectral details |
-| **Sandbox Prisms** | Execution sandbox with results, rollback, WASM status |
-| **Spectral Timeline** | Time-based graph history with date grouping |
-| **Settings & Security** | Configuration, encrypted export/import, multi-device sync, live security status |
-| **Agent Debate** | Live debate panel with argument types and agreement scoring |
+| # | View | What You'll See |
+|:-:|------|----------------|
+| 1 | **🧠 Intent Console** | Natural language chat with AI metadata, collaboration traces, and guided Ollama setup wizard |
+| 2 | **🌈 Spectrum Graph** | Force-directed knowledge graph with spectral coloring and multi-window pop-out |
+| 3 | **🔍 Spectrum Explorer** | Node browser with CRUD, search, and spectral dimension details |
+| 4 | **🛡️ Sandbox Prisms** | Code execution sandbox with results, rollback, and WASM status |
+| 5 | **⏳ Spectral Timeline** | Time-based graph history with date grouping and snapshot restore |
+| 6 | **⚙️ Settings & Security** | Configuration, encrypted export/import, sync, live security dashboard |
+| 7 | **💬 Agent Debate** | Live debate panel with argument types and agreement scoring |
 
 ---
 
@@ -403,22 +411,25 @@ PrismOS exposes **51 Tauri commands** for frontend–backend communication:
 
 ---
 
-## 🔐 Security Model
+## 🔐 Security Model — 9 Layers of Defense
 
 <p align="center">
   <img src="docs/diagrams/security-model.svg" width="720" alt="Security Model" />
 </p>
 
-| Layer | Mechanism | Purpose |
-|-------|-----------|---------|
-| **Cryptographic** | HMAC-SHA256 | Action signing and verification |
-| **Behavioral** | Allow-lists | Operation whitelisting |
-| **Runtime** | wasmtime WASM | Memory + CPU isolation |
-| **Anomaly** | Statistical detection | Deviation alerting |
-| **Recovery** | Auto-rollback | Checkpoint restoration |
-| **Encryption** | XOR stream cipher + HMAC | State encryption at rest || **Audit** | SHA-256 hash chain | Tamper-evident action log |
-| **Model Integrity** | SHA-256 fingerprinting | LLM verification vs known-good registry |
-| **Hardware** | TPM / Secure Enclave | Hardware-backed key derivation |
+> Security isn't a feature — it's the architecture.
+
+| # | Layer | Mechanism | What It Does |
+|:-:|-------|-----------|-------------|
+| 1 | **Cryptographic** | HMAC-SHA256 | Every agent action is cryptographically signed |
+| 2 | **Behavioral** | Allow-lists | Only whitelisted operations can execute |
+| 3 | **Runtime** | wasmtime WASM | Code runs in sandboxes with memory + CPU limits |
+| 4 | **Anomaly** | Statistical detection | Flags unusual patterns automatically |
+| 5 | **Recovery** | Auto-rollback | Failed actions revert to last checkpoint |
+| 6 | **Encryption** | XOR stream cipher + HMAC | All state encrypted at rest |
+| 7 | **Audit** | SHA-256 hash chain | Tamper one entry, break the entire chain |
+| 8 | **Model Integrity** | SHA-256 fingerprinting | LLM models checked against known-good registry |
+| 9 | **Hardware** | TPM / Secure Enclave | Hardware-backed key derivation |
 ---
 
 ## 🗺️ Roadmap
@@ -481,30 +492,20 @@ PrismOS exposes **51 Tauri commands** for frontend–backend communication:
 
 ## 📊 Release Notes — v0.2.0
 
-**Released:** March 2, 2026  
-**Tag:** `v0.2.0`
+**Released:** March 2, 2026 · **Tag:** `v0.2.0` · **[Full Release Notes →](RELEASE_NOTES.md)**
 
 ### Highlights
 
-🔒 **WASM Sandbox Isolation** — Agent actions now run inside full wasmtime WASM sandboxes with fuel metering, memory limits, and zero ambient authority.
-
-🎙️ **Voice I/O** — Speak your intents and hear responses via the Web Speech API. All processing stays local.
-
-🪟 **Multi-Window** — Open the Spectrum Graph or Timeline in separate windows for multi-monitor workflows.
-
-📅 **Spectral Timeline** — Browse your graph's history with a time-based visualization featuring date grouping, search, and filtering.
-
-🔄 **Graph Merge/Diff** — Full merge engine for multi-device sync with conflict detection, preview-before-merge, and three resolution strategies.
-
-♿ **Accessibility** — Skip navigation, focus-visible rings, ARIA roles, prefers-reduced-motion support, screen reader compatibility.
-
-🎨 **Light Theme** — Full light theme with 25+ component overrides. Theme toggle actually works now and persists across restarts.
-
-📱 **Responsive Sidebar** — Collapses to hamburger menu on small windows (<768px). Keyboard shortcuts Ctrl+1–6 for instant view switching.
-
-💾 **Settings Persistence** — All settings saved to localStorage — survive app restarts.
-
-🛡️ **Consensus Voting** — ToolSmith now rejects unsandboxed writes; MemoryKeeper varies confidence by context depth.
+| | Feature | Description |
+|:-:|---------|------------|
+| 🛡️ | **WASM Sandbox** | Agent actions run inside wasmtime with fuel metering + zero ambient authority |
+| 🎙️ | **Voice I/O** | Speak intents, hear responses — all via local Web Speech API |
+| 🪟 | **Multi-Window** | Pop out Spectrum Graph or Timeline to separate native windows |
+| ⏳ | **Timeline** | Browse graph history with date grouping, search, and snapshot restore |
+| 🔄 | **Merge/Diff** | Multi-device sync with conflict detection and 3 resolution strategies |
+| ♥️ | **Accessibility** | ARIA roles, focus rings, reduced-motion, screen reader support |
+| 🎨 | **Blue UI** | Modern glassmorphism dark theme + full light theme parity |
+| 🔒 | **Security** | SHA-256 audit chain, model verification, hardware enclave abstraction |
 
 ### Stats
 
@@ -585,7 +586,16 @@ Copyright © 2026 Manish Kumar
 
 ---
 
-<p align="center">
-  <strong>PrismOS</strong> — Your mind, refracted. 🌈<br/>
-  <sub>Patent Pending — US [application number] · Local-First · Privacy-First · Agentic AI</sub>
-</p>
+<div align="center">
+
+---
+
+**🔷 PrismOS** — Your mind, refracted.
+
+*Patent Pending — US [application number] · Local-First · Privacy-First · Agentic AI*
+
+**[⭐ Star on GitHub](https://github.com/mkbhardwas12/prismos-ai)** · **[📖 Release Notes](RELEASE_NOTES.md)** · **[🐛 Report a Bug](https://github.com/mkbhardwas12/prismos-ai/issues)**
+
+*Built with the conviction that AI should serve its user, not a platform.*
+
+</div>

@@ -1,162 +1,214 @@
-# PrismOS v0.2.0 — Release Notes
+<div align="center">
 
-**Release Date:** March 2, 2026  
-**Patent:** US Provisional Application No. [application number] (Filed Feb 28, 2026)  
-**Author:** Manish Kumar  
+# 🔷 PrismOS v0.2.0
+
+### The Local-First AI Operating System
+
+**Your AI. Your Data. Your Machine. Period.**
+
+[![Release](https://img.shields.io/badge/Release-v0.2.0-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
+[![Patent](https://img.shields.io/badge/Patent_Pending-US_63%2F993%2C589-10b981?style=for-the-badge)](.)
+[![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
+[![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
+
+**Release Date:** March 2, 2026 · **Author:** Manish Kumar
+
+</div>
 
 ---
 
-## 🎯 Highlights
+## 🎯 What Is This Release?
 
-PrismOS v0.2.0 is the first feature-complete desktop release of the **local-first, patent-pending AI operating system**. This release delivers **51 Tauri IPC commands**, **5 autonomous AI agents**, **WASM sandboxing**, **hardware security integration**, and a polished modern UI — all running **100% offline** with zero cloud dependency.
+PrismOS v0.2.0 is the **first feature-complete desktop release** of a patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+
+> **In one sentence:** A Tauri 2.0 desktop app with 5 AI agents, a physics-inspired knowledge graph, WASM sandboxing, 9 security layers, and a modern glassmorphism UI — all running 100% offline.
+
+### 📌 Key Numbers
+
+| | |
+|:--|:--|
+| 🔌 **51** Tauri IPC commands | 🤖 **5** autonomous AI agents |
+| 🦀 **16** Rust backend modules | ⚛️ **16** TypeScript components |
+| 🎨 **4,700+** lines of CSS | 📏 **18,000+** total lines of code |
+| 🔒 **9** security layers | 🌈 **7** spectral dimensions |
 
 ---
 
-## ✨ What's New
+## ✨ What's New in v0.2.0
 
-### Phase 18 — WASM Sandbox Isolation
-- Full `wasmtime` containment for code execution
-- Memory + CPU limits enforced at the runtime level
+### 🛡️ WASM Sandbox Isolation
+> Code execution that can't escape.
+
+- Full **wasmtime** containment with memory + CPU limits
 - Execute button in Sandbox Prisms with live results
+- Automatic rollback on failure
 
-### Phase 19 — Voice Input/Output
-- Web Speech API integration (speech-to-text + text-to-speech)
+### 🎙️ Voice Input & Output
+> Talk to your AI. It talks back.
+
+- Web Speech API — speech-to-text + text-to-speech
 - Mic toggle with visual feedback in Intent Console
-- Works fully offline (browser engine speech)
+- 100% offline — your browser's built-in speech engine, no cloud
 
-### Phase 20 — Multi-Window Support
+### 🪟 Multi-Window Support
+> Pop out any view into its own window.
+
 - Tauri `WebviewWindowBuilder` for detachable views
-- Pop-out any view into its own native window
-- Independent window lifecycle management
+- Independent window lifecycle (resize, close, minimize)
+- Any panel becomes a standalone native window
 
-### Phase 21 — Spectral Timeline
-- Time-based graph history visualization
-- Date grouping and temporal navigation
-- Snapshot restore from any timeline point
+### ⏳ Spectral Timeline
+> See how your knowledge evolves over time.
 
-### Phase 22 — UX Polish & Accessibility
-- ARIA labels, focus management, reduced-motion support
-- Light theme with `prefers-color-scheme` detection
-- Theme persistence via localStorage
-- Responsive sidebar with hamburger menu (<768px)
-- Keyboard shortcuts (Ctrl+1–6) for view navigation
-- Form labels, keyboard-accessible cards, 2-click delete
-- Settings persistence across app restarts
-- UTF-8 safety fixes (prevent Rust panics on multi-byte input)
-- Consensus voting improvements for ToolSmith + MemoryKeeper agents
+- Time-based graph history with date grouping
+- Temporal navigation and snapshot restore
+- Visual timeline of every graph change
 
-### Phase 23 — Offline UX & Welcome Screen
-- New welcome screen with clickable example intents
-- Privacy-focused input placeholder messaging
-- Offline status indicators throughout UI
+### ♿ UX Polish & Accessibility
+> Beautiful for everyone.
 
-### Phase 24 — Modern Blue UI Overhaul
-- Complete color system replacement (legacy → modern blue glassmorphism)
-- Consistent design tokens across all 4,700+ CSS lines
-- Glassmorphism effects (backdrop-filter, transparency layers)
+- ARIA labels, focus management, `prefers-reduced-motion`
+- Light theme with automatic OS detection
+- Responsive sidebar with hamburger menu (< 768px)
+- Keyboard shortcuts: `Ctrl+1` through `Ctrl+6`
+- 2-click delete, keyboard-accessible cards, form labels
+- Settings persistence across restarts
+- UTF-8 safety (no more Rust panics on emoji or accented text)
+
+### 🏠 Welcome Screen & Onboarding
+> From zero to AI in under 2 minutes.
+
+- First-time setup wizard modal (shows once, never again)
+- 3-step Ollama onboarding: **Install → Start → Pull Model**
+- Clickable example intents that auto-fill the input box
+- Live Ollama status detection (running / stopped / not installed)
+- Collapsible wizard — compact after first use
+
+### 🎨 Modern Blue UI Overhaul
+> A UI you actually want to look at.
+
+- Complete color system rewrite — modern blue glassmorphism
+- `backdrop-filter` transparency layers throughout
 - Dark-first design with full light theme parity
+- Consistent design tokens across all 4,700+ CSS lines
 
-### Phase 25 — Ollama Setup Wizard
-- 3-step guided onboarding: Install → Start → Pull Model
-- Live status detection (running/stopped/not installed)
-- Start Ollama and Pull Model buttons with real-time progress
-- Collapsible wizard with compact/expanded states
-- Download Ollama button via `@tauri-apps/plugin-shell`
+### 🔐 Security Hardening
+> Defense-in-depth, not defense-as-afterthought.
 
-### Phase 26 — User-Friendly Improvements
-- First-time setup modal (localStorage-gated, shows only on first launch)
-- Plain-English tooltips on all security badges
-- Live Security Status section in Settings (6 green checkmarks)
-- Improved input placeholder with privacy messaging
-
-### Phase 27 — Security Hardening
-- **Tamper-evident audit log** — SHA-256 hash chain where each entry references the previous hash, making retroactive tampering detectable
-- **Model verification** — SHA-256 fingerprinting of LLM models against a known-good registry, alerting on unknown or modified models
-- **Secure enclave abstraction** — Detects Windows TPM, macOS Secure Enclave, and Linux TPM2 with automatic software fallback
-- 4 new Tauri IPC commands: `get_audit_log`, `verify_audit_chain`, `verify_model`, `get_security_status`
+- **Tamper-evident audit log** — SHA-256 hash chain; each entry references the previous hash, making retroactive tampering instantly detectable
+- **LLM model verification** — SHA-256 fingerprinting against a known-good registry; unknown models are flagged (not blocked)
+- **Secure enclave abstraction** — Auto-detects Windows TPM, macOS Secure Enclave, Linux TPM2; software fallback when hardware unavailable
+- 4 new IPC commands: `get_audit_log` · `verify_audit_chain` · `verify_model` · `get_security_status`
 
 ---
 
-## 📊 Project Stats
-
-| Metric | v0.1.0-alpha | v0.2.0 |
-|--------|:------------:|:------:|
-| Tauri IPC commands | 30 | **51** |
-| Rust source files | 6 | **16** |
-| TypeScript files | 10 | **16** |
-| CSS lines | ~1,200 | **4,700+** |
-| AI agents | 5 | **5** |
-| Total source lines | ~8,000 | **~18,000+** |
-
----
-
-## 🏗️ Architecture
+## 📊 Growth: v0.1.0 → v0.2.0
 
 ```
-React 18 + TypeScript 5.5 (frontend)
-    ↕ 51 Tauri IPC commands
-Rust 1.82+ (backend)
-    ├── SQLite (knowledge persistence)
-    ├── wasmtime (WASM sandbox)
-    ├── LangGraph (multi-agent workflows)
-    ├── SHA-256 audit log (tamper-evident)
-    ├── Model verification (integrity)
-    └── Secure enclave (hardware security)
+                    v0.1.0-alpha        v0.2.0
+                    ────────────        ──────
+IPC Commands        30                  51          (+70%)
+Rust Modules        6                   16          (+167%)
+TypeScript Files    10                  16          (+60%)
+CSS Lines           ~1,200              4,700+      (+292%)
+Total LOC           ~8,000              18,000+     (+125%)
+Security Layers     6                   9           (+50%)
 ```
 
 ---
 
-## 🔒 Security Layers (9 total)
+## 🏗️ Architecture at a Glance
 
-1. **HMAC-SHA256** — Action signing and verification
-2. **Allow-lists** — Operation whitelisting
-3. **wasmtime WASM** — Memory + CPU isolation
-4. **Statistical detection** — Anomaly alerting
-5. **Auto-rollback** — Checkpoint restoration
-6. **XOR stream cipher + HMAC** — State encryption at rest
-7. **SHA-256 hash chain** — Tamper-evident audit log
-8. **SHA-256 fingerprinting** — LLM model verification
-9. **TPM / Secure Enclave** — Hardware-backed key derivation
+```
+┌──────────────────────────────────────────────────────────┐
+│                    PrismOS Desktop App                    │
+├──────────────────────────────────────────────────────────┤
+│  React 18 + TypeScript 5.5            (Frontend)         │
+│  ├── Intent Console         Natural language chat        │
+│  ├── Spectrum Graph         7D force-directed viz        │
+│  ├── Sandbox Prisms         WASM execution sandbox       │
+│  ├── Spectral Timeline      Time-based graph history     │
+│  └── Settings & Security    Config + security status     │
+├───────────────── 51 Tauri IPC Commands ──────────────────┤
+│  Rust 1.82+ Backend                  (16 Modules)        │
+│  ├── spectrum_graph.rs      SQLite knowledge store       │
+│  ├── ollama_bridge.rs       LLM inference (local)        │
+│  ├── sandbox_engine.rs      wasmtime WASM runtime        │
+│  ├── agents/                5 LangGraph AI agents        │
+│  ├── you_port.rs            Encrypted sync/export        │
+│  ├── audit_log.rs           SHA-256 hash chain           │
+│  ├── model_verify.rs        LLM integrity checking       │
+│  └── secure_enclave.rs      Hardware security module     │
+└──────────────────────────────────────────────────────────┘
+        ↓ Everything runs locally. Nothing phones home. ↓
+```
+
+---
+
+## 🔒 9 Security Layers
+
+| # | Layer | What It Does |
+|:-:|-------|-------------|
+| 1 | **HMAC-SHA256** | Every agent action is cryptographically signed |
+| 2 | **Allow-lists** | Only whitelisted operations can execute |
+| 3 | **WASM Sandbox** | Code runs in `wasmtime` with memory/CPU limits |
+| 4 | **Anomaly Detection** | Statistical monitoring flags unusual patterns |
+| 5 | **Auto-Rollback** | Automatic checkpoint restoration on failure |
+| 6 | **Encryption at Rest** | XOR stream cipher + HMAC for stored state |
+| 7 | **Audit Hash Chain** | SHA-256 chain — tamper one entry, break the chain |
+| 8 | **Model Verification** | SHA-256 fingerprint vs known-good registry |
+| 9 | **Secure Enclave** | Hardware TPM / Secure Enclave key derivation |
 
 ---
 
 ## ⚠️ Breaking Changes
 
-None. This is the first public release.
+**None.** This is the first public release.
 
 ---
 
-## 🛤️ What's Next (v0.3.0 Planned)
+## 🛤️ What's Next — v0.3.0
 
-- [ ] Plugin marketplace (community extensions)
-- [ ] Federated learning (privacy-preserving model updates)
-- [ ] Mobile companion app (React Native)
-- [ ] P2P sync without central server
-- [ ] Custom spectral dimension definitions
-- [ ] Hardware security key integration (YubiKey/Titan)
+| Feature | Description |
+|---------|-------------|
+| 🧩 Plugin Marketplace | Community-built extensions |
+| 🧠 Federated Learning | Privacy-preserving model updates |
+| 📱 Mobile Companion | React Native app |
+| 🔗 P2P Sync | Device-to-device, no central server |
+| 🌈 Custom Dimensions | User-defined spectral properties |
+| 🔑 Hardware Keys | YubiKey / Titan Security Key integration |
 
 ---
 
-## 📥 Installation
+## 📥 Get Started
 
 ```bash
+# Clone and run — that's it
 git clone https://github.com/mkbhardwas12/prismos-ai.git
 cd prismos-ai
 npm install
 npm run tauri dev
 ```
 
-**Prerequisites:** Node.js 18+, Rust 1.82+, Ollama (optional, guided setup included)
+**You'll need:** Node.js 18+ · Rust 1.82+ · Ollama (optional — guided setup walks you through it)
 
 ---
 
 ## 📜 Legal
 
-**Patent Pending:** US Provisional Patent Application No. [application number]  
-**Filed:** February 28, 2026  
-**Author:** Manish Kumar  
-**License:** MIT  
+| | |
+|:--|:--|
+| **Patent** | US Provisional Application No. [application number] |
+| **Filed** | February 28, 2026 |
+| **Author** | Manish Kumar |
+| **License** | MIT — free to use, modify, distribute |
 
 ---
 
-*Built with conviction that AI should serve its user, not a platform.*
+<div align="center">
+
+*Built with the conviction that AI should serve its user, not a platform.*
+
+**[⭐ Star on GitHub](https://github.com/mkbhardwas12/prismos-ai)** · **[📖 Read the README](README.md)** · **[🐛 Report a Bug](https://github.com/mkbhardwas12/prismos-ai/issues)**
+
+</div>

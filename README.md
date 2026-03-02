@@ -267,7 +267,7 @@ PrismOS exposes **37 Tauri commands** for frontend–backend communication:
 - [x] Spectral timeline visualization (time-based graph history)
 - [x] LangGraph Workflow Engine (formal state-graph, debate rounds)
 - [ ] Plugin system for third-party Prisms
-- [ ] Graph merge/diff for multi-device sync
+- [x] Graph merge/diff for multi-device sync
 
 ### v0.3.0 (Future)
 

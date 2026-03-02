@@ -27,6 +27,9 @@ src-tauri/target/
 Thumbs.db
 Desktop.ini
 
+# Private / legal (do not sync)
+EB1A_EVIDENCE.md
+
 # Python
 __pycache__/
 *.pyc

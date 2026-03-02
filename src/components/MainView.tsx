@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
@@ -326,7 +327,7 @@ export default function MainView({
                       {!ollamaConnected && (
                         <button
                           className="step-action-btn"
-                          onClick={() => window.open("https://ollama.com", "_blank")}
+                          onClick={() => shellOpen("https://ollama.com")}
                         >
                           ⬇️ Download from ollama.com
                         </button>

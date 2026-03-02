@@ -204,21 +204,37 @@ impl ToolSmithNode {
 
     /// Cast a vote — Tool Smith checks if the action is safely sandboxable
     pub fn vote(proposal: &str) -> Vote {
-        // Tool Smith always approves read-only; cautious on writes
-        let is_write = proposal.to_lowercase().contains("create")
-            || proposal.to_lowercase().contains("write")
-            || proposal.to_lowercase().contains("execute");
+        let lower = proposal.to_lowercase();
+
+        // Tool Smith checks if write/execute actions reference sandbox protections
+        let is_write = lower.contains("create")
+            || lower.contains("write")
+            || lower.contains("execute");
+
+        let mentions_sandbox = lower.contains("sandbox")
+            || lower.contains("checkpoint")
+            || lower.contains("prism");
+
+        // Reject unsandboxed write operations
+        let approve = if is_write && !mentions_sandbox {
+            false
+        } else {
+            true
+        };
 
         Vote {
             agent: AgentRole::ToolSmith,
-            approve: true, // Tool Smith trusts the sandbox
-            reason: if is_write {
+            approve,
+            reason: if !approve {
+                "Tool Smith rejects: write/execute operation proposed without sandbox protection"
+                    .to_string()
+            } else if is_write {
                 "Tool Smith approves: write operations will be sandboxed with checkpoint rollback"
                     .to_string()
             } else {
                 "Tool Smith approves: read-only operation, no sandbox concerns".to_string()
             },
-            confidence: if is_write { 0.8 } else { 1.0 },
+            confidence: if !approve { 0.3 } else if is_write { 0.8 } else { 1.0 },
         }
     }
 }
@@ -259,18 +275,31 @@ impl MemoryKeeperNode {
     /// Cast a vote — Memory Keeper checks data integrity
     pub fn vote(_proposal: &str, context_nodes: &[String]) -> Vote {
         let has_context = !context_nodes.is_empty();
+        let context_count = context_nodes.len();
+
+        // Memory Keeper is more cautious when there's no supporting context
+        let approve = has_context || context_count == 0; // approve if context exists or if it's a fresh topic
+        let confidence = if context_count >= 3 {
+            0.95
+        } else if context_count >= 1 {
+            0.8
+        } else {
+            0.6
+        };
+
         Vote {
             agent: AgentRole::MemoryKeeper,
-            approve: true,
+            approve,
             reason: if has_context {
                 format!(
-                    "Memory Keeper approves: {} context nodes support this response",
-                    context_nodes.len()
+                    "Memory Keeper approves: {} context node{} support this response",
+                    context_count,
+                    if context_count == 1 { "" } else { "s" }
                 )
             } else {
-                "Memory Keeper approves: no conflicting data in Spectrum Graph".to_string()
+                "Memory Keeper approves with low confidence: no prior context in Spectrum Graph".to_string()
             },
-            confidence: if has_context { 0.9 } else { 0.7 },
+            confidence,
         }
     }
 

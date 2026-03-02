@@ -1496,19 +1496,19 @@ impl SpectrumGraph {
                                 entity_type: "node".into(),
                                 entity_id: id.clone(),
                                 field: "content".into(),
-                                local_value: if local_node.content.len() > 80 {
-                                    format!("{}…", &local_node.content[..80])
+                                local_value: if local_node.content.chars().count() > 80 {
+                                    format!("{}…", local_node.content.chars().take(80).collect::<String>())
                                 } else {
                                     local_node.content.clone()
                                 },
-                                remote_value: if remote_node.content.len() > 80 {
-                                    format!("{}…", &remote_node.content[..80])
+                                remote_value: if remote_node.content.chars().count() > 80 {
+                                    format!("{}…", remote_node.content.chars().take(80).collect::<String>())
                                 } else {
                                     remote_node.content.clone()
                                 },
                                 resolution: resolution.clone(),
-                                resolved_value: if resolved_content.len() > 80 {
-                                    format!("{}…", &resolved_content[..80])
+                                resolved_value: if resolved_content.chars().count() > 80 {
+                                    format!("{}…", resolved_content.chars().take(80).collect::<String>())
                                 } else {
                                     resolved_content
                                 },

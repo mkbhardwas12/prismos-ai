@@ -8,12 +8,13 @@ import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import { useVoice } from "../hooks/useVoice";
-import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary } from "../types";
+import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel } from "../types";
 import "./MainView.css";
 
 interface MainViewProps {
   ollamaConnected: boolean;
   settings: AppSettings;
+  onSettingsChange: (s: AppSettings) => void;
   onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
 }
 
@@ -22,12 +23,18 @@ type SetupStep = "install" | "start" | "model" | "ready";
 export default function MainView({
   ollamaConnected,
   settings,
+  onSettingsChange,
   onIntentProcessed,
 }: MainViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingIntent, setPendingIntent] = useState("");
   const conversationRef = useRef<HTMLDivElement>(null);
+
+  // ── Inline model selector state ──
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState<OllamaModel[]>([]);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // Ollama setup wizard state
   const [isLaunching, setIsLaunching] = useState(false);
@@ -153,6 +160,36 @@ export default function MainView({
       setIsLaunching(false);
     }
   }, []);
+
+  // ── Fetch available models when connected & dropdown opens ──
+  useEffect(() => {
+    if (!ollamaConnected || !modelDropdownOpen) return;
+    (async () => {
+      try {
+        const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
+        setAvailableModels(JSON.parse(result));
+      } catch {
+        setAvailableModels([]);
+      }
+    })();
+  }, [ollamaConnected, modelDropdownOpen, settings.ollamaUrl]);
+
+  // ── Close dropdown on outside click ──
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelDropdownOpen]);
+
+  const selectModel = useCallback((name: string) => {
+    onSettingsChange({ ...settings, defaultModel: name });
+    setModelDropdownOpen(false);
+  }, [settings, onSettingsChange]);
 
   const handleRetryConnection = useCallback(async () => {
     setIsRetrying(true);
@@ -283,13 +320,37 @@ export default function MainView({
               🗑️ Clear
             </button>
           )}
-          <div className="ollama-status">
-            <span
-              className={`status-dot ${ollamaConnected ? "connected" : ""}`}
-            />
-            {ollamaConnected
-              ? `Ollama · ${settings.defaultModel}`
-              : "Ollama Offline"}
+          <div className="ollama-status" ref={modelDropdownRef}>
+            <button
+              className="model-selector-btn"
+              onClick={() => ollamaConnected && setModelDropdownOpen(v => !v)}
+              title={ollamaConnected ? "Click to change model" : "Ollama is offline"}
+            >
+              <span className={`status-dot ${ollamaConnected ? "connected" : ""}`} />
+              {ollamaConnected
+                ? <><span className="model-selector-label">Ollama ·</span> <strong>{settings.defaultModel}</strong> <span className="model-selector-caret">{modelDropdownOpen ? "▲" : "▼"}</span></>
+                : "Ollama Offline"}
+            </button>
+            {modelDropdownOpen && (
+              <div className="model-dropdown">
+                <div className="model-dropdown-header">Select Model</div>
+                {availableModels.length === 0 ? (
+                  <div className="model-dropdown-empty">Loading models…</div>
+                ) : (
+                  availableModels.map(m => (
+                    <button
+                      key={m.name}
+                      className={`model-dropdown-item ${settings.defaultModel === m.name ? "active" : ""}`}
+                      onClick={() => selectModel(m.name)}
+                    >
+                      <span className="model-dropdown-name">{m.name}</span>
+                      {m.size && <span className="model-dropdown-size">{(m.size / 1e9).toFixed(1)}GB</span>}
+                      {settings.defaultModel === m.name && <span className="model-dropdown-check">✓</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

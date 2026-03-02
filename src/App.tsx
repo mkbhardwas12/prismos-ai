@@ -220,6 +220,7 @@ function App() {
           <MainView
             ollamaConnected={ollamaConnected}
             settings={settings}
+            onSettingsChange={handleSettingsChange}
             onIntentProcessed={onIntentProcessed}
           />
         );

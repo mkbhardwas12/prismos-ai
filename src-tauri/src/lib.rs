@@ -92,8 +92,8 @@ async fn add_spectrum_node(
 }
 
 #[tauri::command]
-async fn get_active_agents() -> Result<String, String> {
-    let agents = refractive_core::get_agents();
+async fn get_active_agents(active_agent: Option<String>) -> Result<String, String> {
+    let agents = refractive_core::get_agents_with_active(active_agent.as_deref());
     serde_json::to_string(&agents).map_err(|e| e.to_string())
 }
 

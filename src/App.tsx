@@ -19,6 +19,8 @@ function App() {
   const [nodes, setNodes] = useState<SpectrumNode[]>([]);
   const [graphStats, setGraphStats] = useState<GraphStats>({ nodes: 0, edges: 0 });
   const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [lastActiveAgent, setLastActiveAgent] = useState<string | null>(null);
+  const [graphRefreshKey, setGraphRefreshKey] = useState(0);
   const [settings, setSettings] = useState<AppSettings>({
     ollamaUrl: "http://localhost:11434",
     defaultModel: "mistral",
@@ -26,9 +28,11 @@ function App() {
     maxTokens: 2048,
   });
 
-  const loadAgents = useCallback(async () => {
+  const loadAgents = useCallback(async (activeAgent?: string | null) => {
     try {
-      const result = await invoke<string>("get_active_agents");
+      const result = await invoke<string>("get_active_agents", {
+        activeAgent: activeAgent ?? null,
+      });
       setAgents(JSON.parse(result));
     } catch (e) {
       console.error("Failed to load agents:", e);
@@ -62,10 +66,24 @@ function App() {
     }
   }, []);
 
-  const refreshData = useCallback(() => {
+  // Called after every intent is processed — refreshes all live data
+  const onIntentProcessed = useCallback((agentUsed?: string) => {
+    // Flash the active agent in the sidebar
+    if (agentUsed) {
+      setLastActiveAgent(agentUsed);
+      loadAgents(agentUsed);
+      // Reset agent status after 3 seconds
+      setTimeout(() => {
+        setLastActiveAgent(null);
+        loadAgents(null);
+      }, 3000);
+    }
+    // Refresh graph data
     loadNodes();
     loadGraphStats();
-  }, [loadNodes, loadGraphStats]);
+    // Signal the SpectrumGraphView to re-fetch
+    setGraphRefreshKey((k) => k + 1);
+  }, [loadAgents, loadNodes, loadGraphStats]);
 
   useEffect(() => {
     loadAgents();
@@ -84,17 +102,17 @@ function App() {
           <MainView
             ollamaConnected={ollamaConnected}
             settings={settings}
-            onNodeAdded={refreshData}
+            onIntentProcessed={onIntentProcessed}
           />
         );
       case "graph":
-        return <SpectrumGraphView />;
+        return <SpectrumGraphView refreshKey={graphRefreshKey} />;
       case "spectrum":
         return (
           <SpectrumExplorer
             nodes={nodes}
             stats={graphStats}
-            onDataChanged={refreshData}
+            onDataChanged={() => { loadNodes(); loadGraphStats(); }}
           />
         );
       case "sandbox":

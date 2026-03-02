@@ -5,6 +5,7 @@ import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Prism, PrismResult } from "../types";
 import prismosIcon from "../assets/prismos-icon.svg";
+import "./SandboxPanel.css";
 
 export default function SandboxPanel() {
   const [prismName, setPrismName] = useState("");
@@ -34,9 +35,9 @@ export default function SandboxPanel() {
     if (!prismName.trim() || !task.trim()) return;
     setIsExecuting(true);
     try {
-      const result = await invoke<string>("execute_sandbox", {
-        name: prismName || "default",
-        task,
+      const result = await invoke<string>("execute_in_sandbox", {
+        action: task,
+        agentId: prismName || "default",
       });
       const prismResult: PrismResult = JSON.parse(result);
       setResults((prev) => [...prev, { ...prismResult, _key: nextKey }]);

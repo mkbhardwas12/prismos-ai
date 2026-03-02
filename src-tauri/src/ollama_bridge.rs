@@ -6,8 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use futures_util::StreamExt;
 
-const OLLAMA_BASE_URL: &str = "http://localhost:11434";
+pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const GENERATE_TIMEOUT: Duration = Duration::from_secs(120);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -18,6 +19,14 @@ struct GenerateRequest {
     model: String,
     prompt: String,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<GenerateOptions>,
+}
+
+#[derive(Debug, Serialize)]
+struct GenerateOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_predict: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,10 +54,11 @@ pub struct ModelInfo {
 // ─── Ollama API Functions ──────────────────────────────────────────────────────
 
 /// Check if Ollama is running and accessible
-pub async fn is_available() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn is_available(base_url: Option<&str>) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
     match client
-        .get(OLLAMA_BASE_URL)
+        .get(url)
         .timeout(HEALTH_TIMEOUT)
         .send()
         .await
@@ -62,16 +72,21 @@ pub async fn is_available() -> Result<bool, Box<dyn std::error::Error + Send + S
 pub async fn generate(
     model: &str,
     prompt: &str,
+    base_url: Option<&str>,
+    max_tokens: Option<u32>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
+    let options = max_tokens.map(|n| GenerateOptions { num_predict: Some(n) });
     let request = GenerateRequest {
         model: model.to_string(),
         prompt: prompt.to_string(),
         stream: false,
+        options,
     };
 
     let response = client
-        .post(format!("{}/api/generate", OLLAMA_BASE_URL))
+        .post(format!("{}/api/generate", url))
         .json(&request)
         .timeout(GENERATE_TIMEOUT)
         .send()
@@ -88,10 +103,11 @@ pub async fn generate(
 }
 
 /// List all locally available models
-pub async fn list_models() -> Result<Vec<ModelInfo>, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn list_models(base_url: Option<&str>) -> Result<Vec<ModelInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
     let response = client
-        .get(format!("{}/api/tags", OLLAMA_BASE_URL))
+        .get(format!("{}/api/tags", url))
         .timeout(Duration::from_secs(10))
         .send()
         .await?;
@@ -102,4 +118,77 @@ pub async fn list_models() -> Result<Vec<ModelInfo>, Box<dyn std::error::Error +
 
     let model_list: ModelList = response.json().await?;
     Ok(model_list.models)
+}
+
+// ─── Streaming Response Types ──────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct StreamChunk {
+    response: String,
+    #[serde(default)]
+    done: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamEvent {
+    pub token: String,
+    pub done: bool,
+}
+
+/// Generate a completion with streaming — sends tokens via a callback
+pub async fn generate_stream<F>(
+    model: &str,
+    prompt: &str,
+    base_url: Option<&str>,
+    max_tokens: Option<u32>,
+    mut on_token: F,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>>
+where
+    F: FnMut(StreamEvent),
+{
+    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
+    let client = reqwest::Client::new();
+    let options = max_tokens.map(|n| GenerateOptions { num_predict: Some(n) });
+    let request = GenerateRequest {
+        model: model.to_string(),
+        prompt: prompt.to_string(),
+        stream: true,
+        options,
+    };
+
+    let response = client
+        .post(format!("{}/api/generate", url))
+        .json(&request)
+        .timeout(GENERATE_TIMEOUT)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Ollama error ({}): {}", status, body).into());
+    }
+
+    let mut full_response = String::new();
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk_bytes = chunk_result?;
+        // Ollama sends newline-delimited JSON
+        let chunk_str = String::from_utf8_lossy(&chunk_bytes);
+        for line in chunk_str.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(parsed) = serde_json::from_str::<StreamChunk>(line) {
+                full_response.push_str(&parsed.response);
+                on_token(StreamEvent {
+                    token: parsed.response,
+                    done: parsed.done,
+                });
+            }
+        }
+    }
+
+    Ok(full_response)
 }

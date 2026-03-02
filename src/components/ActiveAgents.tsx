@@ -2,6 +2,7 @@
 // PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
 import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary } from "../types";
+import "./ActiveAgents.css";
 
 interface ActiveAgentsProps {
   agents: Agent[];

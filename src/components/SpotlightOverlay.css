@@ -1,0 +1,239 @@
+/* Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+   SpotlightOverlay — Global command palette / quick-launch bar
+   Activated by Alt+Space — slides in from top with frosted-glass effect */
+
+/* ── Backdrop ── */
+.spotlight-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9998;
+}
+
+/* ── Panel ── */
+.spotlight-panel {
+  position: fixed;
+  top: min(18vh, 140px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, 90vw);
+  max-height: 70vh;
+  background: var(--glass-bg, rgba(22, 22, 30, 0.92));
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Input row ── */
+.spotlight-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.spotlight-icon {
+  font-size: 22px;
+  color: var(--accent, #7c6fff);
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px var(--accent, #7c6fff));
+}
+
+.spotlight-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 18px;
+  font-family: inherit;
+  color: var(--text-primary, #f0f0f5);
+  caret-color: var(--accent, #7c6fff);
+}
+.spotlight-input::placeholder {
+  color: var(--text-muted, rgba(255, 255, 255, 0.35));
+  font-size: 16px;
+}
+
+.spotlight-kbd {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.4));
+}
+
+/* ── Results ── */
+.spotlight-results {
+  overflow-y: auto;
+  max-height: 50vh;
+  padding: 6px 0;
+}
+
+.spotlight-section {
+  padding: 4px 0;
+}
+
+.spotlight-section-label {
+  display: block;
+  padding: 6px 20px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, rgba(255, 255, 255, 0.35));
+}
+
+/* ── Result row ── */
+.spotlight-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.1s;
+  color: var(--text-primary, #f0f0f5);
+}
+.spotlight-result:hover,
+.spotlight-result--active {
+  background: rgba(124, 111, 255, 0.12);
+}
+.spotlight-result--active .spotlight-result-label {
+  color: var(--accent, #7c6fff);
+}
+
+.spotlight-result--ask {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+}
+
+.spotlight-result-icon {
+  font-size: 18px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.spotlight-result-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.spotlight-result-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #f0f0f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotlight-result-hint {
+  font-size: 12px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.4));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotlight-result-kbd {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.4));
+}
+
+/* ── Empty state ── */
+.spotlight-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.35));
+}
+
+/* ── Footer ── */
+.spotlight-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.3));
+}
+.spotlight-footer kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  margin: 0 2px;
+  font-family: inherit;
+}
+
+/* ── Light theme ── */
+[data-theme="light"] .spotlight-panel {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .spotlight-backdrop {
+  background: rgba(0, 0, 0, 0.25);
+}
+[data-theme="light"] .spotlight-input {
+  color: #1a1a2e;
+}
+[data-theme="light"] .spotlight-result {
+  color: #1a1a2e;
+}
+[data-theme="light"] .spotlight-result:hover,
+[data-theme="light"] .spotlight-result--active {
+  background: rgba(124, 111, 255, 0.08);
+}
+[data-theme="light"] .spotlight-result-label {
+  color: #1a1a2e;
+}
+[data-theme="light"] .spotlight-section-label {
+  color: rgba(0, 0, 0, 0.45);
+}
+[data-theme="light"] .spotlight-result-hint {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-panel,
+  .spotlight-backdrop {
+    transition: none !important;
+    animation: none !important;
+  }
+}

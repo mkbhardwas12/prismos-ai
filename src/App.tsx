@@ -14,6 +14,7 @@ import SandboxPanel from "./components/SandboxPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
 import ErrorBoundary from "./components/ErrorBoundary";
 import OnboardingWizard from "./components/OnboardingWizard";
+import SpotlightOverlay from "./components/SpotlightOverlay";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
 
@@ -58,6 +59,7 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(
     () => !localStorage.getItem("prismos-onboarding-done")
   );
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
 
   // ── Settings: load from localStorage (persists across restarts) ──
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -272,7 +274,7 @@ function App() {
     document.documentElement.setAttribute("data-spectrum", view);
   }, [view]);
 
-  // ── Global Hotkey: Ctrl+Space to focus PrismOS-AI ──
+  // ── Global Hotkey: Ctrl+Space to open Spotlight overlay ──
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     (async () => {
@@ -280,14 +282,9 @@ function App() {
         const { register, unregister } = await import("@tauri-apps/plugin-global-shortcut");
         await register("CommandOrControl+Space", (event) => {
           if (event.state === "Pressed") {
-            // Bring window to front and focus the intent input
-            setView("chat");
+            // Toggle the Spotlight overlay
+            setSpotlightOpen((prev) => !prev);
             window.focus();
-            // Focus the intent input (will be picked up by IntentInput via DOM)
-            setTimeout(() => {
-              const input = document.querySelector<HTMLTextAreaElement>(".intent-textarea");
-              if (input) input.focus();
-            }, 100);
           }
         });
         cleanup = () => { unregister("CommandOrControl+Space").catch(() => {}); };
@@ -296,6 +293,28 @@ function App() {
       }
     })();
     return () => { if (cleanup) cleanup(); };
+  }, []);
+
+  // ── Listen for Spotlight navigation events ──
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline"];
+      if (validViews.includes(detail as View)) {
+        setView(detail as View);
+      }
+    };
+    window.addEventListener("prismos:navigate", handler);
+    return () => window.removeEventListener("prismos:navigate", handler);
+  }, []);
+
+  // ── Handle spotlight intent submission ──
+  const handleSpotlightSubmit = useCallback((intent: string) => {
+    setView("chat");
+    // Fill the intent input via custom event
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: intent }));
+    }, 100);
   }, []);
 
   function renderView() {
@@ -402,6 +421,14 @@ function App() {
           onComplete={() => setShowOnboarding(false)}
         />
       )}
+
+      {/* Spotlight overlay — global command palette (Ctrl+Space) */}
+      <SpotlightOverlay
+        visible={spotlightOpen}
+        onClose={() => setSpotlightOpen(false)}
+        onSubmit={handleSpotlightSubmit}
+        suggestions={startupSuggestions}
+      />
 
       {/* You-Port session restore toast */}
       {toast?.visible && (

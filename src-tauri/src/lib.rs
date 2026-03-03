@@ -12,14 +12,24 @@ mod agents;
 mod audit_log;
 mod model_verify;
 mod secure_enclave;
+mod whisper_engine;
+mod file_indexer;
 
 use std::sync::Mutex;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tauri::Manager;
 
 /// Shared Spectrum Graph database — initialized once at startup, reused by all commands.
 /// Wrapped in Mutex because rusqlite::Connection is not Sync.
 pub struct DbState(pub Mutex<spectrum_graph::SpectrumGraph>);
+
+/// Shared file indexer state
+pub struct IndexerState(pub Mutex<file_indexer::FileIndexer>);
+
+/// Shared voice recording stop flag
+pub struct VoiceStopFlag(pub Arc<AtomicBool>);
 
 // ─── Tauri Commands ────────────────────────────────────────────────────────────
 
@@ -971,6 +981,223 @@ async fn get_security_status(app: tauri::AppHandle) -> Result<String, String> {
     serde_json::to_string(&status).map_err(|e| e.to_string())
 }
 
+// ─── Whisper Engine Commands (Phase 4 — Local Voice) ──────────────────────────
+
+/// Check whisper engine status — model availability, recording state
+#[tauri::command]
+async fn whisper_status(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let models = whisper_engine::list_models(&app_dir);
+    let has_model = !models.is_empty();
+
+    let recording = app.try_state::<VoiceStopFlag>()
+        .map(|f| !f.0.load(Ordering::Relaxed))
+        .unwrap_or(false);
+
+    let status = whisper_engine::WhisperStatus {
+        available: true,
+        model_loaded: has_model,
+        model_name: models.first().cloned(),
+        model_path: models.first().map(|m| {
+            whisper_engine::models_dir(&app_dir).join(m).display().to_string()
+        }),
+        recording,
+    };
+
+    serde_json::to_string(&status).map_err(|e| e.to_string())
+}
+
+/// Download a whisper model (streams progress events)
+#[tauri::command]
+async fn download_whisper_model(app: tauri::AppHandle, size: Option<String>) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let model_size = match size.as_deref() {
+        Some("tiny") => whisper_engine::WhisperModelSize::Tiny,
+        Some("small") => whisper_engine::WhisperModelSize::Small,
+        _ => whisper_engine::WhisperModelSize::Base,
+    };
+
+    let app_clone = app.clone();
+    let model_path = whisper_engine::download_model(&app_dir, model_size, move |pct, msg| {
+        let _ = app_clone.emit("whisper-download-progress", serde_json::json!({
+            "percent": pct,
+            "message": msg,
+        }));
+    })
+    .await?;
+
+    Ok(model_path.display().to_string())
+}
+
+/// Start recording audio from the microphone
+#[tauri::command]
+async fn start_voice_recording(app: tauri::AppHandle) -> Result<(), String> {
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    app.manage(VoiceStopFlag(Arc::clone(&stop_flag)));
+    Ok(())
+}
+
+/// Stop recording and return the captured audio result
+#[tauri::command]
+async fn stop_and_transcribe(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    // Stop any active recording
+    if let Some(flag) = app.try_state::<VoiceStopFlag>() {
+        flag.0.store(true, Ordering::Relaxed);
+    }
+
+    // Record for 5 seconds as fallback
+    let result = tokio::task::spawn_blocking(move || {
+        whisper_engine::record_and_transcribe(&app_dir, 5)
+    })
+    .await
+    .map_err(|e| format!("Recording task failed: {}", e))?
+    .map_err(|e| format!("Recording failed: {}", e))?;
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Quick transcribe — record for N seconds then return audio capture result
+#[tauri::command]
+async fn quick_transcribe(app: tauri::AppHandle, seconds: Option<u64>) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let duration = seconds.unwrap_or(5);
+
+    let result = tokio::task::spawn_blocking(move || {
+        whisper_engine::record_and_transcribe(&app_dir, duration)
+    })
+    .await
+    .map_err(|e| format!("Record task error: {}", e))?
+    .map_err(|e| format!("Recording error: {}", e))?;
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+// ─── File Indexer Commands (Phase 4 — Local RAG) ──────────────────────────────
+
+/// Get file indexer status
+#[tauri::command]
+async fn indexer_status(app: tauri::AppHandle) -> Result<String, String> {
+    let state = app.try_state::<IndexerState>();
+    if let Some(indexer_state) = state {
+        let indexer = indexer_state.0.lock().map_err(|e| e.to_string())?;
+        serde_json::to_string(&indexer.status()).map_err(|e| e.to_string())
+    } else {
+        let status = file_indexer::IndexerStatus {
+            running: false,
+            watch_paths: vec![],
+            indexed_count: 0,
+            last_scan: None,
+        };
+        serde_json::to_string(&status).map_err(|e| e.to_string())
+    }
+}
+
+/// Start the file indexer — watches specified directory (or default ~/Documents/PrismDocs)
+#[tauri::command]
+async fn start_file_indexer(
+    app: tauri::AppHandle,
+    watch_path: Option<String>,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let watch_dir = watch_path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(file_indexer::FileIndexer::default_watch_dir);
+
+    // Ensure the directory exists
+    if !watch_dir.exists() {
+        std::fs::create_dir_all(&watch_dir)
+            .map_err(|e| format!("Failed to create watch directory: {}", e))?;
+    }
+
+    // Create or get indexer state — manage it if not yet initialized
+    if app.try_state::<IndexerState>().is_none() {
+        app.manage(IndexerState(Mutex::new(file_indexer::FileIndexer::new())));
+    }
+
+    let indexer_state = app.state::<IndexerState>();
+    let mut indexer = indexer_state.0.lock().map_err(|e| e.to_string())?;
+
+    // Start watching
+    let _rx = indexer.start_watching(vec![watch_dir.clone()])?;
+
+    // Perform initial scan and index files
+    let files_to_index = indexer.initial_scan();
+    let mut indexed_count = 0;
+
+    // Access the Spectrum Graph to ingest nodes
+    let db_state = app.state::<DbState>();
+    let db = db_state.0.lock().map_err(|e| e.to_string())?;
+
+    for file_path in &files_to_index {
+        match indexer.index_file(file_path) {
+            Ok(mut indexed_file) => {
+                // Ingest into Spectrum Graph
+                let (label, content, node_type) =
+                    file_indexer::FileIndexer::file_to_node_content(&indexed_file);
+                match db.add_node_with_layer(&label, &content, &node_type, "context") {
+                    Ok(node) => {
+                        indexed_file.node_id = Some(node.id.clone());
+                        indexed_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("[FileIndexer] Failed to add node for {}: {}", file_path.display(), e);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[FileIndexer] Failed to index {}: {}", file_path.display(), e);
+            }
+        }
+    }
+
+    // Log to audit
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "file_indexer_start",
+        "system",
+        &format!("File indexer started — watching {}, indexed {} files", watch_dir.display(), indexed_count),
+    );
+
+    let result = serde_json::json!({
+        "success": true,
+        "watch_path": watch_dir.display().to_string(),
+        "files_indexed": indexed_count,
+        "total_files_found": files_to_index.len(),
+    });
+
+    // Emit event to notify frontend
+    let _ = app.emit("file-indexer-update", &result);
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Stop the file indexer
+#[tauri::command]
+async fn stop_file_indexer(app: tauri::AppHandle) -> Result<String, String> {
+    if let Some(state) = app.try_state::<IndexerState>() {
+        let mut indexer = state.0.lock().map_err(|e| e.to_string())?;
+        indexer.stop_watching();
+    }
+
+    Ok(serde_json::json!({ "success": true }).to_string())
+}
+
+/// Get list of indexed files
+#[tauri::command]
+async fn get_indexed_files(app: tauri::AppHandle) -> Result<String, String> {
+    if let Some(state) = app.try_state::<IndexerState>() {
+        let indexer = state.0.lock().map_err(|e| e.to_string())?;
+        let files = indexer.get_indexed_files();
+        serde_json::to_string(&files).map_err(|e| e.to_string())
+    } else {
+        Ok("[]".to_string())
+    }
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -1033,9 +1260,11 @@ pub fn run() {
             );
 
             println!("╔══════════════════════════════════════════════╗");
-            println!("║  ◈ PrismOS-AI v0.3.0 — Local-First AI OS       ║");
+            println!("║  ◈ PrismOS-AI v0.4.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
+            println!("║  Whisper Voice Engine: READY                 ║");
+            println!("║  Local File Indexer: READY                   ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
@@ -1119,6 +1348,17 @@ pub fn run() {
             verify_audit_chain,
             verify_model,
             get_security_status,
+            // Whisper Voice Engine (Phase 4 — Local Voice)
+            whisper_status,
+            download_whisper_model,
+            start_voice_recording,
+            stop_and_transcribe,
+            quick_transcribe,
+            // File Indexer (Phase 4 — Local RAG)
+            indexer_status,
+            start_file_indexer,
+            stop_file_indexer,
+            get_indexed_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS-AI");

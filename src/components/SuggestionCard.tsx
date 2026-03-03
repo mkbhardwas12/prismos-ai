@@ -4,7 +4,9 @@
 // A highly visible, clickable card used both inline (after AI responses)
 // and in the sidebar's Daily Suggestions section. Clicking auto-fills
 // the intent input box for user review before sending.
+// Phase 4: Wrapped in Framer Motion for smooth enter/exit/hover animations.
 
+import { motion } from "framer-motion";
 import type { ProactiveSuggestion } from "../types";
 import "./SuggestionCard.css";
 
@@ -16,6 +18,8 @@ interface SuggestionCardProps {
   onSelect: (suggestion: ProactiveSuggestion) => void;
   /** Optional: show dismiss button */
   onDismiss?: (id: string) => void;
+  /** Animation index for staggered entry */
+  index?: number;
 }
 
 export default function SuggestionCard({
@@ -23,13 +27,21 @@ export default function SuggestionCard({
   variant = "inline",
   onSelect,
   onDismiss,
+  index = 0,
 }: SuggestionCardProps) {
   return (
-    <button
+    <motion.button
       className={`suggestion-card suggestion-card--${variant} proactive-cat-${suggestion.category}`}
       onClick={() => onSelect(suggestion)}
       title={`Click to try: "${suggestion.action_intent}"`}
       aria-label={`Suggestion: ${suggestion.text}. Click to fill intent box.`}
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.95 }}
+      transition={{ duration: 0.25, delay: index * 0.06, ease: "easeOut" }}
+      whileHover={{ scale: 1.03, y: -2 }}
+      whileTap={{ scale: 0.97 }}
+      layout
     >
       {onDismiss && (
         <span
@@ -66,6 +78,6 @@ export default function SuggestionCard({
         </div>
         <span className="suggestion-card__cta">Try it →</span>
       </div>
-    </button>
+    </motion.button>
   );
 }

@@ -7,6 +7,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
+import UserGuide from "./UserGuide";
 import { useVoice } from "../hooks/useVoice";
 import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel } from "../types";
 import "./MainView.css";
@@ -37,6 +38,7 @@ export default function MainView({
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<string | null>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   // Recommended models catalog — shown in dropdown for easy install
   const RECOMMENDED_MODELS = [
@@ -411,9 +413,38 @@ export default function MainView({
                 {RECOMMENDED_MODELS.filter(r => !availableModels.some(m => m.name.startsWith(r.name))).length === 0 && (
                   <div className="model-dropdown-empty">All recommended models installed ✓</div>
                 )}
+
+                {/* ── Response Length ── */}
+                <div className="model-dropdown-divider" />
+                <div className="model-dropdown-header">Response Length</div>
+                <div className="model-tokens-control">
+                  <input
+                    type="range"
+                    min={256}
+                    max={8192}
+                    step={256}
+                    value={settings.maxTokens}
+                    onChange={(e) => onSettingsChange({ ...settings, maxTokens: parseInt(e.target.value) })}
+                    className="model-tokens-slider"
+                  />
+                  <div className="model-tokens-labels">
+                    <span className="model-tokens-value">{settings.maxTokens} tokens</span>
+                    <span className="model-tokens-hint">
+                      {settings.maxTokens <= 512 ? "Concise" : settings.maxTokens <= 2048 ? "Standard" : settings.maxTokens <= 4096 ? "Detailed" : "Maximum"}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
           </div>
+          <button
+            className="toolbar-btn guide-btn"
+            onClick={() => setShowGuide(true)}
+            title="User Guide"
+            aria-label="Open User Guide"
+          >
+            📖 Guide
+          </button>
         </div>
       </div>
 
@@ -740,6 +771,8 @@ export default function MainView({
           </div>
         </div>
       )}
+
+      <UserGuide open={showGuide} onClose={() => setShowGuide(false)} />
     </>
   );
 }

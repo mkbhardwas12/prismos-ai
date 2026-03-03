@@ -10,7 +10,9 @@ import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import DailyBrief from "./DailyBrief";
 import UserGuide from "./UserGuide";
+import SuggestionCard from "./SuggestionCard";
 import { useVoice } from "../hooks/useVoice";
+import { generateFollowUpSuggestions } from "../lib/suggestions";
 import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel, AgentActivity, ProactiveSuggestion } from "../types";
 import "./MainView.css";
 
@@ -389,10 +391,14 @@ export default function MainView({
         }
         const sugJson = await invoke<string>("get_proactive_suggestions");
         const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-        setProactiveSuggestions(sug);
-        setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: sug.slice(0, 3) }));
+        const enriched = generateFollowUpSuggestions(input, sug);
+        setProactiveSuggestions(enriched);
+        setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
       } catch {
-        // Non-critical — don't block the intent flow
+        // Non-critical — generate client-side suggestions as fallback
+        const fallback = generateFollowUpSuggestions(input, []);
+        setProactiveSuggestions(fallback);
+        setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
       }
     } catch (e) {
       // Fallback to legacy process_intent if refract_intent fails
@@ -411,9 +417,14 @@ export default function MainView({
         try {
           const sugJson = await invoke<string>("get_proactive_suggestions");
           const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-          setProactiveSuggestions(sug);
-          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: sug.slice(0, 3) }));
-        } catch { /* non-critical */ }
+          const enriched = generateFollowUpSuggestions(input, sug);
+          setProactiveSuggestions(enriched);
+          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
+        } catch {
+          const fallback = generateFollowUpSuggestions(input, []);
+          setProactiveSuggestions(fallback);
+          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
+        }
       } catch (fallbackErr) {
         const errorStr = String(fallbackErr);
         const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
@@ -792,25 +803,32 @@ export default function MainView({
               </div>
               {msg.role === "ai" && messageSuggestions[msg.id]?.length > 0 && (
                 <div className="inline-suggestions">
-                  {messageSuggestions[msg.id].map((sug) => (
-                    <button
-                      key={sug.id}
-                      className={`inline-suggestion-card proactive-cat-${sug.category}`}
-                      onClick={() => {
-                        setMessageSuggestions(prev => {
-                          const next = { ...prev };
-                          delete next[msg.id];
-                          return next;
-                        });
-                        handleIntent(sug.action_intent);
-                      }}
-                      title="Click to process this suggestion"
-                    >
-                      <span className="inline-sug-icon">{sug.icon}</span>
-                      <span className="inline-sug-text">{sug.text}</span>
-                      <span className="inline-sug-arrow">→</span>
-                    </button>
-                  ))}
+                  <div className="inline-suggestions__label">💡 Suggested next steps</div>
+                  <div className="inline-suggestions__cards">
+                    {messageSuggestions[msg.id].map((sug) => (
+                      <SuggestionCard
+                        key={sug.id}
+                        suggestion={sug}
+                        variant="inline"
+                        onSelect={(s) => {
+                          // Auto-fill intent box (not auto-execute) so user can review
+                          setPendingIntent(s.action_intent);
+                        }}
+                        onDismiss={(id) => {
+                          setMessageSuggestions(prev => {
+                            const current = prev[msg.id] ?? [];
+                            const filtered = current.filter(s => s.id !== id);
+                            if (filtered.length === 0) {
+                              const next = { ...prev };
+                              delete next[msg.id];
+                              return next;
+                            }
+                            return { ...prev, [msg.id]: filtered };
+                          });
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </Fragment>
@@ -871,30 +889,13 @@ export default function MainView({
           </div>
           <div className="proactive-cards">
             {proactiveSuggestions.slice(0, 3).map((sug) => (
-              <button
+              <SuggestionCard
                 key={sug.id}
-                className={`proactive-card proactive-cat-${sug.category}`}
-                onClick={() => {
-                  setProactiveSuggestions(prev => prev.filter(s => s.id !== sug.id));
-                  handleIntent(sug.action_intent);
-                }}
-                title="Click to process this suggestion"
-              >
-                <div className="proactive-card-top">
-                  <span className="proactive-card-icon">{sug.icon}</span>
-                  <span className="proactive-card-badge">{sug.category}</span>
-                </div>
-                <span className="proactive-card-text">{sug.text}</span>
-                <div className="proactive-card-bottom">
-                  <div className="proactive-confidence-bar">
-                    <div
-                      className="proactive-confidence-fill"
-                      style={{ width: `${Math.round(sug.confidence * 100)}%` }}
-                    />
-                  </div>
-                  <span className="proactive-card-action">→</span>
-                </div>
-              </button>
+                suggestion={sug}
+                variant="inline"
+                onSelect={(s) => setPendingIntent(s.action_intent)}
+                onDismiss={(id) => setProactiveSuggestions(prev => prev.filter(s => s.id !== id))}
+              />
             ))}
           </div>
         </div>

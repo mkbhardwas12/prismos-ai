@@ -397,3 +397,28 @@
 [data-theme="light"] .graph-container {
   background-color: #f8fafc;
 }
+
+/* ── Growing Pulse Animation (Phase 1 — Alive Graph) ── */
+.sg-growing-pulse {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.3), transparent 70%);
+  animation: sg-pulse 2.5s ease-in-out infinite;
+  margin: 8px auto;
+}
+
+@keyframes sg-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.4; }
+  50% { transform: scale(1.4); opacity: 0.8; }
+}
+
+.sg-empty-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.sg-empty-hint em {
+  color: var(--color-accent);
+}

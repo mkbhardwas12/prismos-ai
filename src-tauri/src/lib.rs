@@ -343,6 +343,29 @@ async fn anticipate_needs(db: tauri::State<'_, DbState>) -> Result<String, Strin
     serde_json::to_string(&needs).map_err(|e| e.to_string())
 }
 
+/// Get 2-3 proactive human-friendly suggestion strings (Phase 1 — Alive Graph)
+#[tauri::command]
+async fn get_proactive_suggestions(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let suggestions = graph
+        .generate_proactive_suggestions()
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&suggestions).map_err(|e| e.to_string())
+}
+
+/// Strengthen graph edges related to given keywords (auto-reinforcement)
+#[tauri::command]
+async fn strengthen_related_edges(
+    db: tauri::State<'_, DbState>,
+    keywords: Vec<String>,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let count = graph
+        .strengthen_related_edges(&keywords)
+        .map_err(|e| e.to_string())?;
+    Ok(format!("{{\"edges_strengthened\": {}}}", count))
+}
+
 /// Get extended graph metrics
 #[tauri::command]
 async fn get_graph_metrics(db: tauri::State<'_, DbState>) -> Result<String, String> {
@@ -944,6 +967,8 @@ pub fn run() {
             update_edge_weight,
             query_spectrum_intent,
             anticipate_needs,
+            get_proactive_suggestions,
+            strengthen_related_edges,
             get_graph_metrics,
             decay_graph_edges,
             update_spectrum_node,

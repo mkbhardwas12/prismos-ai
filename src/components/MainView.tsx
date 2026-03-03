@@ -30,6 +30,7 @@ export default function MainView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingIntent, setPendingIntent] = useState("");
+  const [proactiveSuggestions, setProactiveSuggestions] = useState<string[]>([]);
   const conversationRef = useRef<HTMLDivElement>(null);
 
   // ── Inline model selector state ──
@@ -307,6 +308,19 @@ export default function MainView({
       }
 
       onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null); // Refresh sidebar + graph + agent status
+
+      // Phase 1 — Alive Graph: auto-strengthen related edges + fetch proactive suggestions
+      try {
+        const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+        if (keywords.length > 0) {
+          await invoke("strengthen_related_edges", { keywords });
+        }
+        const sugJson = await invoke<string>("get_proactive_suggestions");
+        const sug: string[] = JSON.parse(sugJson);
+        setProactiveSuggestions(sug);
+      } catch {
+        // Non-critical — don't block the intent flow
+      }
     } catch (e) {
       // Fallback to legacy process_intent if refract_intent fails
       try {
@@ -319,6 +333,13 @@ export default function MainView({
         };
         setMessages((prev) => [...prev, aiMsg]);
         onIntentProcessed();
+
+        // Fetch proactive suggestions even on fallback path
+        try {
+          const sugJson = await invoke<string>("get_proactive_suggestions");
+          const sug: string[] = JSON.parse(sugJson);
+          setProactiveSuggestions(sug);
+        } catch { /* non-critical */ }
       } catch (fallbackErr) {
         const errorStr = String(fallbackErr);
         const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
@@ -699,6 +720,37 @@ export default function MainView({
           </div>
         )}
       </div>
+
+      {/* ── Proactive Suggestion Cards (Phase 1 — Alive Graph) ── */}
+      {proactiveSuggestions.length > 0 && !isProcessing && messages.length > 0 && (
+        <div className="proactive-suggestions">
+          <div className="proactive-header">
+            <span className="proactive-label">💡 Suggestions</span>
+            <button
+              className="proactive-dismiss-all"
+              onClick={() => setProactiveSuggestions([])}
+              title="Dismiss all suggestions"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="proactive-cards">
+            {proactiveSuggestions.map((sug, i) => (
+              <button
+                key={i}
+                className="proactive-card"
+                onClick={() => {
+                  setProactiveSuggestions([]);
+                  handleIntent(sug);
+                }}
+                title="Click to send as intent"
+              >
+                <span className="proactive-card-text">{sug}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Voice output indicator */}
       {voiceOutput.isSpeaking && (

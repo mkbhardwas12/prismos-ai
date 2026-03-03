@@ -77,6 +77,20 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
+  const [glowPhase, setGlowPhase] = useState(0);
+  const glowRef = useRef<number>(0);
+
+  // Animate glow pulse for high-momentum edges
+  useEffect(() => {
+    let frame: number;
+    const tick = () => {
+      glowRef.current += 0.03;
+      setGlowPhase(glowRef.current);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   // ─── Load full graph snapshot ──────────────────────────────────────────
 
@@ -235,6 +249,22 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       if (link.momentum > 0.05) color = "rgba(100, 180, 255, 0.6)";
       else if (link.momentum < -0.05) color = "rgba(255, 100, 100, 0.4)";
 
+      // Glow effect for high-momentum edges (Phase 1 — Alive Graph)
+      const isHighMomentum = link.momentum > 0.1;
+      if (isHighMomentum) {
+        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(glowPhase * 2 + link.weight));
+        ctx.save();
+        ctx.shadowColor = "rgba(100, 200, 255, " + (0.8 * pulse) + ")";
+        ctx.shadowBlur = (8 + 6 * pulse) / globalScale;
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.strokeStyle = `rgba(120, 200, 255, ${0.5 + 0.3 * pulse})`;
+        ctx.lineWidth = (width * 1.8);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.beginPath();
       ctx.moveTo(source.x, source.y);
       ctx.lineTo(target.x, target.y);
@@ -242,7 +272,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       ctx.lineWidth = width;
       ctx.stroke();
     },
-    []
+    [glowPhase]
   );
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -265,8 +295,10 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         {graphData.nodes.length === 0 ? (
           <div className="sg-empty">
             <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS" className="sg-empty-logo" /></div>
-            <h3>Spectrum Graph is empty</h3>
-            <p>Start conversations or add nodes to build your knowledge graph.</p>
+            <div className="sg-growing-pulse" />
+            <h3>🌱 Memory is growing…</h3>
+            <p>Your Spectrum Graph builds itself as you chat. Each conversation creates nodes and connections that PrismOS learns from.</p>
+            <p className="sg-empty-hint">Try sending an intent like <em>"Summarize my week"</em> to get started.</p>
           </div>
         ) : (
           <ForceGraph2D

@@ -745,6 +745,99 @@
   color: var(--color-success);
 }
 
+/* ── Proactive Suggestion Cards (Phase 1 — Alive Graph) ── */
+.proactive-suggestions {
+  padding: 8px 24px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  animation: proactive-slide-in 0.35s ease;
+}
+
+@keyframes proactive-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.proactive-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.proactive-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.proactive-dismiss-all {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.proactive-dismiss-all:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.proactive-cards {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.proactive-card {
+  flex: 0 0 auto;
+  max-width: 280px;
+  padding: 10px 14px;
+  background: rgba(14, 165, 233, 0.06);
+  border: 1px solid rgba(14, 165, 233, 0.15);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.proactive-card:hover {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.12);
+}
+
+.proactive-card-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Light theme overrides for proactive cards */
+[data-theme="light"] .proactive-suggestions {
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .proactive-card {
+  background: rgba(14, 165, 233, 0.04);
+  border-color: rgba(14, 165, 233, 0.2);
+}
+
+[data-theme="light"] .proactive-card:hover {
+  background: rgba(14, 165, 233, 0.08);
+}
+
 /* ── First-Time Setup Wizard Modal ── */
 .ftw-overlay {
   position: fixed;

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary, AgentActivity } from "../types";
+import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./Sidebar.css";
@@ -19,6 +19,8 @@ interface SidebarProps {
   collaboration?: CollaborationSummary | null;
   debateSummary?: DebateSummary | null;
   liveAgentSteps?: AgentActivity[];
+  proactiveSuggestions?: ProactiveSuggestion[];
+  dailyGreeting?: string;
 }
 
 export default function Sidebar({
@@ -30,6 +32,8 @@ export default function Sidebar({
   collaboration,
   debateSummary,
   liveAgentSteps,
+  proactiveSuggestions = [],
+  dailyGreeting = "",
 }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -240,6 +244,37 @@ export default function Sidebar({
               })()}
             </div>
           </div>
+
+          {/* Proactive Daily Assistance */}
+          {proactiveSuggestions.length > 0 && (
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">
+                Proactive
+                <span className="sidebar-badge">{proactiveSuggestions.length}</span>
+              </div>
+              <div className="sidebar-proactive">
+                <div className="sidebar-proactive-greeting">{dailyGreeting}</div>
+                <ul className="sidebar-proactive-list">
+                  {proactiveSuggestions.slice(0, 3).map((sug) => (
+                    <li key={sug.id}>
+                      <button
+                        className="sidebar-proactive-item"
+                        onClick={() => {
+                          handleNavigate("chat");
+                          // Dispatch custom event so MainView can auto-fill the intent box
+                          window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: sug.action_intent }));
+                        }}
+                        title={sug.action_intent}
+                      >
+                        <span className="sidebar-proactive-icon">{sug.icon}</span>
+                        <span className="sidebar-proactive-text">{sug.text}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
 
           {/* Active Agents */}
           <div className="sidebar-section">

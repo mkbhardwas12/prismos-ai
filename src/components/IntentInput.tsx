@@ -16,6 +16,10 @@ const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "t
 /** Document extensions we accept for text extraction & analysis */
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "xls", "txt", "md", "csv", "json", "rtf"];
 
+/** Maximum file size in bytes (25 MB) — keeps memory & performance safe */
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_FILE_SIZE_LABEL = "25 MB";
+
 /** Check if a filename is an image */
 function isImageFile(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
@@ -70,6 +74,9 @@ export default function IntentInput({
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [documentMeta, setDocumentMeta] = useState<string | null>(null); // e.g. "PDF | 5 pages"
   const [isExtractingDoc, setIsExtractingDoc] = useState(false);
+  // ── Attach menu state ──
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -249,10 +256,34 @@ export default function IntentInput({
     };
   }, []);
 
+  // Close attach menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+        setAttachMenuOpen(false);
+      }
+    }
+    if (attachMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [attachMenuOpen]);
+
+  /** Check file size and show error if too large. Returns true if OK. */
+  function checkFileSize(file: File): boolean {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setInput((prev) => prev + `\n⚠️ File too large (${sizeMB} MB). Maximum is ${MAX_FILE_SIZE_LABEL}.`);
+      return false;
+    }
+    return true;
+  }
+
   /** Handle image file selection via hidden file input */
   function handleImageFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file && isImageFile(file.name)) {
+      if (!checkFileSize(file)) { e.target.value = ""; return; }
       attachImageFromFile(file);
     }
     // Reset input so the same file can be selected again
@@ -263,6 +294,7 @@ export default function IntentInput({
   async function handleDocFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!checkFileSize(file)) { e.target.value = ""; return; }
     const filePath = (file as File & { path?: string }).path;
     if (filePath) {
       await attachDocumentFromPath(filePath, file.name);
@@ -313,6 +345,13 @@ export default function IntentInput({
 
     const file = files[0];
     const fileName = file.name;
+
+    // ── File size guard ──
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setInput((prev) => prev + `\n⚠️ File too large (${sizeMB} MB). Maximum is ${MAX_FILE_SIZE_LABEL}.`);
+      return;
+    }
 
     // ── Image files → attach for vision analysis ──
     if (isImageFile(fileName)) {
@@ -521,41 +560,60 @@ export default function IntentInput({
           </button>
         )}
 
-        {/* Document upload button (Phase 5.5 — Document Analysis) */}
-        <button
-          className="intent-doc-btn"
-          onClick={() => docFileInputRef.current?.click()}
-          disabled={isProcessing || isExtractingDoc}
-          title="Attach document (PDF, DOCX, PPTX, XLSX)"
-          aria-label="Attach document"
-          type="button"
-        >
-          📄
-        </button>
+        {/* ── Unified Attach Button (+) with popup menu ── */}
+        <div className="intent-attach-container" ref={attachMenuRef}>
+          <button
+            className={`intent-attach-btn ${attachMenuOpen ? "attach-active" : ""}`}
+            onClick={() => setAttachMenuOpen((v) => !v)}
+            disabled={isProcessing}
+            title="Attach file, image, or capture photo"
+            aria-label="Attach"
+            aria-expanded={attachMenuOpen}
+            type="button"
+          >
+            <span className={`attach-icon ${attachMenuOpen ? "attach-icon-rotated" : ""}`}>+</span>
+          </button>
 
-        {/* Image upload button (Phase 5.5 — Local Vision) */}
-        <button
-          className="intent-vision-btn"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isProcessing}
-          title="Attach image for vision analysis"
-          aria-label="Attach image"
-          type="button"
-        >
-          🖼️
-        </button>
-
-        {/* Camera capture button (Phase 5.5 — Local Vision) */}
-        <button
-          className="intent-vision-btn"
-          onClick={cameraActive ? stopCamera : startCamera}
-          disabled={isProcessing}
-          title={cameraActive ? "Close camera" : "Take photo for vision analysis"}
-          aria-label={cameraActive ? "Close camera" : "Capture photo"}
-          type="button"
-        >
-          {cameraActive ? "✕" : "📷"}
-        </button>
+          {attachMenuOpen && (
+            <div className="intent-attach-menu" role="menu" aria-label="Attachment options">
+              <button
+                className="attach-menu-item"
+                role="menuitem"
+                onClick={() => { docFileInputRef.current?.click(); setAttachMenuOpen(false); }}
+                disabled={isExtractingDoc}
+              >
+                <span className="attach-menu-icon">📄</span>
+                <div className="attach-menu-label">
+                  <span className="attach-menu-title">Document</span>
+                  <span className="attach-menu-hint">PDF, DOCX, PPTX, XLSX</span>
+                </div>
+              </button>
+              <button
+                className="attach-menu-item"
+                role="menuitem"
+                onClick={() => { fileInputRef.current?.click(); setAttachMenuOpen(false); }}
+              >
+                <span className="attach-menu-icon">🖼️</span>
+                <div className="attach-menu-label">
+                  <span className="attach-menu-title">Image</span>
+                  <span className="attach-menu-hint">JPG, PNG, WebP, GIF</span>
+                </div>
+              </button>
+              <button
+                className="attach-menu-item"
+                role="menuitem"
+                onClick={() => { cameraActive ? stopCamera() : startCamera(); setAttachMenuOpen(false); }}
+              >
+                <span className="attach-menu-icon">📷</span>
+                <div className="attach-menu-label">
+                  <span className="attach-menu-title">Camera</span>
+                  <span className="attach-menu-hint">Capture a live photo</span>
+                </div>
+              </button>
+              <div className="attach-menu-footer">Max {MAX_FILE_SIZE_LABEL} per file</div>
+            </div>
+          )}
+        </div>
 
         <button
           className="intent-send-btn"
@@ -582,7 +640,7 @@ export default function IntentInput({
       <div className="intent-hint">
         <span className="intent-hint-keys">Enter ↵ send · Shift+Enter ↵ newline</span>
         <span className="intent-hint-sep">·</span>
-        <span>� Docs · �📷 Vision · 🎙️ Voice · 100% local · Patent Pending</span>
+        <span>📎 Attach files (max {MAX_FILE_SIZE_LABEL}) · 🎙️ Voice · 100% local · Patent Pending</span>
       </div>
     </div>
   );

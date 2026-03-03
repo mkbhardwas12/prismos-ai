@@ -316,11 +316,16 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LOCAL VISION — Phase 5.5 (Patent Pending)
-   Camera capture, image preview, vision buttons
+   Camera capture, image preview, attach menu
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Vision buttons (camera + image upload) ── */
-.intent-vision-btn {
+/* ═══ Unified Attach Button (+) ═══ */
+.intent-attach-container {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.intent-attach-btn {
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -331,20 +336,119 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  transition: all var(--transition-fast);
+  font-size: 22px;
+  font-weight: 300;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
   flex-shrink: 0;
+  line-height: 1;
 }
 
-.intent-vision-btn:hover {
+.intent-attach-btn:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
   background: rgba(6, 182, 212, 0.08);
 }
 
-.intent-vision-btn:disabled {
+.intent-attach-btn.attach-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(6, 182, 212, 0.12);
+}
+
+.intent-attach-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.attach-icon {
+  display: inline-block;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.attach-icon-rotated {
+  transform: rotate(45deg);
+}
+
+/* ═══ Attach Popup Menu ═══ */
+.intent-attach-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 35, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 6px;
+  min-width: 220px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  z-index: 100;
+  animation: attach-menu-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes attach-menu-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 10px;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.attach-menu-item:hover {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.attach-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.attach-menu-icon {
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.attach-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.attach-menu-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.attach-menu-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.attach-menu-footer {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 6px 8px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 4px;
+  opacity: 0.6;
 }
 
 /* ── Image Preview ── */
@@ -488,38 +592,23 @@
   border-color: #e2e8f0;
 }
 
-[data-theme="light"] .intent-vision-btn:hover {
+[data-theme="light"] .intent-attach-btn:hover {
   background: rgba(6, 182, 212, 0.06);
+}
+
+[data-theme="light"] .intent-attach-menu {
+  background: rgba(248, 250, 252, 0.95);
+  border-color: #e2e8f0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .attach-menu-item:hover {
+  background: rgba(37, 99, 235, 0.08);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    DOCUMENT ATTACHMENT — Phase 5.5 (Patent Pending)
    ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Document upload button */
-.intent-doc-btn {
-  background: none;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 8px;
-  transition: all var(--transition-fast);
-  opacity: 0.7;
-  line-height: 1;
-}
-
-.intent-doc-btn:hover {
-  opacity: 1;
-  background: rgba(249, 115, 22, 0.08);
-  transform: scale(1.1);
-}
-
-.intent-doc-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-  transform: none;
-}
 
 /* Document preview card */
 .doc-preview {
@@ -589,8 +678,4 @@
 [data-theme="light"] .doc-preview {
   background: rgba(249, 115, 22, 0.04);
   border-color: rgba(249, 115, 22, 0.2);
-}
-
-[data-theme="light"] .intent-doc-btn:hover {
-  background: rgba(249, 115, 22, 0.06);
 }

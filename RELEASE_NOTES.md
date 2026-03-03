@@ -1,17 +1,17 @@
 <div align="center">
 
-# 🔷 PrismOS-AI v0.2.0
+# 🔷 PrismOS-AI v0.2.1
 
 ### The Local-First AI Operating System
 
 **Your AI. Your Data. Your Machine. Period.**
 
-[![Release](https://img.shields.io/badge/Release-v0.2.0-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
+[![Release](https://img.shields.io/badge/Release-v0.2.1-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
 [![Patent](https://img.shields.io/badge/Patent_Pending-US_63%2F993%2C589-10b981?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
 [![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
 
-**Release Date:** March 2, 2026 · **Author:** Manish Kumar
+**Release Date:** March 3, 2026 · **Author:** Manish Kumar
 
 </div>
 
@@ -19,7 +19,7 @@
 
 ## 🎯 What Is This Release?
 
-PrismOS-AI v0.2.0 is the **first feature-complete desktop release** of a patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+PrismOS-AI v0.2.1 is the **first feature-complete desktop release** of a patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
 
 > **In one sentence:** A Tauri 2.0 desktop app with 5 AI agents, a physics-inspired knowledge graph, WASM sandboxing, 9 security layers, and a modern glassmorphism UI — all running 100% offline.
 
@@ -34,7 +34,7 @@ PrismOS-AI v0.2.0 is the **first feature-complete desktop release** of a patent-
 
 ---
 
-## ✨ What's New in v0.2.0
+## ✨ What's New in v0.2.1
 
 ### 🛡️ WASM Sandbox Isolation
 > Code execution that can't escape.
@@ -63,6 +63,23 @@ PrismOS-AI v0.2.0 is the **first feature-complete desktop release** of a patent-
 - Time-based graph history with date grouping
 - Temporal navigation and snapshot restore
 - Visual timeline of every graph change
+
+### 💡 Proactive Suggestions
+> Your graph tells you what to do next.
+
+- Context-aware **SuggestionCards** with confidence bars and category badges
+- Inline follow-up cards after every AI response
+- Persistent **Daily Suggestions** sidebar section with auto-refresh
+- Graph-node analysis + time-of-day awareness for smart recommendations
+
+### 🌅 Morning Brief & Evening Recap
+> A greeting that knows your day.
+
+- Time-aware greeting card (☀️ Good morning / 🌆 Good evening / 🌙 Late night)
+- 2-3 personalized SuggestionCards pulled from your Spectrum Graph
+- **Daily Summary** pill button with dropdown stats panel
+- "Get Full AI Summary" button dispatches a contextual recap intent
+- Dismissible with one-click re-open
 
 ### ♿ UX Polish & Accessibility
 > Beautiful for everyone.
@@ -102,10 +119,10 @@ PrismOS-AI v0.2.0 is the **first feature-complete desktop release** of a patent-
 
 ---
 
-## 📊 Growth: v0.1.0 → v0.2.0
+## 📊 Growth: v0.1.0 → v0.2.1
 
 ```
-                    v0.1.0-alpha        v0.2.0
+                    v0.1.0-alpha        v0.2.1
                     ────────────        ──────
 IPC Commands        30                  53          (+77%)
 Rust Modules        6                   16          (+167%)

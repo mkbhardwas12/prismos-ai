@@ -12,9 +12,23 @@ PrismOS-AI is a **local-first agentic personal AI operating system** that runs 1
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console" />
 </p>
 
+<details>
+<summary><strong>📸 More Screenshots</strong> (click to expand)</summary>
+<br />
+
+| Spectrum Graph | Spectrum Explorer |
+|:-:|:-:|
+| <img src="docs/screenshots/spectrum-graph.png" width="400" alt="Spectrum Graph" /> | <img src="docs/screenshots/Spectrum-Explorer.png" width="400" alt="Spectrum Explorer" /> |
+
+| Sandbox Prisms | Spectral Timeline |
+|:-:|:-:|
+| <img src="docs/screenshots/Sandbox-Prisms.png" width="400" alt="Sandbox Prisms" /> | <img src="docs/screenshots/Spectral-Timeline.png" width="400" alt="Spectral Timeline" /> |
+
+</details>
+
 ---
 
-## ✨ Core Features (v0.2.0)
+## ✨ Core Features (v0.2.1)
 
 | Feature | Description |
 |---------|-------------|

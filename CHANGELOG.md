@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] — 2026-03-03
+
+### 🎯 Highlights
+
+PrismOS-AI v0.4.0 — **Local-First Agentic OS** release. Adds local voice engine (cpal audio capture + Whisper model download infrastructure), Spotlight-style global command palette (Ctrl+Space), local RAG file indexer watching directories and ingesting into Spectrum Graph, and deep Framer Motion animation polish across all UI components.
+
+### Added
+
+- **Local Voice Engine** — cpal-based cross-platform microphone capture with mono conversion, 16kHz resampling, and WAV encoding via hound; Whisper model download infrastructure from Hugging Face with progress streaming (Tiny/Base/Small); hybrid voice hook (`useVoice.ts`) with automatic Whisper → Web Speech API fallback
+- **Spotlight Overlay** — macOS Spotlight-style global command palette (Ctrl+Space) with 6 quick commands, keyboard navigation (Arrow/Enter/Escape), graph node suggestions, frosted glass UI with backdrop-filter blur, full dark/light theme support, and `prismos:navigate` event dispatch
+- **Local RAG File Indexer** — Watches `~/Documents/PrismDocs` directory for file changes (notify crate); initial scan with walkdir; auto-ingests text files into Spectrum Graph as knowledge nodes; supports 23 file extensions; max 1MB file size, 4KB content preview; tracks indexed files with metadata
+- **Deep Framer Motion Polish** — SuggestionCard upgraded to `motion.button` with scale/opacity/position animations and stagger delays; live debate log steps wrapped in AnimatePresence with slide-in animations; proactive and inline follow-up suggestion cards animated with AnimatePresence
+
+### Changed
+
+- 13 new Tauri IPC commands for voice and file indexer operations
+- `useVoice` hook now supports hybrid Whisper + Web Speech API with smart routing
+- Startup banner updated to v0.4.0 with Whisper and File Indexer status
+- `IndexerState` and `VoiceStopFlag` managed via Tauri state
+
+---
+
+## [0.3.0] — 2026-03-03
+
+### 🎯 Highlights
+
+PrismOS-AI v0.3.0 — **Phase 3** release. Adds onboarding wizard, model hub, Spectrum dynamic theming, Framer Motion transitions, global hotkey, and intent templates.
+
+### Added
+
+- **Onboarding Wizard** — Multi-step first-run experience guiding users through setup
+- **Model Hub** — Browse, download, and manage Ollama models from within the app
+- **Spectrum Theming** — Dynamic theme engine driven by Spectrum Graph spectral properties
+- **Framer Motion Transitions** — Smooth page-level transitions with AnimatePresence
+- **Global Hotkey** — Ctrl+Space / Cmd+Space to instantly focus the app (tauri-plugin-global-shortcut)
+- **Intent Templates** — Pre-built intent templates for common workflows
+
+---
+
 ## [0.2.1] — 2026-03-03
 
 ### 🎯 Highlights
@@ -144,5 +183,8 @@ and full release polish with accessibility improvements.
 
 ---
 
+[0.4.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.1.0-alpha...v0.2.0
 [0.1.0-alpha]: https://github.com/mkbhardwas12/prismos-ai/releases/tag/v0.1.0-alpha

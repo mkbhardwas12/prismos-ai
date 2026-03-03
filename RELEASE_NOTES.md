@@ -1,12 +1,12 @@
 <div align="center">
 
-# 🔷 PrismOS-AI v0.2.1
+# 🔷 PrismOS-AI v0.4.0
 
 ### The Local-First AI Operating System
 
 **Your AI. Your Data. Your Machine. Period.**
 
-[![Release](https://img.shields.io/badge/Release-v0.2.1-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
+[![Release](https://img.shields.io/badge/Release-v0.4.0-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
 [![Patent](https://img.shields.io/badge/Patent_Pending-US_63%2F993%2C589-10b981?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
 [![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
@@ -184,7 +184,7 @@ Security Layers     6                   9           (+50%)
 
 ---
 
-## 🛤️ What's Next — v0.3.0
+## 🛤️ What's Next — v0.5.0
 
 | Feature | Description |
 |---------|-------------|

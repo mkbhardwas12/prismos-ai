@@ -47,7 +47,7 @@ Use this checklist to verify all features before a release:
 - [ ] Loading screen transitions smoothly to main view
 - [ ] You-Port auto-restore toast appears if previous session exists
 - [ ] Sidebar shows all 6 navigation items
-- [ ] Version badge shows v0.2.0
+- [ ] Version badge shows v0.4.0
 
 #### Intent Console
 - [ ] Welcome screen shows with 3 feature cards
@@ -111,7 +111,7 @@ Use this checklist to verify all features before a release:
   - [ ] Apply Merge runs merge with selected strategy
   - [ ] Strategy selector (Latest/Theirs/Ours) works
 - [ ] Patent notice visible
-- [ ] Version banner shows v0.2.0
+- [ ] Version banner shows v0.4.0
 
 #### Accessibility
 - [ ] Tab navigation moves through all interactive elements

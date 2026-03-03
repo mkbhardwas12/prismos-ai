@@ -198,8 +198,9 @@ export default function Sidebar({
                 if (realNodes.length === 0) {
                   return (
                     <div className="spectrum-empty">
-                      <span className="spectrum-empty-icon" aria-hidden="true">🕸️</span>
-                      <span>Your knowledge graph is empty. Send an intent to grow it.</span>
+                      <div className="spectrum-growing-pulse" />
+                      <span className="spectrum-growing-text">🌱 Memory is growing…</span>
+                      <span>Send an intent to start building your knowledge graph.</span>
                     </div>
                   );
                 }

@@ -56,6 +56,13 @@
   --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.45), 0 4px 8px rgba(0, 0, 0, 0.2);
 
+  /* -- Aliases (used by SpectralTimeline, SettingsPanel, etc.) -- */
+  --color-text: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-surface: var(--bg-surface);
+  --color-bg: var(--bg-primary);
+  --color-border: var(--border-color);
+
   /* -- Glass -- */
   --glass-bg: rgba(15, 20, 25, 0.6);
   --glass-border: rgba(255, 255, 255, 0.06);
@@ -94,6 +101,13 @@
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-blur: 12px;
+
+  /* -- Aliases -- */
+  --color-text: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-surface: var(--bg-surface);
+  --color-bg: var(--bg-primary);
+  --color-border: var(--border-color);
 }
 
 [data-theme="light"] body {

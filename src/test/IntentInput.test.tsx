@@ -17,7 +17,7 @@ describe("IntentInput", () => {
     render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
     const textarea = screen.getByRole("textbox");
     await userEvent.type(textarea, "What is PrismOS-AI?{enter}");
-    expect(onSubmit).toHaveBeenCalledWith("What is PrismOS-AI?", undefined);
+    expect(onSubmit).toHaveBeenCalledWith("What is PrismOS-AI?", undefined, undefined);
   });
 
   it("does NOT submit when processing is in progress", async () => {

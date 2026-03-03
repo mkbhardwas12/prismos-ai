@@ -1254,6 +1254,7 @@ async fn get_indexed_files(app: tauri::AppHandle) -> Result<String, String> {
 
 /// Extract readable text from a dropped file.
 /// Supports plain text, markdown, JSON, CSV, code files, and more.
+/// Phase 5.5: Also supports PDF, DOCX, PPTX, and XLSX binary formats.
 #[tauri::command]
 async fn extract_file_text(path: String) -> Result<String, String> {
     let file_path = std::path::Path::new(&path);
@@ -1263,9 +1264,9 @@ async fn extract_file_text(path: String) -> Result<String, String> {
     }
 
     let metadata = std::fs::metadata(file_path).map_err(|e| e.to_string())?;
-    // Limit to 5 MB for safety
-    if metadata.len() > 5 * 1024 * 1024 {
-        return Err("File too large (max 5 MB)".to_string());
+    // Limit to 50 MB for documents (PDFs/PPTX can be large)
+    if metadata.len() > 50 * 1024 * 1024 {
+        return Err("File too large (max 50 MB)".to_string());
     }
 
     let ext = file_path
@@ -1274,6 +1275,33 @@ async fn extract_file_text(path: String) -> Result<String, String> {
         .unwrap_or("")
         .to_lowercase();
 
+    let file_name = file_path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown");
+
+    // ── Binary document formats (Phase 5.5) ──
+    match ext.as_str() {
+        "pdf" => {
+            return extract_pdf_text(file_path, file_name);
+        }
+        "docx" => {
+            return extract_docx_text(file_path, file_name);
+        }
+        "pptx" => {
+            return extract_pptx_text(file_path, file_name);
+        }
+        "xlsx" | "xls" => {
+            return extract_xlsx_text(file_path, file_name);
+        }
+        "doc" => {
+            return Err("Legacy .doc format is not supported — please save as .docx".to_string());
+        }
+        "ppt" => {
+            return Err("Legacy .ppt format is not supported — please save as .pptx".to_string());
+        }
+        _ => {}
+    }
+
     // Text-based extensions we support
     let text_exts = [
         "txt", "md", "markdown", "json", "csv", "tsv", "xml", "html", "htm",
@@ -1281,26 +1309,317 @@ async fn extract_file_text(path: String) -> Result<String, String> {
         "rs", "py", "js", "ts", "tsx", "jsx", "java", "c", "cpp", "h", "hpp",
         "go", "rb", "php", "swift", "kt", "scala", "sh", "bash", "zsh",
         "sql", "r", "lua", "dart", "css", "scss", "sass", "less",
-        "env", "gitignore", "dockerfile", "makefile",
+        "env", "gitignore", "dockerfile", "makefile", "rtf",
     ];
 
     if text_exts.contains(&ext.as_str()) || ext.is_empty() {
         // Try reading as UTF-8 text
         match std::fs::read_to_string(file_path) {
             Ok(content) => {
-                let file_name = file_path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown");
                 Ok(format!("[File: {}]\n{}", file_name, content))
             }
             Err(_) => Err("File is not valid UTF-8 text".to_string()),
         }
     } else {
         Err(format!(
-            "Unsupported file type: .{} — drop text, code, or data files",
+            "Unsupported file type: .{} — supported: txt, pdf, docx, pptx, xlsx, csv, code files",
             ext
         ))
     }
+}
+
+// ─── Document Extraction Helpers (Phase 5.5) ─────────────────────────────────
+
+/// Extract text from a PDF file using pdf-extract
+fn extract_pdf_text(path: &std::path::Path, file_name: &str) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("Failed to read PDF: {}", e))?;
+    let text = pdf_extract::extract_text_from_mem(&bytes)
+        .map_err(|e| format!("Failed to parse PDF: {}", e))?;
+
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("PDF contains no extractable text (may be scanned/image-based)".to_string());
+    }
+
+    // Count pages approximately (by form feeds or double newlines)
+    let page_count = text.matches('\u{000C}').count().max(1);
+
+    Ok(format!(
+        "[Document: {} | Type: PDF | ~{} pages | {} chars]\n\n{}",
+        file_name,
+        page_count,
+        trimmed.len(),
+        trimmed
+    ))
+}
+
+/// Extract text from a DOCX file by parsing the XML inside the zip
+fn extract_docx_text(path: &std::path::Path, file_name: &str) -> Result<String, String> {
+    let file = std::fs::File::open(path)
+        .map_err(|e| format!("Failed to open DOCX: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Failed to read DOCX archive: {}", e))?;
+
+    // DOCX stores content in word/document.xml
+    let mut text_parts: Vec<String> = Vec::new();
+
+    // Try to read word/document.xml
+    if let Ok(mut doc_xml) = archive.by_name("word/document.xml") {
+        let mut xml_content = String::new();
+        std::io::Read::read_to_string(&mut doc_xml, &mut xml_content)
+            .map_err(|e| format!("Failed to read document.xml: {}", e))?;
+
+        // Extract text between <w:t> tags (Word paragraph text nodes)
+        let mut result = String::new();
+        let mut in_paragraph = false;
+        let mut current_para = String::new();
+
+        for part in xml_content.split('<') {
+            if let Some(rest) = part.strip_prefix("w:p ") {
+                // Start of paragraph
+                in_paragraph = true;
+                let _ = rest;
+                current_para.clear();
+            } else if part.starts_with("w:p>") || part.starts_with("w:p ") {
+                in_paragraph = true;
+                current_para.clear();
+            } else if part.starts_with("/w:p>") {
+                // End of paragraph
+                if !current_para.trim().is_empty() {
+                    result.push_str(current_para.trim());
+                    result.push('\n');
+                }
+                in_paragraph = false;
+                current_para.clear();
+            } else if in_paragraph {
+                // Look for text content after w:t> or w:t ...>
+                if let Some(text_start) = part.find('>') {
+                    let tag_name = &part[..text_start];
+                    if tag_name == "w:t" || tag_name.starts_with("w:t ") {
+                        // The text after > is content
+                        // But we need the text AFTER this tag, which comes before the next <
+                        // Actually in our split, the text after > is in the remaining part
+                    }
+                }
+                // Simpler approach: grab text after closing >
+                if let Some(pos) = part.find('>') {
+                    let text_after = &part[pos + 1..];
+                    if !text_after.is_empty() && in_paragraph {
+                        current_para.push_str(text_after);
+                    }
+                }
+            }
+        }
+
+        if !result.trim().is_empty() {
+            text_parts.push(result);
+        }
+    }
+
+    let combined = text_parts.join("\n").trim().to_string();
+
+    if combined.is_empty() {
+        // Fallback: try reading as docx-rs
+        return extract_docx_text_fallback(path, file_name);
+    }
+
+    let word_count = combined.split_whitespace().count();
+
+    Ok(format!(
+        "[Document: {} | Type: DOCX | ~{} words | {} chars]\n\n{}",
+        file_name,
+        word_count,
+        combined.len(),
+        combined
+    ))
+}
+
+/// Fallback DOCX extraction using docx-rs crate
+fn extract_docx_text_fallback(path: &std::path::Path, file_name: &str) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("Failed to read DOCX: {}", e))?;
+    let docx = docx_rs::read_docx(&bytes)
+        .map_err(|e| format!("Failed to parse DOCX: {:?}", e))?;
+
+    // Serialize to JSON and extract text from it
+    let json_str = serde_json::to_string(&docx.document)
+        .map_err(|e| format!("Failed to serialize DOCX: {}", e))?;
+
+    // Extract text values from the JSON
+    let mut texts: Vec<String> = Vec::new();
+    extract_text_from_json_str(&json_str, &mut texts);
+
+    let combined = texts.join(" ").trim().to_string();
+    if combined.is_empty() {
+        return Err("DOCX contains no extractable text".to_string());
+    }
+
+    let word_count = combined.split_whitespace().count();
+    Ok(format!(
+        "[Document: {} | Type: DOCX | ~{} words | {} chars]\n\n{}",
+        file_name, word_count, combined.len(), combined
+    ))
+}
+
+/// Simple JSON text value extractor — finds "text":"..." patterns
+fn extract_text_from_json_str(json: &str, texts: &mut Vec<String>) {
+    // Look for "type":"text" followed by "data" containing "text":"actual content"
+    let search = "\"text\":\"";
+    let mut pos = 0;
+    while let Some(start) = json[pos..].find(search) {
+        let text_start = pos + start + search.len();
+        if let Some(end) = json[text_start..].find('"') {
+            let text = &json[text_start..text_start + end];
+            if !text.is_empty() && text != "text" {
+                texts.push(text.replace("\\n", "\n").replace("\\t", "\t"));
+            }
+            pos = text_start + end + 1;
+        } else {
+            break;
+        }
+    }
+}
+
+/// Extract text from a PPTX file by reading slide XML files
+fn extract_pptx_text(path: &std::path::Path, file_name: &str) -> Result<String, String> {
+    let file = std::fs::File::open(path)
+        .map_err(|e| format!("Failed to open PPTX: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Failed to read PPTX archive: {}", e))?;
+
+    let mut slides: Vec<(usize, String)> = Vec::new();
+
+    // PPTX stores slides in ppt/slides/slide1.xml, slide2.xml, etc.
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .map_err(|e| format!("Failed to read PPTX entry: {}", e))?;
+
+        let entry_name = entry.name().to_string();
+
+        if entry_name.starts_with("ppt/slides/slide") && entry_name.ends_with(".xml") {
+            // Extract slide number
+            let slide_num = entry_name
+                .trim_start_matches("ppt/slides/slide")
+                .trim_end_matches(".xml")
+                .parse::<usize>()
+                .unwrap_or(0);
+
+            let mut xml_content = String::new();
+            std::io::Read::read_to_string(&mut entry, &mut xml_content)
+                .map_err(|e| format!("Failed to read slide XML: {}", e))?;
+
+            // Extract text from <a:t> tags (PowerPoint text nodes)
+            let mut slide_text = String::new();
+            for part in xml_content.split("<a:t>") {
+                if let Some(end_pos) = part.find("</a:t>") {
+                    let text = &part[..end_pos];
+                    if !text.trim().is_empty() {
+                        slide_text.push_str(text);
+                        slide_text.push(' ');
+                    }
+                }
+            }
+
+            if !slide_text.trim().is_empty() {
+                slides.push((slide_num, slide_text.trim().to_string()));
+            }
+        }
+    }
+
+    if slides.is_empty() {
+        return Err("PPTX contains no extractable text".to_string());
+    }
+
+    // Sort by slide number
+    slides.sort_by_key(|(num, _)| *num);
+
+    let mut result = String::new();
+    for (num, text) in &slides {
+        result.push_str(&format!("── Slide {} ──\n{}\n\n", num, text));
+    }
+
+    let total_words: usize = slides.iter().map(|(_, t)| t.split_whitespace().count()).sum();
+
+    Ok(format!(
+        "[Document: {} | Type: PPTX | {} slides | ~{} words]\n\n{}",
+        file_name,
+        slides.len(),
+        total_words,
+        result.trim()
+    ))
+}
+
+/// Extract text from an XLSX file using calamine
+fn extract_xlsx_text(path: &std::path::Path, file_name: &str) -> Result<String, String> {
+    use calamine::{Reader, open_workbook, Xlsx};
+
+    let mut workbook: Xlsx<_> = open_workbook(path)
+        .map_err(|e| format!("Failed to open spreadsheet: {}", e))?;
+
+    let mut result = String::new();
+    let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
+    let mut total_rows = 0usize;
+
+    for sheet_name in &sheet_names {
+        if let Ok(range) = workbook.worksheet_range(sheet_name) {
+            result.push_str(&format!("── Sheet: {} ──\n", sheet_name));
+
+            for row in range.rows() {
+                let cells: Vec<String> = row.iter().map(|cell| {
+                    match cell {
+                        calamine::Data::Empty => String::new(),
+                        calamine::Data::String(s) => s.clone(),
+                        calamine::Data::Float(f) => format!("{}", f),
+                        calamine::Data::Int(i) => format!("{}", i),
+                        calamine::Data::Bool(b) => format!("{}", b),
+                        calamine::Data::DateTime(dt) => format!("{}", dt),
+                        calamine::Data::DateTimeIso(s) => s.clone(),
+                        calamine::Data::DurationIso(s) => s.clone(),
+                        calamine::Data::Error(e) => format!("ERR:{:?}", e),
+                    }
+                }).collect();
+
+                // Skip fully empty rows
+                if cells.iter().all(|c| c.is_empty()) {
+                    continue;
+                }
+
+                result.push_str(&cells.join("\t"));
+                result.push('\n');
+                total_rows += 1;
+            }
+            result.push('\n');
+        }
+    }
+
+    if result.trim().is_empty() {
+        return Err("Spreadsheet contains no data".to_string());
+    }
+
+    Ok(format!(
+        "[Document: {} | Type: {} | {} sheets | {} rows]\n\n{}",
+        file_name,
+        ext_label(path),
+        sheet_names.len(),
+        total_rows,
+        result.trim()
+    ))
+}
+
+/// Helper: Get a human-readable label for the file extension
+fn ext_label(path: &std::path::Path) -> &str {
+    match path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase().as_str() {
+        "xlsx" => "XLSX",
+        "xls" => "XLS",
+        _ => "Spreadsheet",
+    }
+}
+
+/// Dedicated document extraction command for the document analysis workflow.
+/// Returns extracted text + metadata about the document.
+#[tauri::command]
+async fn extract_document_for_analysis(path: String) -> Result<String, String> {
+    // Reuse the enhanced extract_file_text which now handles all formats
+    extract_file_text(path).await
 }
 
 // ─── Application Setup ────────────────────────────────────────────────────────
@@ -1376,6 +1695,7 @@ pub fn run() {
             println!("║  Auto-Updater: CONFIGURED                    ║");
             println!("║  Drag & Drop File Ingest: READY              ║");
             println!("║  Local Vision Engine: READY                  ║");
+            println!("║  Document Ingest Engine: READY                ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
@@ -1503,8 +1823,9 @@ pub fn run() {
             start_file_indexer,
             stop_file_indexer,
             get_indexed_files,
-            // Drag & Drop File Ingest (Phase 5)
+            // Drag & Drop File Ingest (Phase 5) + Document Extraction (Phase 5.5)
             extract_file_text,
+            extract_document_for_analysis,
             // Local Vision — Multimodal (Phase 5.5)
             query_ollama_vision,
             read_image_as_base64,

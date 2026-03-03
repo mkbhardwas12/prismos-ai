@@ -39,3 +39,9 @@ walkdir = "2"
 dirs = "6"
 tauri-plugin-updater = "2.10.0"
 tauri-plugin-window-state = "2.4.1"
+
+# Phase 5.5 — Document Ingest (PDF, DOCX, PPTX, XLSX)
+pdf-extract = "0.7"
+docx-rs = "0.4"
+calamine = "0.26"
+zip = "2"

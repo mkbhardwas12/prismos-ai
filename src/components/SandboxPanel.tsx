@@ -1,13 +1,13 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Sandbox Panel — Prism Execution & Rollback UI
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Prism, PrismResult } from "../types";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./SandboxPanel.css";
 
-export default function SandboxPanel() {
+export default memo(function SandboxPanel() {
   const [prismName, setPrismName] = useState("");
   const [task, setTask] = useState("");
   const [activePrisms, setActivePrisms] = useState<Prism[]>([]);
@@ -116,6 +116,29 @@ export default function SandboxPanel() {
       </div>
 
       <div className="sandbox-container">
+        {/* P4: First-time guidance */}
+        {activePrisms.length === 0 && results.length === 0 && (
+          <div className="sandbox-guidance">
+            <div className="sandbox-guidance-icon">🛡️</div>
+            <h3>What are Sandbox Prisms?</h3>
+            <p>Sandbox Prisms let AI agents execute actions in <strong>isolated environments</strong> with automatic cryptographic checkpoints. If anything goes wrong, changes are instantly rolled back.</p>
+            <div className="sandbox-guidance-steps">
+              <div className="sandbox-guidance-step">
+                <span className="sandbox-step-num">1</span>
+                <span>Name your prism (e.g., "data-cleanup")</span>
+              </div>
+              <div className="sandbox-guidance-step">
+                <span className="sandbox-step-num">2</span>
+                <span>Describe a task to execute safely</span>
+              </div>
+              <div className="sandbox-guidance-step">
+                <span className="sandbox-step-num">3</span>
+                <span>Click Execute — if it fails, Rollback undoes everything</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Prism Controls */}
         <div className="sandbox-section">
           <h3><img src={prismosIcon} alt="" className="header-icon" /> Execution Sandbox</h3>
@@ -259,4 +282,4 @@ export default function SandboxPanel() {
       </div>
     </>
   );
-}
+})

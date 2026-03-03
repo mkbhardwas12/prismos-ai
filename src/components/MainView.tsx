@@ -1,7 +1,7 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Main View — Intent Console + Conversation
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import prismosLogo from "../assets/prismos-logo.svg";
@@ -19,6 +19,8 @@ interface MainViewProps {
   onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
   liveAgentSteps: AgentActivity[];
   clearLiveSteps: () => void;
+  startupSuggestions: ProactiveSuggestion[];
+  dailyGreeting: string;
 }
 
 type SetupStep = "install" | "start" | "model" | "ready";
@@ -30,12 +32,21 @@ export default function MainView({
   onIntentProcessed,
   liveAgentSteps,
   clearLiveSteps,
+  startupSuggestions,
+  dailyGreeting,
 }: MainViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingIntent, setPendingIntent] = useState("");
   const [proactiveSuggestions, setProactiveSuggestions] = useState<ProactiveSuggestion[]>([]);
   const conversationRef = useRef<HTMLDivElement>(null);
+
+  // P1: Seed proactive suggestions from startup (before user's first intent)
+  useEffect(() => {
+    if (startupSuggestions.length > 0 && proactiveSuggestions.length === 0 && messages.length === 0) {
+      setProactiveSuggestions(startupSuggestions);
+    }
+  }, [startupSuggestions]);
 
   // ── Inline model selector state ──
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -46,7 +57,7 @@ export default function MainView({
   const [showGuide, setShowGuide] = useState(false);
 
   // Recommended models catalog — shown in dropdown for easy install
-  const RECOMMENDED_MODELS = [
+  const RECOMMENDED_MODELS = useMemo(() => [
     { name: "mistral", label: "Mistral 7B", desc: "Great all-rounder", size: "4.1 GB" },
     { name: "llama3.2", label: "Llama 3.2 3B", desc: "Fast & lightweight", size: "2.0 GB" },
     { name: "phi3", label: "Phi-3 3.8B", desc: "Strong reasoning", size: "2.2 GB" },
@@ -55,7 +66,7 @@ export default function MainView({
     { name: "deepseek-r1", label: "DeepSeek R1 8B", desc: "Chain-of-thought", size: "4.7 GB" },
     { name: "qwen2.5", label: "Qwen 2.5 7B", desc: "Multilingual", size: "4.7 GB" },
     { name: "codellama", label: "Code Llama 7B", desc: "Code specialist", size: "3.8 GB" },
-  ];
+  ], []);
 
   // Ollama setup wizard state
   const [isLaunching, setIsLaunching] = useState(false);
@@ -254,6 +265,19 @@ export default function MainView({
     }
   }, [settings.defaultModel]);
 
+  // P3: Retry wrapper for API calls (up to 2 retries with exponential backoff)
+  async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (attempt === retries) throw e;
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+    throw new Error("Unreachable");
+  }
+
   async function handleIntent(input: string) {
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -266,8 +290,8 @@ export default function MainView({
     clearLiveSteps(); // Phase 2: clear previous live steps
 
     try {
-      // Use full Refractive Core pipeline (Patent Pending)
-      const resultJson = await invoke<string>("refract_intent", { input });
+      // Use full Refractive Core pipeline (Patent Pending) — with retry
+      const resultJson = await withRetry(() => invoke<string>("refract_intent", { input }));
       const result: RefractiveResult = JSON.parse(resultJson);
 
       // Build metadata footer
@@ -750,10 +774,10 @@ export default function MainView({
       </div>
 
       {/* ── Proactive Suggestion Cards (Phase 3 — Proactive Spectrum Graph) ── */}
-      {proactiveSuggestions.length > 0 && !isProcessing && messages.length > 0 && (
+      {proactiveSuggestions.length > 0 && !isProcessing && (
         <div className="proactive-suggestions">
           <div className="proactive-header">
-            <span className="proactive-label">🧠 Graph Insights</span>
+            <span className="proactive-label">🧠 {messages.length === 0 ? `${dailyGreeting} — here's what your graph noticed` : 'Graph Insights'}</span>
             <button
               className="proactive-dismiss-all"
               onClick={() => setProactiveSuggestions([])}
@@ -768,7 +792,7 @@ export default function MainView({
                 key={sug.id}
                 className={`proactive-card proactive-cat-${sug.category}`}
                 onClick={() => {
-                  setProactiveSuggestions([]);
+                  setProactiveSuggestions(prev => prev.filter(s => s.id !== sug.id));
                   handleIntent(sug.action_intent);
                 }}
                 title="Click to act on this suggestion"

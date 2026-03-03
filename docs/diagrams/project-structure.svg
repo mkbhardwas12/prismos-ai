@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 480" font-family="'Cascadia Code', 'Fira Code', Consolas, monospace">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/></filter>
+  </defs>
+
+  <rect width="780" height="480" rx="12" fill="url(#bg)"/>
+  <rect x="1" y="1" width="778" height="478" rx="11" fill="none" stroke="#334155" stroke-width="0.5"/>
+
+  <text x="390" y="30" text-anchor="middle" font-size="15" font-weight="700" fill="url(#cyan)" font-family="'Segoe UI', Inter, sans-serif">📁 Project Structure</text>
+
+  <!-- Column headers -->
+  <text x="40" y="55" font-size="10" font-weight="700" fill="#06b6d4" letter-spacing="1" font-family="'Segoe UI', Inter, sans-serif">PATH</text>
+  <text x="370" y="55" font-size="10" font-weight="700" fill="#06b6d4" letter-spacing="1" font-family="'Segoe UI', Inter, sans-serif">PURPOSE</text>
+  <line x1="40" y1="62" x2="740" y2="62" stroke="#1e3a5f" stroke-width="0.5"/>
+
+  <!-- Frontend section -->
+  <rect x="30" y="70" width="720" height="20" rx="3" fill="#164e63" fill-opacity="0.15"/>
+  <text x="40" y="84" font-size="11" font-weight="700" fill="#22d3ee">src/</text>
+  <text x="370" y="84" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">React frontend (TypeScript)</text>
+
+  <text x="60" y="106" font-size="10.5" fill="#7dd3fc">├── components/</text>
+  <text x="370" y="106" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">MainView, Sidebar, DailyBrief, ActiveAgents, …</text>
+
+  <text x="60" y="126" font-size="10.5" fill="#7dd3fc">├── lib/</text>
+  <text x="370" y="126" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">config.ts, ollama.ts, agents.ts — shared modules</text>
+
+  <text x="60" y="146" font-size="10.5" fill="#7dd3fc">├── hooks/</text>
+  <text x="370" y="146" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">useVoice.ts — Web Speech API integration</text>
+
+  <text x="60" y="166" font-size="10.5" fill="#7dd3fc">├── types/</text>
+  <text x="370" y="166" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">TypeScript interfaces and type definitions</text>
+
+  <text x="60" y="186" font-size="10.5" fill="#7dd3fc">└── test/</text>
+  <text x="370" y="186" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Vitest unit tests (65 tests, 7 files)</text>
+
+  <!-- Separator -->
+  <line x1="40" y1="198" x2="740" y2="198" stroke="#1e3a5f" stroke-width="0.3" stroke-dasharray="4,3"/>
+
+  <!-- Backend section -->
+  <rect x="30" y="205" width="720" height="20" rx="3" fill="#064e3b" fill-opacity="0.15"/>
+  <text x="40" y="219" font-size="11" font-weight="700" fill="#34d399">src-tauri/src/</text>
+  <text x="370" y="219" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Rust backend (Tauri 2.0)</text>
+
+  <text x="60" y="241" font-size="10.5" fill="#6ee7b7">├── lib.rs</text>
+  <text x="370" y="241" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Tauri command registration + app setup</text>
+
+  <text x="60" y="261" font-size="10.5" fill="#6ee7b7">├── spectrum_graph.rs</text>
+  <text x="370" y="261" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">7D Spectrum Graph engine (SQLite, ~2300 LOC)</text>
+
+  <text x="60" y="281" font-size="10.5" fill="#6ee7b7">├── refractive_core.rs</text>
+  <text x="370" y="281" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Intent processing pipeline (~600 LOC)</text>
+
+  <text x="60" y="301" font-size="10.5" fill="#6ee7b7">├── sandbox_prism.rs</text>
+  <text x="370" y="301" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">WASM isolation + HMAC-SHA256 + rollback (~1100 LOC)</text>
+
+  <text x="60" y="321" font-size="10.5" fill="#6ee7b7">├── ollama_bridge.rs</text>
+  <text x="370" y="321" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Local LLM client — streaming + batch</text>
+
+  <text x="60" y="341" font-size="10.5" fill="#6ee7b7">├── langgraph_collab.rs</text>
+  <text x="370" y="341" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Multi-agent debate workflow (~500 LOC)</text>
+
+  <text x="60" y="361" font-size="10.5" fill="#6ee7b7">├── you_port.rs</text>
+  <text x="370" y="361" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Encrypted state migration (AES-GCM)</text>
+
+  <text x="60" y="381" font-size="10.5" fill="#6ee7b7">└── audit_log.rs</text>
+  <text x="370" y="381" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Tamper-proof SHA-256 audit trail</text>
+
+  <!-- Separator -->
+  <line x1="40" y1="393" x2="740" y2="393" stroke="#1e3a5f" stroke-width="0.3" stroke-dasharray="4,3"/>
+
+  <!-- Supporting dirs -->
+  <rect x="30" y="400" width="720" height="20" rx="3" fill="#78350f" fill-opacity="0.12"/>
+  <text x="40" y="414" font-size="11" font-weight="700" fill="#fbbf24">docs/</text>
+  <text x="370" y="414" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Architecture diagrams (SVG), ARCHITECTURE.md</text>
+
+  <rect x="30" y="425" width="720" height="20" rx="3" fill="#312e81" fill-opacity="0.12"/>
+  <text x="40" y="439" font-size="11" font-weight="700" fill="#a78bfa">.github/workflows/</text>
+  <text x="370" y="439" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">CI (ci.yml) + Release (release.yml) pipelines</text>
+
+  <rect x="30" y="450" width="720" height="20" rx="3" fill="#1e1b4b" fill-opacity="0.12"/>
+  <text x="40" y="464" font-size="11" font-weight="700" fill="#818cf8">tests/</text>
+  <text x="370" y="464" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Manual test documentation and checklists</text>
+</svg>

@@ -36,24 +36,9 @@ Everything runs offline. All inference via local [Ollama](https://ollama.com) mo
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│  React 18 + TypeScript + Vite (Frontend)            │
-│  ┌───────────┐  ┌──────────┐  ┌──────────────────┐  │
-│  │ Intent    │  │ Spectrum │  │ Active Agents    │  │
-│  │ Console   │  │ Graph    │  │ + Sandbox Panel  │  │
-│  └───────────┘  └──────────┘  └──────────────────┘  │
-├─────────────────────────────────────────────────────┤
-│  Tauri 2.0 IPC Bridge                               │
-├─────────────────────────────────────────────────────┤
-│  Rust Backend                                        │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │ Spectrum │  │ Sandbox  │  │ Ollama Bridge     │  │
-│  │ Graph    │  │ Prism    │  │ (local LLM)       │  │
-│  │ (SQLite) │  │ (WASM)   │  │                   │  │
-│  └──────────┘  └──────────┘  └───────────────────┘  │
-└─────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS Architecture Diagram" />
+</p>
 
 See [docs/architecture.svg](docs/architecture.svg) and the [docs/diagrams/](docs/diagrams/) folder for detailed visual diagrams.
 
@@ -138,25 +123,9 @@ CI runs automatically on every push and PR via [GitHub Actions](.github/workflow
 
 ## 📁 Project Structure
 
-```
-src/                          → React frontend (TypeScript)
-  ├── components/             → UI components (MainView, Sidebar, etc.)
-  ├── lib/                    → Shared libraries (ollama client, agents, config)
-  ├── hooks/                  → React hooks (useVoice)
-  ├── types/                  → TypeScript interfaces
-  └── test/                   → Vitest unit tests
-src-tauri/src/                → Rust backend
-  ├── lib.rs                  → Tauri command registration + app setup
-  ├── spectrum_graph.rs       → 7D Spectrum Graph engine (SQLite)
-  ├── refractive_core.rs      → Intent processing pipeline
-  ├── sandbox_prism.rs        → WASM isolation + cryptographic signing
-  ├── ollama_bridge.rs        → Local LLM client (streaming + non-streaming)
-  ├── langgraph_collab.rs     → Multi-agent debate workflow
-  ├── you_port.rs             → Encrypted state migration
-  └── audit_log.rs            → Tamper-proof audit trail
-docs/                         → Architecture diagrams (SVG)
-.github/workflows/            → CI + Release pipelines
-```
+<p align="center">
+  <img src="docs/diagrams/project-structure.svg" width="750" alt="PrismOS Project Structure" />
+</p>
 
 ---
 

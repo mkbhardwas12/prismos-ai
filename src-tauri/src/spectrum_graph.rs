@@ -1149,6 +1149,7 @@ impl SpectrumGraph {
              JOIN nodes ns ON e.source_id = ns.id
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.08
+               AND ns.label != nt.label
              ORDER BY mom DESC LIMIT 2",
         )?;
 
@@ -1166,6 +1167,12 @@ impl SpectrumGraph {
             .collect::<Result<Vec<_>, _>>()?;
 
         for (src, src_type, tgt, _tgt_type, w, m) in &high_momentum {
+            // Skip near-identical labels (truncated duplicates)
+            let src_norm: String = src.to_lowercase().chars().take(40).collect();
+            let tgt_norm: String = tgt.to_lowercase().chars().take(40).collect();
+            if src_norm == tgt_norm {
+                continue;
+            }
             let (text, action, icon) = match src_type.as_str() {
                 "work" => (
                     format!("Your \"{}\" ↔ \"{}\" connection is growing fast", src, tgt),

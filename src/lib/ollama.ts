@@ -1,4 +1,4 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Ollama TypeScript Client — for direct frontend calls when needed
 
 import { DEFAULT_OLLAMA_URL } from "./config";

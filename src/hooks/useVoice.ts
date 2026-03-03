@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Voice Engine — Web Speech API Integration
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Voice Engine — Web Speech API Integration
 //
 // Provides voice input (Speech-to-Text) and voice output (Text-to-Speech)
 // using the browser's built-in Web Speech API. All processing stays local
@@ -144,7 +144,7 @@ export function useVoice(
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.warn("[PrismOS Voice] Recognition error:", event.error);
+      console.warn("[PrismOS-AI Voice] Recognition error:", event.error);
       setIsListening(false);
       setInterimTranscript("");
     };
@@ -159,7 +159,7 @@ export function useVoice(
     try {
       recognition.start();
     } catch (e) {
-      console.error("[PrismOS Voice] Failed to start recognition:", e);
+      console.error("[PrismOS-AI Voice] Failed to start recognition:", e);
       setIsListening(false);
     }
   }, [sttSupported, voiceEnabled, onTranscript]);

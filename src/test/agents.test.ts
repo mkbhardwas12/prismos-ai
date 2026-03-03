@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — Agent Definitions Unit Tests
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — Agent Definitions Unit Tests
 
 import { describe, it, expect } from "vitest";
 import { CORE_AGENTS, createInitialState } from "../lib/agents";

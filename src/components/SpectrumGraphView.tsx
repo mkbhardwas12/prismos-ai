@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Spectrum Graph View — Force-Directed Knowledge Graph Visualization
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Spectrum Graph View — Force-Directed Knowledge Graph Visualization
 //
 // Renders the multi-layered Spectrum Graph using react-force-graph-2d.
 // Nodes are colored by facet type (life facets per patent).
@@ -326,10 +326,10 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       <div className="sg-canvas">
         {graphData.nodes.length === 0 ? (
           <div className="sg-empty">
-            <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS" className="sg-empty-logo" /></div>
+            <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS-AI" className="sg-empty-logo" /></div>
             <div className="sg-growing-pulse" />
             <h3>🌱 Memory is growing…</h3>
-            <p>Your Spectrum Graph builds itself as you chat. Each conversation creates nodes and connections that PrismOS learns from.</p>
+            <p>Your Spectrum Graph builds itself as you chat. Each conversation creates nodes and connections that PrismOS-AI learns from.</p>
             <p className="sg-empty-hint">Try sending an intent like <em>"Summarize my week"</em> to get started.</p>
           </div>
         ) : (

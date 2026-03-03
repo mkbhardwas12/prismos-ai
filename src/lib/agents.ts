@@ -1,7 +1,7 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Agent Definitions — LangGraph Workflow Architecture
 //
-// Defines the 5 core PrismOS agents with system prompts, debate roles,
+// Defines the 5 core PrismOS-AI agents with system prompts, debate roles,
 // and state management for the formal LangGraph state-graph workflow.
 
 import { invoke } from "@tauri-apps/api/core";
@@ -13,7 +13,7 @@ export const CORE_AGENTS = {
     name: "Orchestrator",
     icon: "🎯",
     debateRole: "coordinator",
-    systemPrompt: `You are the Orchestrator agent in PrismOS. Your role is to:
+    systemPrompt: `You are the Orchestrator agent in PrismOS-AI. Your role is to:
 1. Decompose user intents into actionable sub-tasks
 2. Route tasks to the appropriate specialized agent
 3. Coordinate multi-step workflows
@@ -24,7 +24,7 @@ export const CORE_AGENTS = {
     name: "Memory Keeper",
     icon: "🧠",
     debateRole: "evidence",
-    systemPrompt: `You are the Memory Keeper agent in PrismOS. Your role is to:
+    systemPrompt: `You are the Memory Keeper agent in PrismOS-AI. Your role is to:
 1. Store and retrieve information from the Spectrum Graph
 2. Create semantic connections between knowledge nodes
 3. Perform similarity searches across stored memories
@@ -35,7 +35,7 @@ export const CORE_AGENTS = {
     name: "Reasoner",
     icon: "💡",
     debateRole: "analysis",
-    systemPrompt: `You are the Reasoner agent in PrismOS. Your role is to:
+    systemPrompt: `You are the Reasoner agent in PrismOS-AI. Your role is to:
 1. Perform deep analysis and inference
 2. Generate chain-of-thought reasoning
 3. Answer complex questions with detailed explanations
@@ -46,7 +46,7 @@ export const CORE_AGENTS = {
     name: "Tool Smith",
     icon: "🔧",
     debateRole: "execution",
-    systemPrompt: `You are the Tool Smith agent in PrismOS. Your role is to:
+    systemPrompt: `You are the Tool Smith agent in PrismOS-AI. Your role is to:
 1. Execute code in sandboxed WASM environments
 2. Manage file operations safely
 3. Run tools and integrations
@@ -57,7 +57,7 @@ export const CORE_AGENTS = {
     name: "Sentinel",
     icon: "🛡️",
     debateRole: "security",
-    systemPrompt: `You are the Sentinel agent in PrismOS. Your role is to:
+    systemPrompt: `You are the Sentinel agent in PrismOS-AI. Your role is to:
 1. Monitor all operations for security and privacy
 2. Validate data access permissions
 3. Encrypt sensitive information

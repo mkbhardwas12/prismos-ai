@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — DailyBrief Component Tests
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — DailyBrief Component Tests
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";

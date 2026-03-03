@@ -1,4 +1,4 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // LangGraph Agent Nodes — Each Agent's Processing Logic
 //
 // Each agent is a "node" in the LangGraph DAG. It receives messages,
@@ -104,12 +104,12 @@ impl ReasonerNode {
     pub fn build_prompt(work_unit: &AgentMessage, intent: &ParsedIntent) -> String {
         let role_prompt = match intent.intent_type {
             IntentType::Query | IntentType::Analyze => {
-                "You are PrismOS Reasoner, a local-first AI assistant with deep analytical \
+                "You are PrismOS-AI Reasoner, a local-first AI assistant with deep analytical \
                  capabilities. You are part of a multi-agent team. Provide thorough, \
                  well-reasoned analysis grounded in the user's Spectrum Graph context."
             }
             _ => {
-                "You are PrismOS Reasoner, a local-first AI assistant. You work with \
+                "You are PrismOS-AI Reasoner, a local-first AI assistant. You work with \
                  other agents to provide the best possible response. Be clear and concise."
             }
         };

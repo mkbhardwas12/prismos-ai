@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — Main Application Shell
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — Main Application Shell
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -308,9 +308,9 @@ function App() {
   // ── Loading screen ──
   if (!ready) {
     return (
-      <div className="app-loading" role="status" aria-label="Loading PrismOS" aria-live="polite">
-        <img src={prismosIcon} alt="PrismOS" className="app-loading-logo" />
-        <div className="app-loading-text" aria-hidden="true">PrismOS</div>
+      <div className="app-loading" role="status" aria-label="Loading PrismOS-AI" aria-live="polite">
+        <img src={prismosIcon} alt="PrismOS-AI" className="app-loading-logo" />
+        <div className="app-loading-text" aria-hidden="true">PrismOS-AI</div>
         <div className="app-loading-bar" role="progressbar" aria-label="Loading progress">
           <div className="app-loading-bar-fill" />
         </div>
@@ -320,7 +320,7 @@ function App() {
   }
 
   return (
-    <div className="app-layout" role="application" aria-label="PrismOS">
+    <div className="app-layout" role="application" aria-label="PrismOS-AI">
       <Sidebar
         currentView={view}
         onNavigate={setView}

@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — Sidebar Component Tests
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — Sidebar Component Tests
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -32,7 +32,7 @@ const defaultProps = {
 };
 
 describe("Sidebar", () => {
-  it("renders the PrismOS logo/icon", () => {
+  it("renders the PrismOS-AI logo/icon", () => {
     render(<Sidebar {...defaultProps} />);
     expect(screen.getByAltText(/prism/i)).toBeInTheDocument();
   });

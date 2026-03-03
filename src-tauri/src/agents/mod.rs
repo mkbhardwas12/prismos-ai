@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS LangGraph Multi-Agent Collaboration Framework
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI LangGraph Multi-Agent Collaboration Framework
 //
 // This module implements the LangGraph-style multi-agent workflow described
 // in the patent. Five specialized agents collaborate through a structured

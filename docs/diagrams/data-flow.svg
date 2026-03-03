@@ -127,5 +127,5 @@
   <text x="350" y="644" text-anchor="middle" font-size="9.5" fill="#94a3b8">+ Proactive suggestion cards auto-process on click</text>
 
   <!-- Footer -->
-  <text x="350" y="672" text-anchor="middle" font-size="9" fill="#475569">PrismOS v0.2.1 · Patent Pending · 100% Local Processing</text>
+  <text x="350" y="672" text-anchor="middle" font-size="9" fill="#475569">PrismOS-AI v0.2.1 · Patent Pending · 100% Local Processing</text>
 </svg>

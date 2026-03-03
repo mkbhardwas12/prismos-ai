@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — Local-First Agentic Personal AI Operating System
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — Local-First Agentic Personal AI Operating System
 // Main application library — Tauri command handlers and system initialization
 
 mod refractive_core;
@@ -478,7 +478,7 @@ async fn update_spectrum_node(
 
 // ─── You-Port Encrypted State Handoff (Patent Pending) ──────────────────────
 
-/// Save complete PrismOS state to encrypted file (Spectrum Graph + agents + metadata)
+/// Save complete PrismOS-AI state to encrypted file (Spectrum Graph + agents + metadata)
 /// Called on app close or manually by the user.
 #[tauri::command]
 async fn save_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
@@ -488,7 +488,7 @@ async fn save_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Res
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-/// Load and restore PrismOS state from encrypted file.
+/// Load and restore PrismOS-AI state from encrypted file.
 /// Decrypts, verifies integrity, and merges into current Spectrum Graph.
 #[tauri::command]
 async fn load_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
@@ -810,7 +810,7 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
 // ─── Graph Merge/Diff Commands (Patent Pending — Multi-Device Sync) ───────
 
 /// Export the local Spectrum Graph as a passphrase-encrypted sync package.
-/// The resulting file can be transferred to another PrismOS instance and
+/// The resulting file can be transferred to another PrismOS-AI instance and
 /// merged using the same passphrase.
 #[tauri::command]
 async fn export_sync_package(app: tauri::AppHandle, passphrase: String) -> Result<String, String> {
@@ -976,7 +976,7 @@ pub fn run() {
 
             // Initialize tamper-evident audit log
             let audit = audit_log::AuditLog::new(&app_dir);
-            let _ = audit.append("app_launch", "system", "PrismOS application started");
+            let _ = audit.append("app_launch", "system", "PrismOS-AI application started");
 
             // Initialize secure enclave
             let enclave = secure_enclave::SecureEnclave::new();
@@ -990,7 +990,7 @@ pub fn run() {
             );
 
             println!("╔══════════════════════════════════════════════╗");
-            println!("║  ◈ PrismOS v0.2.0 — Local-First AI OS       ║");
+            println!("║  ◈ PrismOS-AI v0.2.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
@@ -1076,5 +1076,5 @@ pub fn run() {
             get_security_status,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running PrismOS");
+        .expect("error while running PrismOS-AI");
 }

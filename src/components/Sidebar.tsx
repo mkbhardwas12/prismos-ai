@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -97,7 +97,7 @@ export default function Sidebar({
 
       <div className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`} role="complementary" aria-label="Sidebar navigation">
         <div className="sidebar-header">
-          <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" /> PrismOS</span>
+          <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS-AI" className="sidebar-logo-img" /> PrismOS-AI</span>
           <span className="sidebar-version">v0.2.0</span>
         </div>
 
@@ -132,7 +132,7 @@ export default function Sidebar({
                 className="sidebar-item-window-btn"
                 title="Open Spectrum Graph in new window"
                 aria-label="Open Spectrum Graph in new window"
-                onClick={() => openWindow("spectrum-graph-window", "PrismOS — Spectrum Graph", "graph")}
+                onClick={() => openWindow("spectrum-graph-window", "PrismOS-AI — Spectrum Graph", "graph")}
               >
                 ↗
               </button>
@@ -175,7 +175,7 @@ export default function Sidebar({
                 className="sidebar-item-window-btn"
                 title="Open Spectral Timeline in new window"
                 aria-label="Open Spectral Timeline in new window"
-                onClick={() => openWindow("spectral-timeline-window", "PrismOS — Spectral Timeline", "timeline")}
+                onClick={() => openWindow("spectral-timeline-window", "PrismOS-AI — Spectral Timeline", "timeline")}
               >
                 ↗
               </button>

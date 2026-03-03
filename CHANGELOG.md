@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Highlights
 
-PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native window decorations and adds a custom frameless title bar with drag region and window controls. System tray integration keeps agents resident when the window is closed. Drag-and-drop file ingest lets users drop files directly into the Intent Input for instant text extraction. Auto-updater infrastructure enables seamless OTA updates via GitHub Releases.
+PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native window decorations and adds a custom frameless title bar with drag region and window controls. System tray integration keeps agents resident when the window is closed. Drag-and-drop file ingest lets users drop files directly into the Intent Input for instant text extraction. Auto-updater infrastructure enables seamless OTA updates via GitHub Releases. **Phase 5.5: Local Vision** adds multimodal image analysis — drag-drop images or capture photos via webcam, analyzed entirely offline using llava/llama3.2-vision models.
 
 ### Added
 
@@ -21,13 +21,27 @@ PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native 
 - **System Tray** — `TrayIconBuilder` with "Show PrismOS-AI" and "Quit" menu items; clicking the tray icon restores the window; close button hides to tray instead of exiting
 - **Drag & Drop File Ingest** — Drop files onto Intent Input to auto-extract text content via Rust `extract_file_text` command; supports 50+ text/code/data file extensions; 5MB size limit; visual drag overlay and file badge indicator
 - **Auto-Updater Infrastructure** — `tauri-plugin-updater` configured with GitHub Releases endpoint; `tauri-plugin-window-state` for window position persistence across sessions
+- **Local Vision Engine** — Multimodal image analysis via llava/llama3.2-vision models, entirely offline:
+  - `query_ollama_vision` Tauri command: sends base64-encoded images to Ollama's `/api/generate` endpoint with vision models
+  - `read_image_as_base64` Tauri command: reads image files from disk (jpg/png/gif/bmp/webp/tiff, 20MB limit) and returns base64
+  - `IntentInput.tsx` vision UI: drag-drop images, 🖼️ file picker button, 📷 camera capture button, image preview with thumbnail
+  - Camera capture via `navigator.mediaDevices.getUserMedia()` with live viewfinder and single-frame capture
+  - `ollama_bridge.rs`: `GenerateRequest` struct extended with `images: Option<Vec<String>>` for base64 image arrays
+  - Auto-detects vision-capable models; defaults to "llava" when current model doesn't support vision
+  - `MainView.tsx`: Vision path in `handleIntent` — routes image+prompt to `query_ollama_vision`, shows 👁️ Vision metadata
 
 ### Changed
 
 - `tauri.conf.json`: `decorations` set to `false`, added `trayIcon` and `plugins.updater` config, version bumped to v0.5.0
-- `lib.rs`: Registered `tauri-plugin-updater` and `tauri-plugin-window-state` plugins; added tray menu with event handlers; added `extract_file_text` Tauri IPC command; startup banner updated to v0.5.0
+- `lib.rs`: Registered `tauri-plugin-updater` and `tauri-plugin-window-state` plugins; added tray menu with event handlers; added `extract_file_text` Tauri IPC command; added `query_ollama_vision` and `read_image_as_base64` commands; startup banner updated with Local Vision Engine line
+- `ollama_bridge.rs`: `GenerateRequest` struct extended with `images` field; `generate()` and `generate_stream()` accept images parameter
+- `refractive_core.rs`: Updated `generate()` call to pass `None` for images
+- `agents/langgraph_workflow.rs`: Updated `generate()` call to pass `None` for images
 - `App.tsx`: New `TitleBar` component rendered at top of layout; `.app-body` wrapper for sidebar + main content
-- `IntentInput.tsx`: Added drag-over/drop handlers with visual feedback, file text extraction via Tauri IPC
+- `IntentInput.tsx`: Added drag-over/drop handlers with visual feedback, file text extraction via Tauri IPC; added vision UI (image attachment, camera capture, file picker, image preview)
+- `IntentInput.css`: Added vision CSS classes (preview, camera viewfinder, vision buttons, animations)
+- `MainView.tsx`: `handleIntent` accepts optional `imageData` parameter; vision path routes to `query_ollama_vision`
+- `IntentInput.test.tsx`: Updated `onSubmit` assertion for new `(input, imageData?)` signature; updated button selector for vision buttons
 - `Cargo.toml`: Added `tauri-plugin-updater`, `tauri-plugin-window-state`; enabled `tray-icon` feature on `tauri` crate
 - `capabilities/default.json`: Added `updater:default` and `window-state:default` permissions
 - All version references updated from v0.4.0 to v0.5.0

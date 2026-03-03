@@ -21,6 +21,9 @@ struct GenerateRequest {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<GenerateOptions>,
+    /// Base64-encoded images for multimodal vision models (llava, llama3.2-vision)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    images: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,11 +72,13 @@ pub async fn is_available(base_url: Option<&str>) -> Result<bool, Box<dyn std::e
 }
 
 /// Generate a completion from a local model (non-streaming)
+/// Pass `images` as base64-encoded strings for multimodal vision models.
 pub async fn generate(
     model: &str,
     prompt: &str,
     base_url: Option<&str>,
     max_tokens: Option<u32>,
+    images: Option<Vec<String>>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
@@ -83,6 +88,7 @@ pub async fn generate(
         prompt: prompt.to_string(),
         stream: false,
         options,
+        images,
     };
 
     let response = client
@@ -136,11 +142,13 @@ pub struct StreamEvent {
 }
 
 /// Generate a completion with streaming — sends tokens via a callback
+/// Pass `images` as base64-encoded strings for multimodal vision models.
 pub async fn generate_stream<F>(
     model: &str,
     prompt: &str,
     base_url: Option<&str>,
     max_tokens: Option<u32>,
+    images: Option<Vec<String>>,
     mut on_token: F,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -154,6 +162,7 @@ where
         prompt: prompt.to_string(),
         stream: true,
         options,
+        images,
     };
 
     let response = client

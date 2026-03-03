@@ -81,7 +81,7 @@ async fn refract_intent(app: tauri::AppHandle, input: String) -> Result<String, 
 #[tauri::command]
 async fn query_ollama(prompt: String, model: Option<String>, ollama_url: Option<String>, max_tokens: Option<u32>) -> Result<String, String> {
     let model = model.unwrap_or_else(|| "mistral".to_string());
-    ollama_bridge::generate(&model, &prompt, ollama_url.as_deref(), max_tokens)
+    ollama_bridge::generate(&model, &prompt, ollama_url.as_deref(), max_tokens, None)
         .await
         .map_err(|e| e.to_string())
 }
@@ -101,12 +101,62 @@ async fn query_ollama_stream(
         &prompt,
         ollama_url.as_deref(),
         max_tokens,
+        None,
         move |event| {
             let _ = app_clone.emit("ollama-stream", &event);
         },
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+// ─── Local Vision (Phase 5.5) — Multimodal image analysis via llava/llama3.2-vision ──
+
+/// Analyze an image with a local vision model.
+/// Accepts a text prompt + base64-encoded image, sends to a vision-capable model.
+#[tauri::command]
+async fn query_ollama_vision(
+    prompt: String,
+    image_data: String,
+    model: Option<String>,
+    ollama_url: Option<String>,
+) -> Result<String, String> {
+    let model = model.unwrap_or_else(|| "llava".to_string());
+    let images = vec![image_data];
+    ollama_bridge::generate(&model, &prompt, ollama_url.as_deref(), None, Some(images))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Read an image file from disk and return its base64-encoded content.
+/// Used when users drag-and-drop image files into the intent input.
+#[tauri::command]
+async fn read_image_as_base64(path: String) -> Result<String, String> {
+    let file_path = std::path::Path::new(&path);
+
+    if !file_path.exists() {
+        return Err(format!("Image not found: {}", path));
+    }
+
+    let metadata = std::fs::metadata(file_path).map_err(|e| e.to_string())?;
+    // Limit to 20 MB for images
+    if metadata.len() > 20 * 1024 * 1024 {
+        return Err("Image too large (max 20 MB)".to_string());
+    }
+
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let image_exts = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif"];
+    if !image_exts.contains(&ext.as_str()) {
+        return Err(format!("Not a supported image format: .{}", ext));
+    }
+
+    let bytes = std::fs::read(file_path).map_err(|e| e.to_string())?;
+    Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
 }
 
 // ─── Spectrum Graph Commands ───────────────────────────────────────────────────
@@ -1325,6 +1375,7 @@ pub fn run() {
             println!("║  Frameless Window + System Tray: ACTIVE      ║");
             println!("║  Auto-Updater: CONFIGURED                    ║");
             println!("║  Drag & Drop File Ingest: READY              ║");
+            println!("║  Local Vision Engine: READY                  ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
@@ -1454,6 +1505,9 @@ pub fn run() {
             get_indexed_files,
             // Drag & Drop File Ingest (Phase 5)
             extract_file_text,
+            // Local Vision — Multimodal (Phase 5.5)
+            query_ollama_vision,
+            read_image_as_base64,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS-AI");

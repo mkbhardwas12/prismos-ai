@@ -1,10 +1,10 @@
-// Patent Pending — US 63/993,589 (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // You-Port — Encrypted State Migration & Session Handoff
 //
 // You-Port enables secure, end-to-end encrypted export/import of the complete
 // PrismOS state for device-to-device handoff and session persistence.
 //
-// Architecture per Patent 63/993,589:
+// Architecture per Patent Pending:
 //   1. Serialize full Spectrum Graph (nodes + edges + metrics)
 //   2. Capture active agent states and collaboration metadata
 //   3. Encrypt using AES-256-GCM with HMAC-SHA256-derived key
@@ -279,7 +279,7 @@ pub fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
 // ─── State Capture ─────────────────────────────────────────────────────────────
 
 /// Capture the complete PrismOS state: Spectrum Graph + agent states + metadata.
-/// This is the full "You-Port snapshot" per Patent 63/993,589.
+/// This is the full "You-Port snapshot" per Patent Pending.
 pub fn capture_state(
     app_dir: &Path,
 ) -> Result<YouPortState, Box<dyn std::error::Error + Send + Sync>> {
@@ -519,7 +519,7 @@ pub fn has_saved_state(app_dir: &Path) -> bool {
     app_dir.join(STATE_FILE).exists()
 }
 
-// ─── Advanced You-Port: Cross-Device Merge (Patent 63/993,589) ─────────────────
+// ─── Advanced You-Port: Cross-Device Merge (Patent Pending) ─────────────────
 
 /// Result of a cross-device merge operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -742,7 +742,7 @@ mod tests {
     #[test]
     fn test_xor_cipher_roundtrip() {
         let key = derive_key("test-device", "test-nonce");
-        let plaintext = b"Hello PrismOS! Patent 63/993,589 - encrypted handoff test data that spans multiple blocks to verify counter mode works correctly.";
+        let plaintext = b"Hello PrismOS! Patent Pending - encrypted handoff test data that spans multiple blocks to verify counter mode works correctly.";
 
         let ciphertext = xor_stream_cipher(&key, plaintext);
         assert_ne!(&ciphertext, plaintext);

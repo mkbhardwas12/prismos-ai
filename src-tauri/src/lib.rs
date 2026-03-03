@@ -30,7 +30,7 @@ pub struct DbState(pub Mutex<spectrum_graph::SpectrumGraph>);
 async fn process_intent(app: tauri::AppHandle, input: String) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
-    let result = refractive_core::process_intent_full(&input, &app_dir)
+    let result = refractive_core::process_intent_full(&input, &app_dir, app.clone())
         .await
         .map_err(|e| e.to_string())?;
 
@@ -43,7 +43,7 @@ async fn process_intent(app: tauri::AppHandle, input: String) -> Result<String, 
 async fn process_intent_full(app: tauri::AppHandle, input: String) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
-    let result = refractive_core::process_intent_full(&input, &app_dir)
+    let result = refractive_core::process_intent_full(&input, &app_dir, app.clone())
         .await
         .map_err(|e| e.to_string())?;
 
@@ -59,7 +59,7 @@ async fn refract_intent(app: tauri::AppHandle, input: String) -> Result<String, 
 
     let engine = refractive_core::RefractiveEngine::new();
     let result = engine
-        .refract(parsed, &app_dir)
+        .refract(parsed, &app_dir, app.clone())
         .await
         .map_err(|e| e.to_string())?;
 
@@ -611,7 +611,7 @@ async fn run_collaboration(app: tauri::AppHandle, input: String) -> Result<Strin
 
     let engine = refractive_core::RefractiveEngine::new();
     let result = engine
-        .refract(parsed, &app_dir)
+        .refract(parsed, &app_dir, app.clone())
         .await
         .map_err(|e| e.to_string())?;
 

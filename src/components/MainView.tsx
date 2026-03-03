@@ -9,7 +9,7 @@ import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import UserGuide from "./UserGuide";
 import { useVoice } from "../hooks/useVoice";
-import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel } from "../types";
+import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel, AgentActivity } from "../types";
 import "./MainView.css";
 
 interface MainViewProps {
@@ -17,6 +17,8 @@ interface MainViewProps {
   settings: AppSettings;
   onSettingsChange: (s: AppSettings) => void;
   onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
+  liveAgentSteps: AgentActivity[];
+  clearLiveSteps: () => void;
 }
 
 type SetupStep = "install" | "start" | "model" | "ready";
@@ -26,6 +28,8 @@ export default function MainView({
   settings,
   onSettingsChange,
   onIntentProcessed,
+  liveAgentSteps,
+  clearLiveSteps,
 }: MainViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -259,6 +263,7 @@ export default function MainView({
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsProcessing(true);
+    clearLiveSteps(); // Phase 2: clear previous live steps
 
     try {
       // Use full Refractive Core pipeline (Patent Pending)
@@ -713,9 +718,32 @@ export default function MainView({
                 </div>
                 <div className="processing-text">
                   <span className="processing-label">Refracting your intent…</span>
-                  <span className="processing-detail">Agents collaborating · Graph context loading</span>
+                  <span className="processing-detail">
+                    {liveAgentSteps.length > 0
+                      ? liveAgentSteps[liveAgentSteps.length - 1].action
+                      : "Agents collaborating · Graph context loading"}
+                  </span>
                 </div>
               </div>
+
+              {/* ── Phase 2: Live Agent Debate Log ── */}
+              {liveAgentSteps.length > 0 && (
+                <div className="live-debate-log" role="log" aria-label="Agent collaboration log">
+                  {liveAgentSteps.map((step, i) => (
+                    <div
+                      key={i}
+                      className={`live-step live-step-${step.status} live-phase-${step.phase}`}
+                      style={{ animationDelay: `${i * 0.05}s` }}
+                    >
+                      <span className={`live-step-dot ${step.status === "completed" ? "dot-done" : "dot-active"}`} />
+                      <span className="live-step-agent">{step.agent}</span>
+                      <span className="live-step-action">{step.action}</span>
+                      {step.status === "completed" && <span className="live-step-check">✓</span>}
+                      {step.status === "thinking" && <span className="live-step-pulse">…</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

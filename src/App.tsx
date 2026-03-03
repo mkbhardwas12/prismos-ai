@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import Sidebar from "./components/Sidebar";
 import MainView from "./components/MainView";
 import SettingsPanel from "./components/SettingsPanel";
@@ -12,7 +13,7 @@ import SandboxPanel from "./components/SandboxPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
 import ErrorBoundary from "./components/ErrorBoundary";
 import prismosIcon from "./assets/prismos-icon.svg";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
 
@@ -37,6 +38,7 @@ function App() {
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
   const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
   const [lastDebate, setLastDebate] = useState<DebateSummary | null>(null);
+  const [liveAgentSteps, setLiveAgentSteps] = useState<AgentActivity[]>([]);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
@@ -142,6 +144,8 @@ function App() {
     loadGraphStats();
     // Signal the SpectrumGraphView to re-fetch
     setGraphRefreshKey((k) => k + 1);
+    // Phase 2: keep live steps visible briefly, then clear
+    setTimeout(() => setLiveAgentSteps([]), 4000);
   }, [loadAgents, loadNodes, loadGraphStats]);
 
   useEffect(() => {
@@ -213,6 +217,24 @@ function App() {
     }
   }, [toast]);
 
+  // ── Phase 2: Listen for real-time agent-activity events from Rust backend ──
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    listen<AgentActivity>("agent-activity", (event) => {
+      setLiveAgentSteps((prev) => [...prev, event.payload]);
+    }).then((fn) => {
+      unlistenFn = fn;
+    });
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
+
+  // Callback for MainView to clear live steps when starting a new intent
+  const clearLiveSteps = useCallback(() => {
+    setLiveAgentSteps([]);
+  }, []);
+
   function renderView() {
     switch (view) {
       case "chat":
@@ -222,6 +244,8 @@ function App() {
             settings={settings}
             onSettingsChange={handleSettingsChange}
             onIntentProcessed={onIntentProcessed}
+            liveAgentSteps={liveAgentSteps}
+            clearLiveSteps={clearLiveSteps}
           />
         );
       case "graph":
@@ -276,6 +300,7 @@ function App() {
         graphStats={graphStats}
         collaboration={lastCollaboration}
         debateSummary={lastDebate}
+        liveAgentSteps={liveAgentSteps}
       />
       <main className="main-content" id="main-content" role="main" aria-label="Main content">
         {/* Global error banner */}

@@ -352,6 +352,110 @@ select:focus-visible {
   50%      { opacity: 1; }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   PHASE 2 — LIVE AGENT DEBATE LOG (inline in processing bubble)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.live-debate-log {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(37, 99, 235, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.2) transparent;
+}
+
+.live-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  animation: liveStepSlideIn 0.25s ease-out both;
+  transition: background 0.2s ease;
+}
+
+.live-step:last-child {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+@keyframes liveStepSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.live-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.live-step-dot.dot-active {
+  background: var(--color-accent);
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.live-step-dot.dot-done {
+  background: rgba(16, 185, 129, 0.8);
+}
+
+.live-step-agent {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.live-step-action {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.live-step-check {
+  color: rgba(16, 185, 129, 0.9);
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.live-step-pulse {
+  color: var(--color-accent);
+  font-weight: 700;
+  animation: processingShimmer 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* Phase colors for left accent */
+.live-phase-orchestrate { border-left: 2px solid rgba(37, 99, 235, 0.5); }
+.live-phase-analyze { border-left: 2px solid rgba(6, 182, 212, 0.5); }
+.live-phase-debate { border-left: 2px solid rgba(245, 158, 11, 0.5); }
+.live-phase-review { border-left: 2px solid rgba(239, 68, 68, 0.4); }
+.live-phase-vote { border-left: 2px solid rgba(16, 185, 129, 0.5); }
+.live-phase-execute { border-left: 2px solid rgba(139, 92, 246, 0.5); }
+
+/* Completed steps are slightly dimmed */
+.live-step-completed .live-step-action {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 /* ===============================================================================
    STARTUP LOADING SCREEN
    =============================================================================== */

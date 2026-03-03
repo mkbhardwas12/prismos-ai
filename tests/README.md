@@ -47,7 +47,7 @@ Use this checklist to verify all features before a release:
 - [ ] Loading screen transitions smoothly to main view
 - [ ] You-Port auto-restore toast appears if previous session exists
 - [ ] Sidebar shows all 6 navigation items
-- [ ] Version badge shows v0.4.0
+- [ ] Version badge shows v0.5.0
 
 #### Intent Console
 - [ ] Welcome screen shows with 3 feature cards
@@ -111,7 +111,41 @@ Use this checklist to verify all features before a release:
   - [ ] Apply Merge runs merge with selected strategy
   - [ ] Strategy selector (Latest/Theirs/Ours) works
 - [ ] Patent notice visible
-- [ ] Version banner shows v0.4.0
+- [ ] Version banner shows v0.5.0
+
+#### Frameless Window & System Tray
+- [ ] Frameless window renders with custom titlebar
+- [ ] Minimize / maximize / close buttons work
+- [ ] Window drag works from titlebar area
+- [ ] System tray icon appears
+- [ ] System tray menu (Show / Quit) works
+- [ ] Closing window hides to tray (does not quit)
+
+#### Drag & Drop File Ingest
+- [ ] Dragging a .txt file onto Intent Console ingests text
+- [ ] Dragging a .json file shows parsed content
+- [ ] Dragging a .md file ingests markdown content
+- [ ] Drop zone visual highlight appears on drag-over
+
+#### Local Vision (Multimodal)
+- [ ] 🖼️ Image button appears in Intent Input
+- [ ] 📷 Camera capture button works
+- [ ] Drag-drop image onto input shows preview
+- [ ] Submitting with image calls vision model (llava / llama3.2-vision)
+- [ ] AI response describes the image content
+
+#### Document Analysis
+- [ ] 📄 Document upload button appears in Intent Input
+- [ ] Uploading PDF extracts text and shows preview card
+- [ ] Uploading DOCX extracts text and shows preview card
+- [ ] Uploading PPTX extracts text and shows preview card
+- [ ] Uploading XLSX extracts text and shows preview card
+- [ ] Submitting with document sends context to AI for analysis
+- [ ] AI response summarizes/analyzes the document content
+
+#### Auto-Updater
+- [ ] App checks for updates on startup
+- [ ] Update notification appears when new version available
 
 #### Accessibility
 - [ ] Tab navigation moves through all interactive elements

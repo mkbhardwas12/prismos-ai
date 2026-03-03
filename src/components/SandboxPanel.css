@@ -127,3 +127,82 @@
   background-color: #fef2f2;
   border: 1px solid #fecaca;
 }
+
+/* ── First-Time Guidance ── */
+.sandbox-guidance {
+  text-align: center;
+  padding: 32px 24px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
+  border: 1px dashed rgba(139, 92, 246, 0.3);
+  border-radius: 12px;
+  animation: guidanceFadeIn 0.4s ease-out;
+}
+
+.sandbox-guidance-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.sandbox-guidance h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+
+.sandbox-guidance p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 18px;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sandbox-guidance-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 320px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.sandbox-guidance-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.sandbox-step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+@keyframes guidanceFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+[data-theme="light"] .sandbox-guidance {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.06));
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+[data-theme="light"] .sandbox-step-num {
+  background: rgba(139, 92, 246, 0.15);
+  color: #7c3aed;
+}

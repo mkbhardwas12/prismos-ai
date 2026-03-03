@@ -105,6 +105,7 @@ export default function Sidebar({
               className={`sidebar-item ${currentView === "chat" ? "active" : ""}`}
               onClick={() => handleNavigate("chat")}
               aria-current={currentView === "chat" ? "page" : undefined}
+              title="Chat with your AI agents — send intents and get intelligent responses"
             >
               <span className="sidebar-item-icon" aria-hidden="true">💬</span>
               Intent Console
@@ -117,6 +118,7 @@ export default function Sidebar({
                 className={`sidebar-item sidebar-item-grow ${currentView === "graph" ? "active" : ""}`}
                 onClick={() => handleNavigate("graph")}
                 aria-current={currentView === "graph" ? "page" : undefined}
+                title="Interactive force-directed visualization of your knowledge connections"
               >
                 <span className="sidebar-item-icon" aria-hidden="true">🕸️</span>
                 Spectrum Graph
@@ -136,6 +138,7 @@ export default function Sidebar({
               className={`sidebar-item ${currentView === "spectrum" ? "active" : ""}`}
               onClick={() => handleNavigate("spectrum")}
               aria-current={currentView === "spectrum" ? "page" : undefined}
+              title="Browse, search, and manage all nodes in your knowledge graph"
             >
               <span className="sidebar-item-icon" aria-hidden="true">🌈</span>
               Spectrum Explorer
@@ -145,6 +148,7 @@ export default function Sidebar({
               className={`sidebar-item ${currentView === "sandbox" ? "active" : ""}`}
               onClick={() => handleNavigate("sandbox")}
               aria-current={currentView === "sandbox" ? "page" : undefined}
+              title="Execute AI actions in isolated sandboxes with cryptographic rollback"
             >
               <span className="sidebar-item-icon" aria-hidden="true">🔒</span>
               Sandbox Prisms
@@ -157,6 +161,7 @@ export default function Sidebar({
                 className={`sidebar-item sidebar-item-grow ${currentView === "timeline" ? "active" : ""}`}
                 onClick={() => handleNavigate("timeline")}
                 aria-current={currentView === "timeline" ? "page" : undefined}
+                title="Time-based history of all knowledge graph events and changes"
               >
                 <span className="sidebar-item-icon" aria-hidden="true">📅</span>
                 Spectral Timeline
@@ -176,6 +181,7 @@ export default function Sidebar({
               className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}
               onClick={() => handleNavigate("settings")}
               aria-current={currentView === "settings" ? "page" : undefined}
+              title="Configure Ollama, themes, graph sync, export/import, and security"
             >
               <span className="sidebar-item-icon" aria-hidden="true">⚙️</span>
               Settings

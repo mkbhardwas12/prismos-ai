@@ -13,9 +13,19 @@ import SandboxPanel from "./components/SandboxPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
 import ErrorBoundary from "./components/ErrorBoundary";
 import prismosIcon from "./assets/prismos-icon.svg";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
+
+/** Time-aware daily greeting based on hour of day */
+function getDailyGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 6) return "🌙 Burning the midnight oil?";
+  if (h < 12) return "☀️ Good morning";
+  if (h < 17) return "🌤️ Good afternoon";
+  if (h < 21) return "🌆 Good evening";
+  return "🌙 Working late?";
+}
 
 function App() {
   const [ready, setReady] = useState(false);
@@ -41,6 +51,8 @@ function App() {
   const [liveAgentSteps, setLiveAgentSteps] = useState<AgentActivity[]>([]);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [startupSuggestions, setStartupSuggestions] = useState<ProactiveSuggestion[]>([]);
+  const [dailyGreeting] = useState(getDailyGreeting);
 
   // ── Settings: load from localStorage (persists across restarts) ──
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -119,6 +131,15 @@ function App() {
     }
   }, [settings.ollamaUrl]);
 
+  // P1+P2: Fetch proactive suggestions from the Spectrum Graph (startup + periodic)
+  const fetchProactiveSuggestions = useCallback(async () => {
+    try {
+      const sugJson = await invoke<string>("get_proactive_suggestions");
+      const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
+      if (sug.length > 0) setStartupSuggestions(sug);
+    } catch { /* non-critical */ }
+  }, []);
+
   // Called after every intent is processed — refreshes all live data
   const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => {
     // Store latest collaboration trace for sidebar display
@@ -185,6 +206,9 @@ function App() {
         }
 
         setLoadingStatus("Ready!");
+
+        // P1: Fetch proactive suggestions on startup (non-blocking)
+        fetchProactiveSuggestions();
       } catch (e) {
         console.error("Startup error:", e);
         setErrorBanner(`Startup warning: ${e}`);
@@ -202,12 +226,15 @@ function App() {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
-    const interval = setInterval(checkOllama, 30000);
+    const ollamaInterval = setInterval(checkOllama, 30000);
+    // P2: Background proactive refresh every 5 minutes (daily proactive mode)
+    const proactiveInterval = setInterval(fetchProactiveSuggestions, 5 * 60 * 1000);
     return () => {
-      clearInterval(interval);
+      clearInterval(ollamaInterval);
+      clearInterval(proactiveInterval);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [loadAgents, loadNodes, loadGraphStats, checkOllama]);
+  }, [loadAgents, loadNodes, loadGraphStats, checkOllama, fetchProactiveSuggestions]);
 
   // Auto-hide toast after 5 seconds
   useEffect(() => {
@@ -246,6 +273,8 @@ function App() {
             onIntentProcessed={onIntentProcessed}
             liveAgentSteps={liveAgentSteps}
             clearLiveSteps={clearLiveSteps}
+            startupSuggestions={startupSuggestions}
+            dailyGreeting={dailyGreeting}
           />
         );
       case "graph":

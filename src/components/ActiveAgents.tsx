@@ -1,6 +1,7 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
+import { memo } from "react";
 import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary, AgentActivity } from "../types";
 import "./ActiveAgents.css";
 
@@ -76,7 +77,7 @@ function DebatePanel({ debate }: { debate: DebateSummary }) {
   );
 }
 
-export default function ActiveAgents({ agents, collaboration, debateSummary, liveAgentSteps }: ActiveAgentsProps) {
+export default memo(function ActiveAgents({ agents, collaboration, debateSummary, liveAgentSteps }: ActiveAgentsProps) {
   if (agents.length === 0) {
     return (
       <div className="agents-panel">
@@ -266,4 +267,4 @@ export default function ActiveAgents({ agents, collaboration, debateSummary, liv
       })}
     </div>
   );
-}
+})

@@ -1,5 +1,5 @@
 // Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
-// Sandbox Prism v0.2.0 — TRUE WASM Isolation with Cryptographic Signing,
+// Sandbox Prism v0.4.0 — TRUE WASM Isolation with Cryptographic Signing,
 //                         Allow-List Enforcement, and Automatic Rollback
 //
 // Sandbox Prisms are the core security component of PrismOS-AI.

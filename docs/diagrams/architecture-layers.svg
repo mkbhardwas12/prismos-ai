@@ -86,5 +86,5 @@
   <text x="870" y="300" fill="#4a6a80" font-size="28" text-anchor="middle" transform="rotate(90, 870, 300)">▲  DATA  ▲</text>
 
   <!-- Footer -->
-  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">Patent Pending · All layers fully implemented in v0.2.0</text>
+  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">Patent Pending · All layers fully implemented in v0.4.0</text>
 </svg>

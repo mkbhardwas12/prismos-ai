@@ -297,8 +297,8 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>🔷 About PrismOS-AI</h4>
-                  <p><strong>Version:</strong> 0.2.0</p>
-                  <p><strong>Released:</strong> March 2, 2026</p>
+                  <p><strong>Version:</strong> 0.4.0</p>
+                  <p><strong>Released:</strong> March 3, 2026</p>
                   <p><strong>GitHub:</strong> github.com/mkbhardwas12/prismos-ai</p>
                   <p>PrismOS-AI is a local-first AI operating system built on a physics-inspired 7-dimensional knowledge graph. It processes your intents through multi-agent collaboration — all running 100% offline on your own hardware.</p>
                 </div>

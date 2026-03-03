@@ -2,7 +2,7 @@
 
 # 🔷 PrismOS-AI — Launch Posts
 
-### Ready-to-copy social media content for the v0.2.0 public launch
+### Ready-to-copy social media content for the v0.4.0 public launch
 
 </div>
 

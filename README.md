@@ -238,10 +238,14 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 
 ## 📸 Screenshots
 
-> **Screenshots coming soon.** PrismOS v0.2.0 features a modern glassmorphism dark UI with full light theme support.
+<p align="center">
+  <em>PrismOS v0.2.0 — Modern glassmorphism dark UI with full light theme support</em>
+</p>
 
-| # | View | What You'll See |
-|:-:|------|----------------|
+<!-- To add screenshots: place PNG/JPG files in docs/screenshots/ and uncomment the relevant lines below -->
+
+| # | View | Description |
+|:-:|------|-------------|
 | 1 | **🧠 Intent Console** | Natural language chat with AI metadata, collaboration traces, and guided Ollama setup wizard |
 | 2 | **🌈 Spectrum Graph** | Force-directed knowledge graph with spectral coloring and multi-window pop-out |
 | 3 | **🔍 Spectrum Explorer** | Node browser with CRUD, search, and spectral dimension details |
@@ -249,6 +253,23 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 | 5 | **⏳ Spectral Timeline** | Time-based graph history with date grouping and snapshot restore |
 | 6 | **⚙️ Settings & Security** | Configuration, encrypted export/import, sync, live security dashboard |
 | 7 | **💬 Agent Debate** | Live debate panel with argument types and agreement scoring |
+
+<!--
+### Intent Console
+![Intent Console](docs/screenshots/intent-console.png)
+
+### Spectrum Graph
+![Spectrum Graph](docs/screenshots/spectrum-graph.png)
+
+### Spectral Timeline
+![Spectral Timeline](docs/screenshots/spectral-timeline.png)
+
+### Sandbox Prisms
+![Sandbox Prisms](docs/screenshots/sandbox-prisms.png)
+
+### Settings & Security
+![Settings](docs/screenshots/settings.png)
+-->
 
 ---
 

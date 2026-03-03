@@ -13,14 +13,37 @@ import "./IntentInput.css";
 /** Image extensions we accept for vision analysis */
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif"];
 
+/** Document extensions we accept for text extraction & analysis */
+const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "xls", "txt", "md", "csv", "json", "rtf"];
+
 /** Check if a filename is an image */
 function isImageFile(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
+/** Check if a filename is a supported document */
+function isDocumentFile(name: string): boolean {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return DOCUMENT_EXTENSIONS.includes(ext);
+}
+
+/** Get emoji icon for document type */
+function getDocIcon(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  switch (ext) {
+    case "pdf": return "📕";
+    case "docx": case "doc": return "📘";
+    case "pptx": case "ppt": return "📙";
+    case "xlsx": case "xls": return "📗";
+    case "csv": return "📊";
+    case "md": return "📝";
+    default: return "📄";
+  }
+}
+
 interface IntentInputProps {
-  onSubmit: (input: string, imageData?: string) => void;
+  onSubmit: (input: string, imageData?: string, documentText?: string) => void;
   isProcessing: boolean;
   voiceEnabled?: boolean;
   pendingIntent?: string;
@@ -42,10 +65,16 @@ export default function IntentInput({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null); // data URL for preview
   const [imageName, setImageName] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  // ── Document state (Phase 5.5) ──
+  const [attachedDocument, setAttachedDocument] = useState<string | null>(null); // extracted text
+  const [documentName, setDocumentName] = useState<string | null>(null);
+  const [documentMeta, setDocumentMeta] = useState<string | null>(null); // e.g. "PDF | 5 pages"
+  const [isExtractingDoc, setIsExtractingDoc] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
   // Auto-fill input when a pending intent arrives (from example chips)
@@ -79,11 +108,12 @@ export default function IntentInput({
 
   function handleSubmit() {
     const trimmed = input.trim();
-    if ((!trimmed && !attachedImage) || isProcessing) return;
-    const prompt = trimmed || "Describe this image in detail.";
-    onSubmit(prompt, attachedImage ?? undefined);
+    if ((!trimmed && !attachedImage && !attachedDocument) || isProcessing) return;
+    const prompt = trimmed || (attachedImage ? "Describe this image in detail." : "Summarize this document.");
+    onSubmit(prompt, attachedImage ?? undefined, attachedDocument ?? undefined);
     setInput("");
     clearAttachedImage();
+    clearAttachedDocument();
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -94,6 +124,54 @@ export default function IntentInput({
     setAttachedImage(null);
     setImagePreviewUrl(null);
     setImageName(null);
+  }
+
+  /** Clear attached document state */
+  function clearAttachedDocument() {
+    setAttachedDocument(null);
+    setDocumentName(null);
+    setDocumentMeta(null);
+  }
+
+  /** Attach a document by extracting its text via Rust backend */
+  async function attachDocumentFromPath(filePath: string, fileName: string) {
+    setIsExtractingDoc(true);
+    setDocumentName(fileName);
+    setDocumentMeta("Extracting...");
+    try {
+      const text: string = await invoke("extract_file_text", { path: filePath });
+      setAttachedDocument(text);
+      // Parse metadata from the header line [Document: ... | Type: ... | ...]
+      const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
+      setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${fileName.split('.').pop()?.toUpperCase()} document`);
+    } catch (err) {
+      console.error("Document extraction error:", err);
+      setDocumentMeta(null);
+      setDocumentName(null);
+      setAttachedDocument(null);
+      // Show error in input as fallback
+      setInput((prev) => prev + `\n⚠️ Could not extract text from ${fileName}: ${err}`);
+    } finally {
+      setIsExtractingDoc(false);
+    }
+  }
+
+  /** Attach a document from a File object (browser fallback — reads as text) */
+  async function attachDocumentFromFile(file: File) {
+    setIsExtractingDoc(true);
+    setDocumentName(file.name);
+    setDocumentMeta("Reading...");
+    try {
+      const text = await file.text();
+      const prefixed = `[File: ${file.name}]\n${text}`;
+      setAttachedDocument(prefixed);
+      setDocumentMeta(`${file.name.split('.').pop()?.toUpperCase()} | ${Math.round(text.length / 1024)}KB`);
+    } catch (err) {
+      console.error("File read error:", err);
+      clearAttachedDocument();
+    } finally {
+      setIsExtractingDoc(false);
+    }
   }
 
   /** Attach an image from a base64 string */
@@ -181,6 +259,22 @@ export default function IntentInput({
     e.target.value = "";
   }
 
+  /** Handle document file selection via hidden file input */
+  async function handleDocFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const filePath = (file as File & { path?: string }).path;
+    if (filePath) {
+      await attachDocumentFromPath(filePath, file.name);
+    } else {
+      await attachDocumentFromFile(file);
+    }
+    if (!input.trim()) {
+      setInput("Summarize this document.");
+    }
+    e.target.value = "";
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -241,7 +335,21 @@ export default function IntentInput({
       return;
     }
 
-    // ── Text files → extract content (existing behavior) ──
+    // ── Document files → attach for analysis (Phase 5.5) ──
+    if (isDocumentFile(fileName)) {
+      const filePath = (file as File & { path?: string }).path;
+      if (filePath) {
+        await attachDocumentFromPath(filePath, fileName);
+      } else {
+        await attachDocumentFromFile(file);
+      }
+      if (!input.trim()) {
+        setInput("Summarize this document.");
+      }
+      return;
+    }
+
+    // ── Other text files → extract content inline (existing behavior) ──
     setDroppedFileName(fileName);
 
     try {
@@ -288,7 +396,7 @@ export default function IntentInput({
       {isDragOver && (
         <div className="drag-overlay" aria-hidden="true">
           <span className="drag-overlay-icon">📄</span>
-          <span className="drag-overlay-text">Drop file or image to ingest</span>
+          <span className="drag-overlay-text">Drop file, image, or document to analyze</span>
         </div>
       )}
 
@@ -319,6 +427,29 @@ export default function IntentInput({
         </div>
       )}
 
+      {/* ── Attached Document Preview (Phase 5.5 — Document Analysis) ── */}
+      {documentName && (
+        <div className="doc-preview" role="status">
+          <span className="doc-preview-icon">{getDocIcon(documentName)}</span>
+          <div className="doc-preview-info">
+            <span className="doc-preview-name">{documentName}</span>
+            <span className="doc-preview-hint">
+              {isExtractingDoc ? "⏳ Extracting text..." : documentMeta ?? "Ready for analysis"}
+            </span>
+          </div>
+          {!isExtractingDoc && (
+            <button
+              className="doc-preview-remove"
+              onClick={clearAttachedDocument}
+              aria-label="Remove attached document"
+              title="Remove document"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Camera Viewfinder (Phase 5.5) ── */}
       {cameraActive && (
         <div className="vision-camera" role="dialog" aria-label="Camera viewfinder">
@@ -342,6 +473,15 @@ export default function IntentInput({
         accept="image/*"
         style={{ display: "none" }}
         onChange={handleImageFileSelect}
+      />
+
+      {/* Hidden file input for document selection */}
+      <input
+        ref={docFileInputRef}
+        type="file"
+        accept=".pdf,.docx,.pptx,.xlsx,.xls,.txt,.md,.csv,.json,.rtf"
+        style={{ display: "none" }}
+        onChange={handleDocFileSelect}
       />
 
       <div className="intent-input-wrapper">
@@ -381,6 +521,18 @@ export default function IntentInput({
           </button>
         )}
 
+        {/* Document upload button (Phase 5.5 — Document Analysis) */}
+        <button
+          className="intent-doc-btn"
+          onClick={() => docFileInputRef.current?.click()}
+          disabled={isProcessing || isExtractingDoc}
+          title="Attach document (PDF, DOCX, PPTX, XLSX)"
+          aria-label="Attach document"
+          type="button"
+        >
+          📄
+        </button>
+
         {/* Image upload button (Phase 5.5 — Local Vision) */}
         <button
           className="intent-vision-btn"
@@ -408,7 +560,7 @@ export default function IntentInput({
         <button
           className="intent-send-btn"
           onClick={handleSubmit}
-          disabled={(!input.trim() && !attachedImage) || isProcessing}
+          disabled={(!input.trim() && !attachedImage && !attachedDocument) || isProcessing}
           title="Send intent"
           aria-label="Send intent"
         >
@@ -430,7 +582,7 @@ export default function IntentInput({
       <div className="intent-hint">
         <span className="intent-hint-keys">Enter ↵ send · Shift+Enter ↵ newline</span>
         <span className="intent-hint-sep">·</span>
-        <span>📷 Vision · 🎙️ Voice · 100% local · Patent Pending</span>
+        <span>� Docs · �📷 Vision · 🎙️ Voice · 100% local · Patent Pending</span>
       </div>
     </div>
   );

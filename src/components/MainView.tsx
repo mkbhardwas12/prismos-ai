@@ -324,11 +324,15 @@ export default function MainView({
     throw new Error("Unreachable");
   }
 
-  async function handleIntent(input: string, imageData?: string) {
+  async function handleIntent(input: string, imageData?: string, documentText?: string) {
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: imageData ? `🖼️ [Image attached]\n${input}` : input,
+      content: documentText
+        ? `📄 [Document attached]\n${input}`
+        : imageData
+          ? `🖼️ [Image attached]\n${input}`
+          : input,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -336,8 +340,50 @@ export default function MainView({
     clearLiveSteps(); // Phase 2: clear previous live steps
 
     try {
-      // ── Vision path: image attached → use local vision model ──
-      if (imageData) {
+      // ── Document analysis path: document text attached ──
+      if (documentText) {
+        // Truncate document text if extremely long (keep first ~12000 chars for model context)
+        const maxDocLen = 12000;
+        const truncatedDoc = documentText.length > maxDocLen
+          ? documentText.slice(0, maxDocLen) + `\n\n[... truncated ${documentText.length - maxDocLen} chars ...]`
+          : documentText;
+
+        // Build a rich prompt with the document content as context
+        const docPrompt = `Here is a document for analysis:\n\n---\n${truncatedDoc}\n---\n\nUser request: ${input}`;
+
+        // Use the standard Ollama query with the enriched prompt
+        const response = await invoke<string>("query_ollama", {
+          prompt: docPrompt,
+          model: settings.defaultModel || "mistral",
+          ollamaUrl: settings.ollamaUrl || null,
+        });
+
+        const docMeta = documentText.match(/\[Document:.*?\]/) || documentText.match(/\[File:.*?\]/);
+        const metaLine = docMeta ? `\n\n───\n📄 Document Analysis · ${docMeta[0]} · 100% local` : "\n\n───\n📄 Document Analysis · 100% local";
+
+        const aiMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "ai",
+          content: response + metaLine,
+          timestamp: new Date(),
+          agent: "Document Analyst",
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        onIntentProcessed("Document Analyst");
+
+        // Generate follow-up suggestions
+        try {
+          const sugJson = await invoke<string>("get_proactive_suggestions");
+          const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
+          const enriched = generateFollowUpSuggestions(input, sug);
+          setProactiveSuggestions(enriched);
+          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
+        } catch {
+          const fallback = generateFollowUpSuggestions(input, []);
+          setProactiveSuggestions(fallback);
+          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
+        }
+      } else if (imageData) {
         const visionModel = settings.defaultModel?.includes("llava") || settings.defaultModel?.includes("vision")
           ? settings.defaultModel
           : "llava";  // Default to llava for vision tasks
@@ -478,7 +524,7 @@ export default function MainView({
             setMessages((prev) => [...prev, errorMsg]);
           }
         }
-      } // end if/else imageData
+      } // end if/else documentText/imageData
     } finally {
       setIsProcessing(false);
     }

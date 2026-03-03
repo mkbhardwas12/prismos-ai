@@ -39,7 +39,7 @@ HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 has
 → 16 Rust backend modules
 → 15,800+ lines of hand-written code
 → 5 autonomous AI agents with consensus voting
-→ Patent pending (US 63/993,589)
+→ Patent pending
 
 I built every line of this. Frontend. Backend. Security. Agents. Graph engine. UI. All of it.
 
@@ -139,7 +139,7 @@ All hand-written. All local. All open source. ⚡
 
 ### Tweet 7 — Call to Action
 ```
-PrismOS is patent-pending (US 63/993,589) and fully open source under MIT.
+PrismOS is patent-pending (Patent Pending) and fully open source under MIT.
 
 If you believe your AI should work for YOU — not a platform — take a look.
 
@@ -175,7 +175,7 @@ Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persiste
 
 The guided setup wizard walks you through installing Ollama on first launch. Supports Mistral, Llama 3.x, Phi-3, Gemma 2, DeepSeek, and others.
 
-Patent pending: US Provisional Application No. 63/993,589.
+Patent pending — US Provisional Patent Application (filed February 2026).
 
 GitHub: https://github.com/mkbhardwas12/prismos-ai
 
@@ -208,7 +208,7 @@ Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 15,800+ lines of code.
 
 ```
 Manish Kumar — Inventor of PrismOS, a patent-pending local-first AI operating system
-(US 63/993,589). Designed and built a 7-dimensional spectral knowledge graph, a multi-agent
+(Patent Pending). Designed and built a 7-dimensional spectral knowledge graph, a multi-agent
 AI reasoning engine, and a 9-layer security architecture — 15,800+ lines of Rust + TypeScript,
 running 100% offline. github.com/mkbhardwas12/prismos-ai
 ```
@@ -232,7 +232,7 @@ Three things make it different from anything I've seen:
 3. 9 security layers including WASM sandboxing and a tamper-evident SHA-256 audit log
 
 It's 15,800+ lines of Rust + TypeScript, fully open source under MIT,
-and patent-pending (US Provisional 63/993,589).
+and patent-pending (US Provisional Patent Pending).
 
 GitHub: https://github.com/mkbhardwas12/prismos-ai
 

@@ -1,8 +1,8 @@
-// Patent Pending — US 63/993,589 (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Refractive Core — NPU-Accelerated Multi-Agent Orchestration Engine
 //
 // The Refractive Core is the central nervous system of PrismOS.
-// Architecture per Patent 63/993,589:
+// Architecture per Patent Pending:
 //   1. Ingest raw user input
 //   2. Apply Intent Lens decomposition (NLU → structured intent)
 //   3. Query Spectrum Graph for contextual memory (graph-aware retrieval)
@@ -276,7 +276,7 @@ impl NpuScorer {
 
 // ─── Core Agent Registry ───────────────────────────────────────────────────────
 
-/// Returns the 5 core PrismOS agents per Patent 63/993,589
+/// Returns the 5 core PrismOS agents per Patent Pending
 pub fn get_agents() -> Vec<Agent> {
     get_agents_with_active(None)
 }
@@ -493,7 +493,7 @@ impl RefractiveEngine {
     }
 }
 
-// ─── Process Intent — Full Pipeline Entry Point (Patent 63/993,589) ────────────
+// ─── Process Intent — Full Pipeline Entry Point (Patent Pending) ────────────
 
 /// Full process_intent entry point: parses raw input through Intent Lens,
 /// then routes through the complete Refractive Core pipeline.

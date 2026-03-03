@@ -198,8 +198,8 @@ npm run tauri dev
 
 | | |
 |:--|:--|
-| **Patent** | US Provisional Application No. 63/993,589 |
-| **Filed** | February 28, 2026 |
+| **Patent** | US Provisional Patent Application (Patent Pending) |
+| **Filed** | February 2026 |
 | **Inventor** | Manish Kumar |
 | **License** | MIT — free to use, modify, distribute |
 

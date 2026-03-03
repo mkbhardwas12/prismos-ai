@@ -1,4 +1,4 @@
-// Patent Pending — US 63/993,589 (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // Ollama TypeScript Client — for direct frontend calls when needed
 
 const OLLAMA_BASE = "http://localhost:11434";

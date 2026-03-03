@@ -1,4 +1,4 @@
-// Patent Pending — US 63/993,589 (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // Sandbox Prism v0.2.0 — TRUE WASM Isolation with Cryptographic Signing,
 //                         Allow-List Enforcement, and Automatic Rollback
 //

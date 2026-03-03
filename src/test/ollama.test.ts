@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — Ollama Client Unit Tests
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — Ollama Client Unit Tests
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { checkOllamaHealth, listModels, generate } from "../lib/ollama";

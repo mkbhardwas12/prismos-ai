@@ -1,7 +1,7 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Model Verification — SHA-256 Hash Checking for LLM Integrity
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Model Verification — SHA-256 Hash Checking for LLM Integrity
 //
-// Before loading any LLM model, PrismOS verifies its integrity by checking
+// Before loading any LLM model, PrismOS-AI verifies its integrity by checking
 // the model's SHA-256 digest against a known-good registry. This prevents
 // tampered or malicious models from being used in the AI pipeline.
 //

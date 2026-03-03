@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "PrismOS default capabilities",
+  "description": "PrismOS-AI default capabilities",
   "windows": ["main"],
   "permissions": [
     "core:default",

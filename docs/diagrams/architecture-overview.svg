@@ -29,7 +29,7 @@
   <rect x="1" y="1" width="878" height="518" rx="13" fill="none" stroke="#334155" stroke-width="0.5"/>
 
   <!-- Title -->
-  <text x="440" y="36" text-anchor="middle" font-size="18" font-weight="700" fill="url(#cyan)" filter="url(#glow)">PrismOS — System Architecture</text>
+  <text x="440" y="36" text-anchor="middle" font-size="18" font-weight="700" fill="url(#cyan)" filter="url(#glow)">PrismOS-AI — System Architecture</text>
 
   <!-- ═══ FRONTEND LAYER ═══ -->
   <rect x="40" y="55" width="800" height="95" rx="10" fill="#0f172a" stroke="#06b6d4" stroke-width="1.2" filter="url(#s)"/>
@@ -147,5 +147,5 @@
   <rect x="520" y="470" width="110" height="22" rx="11" fill="#0c4a6e" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.6"/>
   <text x="575" y="485" text-anchor="middle" font-size="9" font-weight="600" fill="#67e8f9">📡 No Telemetry</text>
 
-  <text x="440" y="510" text-anchor="middle" font-size="9" fill="#475569">© 2026 Manish Kumar · PrismOS v0.2.1 · MIT License</text>
+  <text x="440" y="510" text-anchor="middle" font-size="9" fill="#475569">© 2026 Manish Kumar · PrismOS-AI v0.2.1 · MIT License</text>
 </svg>

@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — React Error Boundary
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — React Error Boundary
 // Catches rendering crashes and displays a recovery UI instead of a blank screen.
 
 import { Component } from "react";
@@ -29,7 +29,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
-    console.error("[PrismOS ErrorBoundary]", error, errorInfo);
+    console.error("[PrismOS-AI ErrorBoundary]", error, errorInfo);
   }
 
   handleRecover = () => {

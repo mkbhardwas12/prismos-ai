@@ -1,14 +1,14 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Secure Enclave — Hardware Security Module Abstraction
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Secure Enclave — Hardware Security Module Abstraction
 //
-// Provides a hardware-backed key derivation layer for PrismOS cryptographic
+// Provides a hardware-backed key derivation layer for PrismOS-AI cryptographic
 // operations. Attempts to use platform-specific hardware security:
 //   - Windows: TPM 2.0 via platform identity
 //   - macOS: Secure Enclave fingerprint
 //   - Linux: TPM device presence check
 //
 // Falls back to a strong software-derived key using machine-specific entropy
-// (hostname, OS, architecture, boot time) combined with PrismOS-specific salt.
+// (hostname, OS, architecture, boot time) combined with PrismOS-AI-specific salt.
 //
 // The enclave key strengthens existing HMAC signing without replacing
 // the current Sandbox Prism or You-Port encryption.

@@ -1,7 +1,7 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Audit Log — Tamper-Evident Cryptographic Hash Chain
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Audit Log — Tamper-Evident Cryptographic Hash Chain
 //
-// Every significant action in PrismOS is recorded in a tamper-evident log.
+// Every significant action in PrismOS-AI is recorded in a tamper-evident log.
 // Each entry is chained to the previous entry via SHA-256 hash, creating
 // an immutable, verifiable record of all system activity.
 //
@@ -81,7 +81,7 @@ impl AuditLog {
                 timestamp: Utc::now().to_rfc3339(),
                 action: "genesis".to_string(),
                 actor: "system".to_string(),
-                details: "PrismOS audit chain initialized — Patent Pending".to_string(),
+                details: "PrismOS-AI audit chain initialized — Patent Pending".to_string(),
                 prev_hash: GENESIS_HASH.to_string(),
                 hash: String::new(), // Will be computed below
             };

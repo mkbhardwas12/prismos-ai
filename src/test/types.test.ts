@@ -1,8 +1,8 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — Type & Settings Unit Tests
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — Type & Settings Unit Tests
 //
 // Validates default settings values, type shapes, and data transformations
-// used across the PrismOS frontend.
+// used across the PrismOS-AI frontend.
 
 import { describe, it, expect } from "vitest";
 import type { AppSettings, Agent, SpectrumNode, SpectrumEdge, Message } from "../types";

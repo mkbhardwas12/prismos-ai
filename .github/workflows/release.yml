@@ -1,4 +1,4 @@
-# PrismOS Cross-Platform Release Build
+# PrismOS-AI Cross-Platform Release Build
 # Builds Windows (.msi, .exe), macOS (.dmg, .app), Linux (.deb, .AppImage), and Android (.apk)
 # Triggered on version tags or manual dispatch
 
@@ -84,9 +84,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name || inputs.version || 'draft' }}
-          releaseName: 'PrismOS ${{ github.ref_name || inputs.version || 'draft' }}'
+          releaseName: 'PrismOS-AI ${{ github.ref_name || inputs.version || 'draft' }}'
           releaseBody: |
-            ## PrismOS — Local-First Agentic Personal AI Operating System
+            ## PrismOS-AI — Local-First Agentic Personal AI Operating System
 
             ### What's New
             - 🧠 5-Agent Collaborative AI System (Mnemonic, Sentinel, Oracle, Artisan, Nexus)

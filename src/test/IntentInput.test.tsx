@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS — IntentInput Component Tests
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI — IntentInput Component Tests
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -16,8 +16,8 @@ describe("IntentInput", () => {
     const onSubmit = vi.fn();
     render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
     const textarea = screen.getByRole("textbox");
-    await userEvent.type(textarea, "What is PrismOS?{enter}");
-    expect(onSubmit).toHaveBeenCalledWith("What is PrismOS?");
+    await userEvent.type(textarea, "What is PrismOS-AI?{enter}");
+    expect(onSubmit).toHaveBeenCalledWith("What is PrismOS-AI?");
   });
 
   it("does NOT submit when processing is in progress", async () => {

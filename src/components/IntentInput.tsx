@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Intent Input — Natural Language Input with Voice Support
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Intent Input — Natural Language Input with Voice Support
 //
 // Supports both typed and voice input via Web Speech API.
 // All voice processing uses the browser's built-in speech recognition —

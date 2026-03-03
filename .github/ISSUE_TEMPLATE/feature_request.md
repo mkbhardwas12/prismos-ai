@@ -1,6 +1,6 @@
 ---
 name: ✨ Feature Request
-about: Suggest a new feature or enhancement for PrismOS
+about: Suggest a new feature or enhancement for PrismOS-AI
 title: "[Feature] "
 labels: enhancement
 assignees: ''
@@ -16,7 +16,7 @@ A clear and concise description of the feature or change you'd like.
 ## Alternatives Considered
 A description of any alternative solutions or features you've considered.
 
-## Which PrismOS Module?
+## Which PrismOS-AI Module?
 Check the area(s) this feature relates to:
 
 - [ ] 🧠 Intent Console (chat / LLM)

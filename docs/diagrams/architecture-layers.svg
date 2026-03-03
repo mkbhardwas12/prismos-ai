@@ -37,7 +37,7 @@
   <rect width="900" height="520" rx="12" fill="url(#bg)"/>
 
   <!-- Title -->
-  <text x="450" y="42" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">PrismOS — 6-Layer Architecture</text>
+  <text x="450" y="42" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">PrismOS-AI — 6-Layer Architecture</text>
 
   <!-- Layer 6 — Intent Console -->
   <rect x="60" y="65" width="780" height="60" rx="10" fill="url(#l6)" filter="url(#shadow)" opacity="0.95"/>

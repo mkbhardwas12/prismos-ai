@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
 import { memo } from "react";
 import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary, AgentActivity } from "../types";

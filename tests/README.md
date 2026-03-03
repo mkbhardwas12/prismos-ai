@@ -1,10 +1,10 @@
-# PrismOS Test Suite
+# PrismOS-AI Test Suite
 
-> Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+> Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 
 ## Test Architecture
 
-PrismOS has two test layers:
+PrismOS-AI has two test layers:
 
 | Layer | Language | Runner | Description |
 |-------|----------|--------|-------------|
@@ -32,7 +32,7 @@ cargo test
 
 ## Frontend Smoke Tests
 
-Since PrismOS is a Tauri desktop app, the frontend is best tested by running the app:
+Since PrismOS-AI is a Tauri desktop app, the frontend is best tested by running the app:
 
 ```bash
 npm run tauri dev

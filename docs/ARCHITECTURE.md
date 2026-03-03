@@ -1,10 +1,10 @@
-# PrismOS Architecture
+# PrismOS-AI Architecture
 
 > Patent Pending — US Provisional Patent, Feb 2026
 
 ## Overview
 
-PrismOS is built as a **Tauri 2.0 desktop application** with a React frontend and a Rust backend. All processing happens locally — no data ever leaves the user's device.
+PrismOS-AI is built as a **Tauri 2.0 desktop application** with a React frontend and a Rust backend. All processing happens locally — no data ever leaves the user's device.
 
 ## Layers
 
@@ -69,7 +69,7 @@ The Rust backend handles all data processing, storage, and AI inference.
 ## Data Flow: Intent Processing
 
 <p align="center">
-  <img src="diagrams/data-flow.svg" width="650" alt="PrismOS Intent Processing Data Flow" />
+  <img src="diagrams/data-flow.svg" width="650" alt="PrismOS-AI Intent Processing Data Flow" />
 </p>
 
 ## Security Architecture

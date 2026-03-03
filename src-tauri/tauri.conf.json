@@ -1,5 +1,5 @@
 {
-  "productName": "PrismOS",
+  "productName": "PrismOS-AI",
   "version": "0.2.1",
   "identifier": "com.prismos.app",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "PrismOS — Local AI Operating System",
+        "title": "PrismOS-AI — Local AI Operating System",
         "width": 1200,
         "height": 800,
         "resizable": true,

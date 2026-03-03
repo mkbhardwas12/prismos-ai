@@ -1,10 +1,10 @@
-# PrismOS Screenshots
+# PrismOS-AI Screenshots
 
 Place screenshots here for the README and GitHub Release page.
 
 ## How to Capture
 
-1. Run PrismOS: `npm run tauri dev`
+1. Run PrismOS-AI: `npm run tauri dev`
 2. Take screenshots of each view using your OS screenshot tool
 3. Save them here with these names:
 
@@ -27,4 +27,4 @@ Place screenshots here for the README and GitHub Release page.
 - **Format**: PNG
 - **Theme**: Dark (primary) + Light (secondary)
 
-> Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+> Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)

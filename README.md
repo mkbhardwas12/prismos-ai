@@ -12,7 +12,7 @@
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 4 (v0.4.0) adds a local voice engine, Spotlight-style command palette, local file indexing with RAG, and deep motion polish.
+PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 5 (v0.5.0) adds a frameless window with custom title bar, system tray integration, drag-and-drop file ingest, and auto-updater infrastructure.
 
 <p align="center">
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to five AI agents at once" />
@@ -40,7 +40,7 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 
 ---
 
-## ✨ Core Features (v0.4.0)
+## ✨ Core Features (v0.5.0)
 
 | Feature | Description |
 |---------|-------------|
@@ -64,6 +64,10 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 | **Spotlight Overlay** | macOS Spotlight-style command palette with graph search *(Phase 4)* |
 | **Local Voice Engine** | cpal-based microphone capture + Whisper model download infra *(Phase 4)* |
 | **Local File Indexer (RAG)** | Watches `~/Documents/PrismDocs`, auto-ingests into Spectrum Graph *(Phase 4)* |
+| **Frameless Window** | Custom title bar with native window controls + drag region *(Phase 5)* |
+| **System Tray** | Minimize to tray, click to restore — agents stay resident *(Phase 5)* |
+| **Drag & Drop File Ingest** | Drop files into Intent Input — auto-extracts text content *(Phase 5)* |
+| **Auto-Updater** | Seamless OTA updates via GitHub Releases *(Phase 5)* |
 
 Everything runs offline. All inference via local [Ollama](https://ollama.com) models.
 
@@ -209,9 +213,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.2.0** | ✅ Done | WASM sandbox, Voice I/O, Multi-Window, Timeline, LangGraph debates, Merge/Diff, Accessibility |
 | **v0.2.1** | ✅ Done | 65 tests, CI/CD, config centralization, streaming progress bars, docs polish |
 | **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
-| **v0.4.0** | ✅ Current | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
-| **v0.5.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
-| **v0.6.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
+| **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
+| **v0.5.0** | ✅ Current | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater |
+| **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
+| **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
 ---
 
@@ -219,7 +224,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 - **16 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer
 - **65 tests passing** across 7 test files (Vitest + React Testing Library)
-- **50+ Tauri IPC commands** — full frontend↔backend communication
+- **55+ Tauri IPC commands** — full frontend↔backend communication
 - **Zero cloud dependencies** — everything runs on your machine
 
 ---
@@ -231,7 +236,7 @@ PrismOS-AI and its core architectures (Spectrum Graph™, Refractive Core™, Sa
 ---
 
 <p align="center">
-  <strong>PrismOS-AI v0.4.0</strong> — Your mind, your machine, your OS.<br />
+  <strong>PrismOS-AI v0.5.0</strong> — Your mind, your machine, your OS.<br />
   Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
 </p>

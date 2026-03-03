@@ -5,7 +5,8 @@
 // All voice processing uses the browser's built-in speech recognition —
 // no cloud transcription. Your voice data never leaves your device.
 
-import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type DragEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useVoice } from "../hooks/useVoice";
 import "./IntentInput.css";
 
@@ -25,6 +26,8 @@ export default function IntentInput({
   onPendingConsumed,
 }: IntentInputProps) {
   const [input, setInput] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [droppedFileName, setDroppedFileName] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-fill input when a pending intent arrives (from example chips)
@@ -81,8 +84,93 @@ export default function IntentInput({
     }
   }
 
+  // ── Drag & Drop File Ingest (Phase 5) ──
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const fileName = file.name;
+    setDroppedFileName(fileName);
+
+    try {
+      // For Tauri, we need the full file path — use the webkitRelativePath or
+      // fall back to reading via FileReader for browser environments
+      // In Tauri desktop, dropped files have path in the dataTransfer
+      const filePath = (file as File & { path?: string }).path;
+
+      if (filePath) {
+        // Tauri desktop: extract text via Rust backend
+        const text: string = await invoke("extract_file_text", { path: filePath });
+        const currentInput = input.trim();
+        const newInput = currentInput
+          ? `${currentInput}\n\n${text}`
+          : text;
+        setInput(newInput);
+        autoResize();
+      } else {
+        // Fallback: read as text in browser
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = reader.result as string;
+          const prefixed = `[File: ${fileName}]\n${text}`;
+          const currentInput = input.trim();
+          const newInput = currentInput
+            ? `${currentInput}\n\n${prefixed}`
+            : prefixed;
+          setInput(newInput);
+          autoResize();
+        };
+        reader.readAsText(file);
+      }
+    } catch (err) {
+      console.error("File drop error:", err);
+      setDroppedFileName(null);
+    }
+
+    // Clear the file name indicator after a few seconds
+    setTimeout(() => setDroppedFileName(null), 4000);
+  }, [input]);
+
   return (
-    <div className="intent-input-container">
+    <div
+      className={`intent-input-container ${isDragOver ? "drag-over" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay indicator */}
+      {isDragOver && (
+        <div className="drag-overlay" aria-hidden="true">
+          <span className="drag-overlay-icon">📄</span>
+          <span className="drag-overlay-text">Drop file to ingest</span>
+        </div>
+      )}
+
+      {/* Dropped file indicator */}
+      {droppedFileName && (
+        <div className="dropped-file-badge" role="status">
+          <span>📎 {droppedFileName}</span>
+          <button onClick={() => setDroppedFileName(null)} aria-label="Remove file">×</button>
+        </div>
+      )}
+
       <div className="intent-input-wrapper">
         <textarea
           ref={textareaRef}

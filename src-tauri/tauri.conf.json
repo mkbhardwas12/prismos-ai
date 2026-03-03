@@ -1,6 +1,6 @@
 {
   "productName": "PrismOS-AI",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "identifier": "com.prismos.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -16,11 +16,17 @@
         "height": 800,
         "resizable": true,
         "fullscreen": false,
-        "decorations": true
+        "decorations": false
       }
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https://asset.localhost data:; connect-src 'self' http://localhost:11434 http://127.0.0.1:11434; font-src 'self' data:; worker-src 'self' blob:"
+    },
+    "trayIcon": {
+      "id": "prismos-tray",
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "PrismOS-AI — Local AI Operating System"
     }
   },
   "bundle": {
@@ -33,5 +39,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/mkbhardwas12/prismos-ai/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
   }
 }

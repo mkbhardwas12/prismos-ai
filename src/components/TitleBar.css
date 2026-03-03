@@ -1,0 +1,153 @@
+/* ===============================================================================
+   PrismOS-AI Custom Title Bar — Frameless Window Chrome
+   Patent Pending (Feb 2026)
+   =============================================================================== */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  -webkit-app-region: drag;
+  position: relative;
+  z-index: 9999;
+  flex-shrink: 0;
+}
+
+/* Subtle gradient overlay for depth */
+.titlebar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Brand Section ── */
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+.titlebar-icon {
+  width: 18px;
+  height: 18px;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+}
+
+.titlebar-version {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* ── Spacer — draggable area ── */
+.titlebar-spacer {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+/* ── Window Controls ── */
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  -webkit-app-region: no-drag;
+  height: 100%;
+}
+
+.titlebar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.titlebar-btn:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Close button — red on hover (Windows style) */
+.titlebar-close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.titlebar-close:active {
+  background: #c50f1f;
+  color: #ffffff;
+}
+
+/* ── Light Theme ── */
+[data-theme="light"] .titlebar {
+  background: var(--bg-secondary);
+  border-bottom-color: var(--border-color);
+}
+
+[data-theme="light"] .titlebar::after {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.01) 0%,
+    transparent 100%
+  );
+}
+
+[data-theme="light"] .titlebar-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .titlebar-close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+/* ── macOS-style (optional — can detect OS) ── */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  /* Slightly smaller controls on high-DPI */
+  .titlebar-btn svg {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-btn {
+    transition: none;
+  }
+}

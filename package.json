@@ -1,7 +1,7 @@
 {
   "name": "prismos",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)",
   "type": "module",
   "scripts": {
@@ -16,6 +16,8 @@
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.10.0",
+    "@tauri-apps/plugin-window-state": "^2.4.1",
     "framer-motion": "^12.34.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -20,6 +20,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tauri::Manager;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
 
 /// Shared Spectrum Graph database — initialized once at startup, reused by all commands.
 /// Wrapped in Mutex because rusqlite::Connection is not Sync.
@@ -1198,12 +1200,67 @@ async fn get_indexed_files(app: tauri::AppHandle) -> Result<String, String> {
     }
 }
 
+// ─── Drag & Drop File Text Extraction (Phase 5) ──────────────────────────────
+
+/// Extract readable text from a dropped file.
+/// Supports plain text, markdown, JSON, CSV, code files, and more.
+#[tauri::command]
+async fn extract_file_text(path: String) -> Result<String, String> {
+    let file_path = std::path::Path::new(&path);
+
+    if !file_path.exists() {
+        return Err(format!("File not found: {}", path));
+    }
+
+    let metadata = std::fs::metadata(file_path).map_err(|e| e.to_string())?;
+    // Limit to 5 MB for safety
+    if metadata.len() > 5 * 1024 * 1024 {
+        return Err("File too large (max 5 MB)".to_string());
+    }
+
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // Text-based extensions we support
+    let text_exts = [
+        "txt", "md", "markdown", "json", "csv", "tsv", "xml", "html", "htm",
+        "yaml", "yml", "toml", "ini", "cfg", "conf", "log",
+        "rs", "py", "js", "ts", "tsx", "jsx", "java", "c", "cpp", "h", "hpp",
+        "go", "rb", "php", "swift", "kt", "scala", "sh", "bash", "zsh",
+        "sql", "r", "lua", "dart", "css", "scss", "sass", "less",
+        "env", "gitignore", "dockerfile", "makefile",
+    ];
+
+    if text_exts.contains(&ext.as_str()) || ext.is_empty() {
+        // Try reading as UTF-8 text
+        match std::fs::read_to_string(file_path) {
+            Ok(content) => {
+                let file_name = file_path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown");
+                Ok(format!("[File: {}]\n{}", file_name, content))
+            }
+            Err(_) => Err("File is not valid UTF-8 text".to_string()),
+        }
+    } else {
+        Err(format!(
+            "Unsupported file type: .{} — drop text, code, or data files",
+            ext
+        ))
+    }
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
@@ -1260,11 +1317,14 @@ pub fn run() {
             );
 
             println!("╔══════════════════════════════════════════════╗");
-            println!("║  ◈ PrismOS-AI v0.4.0 — Local-First AI OS       ║");
+            println!("║  ◈ PrismOS-AI v0.5.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  Whisper Voice Engine: READY                 ║");
             println!("║  Local File Indexer: READY                   ║");
+            println!("║  Frameless Window + System Tray: ACTIVE      ║");
+            println!("║  Auto-Updater: CONFIGURED                    ║");
+            println!("║  Drag & Drop File Ingest: READY              ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
@@ -1273,6 +1333,39 @@ pub fn run() {
             println!("╚══════════════════════════════════════════════╝");
             println!("📍 Data directory: {:?}", app_dir);
             println!("🔑 Enclave fingerprint: {}", enclave_status.key_fingerprint);
+
+            // ── System Tray (Phase 5) — minimize to tray instead of closing ──
+            let show_item = MenuItem::with_id(app, "show", "Show PrismOS-AI", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().expect("no icon"))
+                .tooltip("PrismOS-AI — Local AI Operating System")
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })
@@ -1359,6 +1452,8 @@ pub fn run() {
             start_file_indexer,
             stop_file_indexer,
             get_indexed_files,
+            // Drag & Drop File Ingest (Phase 5)
+            extract_file_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS-AI");

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
+import TitleBar from "./components/TitleBar";
 import Sidebar from "./components/Sidebar";
 import MainView from "./components/MainView";
 import SettingsPanel from "./components/SettingsPanel";
@@ -376,6 +377,8 @@ function App() {
 
   return (
     <div className="app-layout" role="application" aria-label="PrismOS-AI">
+      <TitleBar />
+      <div className="app-body">
       <Sidebar
         currentView={view}
         onNavigate={setView}
@@ -444,6 +447,7 @@ function App() {
           </button>
         </div>
       )}
+      </div>{/* end app-body */}
     </div>
   );
 }

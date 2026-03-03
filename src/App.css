@@ -249,8 +249,16 @@ select:focus-visible {
 /* -- App Layout -- */
 .app-layout {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ===============================================================================

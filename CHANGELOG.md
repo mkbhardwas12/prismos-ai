@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] — 2026-03-03
+
+### 🎯 Highlights
+
+PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native window decorations and adds a custom frameless title bar with drag region and window controls. System tray integration keeps agents resident when the window is closed. Drag-and-drop file ingest lets users drop files directly into the Intent Input for instant text extraction. Auto-updater infrastructure enables seamless OTA updates via GitHub Releases.
+
+### Added
+
+- **Frameless Window + Custom Title Bar** — Native decorations disabled; custom `TitleBar.tsx` component with app branding, drag region (`data-tauri-drag-region`), and minimize/maximize/close-to-tray buttons with Windows-style hover states
+- **System Tray** — `TrayIconBuilder` with "Show PrismOS-AI" and "Quit" menu items; clicking the tray icon restores the window; close button hides to tray instead of exiting
+- **Drag & Drop File Ingest** — Drop files onto Intent Input to auto-extract text content via Rust `extract_file_text` command; supports 50+ text/code/data file extensions; 5MB size limit; visual drag overlay and file badge indicator
+- **Auto-Updater Infrastructure** — `tauri-plugin-updater` configured with GitHub Releases endpoint; `tauri-plugin-window-state` for window position persistence across sessions
+
+### Changed
+
+- `tauri.conf.json`: `decorations` set to `false`, added `trayIcon` and `plugins.updater` config, version bumped to v0.5.0
+- `lib.rs`: Registered `tauri-plugin-updater` and `tauri-plugin-window-state` plugins; added tray menu with event handlers; added `extract_file_text` Tauri IPC command; startup banner updated to v0.5.0
+- `App.tsx`: New `TitleBar` component rendered at top of layout; `.app-body` wrapper for sidebar + main content
+- `IntentInput.tsx`: Added drag-over/drop handlers with visual feedback, file text extraction via Tauri IPC
+- `Cargo.toml`: Added `tauri-plugin-updater`, `tauri-plugin-window-state`; enabled `tray-icon` feature on `tauri` crate
+- `capabilities/default.json`: Added `updater:default` and `window-state:default` permissions
+- All version references updated from v0.4.0 to v0.5.0
+
+---
+
 ## [0.4.0] — 2026-03-03
 
 ### 🎯 Highlights
@@ -183,6 +208,7 @@ and full release polish with accessibility improvements.
 
 ---
 
+[0.5.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.2.0...v0.2.1

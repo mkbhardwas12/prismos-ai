@@ -6,7 +6,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import DailyBrief from "../components/DailyBrief";
 import { invoke } from "@tauri-apps/api/core";
 
-// Mock invoke
+// Mock invoke — cover all commands used by DailyBrief
 vi.mocked(invoke).mockImplementation(async (cmd: string) => {
   if (cmd === "get_daily_brief") {
     return JSON.stringify({
@@ -26,6 +26,16 @@ vi.mocked(invoke).mockImplementation(async (cmd: string) => {
       ],
     });
   }
+  if (cmd === "get_proactive_suggestions") {
+    return JSON.stringify([
+      { id: "s1", title: "Explore ML", description: "Review machine learning notes", category: "learning", confidence: 0.8, action_intent: "Review ML notes", source: "graph" },
+    ]);
+  }
+  if (cmd === "get_spectrum_nodes") {
+    return JSON.stringify([
+      { id: "n1", label: "Machine Learning", facet: "learning", weight: 10, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
+    ]);
+  }
   return "{}";
 });
 
@@ -41,10 +51,11 @@ describe("DailyBrief", () => {
     });
   });
 
-  it("renders morning greeting", async () => {
+  it("renders time-aware greeting", async () => {
     render(<DailyBrief />);
     await waitFor(() => {
-      expect(screen.getByText(/morning|brief|today/i)).toBeInTheDocument();
+      // Greeting adapts to time-of-day; match any valid greeting word
+      expect(screen.getByText(/good morning|good afternoon|good evening|late night|working late/i)).toBeInTheDocument();
     });
   });
 

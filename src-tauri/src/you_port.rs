@@ -281,10 +281,9 @@ pub fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
 /// Capture the complete PrismOS state: Spectrum Graph + agent states + metadata.
 /// This is the full "You-Port snapshot" for encrypted device handoff.
 pub fn capture_state(
+    graph: &crate::spectrum_graph::SpectrumGraph,
     app_dir: &Path,
 ) -> Result<YouPortState, Box<dyn std::error::Error + Send + Sync>> {
-    let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
-
     // ── 1. Full graph snapshot ──
     let graph_snapshot = graph.get_full_graph()?;
 
@@ -330,12 +329,13 @@ pub fn capture_state(
 /// Save the complete PrismOS state to an encrypted file.
 /// Uses device-derived key encryption so the file is bound to this device.
 pub fn save_state(
+    graph: &crate::spectrum_graph::SpectrumGraph,
     app_dir: &Path,
 ) -> Result<HandoffResult, Box<dyn std::error::Error + Send + Sync>> {
     eprintln!("[You-Port] Capturing state for encrypted handoff...");
 
     // ── 1. Capture full state ──
-    let state = capture_state(app_dir)?;
+    let state = capture_state(graph, app_dir)?;
     let nodes_count = state.graph_snapshot.nodes.len();
     let edges_count = state.graph_snapshot.edges.len();
 
@@ -400,6 +400,7 @@ pub fn save_state(
 /// Load and restore PrismOS state from an encrypted handoff file.
 /// Decrypts, verifies integrity, and merges into the current Spectrum Graph.
 pub fn load_state(
+    graph: &crate::spectrum_graph::SpectrumGraph,
     app_dir: &Path,
 ) -> Result<HandoffResult, Box<dyn std::error::Error + Send + Sync>> {
     let state_path = app_dir.join(STATE_FILE);
@@ -469,7 +470,6 @@ pub fn load_state(
     let state: YouPortState = serde_json::from_str(&plaintext)?;
 
     // ── 7. Restore Spectrum Graph (merge — skip existing nodes/edges) ──
-    let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
     let mut nodes_restored = 0_usize;
     let mut edges_restored = 0_usize;
 

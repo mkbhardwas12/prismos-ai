@@ -223,6 +223,77 @@ impl SpectrumGraph {
         Ok(Self { conn })
     }
 
+    /// Seed demo data for new users — only runs if graph is completely empty
+    pub fn seed_demo_data(&self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let (nodes, _edges) = self.stats()?;
+        if nodes > 0 {
+            return Ok(false); // Already has data — skip
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // ── Demo nodes showing PrismOS as a daily productivity tool ──
+        let demo_nodes = vec![
+            ("demo-work-1", "Weekly Goals", "Track and review weekly professional goals, deadlines, and deliverables", "work", "core"),
+            ("demo-work-2", "Meeting Notes", "Capture and organize notes from team meetings, 1:1s, and standups", "work", "context"),
+            ("demo-learning-1", "Learning Rust", "Study notes on Rust ownership, lifetimes, and async patterns", "learning", "core"),
+            ("demo-learning-2", "AI Research", "Papers and insights on local LLM inference, RAG systems, and agent architectures", "learning", "context"),
+            ("demo-health-1", "Fitness Tracker", "Daily exercise log: running, strength training, stretching routines", "health", "core"),
+            ("demo-health-2", "Sleep Habits", "Track sleep patterns, quality, and habits for better rest", "health", "context"),
+            ("demo-finance-1", "Budget Overview", "Monthly income, expenses, savings goals, and investment tracking", "finance", "core"),
+            ("demo-task-1", "Home Projects", "Organize home improvement tasks, shopping lists, and maintenance schedules", "task", "context"),
+            ("demo-social-1", "Family Events", "Birthdays, anniversaries, family gatherings, and gift ideas", "social", "context"),
+            ("demo-memory-1", "Travel Plans", "Trip ideas, itineraries, packing lists, and travel memories", "memory", "context"),
+        ];
+
+        for (id, label, content, ntype, layer) in &demo_nodes {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
+                params![id, label, content, ntype, layer, now],
+            )?;
+        }
+
+        // ── Demo edges showing relationships between life facets ──
+        let demo_edges = vec![
+            ("demo-edge-1", "demo-work-1", "demo-work-2", "feeds_into", 0.8),
+            ("demo-edge-2", "demo-learning-1", "demo-work-1", "supports", 0.7),
+            ("demo-edge-3", "demo-learning-2", "demo-learning-1", "related_to", 0.6),
+            ("demo-edge-4", "demo-health-1", "demo-health-2", "affects", 0.75),
+            ("demo-edge-5", "demo-work-1", "demo-finance-1", "impacts", 0.5),
+            ("demo-edge-6", "demo-task-1", "demo-social-1", "related_to", 0.4),
+            ("demo-edge-7", "demo-health-1", "demo-work-1", "enables", 0.6),
+            ("demo-edge-8", "demo-memory-1", "demo-social-1", "connects_to", 0.5),
+        ];
+
+        for (id, src, tgt, rel, weight) in &demo_edges {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 0.05, 0, ?6, ?6)",
+                params![id, src, tgt, rel, weight, now],
+            )?;
+        }
+
+        // ── Add demo intents to the intent log so the daily brief has data ──
+        let demo_intents = vec![
+            ("What are my top priorities this week?", "query"),
+            ("Help me plan a healthy meal prep for the week", "task"),
+            ("Summarize the latest Rust async patterns", "learning"),
+            ("Track my morning run: 5K in 28 minutes", "health"),
+            ("Review my monthly budget and spending", "finance"),
+        ];
+
+        for (raw, itype) in &demo_intents {
+            self.conn.execute(
+                "INSERT INTO intent_log (id, raw_input, intent_type, matched_nodes, confidence, created_at)
+                 VALUES (?1, ?2, ?3, '[]', 0.85, ?4)",
+                params![uuid::Uuid::new_v4().to_string(), raw, itype, now],
+            )?;
+        }
+
+        Ok(true)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  NODE OPERATIONS — Life Facet Management
     // ═══════════════════════════════════════════════════════════════════════

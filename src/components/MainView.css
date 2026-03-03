@@ -267,6 +267,66 @@
   background: rgba(37, 99, 235, 0.06);
 }
 
+/* ── Tokens Slider in Dropdown ── */
+.model-tokens-control {
+  padding: 8px 12px 12px;
+}
+
+.model-tokens-slider {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-surface);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.model-tokens-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 6px rgba(37, 99, 235, 0.4);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.model-tokens-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.model-tokens-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.model-tokens-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.model-tokens-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Guide Button ── */
+.guide-btn {
+  font-size: 12px !important;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;

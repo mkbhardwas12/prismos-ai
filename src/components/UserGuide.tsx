@@ -1,0 +1,263 @@
+// Patent Pending — US [application number] (Feb 28, 2026)
+// PrismOS User Guide — In-app help & onboarding
+
+import { useState, useCallback } from "react";
+import "./UserGuide.css";
+
+interface UserGuideProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+type GuideSection = "getting-started" | "features" | "tips" | "keyboard" | "faq";
+
+export default function UserGuide({ open, onClose }: UserGuideProps) {
+  const [activeSection, setActiveSection] = useState<GuideSection>("getting-started");
+
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
+  }, [onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="guide-overlay" onClick={handleBackdropClick}>
+      <div className="guide-panel" role="dialog" aria-label="User Guide" aria-modal="true">
+        {/* Header */}
+        <div className="guide-header">
+          <div className="guide-header-title">
+            <span className="guide-header-icon">📖</span>
+            <h2>PrismOS User Guide</h2>
+          </div>
+          <button className="guide-close-btn" onClick={onClose} aria-label="Close guide">✕</button>
+        </div>
+
+        <div className="guide-body">
+          {/* Sidebar Nav */}
+          <nav className="guide-nav" aria-label="Guide sections">
+            {([
+              { id: "getting-started", icon: "🚀", label: "Getting Started" },
+              { id: "features", icon: "✨", label: "Features" },
+              { id: "tips", icon: "💡", label: "Tips & Best Practices" },
+              { id: "keyboard", icon: "⌨️", label: "Keyboard Shortcuts" },
+              { id: "faq", icon: "❓", label: "FAQ" },
+            ] as { id: GuideSection; icon: string; label: string }[]).map(s => (
+              <button
+                key={s.id}
+                className={`guide-nav-item ${activeSection === s.id ? "active" : ""}`}
+                onClick={() => setActiveSection(s.id)}
+              >
+                <span className="guide-nav-icon">{s.icon}</span>
+                {s.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Content */}
+          <div className="guide-content">
+            {activeSection === "getting-started" && (
+              <div className="guide-section">
+                <h3>🚀 Getting Started</h3>
+                <p>PrismOS is a <strong>local-first AI operating system</strong> that runs entirely on your device. No cloud, no data sharing, no subscriptions.</p>
+
+                <div className="guide-card">
+                  <h4>Step 1 — Install Ollama</h4>
+                  <p>Ollama powers the AI models. Download it free from <strong>ollama.com</strong> and install it. It runs quietly in the background.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Step 2 — Choose a Model</h4>
+                  <p>Click the <strong>model selector</strong> in the top-right header bar (shows "Ollama · model name"). You can:</p>
+                  <ul>
+                    <li>Switch between installed models instantly</li>
+                    <li>Download new models with one click from "Get More Models"</li>
+                  </ul>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Step 3 — Start Chatting</h4>
+                  <p>Type any intent in the input bar at the bottom. PrismOS will route it through its <strong>Refractive Core</strong> pipeline — analyzing, selecting the best agent, and building knowledge in your Spectrum Graph.</p>
+                </div>
+
+                <div className="guide-card highlight">
+                  <h4>🔒 Your Privacy</h4>
+                  <p>Everything runs locally. Your conversations, data, and knowledge graph never leave your computer. PrismOS uses AES-256-GCM encryption for all stored data.</p>
+                </div>
+              </div>
+            )}
+
+            {activeSection === "features" && (
+              <div className="guide-section">
+                <h3>✨ Features</h3>
+
+                <div className="guide-card">
+                  <h4>💬 Intent Console</h4>
+                  <p>Your main conversation view. Type natural language intents and PrismOS intelligently routes them to the best agent. The AI learns from each interaction, building your personal knowledge graph.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🕸️ Spectrum Graph</h4>
+                  <p>A visual force-directed graph of your knowledge. Every conversation creates nodes and edges that connect concepts. Watch your knowledge network grow over time.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🌈 Spectrum Explorer</h4>
+                  <p>Browse, search, and manage individual nodes in your knowledge graph. Add new nodes manually, view details, and see how concepts connect.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🔒 Sandbox Prisms</h4>
+                  <p>Execute code and actions in WASM-isolated sandboxes with cryptographic signing. Every action is auditable with HMAC-SHA256 verification.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>📅 Spectral Timeline</h4>
+                  <p>View your entire activity history chronologically. Filter by event type, search through past interactions, and track how your knowledge evolved.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🔄 You-Port</h4>
+                  <p>Export your entire state (encrypted) to move between devices. Supports multi-device sync with conflict resolution strategies (latest-wins, theirs, ours).</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🤖 Multi-Agent Collaboration</h4>
+                  <p>PrismOS can coordinate multiple AI agents working together on complex tasks. View agent activity, collaboration traces, and debate panels in real time.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🎤 Voice Input/Output</h4>
+                  <p>Enable voice input and text-to-speech output in Settings. Speak your intents naturally and hear responses read aloud.</p>
+                </div>
+              </div>
+            )}
+
+            {activeSection === "tips" && (
+              <div className="guide-section">
+                <h3>💡 Tips & Best Practices</h3>
+
+                <div className="guide-card">
+                  <h4>Choose the Right Model</h4>
+                  <ul>
+                    <li><strong>Fast responses:</strong> Use Llama 3.2 (3B) or Gemma 2 (2B) — lightweight and quick</li>
+                    <li><strong>Best quality:</strong> Use Llama 3.1 (8B) or Mistral (7B) — more detailed answers</li>
+                    <li><strong>Code tasks:</strong> Use Code Llama — specialized for programming</li>
+                    <li><strong>Reasoning:</strong> Use DeepSeek R1 — chain-of-thought reasoning</li>
+                  </ul>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Adjust Response Length</h4>
+                  <p>Use the <strong>Max Tokens</strong> slider in the model dropdown to control response length:</p>
+                  <ul>
+                    <li><strong>512</strong> — Quick, concise answers</li>
+                    <li><strong>2048</strong> — Standard responses (default)</li>
+                    <li><strong>4096</strong> — Detailed, comprehensive answers</li>
+                    <li><strong>8192</strong> — Maximum length for long-form content</li>
+                  </ul>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Be Specific with Intents</h4>
+                  <p>The more specific your input, the better the response. Instead of "tell me about Python," try "explain Python list comprehensions with examples."</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Build Your Knowledge Graph</h4>
+                  <p>Regular usage builds a richer Spectrum Graph. Visit the Spectrum Explorer to see your knowledge network grow. The more you use PrismOS, the smarter it gets about your interests.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Back Up Your Data</h4>
+                  <p>Use <strong>Settings → Export Graph</strong> regularly to create encrypted backups. Use <strong>You-Port</strong> to sync between devices.</p>
+                </div>
+              </div>
+            )}
+
+            {activeSection === "keyboard" && (
+              <div className="guide-section">
+                <h3>⌨️ Keyboard Shortcuts</h3>
+                <div className="guide-shortcuts">
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>1</kbd></span>
+                    <span>Intent Console</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>2</kbd></span>
+                    <span>Spectrum Graph</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>3</kbd></span>
+                    <span>Spectrum Explorer</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>4</kbd></span>
+                    <span>Sandbox Prisms</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>5</kbd></span>
+                    <span>Spectral Timeline</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>6</kbd></span>
+                    <span>Settings</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Enter</kbd></span>
+                    <span>Send intent</span>
+                  </div>
+                  <div className="guide-shortcut-row">
+                    <span className="guide-keys"><kbd>Shift</kbd> + <kbd>Enter</kbd></span>
+                    <span>New line in input</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeSection === "faq" && (
+              <div className="guide-section">
+                <h3>❓ Frequently Asked Questions</h3>
+
+                <div className="guide-card">
+                  <h4>Is PrismOS free?</h4>
+                  <p>Yes! PrismOS is free to use. It runs open-source AI models locally on your machine through Ollama. No subscriptions, no API keys, no usage limits.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Does my data go to the cloud?</h4>
+                  <p><strong>No.</strong> Everything stays on your device. PrismOS never sends your data anywhere. All AI processing happens locally using Ollama.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Why are responses slow?</h4>
+                  <p>Response speed depends on your hardware. Tips to speed things up:</p>
+                  <ul>
+                    <li>Use a smaller model (Llama 3.2 at 3B is very fast)</li>
+                    <li>Lower the Max Tokens setting</li>
+                    <li>Close other heavy applications</li>
+                    <li>A GPU significantly speeds up inference</li>
+                  </ul>
+                </div>
+
+                <div className="guide-card">
+                  <h4>Can I use my own models?</h4>
+                  <p>Yes! Any model available in Ollama works with PrismOS. You can also create custom Modelfiles. Just pull the model via <code>ollama pull model-name</code> and it will appear in the model selector.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>How do I move my data to another computer?</h4>
+                  <p>Go to <strong>Settings → You-Port</strong> to export an encrypted package. Import it on your other device. You can also use <strong>Multi-Device Sync</strong> for more advanced merge strategies.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>What is the Spectrum Graph?</h4>
+                  <p>It's your personal knowledge network. Every conversation adds nodes (concepts) and edges (connections) to the graph. Over time, it becomes a rich map of your interests and knowledge that helps PrismOS give better answers.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

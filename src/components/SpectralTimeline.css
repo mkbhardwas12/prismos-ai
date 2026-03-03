@@ -130,6 +130,11 @@
   cursor: pointer;
   outline: none;
 }
+.timeline-filter-select option {
+  background: #1c242e;
+  color: #e2e8f0;
+  padding: 0.4rem 0.5rem;
+}
 .timeline-filter-select:focus {
   border-color: var(--color-primary);
 }
@@ -296,6 +301,12 @@
 .timeline-event-node_updated .timeline-event-card { border-left: 3px solid #ffb74d; }
 .timeline-event-edge_created .timeline-event-card { border-left: 3px solid #4fc3f7; }
 .timeline-event-edge_reinforced .timeline-event-card { border-left: 3px solid #60a5fa; }
+
+/* Light theme overrides for dropdown options */
+[data-theme="light"] .timeline-filter-select option {
+  background: #f1f5f9;
+  color: #0f172a;
+}
 
 /* ── Light Theme Overrides ── */
 [data-theme="light"] .timeline-container {

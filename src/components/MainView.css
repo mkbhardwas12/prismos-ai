@@ -1215,6 +1215,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: 4px;
 }
 
 .example-chip {
@@ -1271,6 +1275,19 @@
   opacity: 0;
   transition: all var(--transition-fast);
   flex-shrink: 0;
+}
+
+.example-chip-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--color-primary);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* ── Messages ── */

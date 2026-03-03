@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./SettingsPanel.css";
@@ -52,6 +53,12 @@ export default function SettingsPanel({
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+
+  // ── Model Hub state ──
+  const [pullingModel, setPullingModel] = useState<string | null>(null);
+  const [pullProgress, setPullProgress] = useState<{ status: string; percent: number } | null>(null);
+  const [deletingModel, setDeletingModel] = useState<string | null>(null);
+  const [modelToPull, setModelToPull] = useState("");
 
   // ── Multi-device sync state ──
   const [syncExporting, setSyncExporting] = useState(false);
@@ -116,6 +123,63 @@ export default function SettingsPanel({
       setModelsLoaded(true);
     }
   }, [settings.ollamaUrl]);
+
+  // Auto-load models when Ollama is connected
+  useEffect(() => {
+    if (ollamaConnected && !modelsLoaded) {
+      loadModels();
+    }
+  }, [ollamaConnected, modelsLoaded, loadModels]);
+
+  // ── Pull a model from Ollama registry ──
+  const handlePullModel = useCallback(async (name: string) => {
+    if (!name.trim()) return;
+    setPullingModel(name);
+    setPullProgress({ status: "Starting download…", percent: 0 });
+    try {
+      const result = await invoke<string>("pull_ollama_model", {
+        modelName: name,
+        ollamaUrl: settings.ollamaUrl,
+      });
+      showStatus(`✅ ${result}`, "success");
+      await loadModels();
+    } catch (e) {
+      showStatus(`❌ Pull failed: ${e}`, "error");
+    } finally {
+      setPullingModel(null);
+      setPullProgress(null);
+    }
+  }, [settings.ollamaUrl, showStatus, loadModels]);
+
+  // ── Delete a model from Ollama ──
+  const handleDeleteModel = useCallback(async (name: string) => {
+    setDeletingModel(name);
+    try {
+      const result = await invoke<string>("delete_ollama_model", {
+        modelName: name,
+        ollamaUrl: settings.ollamaUrl,
+      });
+      showStatus(`🗑️ ${result}`, "success");
+      await loadModels();
+      // If deleted model was the default, clear it
+      if (settings.defaultModel === name) {
+        onSettingsChange({ ...settings, defaultModel: "" });
+      }
+    } catch (e) {
+      showStatus(`❌ Delete failed: ${e}`, "error");
+    } finally {
+      setDeletingModel(null);
+    }
+  }, [settings, onSettingsChange, showStatus, loadModels]);
+
+  // ── Listen for pull-progress events from Rust backend ──
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    listen<{ model: string; status: string; percent: number }>("pull-progress", (event) => {
+      setPullProgress({ status: event.payload.status, percent: event.payload.percent });
+    }).then((fn) => { unlistenFn = fn; });
+    return () => { if (unlistenFn) unlistenFn(); };
+  }, []);
 
   // ── Export Graph (encrypted) ──
   const handleExportGraph = useCallback(async () => {
@@ -373,6 +437,107 @@ export default function SettingsPanel({
               value={settings.maxTokens}
               onChange={(e) => update("maxTokens", parseInt(e.target.value) || 2048)}
             />
+          </div>
+        </div>
+
+        {/* ── Model Hub — Download, Manage, Delete Models ── */}
+        <div className="settings-group">
+          <h3>📦 Model Hub</h3>
+          <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
+            Browse, download, and manage your local AI models. All models run entirely on your machine.
+          </div>
+
+          {/* Installed models */}
+          {models.length > 0 && (
+            <div className="settings-model-hub-list">
+              <div className="settings-model-hub-label">Installed Models</div>
+              {models.map((m) => (
+                <div key={m.name} className={`settings-model-hub-item ${settings.defaultModel === m.name ? "active" : ""}`}>
+                  <div className="model-hub-item-info">
+                    <span className="model-hub-item-name">{m.name}</span>
+                    {m.size && <span className="model-hub-item-size">{(m.size / 1e9).toFixed(1)} GB</span>}
+                    {m.modified_at && <span className="model-hub-item-date">{new Date(m.modified_at).toLocaleDateString()}</span>}
+                  </div>
+                  <div className="model-hub-item-actions">
+                    <button
+                      className={`settings-btn settings-btn-sm ${settings.defaultModel === m.name ? "settings-btn-primary" : ""}`}
+                      onClick={() => update("defaultModel", m.name)}
+                      title="Set as default model"
+                    >
+                      {settings.defaultModel === m.name ? "✅ Active" : "Use"}
+                    </button>
+                    <button
+                      className="settings-btn settings-btn-sm settings-btn-danger"
+                      onClick={() => handleDeleteModel(m.name)}
+                      disabled={deletingModel === m.name}
+                      title="Delete this model"
+                    >
+                      {deletingModel === m.name ? "⏳" : "🗑️"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pull new model */}
+          <div className="settings-item">
+            <label>Pull New Model</label>
+            <div className="settings-model-row">
+              <input
+                className="settings-input"
+                value={modelToPull}
+                onChange={(e) => setModelToPull(e.target.value)}
+                placeholder="e.g. llama3.2, mistral, codellama:7b"
+                disabled={!!pullingModel}
+              />
+              <button
+                className="settings-btn settings-btn-primary"
+                onClick={() => handlePullModel(modelToPull)}
+                disabled={!!pullingModel || !modelToPull.trim()}
+              >
+                {pullingModel ? "⏳ Pulling…" : "📥 Pull"}
+              </button>
+            </div>
+          </div>
+
+          {/* Pull progress */}
+          {pullProgress && (
+            <div className="settings-pull-progress">
+              <div className="settings-pull-status">{pullProgress.status}</div>
+              <div className="progress-bar">
+                <div className="progress-bar-fill" style={{ width: `${pullProgress.percent}%` }} />
+              </div>
+              <div className="settings-pull-percent">{pullProgress.percent}%</div>
+            </div>
+          )}
+
+          {/* Quick-pull popular models */}
+          <div className="settings-model-hub-quick">
+            <div className="settings-model-hub-label">Quick Pull</div>
+            <div className="settings-model-hub-quick-chips">
+              {["llama3.2", "mistral", "deepseek-r1:1.5b", "gemma2:2b", "phi3:mini", "codellama:7b"].map((name) => {
+                const isInstalled = models.some((m) => m.name.startsWith(name.split(":")[0]));
+                return (
+                  <button
+                    key={name}
+                    className={`settings-model-quick-chip ${isInstalled ? "installed" : ""}`}
+                    onClick={() => !isInstalled && handlePullModel(name)}
+                    disabled={!!pullingModel || isInstalled}
+                    title={isInstalled ? "Already installed" : `Pull ${name}`}
+                  >
+                    {isInstalled ? "✅" : "📥"} {name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="settings-hint">
+            Models are downloaded from the Ollama registry. Typical sizes: 1-8 GB.
+            <button className="settings-btn settings-btn-sm" onClick={loadModels} style={{ marginLeft: "0.5rem" }}>
+              ↻ Refresh
+            </button>
           </div>
         </div>
 
@@ -745,7 +910,7 @@ export default function SettingsPanel({
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
               <span className="settings-version-name">PrismOS-AI</span>
-              <span className="settings-version-number">v0.2.0</span>
+              <span className="settings-version-number">v0.3.0</span>
             </div>
             <div className="settings-version-badges">
               <span className="settings-badge-patent">Patent Pending</span>

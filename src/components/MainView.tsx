@@ -7,6 +7,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
+import DailyBrief from "./DailyBrief";
 import UserGuide from "./UserGuide";
 import { useVoice } from "../hooks/useVoice";
 import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel, AgentActivity, ProactiveSuggestion } from "../types";
@@ -51,12 +52,20 @@ export default function MainView({
 
   // Listen for sidebar proactive clicks — auto-fill intent box
   useEffect(() => {
-    const handler = (e: Event) => {
+    const fillHandler = (e: Event) => {
       const intent = (e as CustomEvent<string>).detail;
       if (intent) setPendingIntent(intent);
     };
-    window.addEventListener("prismos:fill-intent", handler);
-    return () => window.removeEventListener("prismos:fill-intent", handler);
+    const processHandler = (e: Event) => {
+      const intent = (e as CustomEvent<string>).detail;
+      if (intent) handleIntent(intent);
+    };
+    window.addEventListener("prismos:fill-intent", fillHandler);
+    window.addEventListener("prismos:process-intent", processHandler);
+    return () => {
+      window.removeEventListener("prismos:fill-intent", fillHandler);
+      window.removeEventListener("prismos:process-intent", processHandler);
+    };
   }, []);
 
   // ── Inline model selector state ──
@@ -512,6 +521,9 @@ export default function MainView({
       </div>
 
       <div className="conversation-area" ref={conversationRef} role="log" aria-label="Conversation history" aria-live="polite">
+        {/* ── Morning Brief / Evening Recap ── */}
+        <DailyBrief onSuggestionClick={handleIntent} />
+
         {messages.length === 0 ? (
           <div className="welcome-message">
             <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS" className="welcome-logo-img" /></div>
@@ -830,10 +842,10 @@ export default function MainView({
                 key={sug.id}
                 className={`proactive-card proactive-cat-${sug.category}`}
                 onClick={() => {
-                  setPendingIntent(sug.action_intent);
                   setProactiveSuggestions(prev => prev.filter(s => s.id !== sug.id));
+                  handleIntent(sug.action_intent);
                 }}
-                title="Click to auto-fill this suggestion"
+                title="Click to process this suggestion"
               >
                 <div className="proactive-card-top">
                   <span className="proactive-card-icon">{sug.icon}</span>

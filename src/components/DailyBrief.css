@@ -1,0 +1,271 @@
+/* Patent Pending — PrismOS (US Provisional Patent, Feb 2026) */
+/* DailyBrief — Morning Brief, Evening Recap & "What PrismOS did today" */
+
+.daily-brief {
+  margin: 12px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.06) 0%, rgba(139, 92, 246, 0.04) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.15);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  animation: briefSlideIn 0.4s ease-out;
+}
+
+@keyframes briefSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.daily-brief-header {
+  margin-bottom: 14px;
+}
+
+.daily-brief-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.daily-brief-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.daily-brief-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.daily-brief-dismiss:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.daily-brief-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+/* ── Stats strip ── */
+.daily-brief-stats {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 14px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  padding: 2px;
+  overflow: hidden;
+}
+
+.brief-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.2s;
+}
+
+.brief-stat:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.brief-stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--accent-primary, #0ea5e9);
+  line-height: 1.2;
+}
+
+.brief-stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 2px;
+}
+
+/* ── Highlights ── */
+.daily-brief-highlights {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.brief-highlight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.brief-highlight-icon {
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.brief-highlight-text {
+  line-height: 1.35;
+}
+
+/* ── Top facets ── */
+.daily-brief-facets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.brief-facets-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.brief-facet-tag {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brief-facet-tag.type-work {
+  border-color: rgba(79, 195, 247, 0.25);
+  color: #4fc3f7;
+}
+.brief-facet-tag.type-health {
+  border-color: rgba(129, 199, 132, 0.25);
+  color: #81c784;
+}
+.brief-facet-tag.type-finance {
+  border-color: rgba(255, 183, 77, 0.25);
+  color: #ffb74d;
+}
+.brief-facet-tag.type-learning {
+  border-color: rgba(100, 181, 246, 0.25);
+  color: #64b5f6;
+}
+.brief-facet-tag.type-social {
+  border-color: rgba(206, 147, 216, 0.25);
+  color: #ce93d8;
+}
+.brief-facet-tag.type-memory {
+  border-color: rgba(144, 164, 174, 0.25);
+  color: #90a4ae;
+}
+.brief-facet-tag.type-task {
+  border-color: rgba(229, 115, 115, 0.25);
+  color: #e57373;
+}
+
+/* ── Quick actions ── */
+.daily-brief-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brief-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: rgba(14, 165, 233, 0.05);
+  border: 1px solid rgba(14, 165, 233, 0.12);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.brief-action-btn:hover {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.3);
+  color: var(--text-primary);
+  transform: translateX(3px);
+}
+
+.brief-action-btn:active {
+  transform: translateX(1px);
+}
+
+.brief-action-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.brief-action-text {
+  flex: 1;
+}
+
+.brief-action-arrow {
+  font-size: 0.85rem;
+  opacity: 0.3;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.brief-action-btn:hover .brief-action-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+/* ── Light theme ── */
+[data-theme="light"] .daily-brief {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.04) 0%, rgba(139, 92, 246, 0.03) 100%);
+  border-color: rgba(14, 165, 233, 0.12);
+}
+
+[data-theme="light"] .daily-brief-stats {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .brief-stat {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="light"] .brief-highlight {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .brief-facet-tag {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .brief-action-btn {
+  background: rgba(14, 165, 233, 0.03);
+  border-color: rgba(14, 165, 233, 0.1);
+}
+
+[data-theme="light"] .brief-action-btn:hover {
+  background: rgba(14, 165, 233, 0.08);
+}

@@ -261,8 +261,8 @@ export default function Sidebar({
                         className="sidebar-proactive-item"
                         onClick={() => {
                           handleNavigate("chat");
-                          // Dispatch custom event so MainView can auto-fill the intent box
-                          window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: sug.action_intent }));
+                          // Dispatch custom event so MainView auto-processes the intent
+                          window.dispatchEvent(new CustomEvent("prismos:process-intent", { detail: sug.action_intent }));
                         }}
                         title={sug.action_intent}
                       >

@@ -11,7 +11,7 @@
 // Nodes represent "life facets" — work, health, finance, social, learning, etc.
 // Edges carry dynamic intent weights updated through closed-loop feedback.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Timelike};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1615,6 +1615,132 @@ impl SpectrumGraph {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(rows)
+    }
+
+    /// Generate a daily brief/recap from Spectrum Graph activity
+    /// Returns stats about today's activity: intents processed, nodes created/updated,
+    /// edges strengthened, top facets, and highlights
+    pub fn get_daily_brief(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        // Intents processed today
+        let intents_today: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM intent_log WHERE created_at > datetime('now', '-1 day')",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Nodes created today
+        let nodes_created_today: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE created_at > datetime('now', '-1 day')",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Nodes updated today (updated_at differs from created_at and is today)
+        let nodes_updated_today: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE updated_at > datetime('now', '-1 day') AND updated_at != created_at",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Edges strengthened today (reinforced recently)
+        let edges_strengthened: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM edges WHERE last_reinforced > datetime('now', '-1 day') AND reinforcements > 0",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Total graph size
+        let (total_nodes, total_edges) = self.stats().unwrap_or((0, 0));
+
+        // Top facets (node types) created/accessed today
+        let mut stmt = self.conn.prepare(
+            "SELECT node_type, COUNT(*) as cnt FROM nodes
+             WHERE created_at > datetime('now', '-1 day') OR last_accessed > datetime('now', '-1 day')
+             GROUP BY node_type ORDER BY cnt DESC LIMIT 5"
+        )?;
+        let facets: Vec<(String, usize)> = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+        })?.filter_map(|r| r.ok()).collect();
+
+        // Recent intent types today
+        let mut stmt2 = self.conn.prepare(
+            "SELECT intent_type, COUNT(*) as cnt FROM intent_log
+             WHERE created_at > datetime('now', '-1 day')
+             GROUP BY intent_type ORDER BY cnt DESC LIMIT 5"
+        )?;
+        let intent_types: Vec<(String, usize)> = stmt2.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+        })?.filter_map(|r| r.ok()).collect();
+
+        // Strongest edge reinforced today
+        let strongest_today: Option<(String, f64, i32)> = self.conn.query_row(
+            "SELECT e.relation, e.weight, e.reinforcements FROM edges e
+             WHERE e.last_reinforced > datetime('now', '-1 day')
+             ORDER BY e.weight DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        ).ok();
+
+        // Most accessed node today
+        let busiest_node: Option<(String, String, i32)> = self.conn.query_row(
+            "SELECT label, node_type, access_count FROM nodes
+             WHERE last_accessed > datetime('now', '-1 day')
+             ORDER BY access_count DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        ).ok();
+
+        // Determine time of day for greeting context
+        let hour = chrono::Local::now().hour();
+        let time_period = if hour < 12 { "morning" } else if hour < 17 { "afternoon" } else { "evening" };
+        let is_morning = hour < 12;
+
+        // Build highlights list
+        let mut highlights: Vec<serde_json::Value> = Vec::new();
+        if let Some((label, ntype, count)) = &busiest_node {
+            highlights.push(serde_json::json!({
+                "icon": "🎯",
+                "text": format!("Most active: \"{}\" ({}) — accessed {} times", label, ntype, count)
+            }));
+        }
+        if let Some((rel, weight, reinf)) = &strongest_today {
+            highlights.push(serde_json::json!({
+                "icon": "🔗",
+                "text": format!("Strongest connection: \"{}\" — weight {:.2}, reinforced {}×", rel, weight, reinf)
+            }));
+        }
+        if edges_strengthened > 0 {
+            highlights.push(serde_json::json!({
+                "icon": "💪",
+                "text": format!("{} knowledge connections strengthened today", edges_strengthened)
+            }));
+        }
+        if nodes_created_today > 0 {
+            highlights.push(serde_json::json!({
+                "icon": "✨",
+                "text": format!("{} new knowledge nodes added to your graph", nodes_created_today)
+            }));
+        }
+
+        let facet_map: serde_json::Value = facets.iter()
+            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+            .collect::<serde_json::Map<String, serde_json::Value>>()
+            .into();
+
+        let intent_type_map: serde_json::Value = intent_types.iter()
+            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+            .collect::<serde_json::Map<String, serde_json::Value>>()
+            .into();
+
+        Ok(serde_json::json!({
+            "time_period": time_period,
+            "is_morning": is_morning,
+            "intents_today": intents_today,
+            "nodes_created": nodes_created_today,
+            "nodes_updated": nodes_updated_today,
+            "edges_strengthened": edges_strengthened,
+            "total_nodes": total_nodes,
+            "total_edges": total_edges,
+            "top_facets": facet_map,
+            "intent_types": intent_type_map,
+            "highlights": highlights,
+        }))
     }
 }
 

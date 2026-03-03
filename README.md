@@ -12,7 +12,7 @@
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 5 adds frameless window, system tray, drag-and-drop file ingest, auto-updater, and **Local Vision** — analyze images with llava/llama3.2-vision entirely offline.
+PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 5 adds frameless window, system tray, drag-and-drop file ingest, auto-updater, **Local Vision** (llava/llama3.2-vision), and **Document Analysis** — upload PDF/DOCX/PPTX/XLSX for AI-powered summaries, entirely offline.
 
 <p align="center">
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to five AI agents at once" />
@@ -69,6 +69,7 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 | **Drag & Drop File Ingest** | Drop files into Intent Input — auto-extracts text content *(Phase 5)* |
 | **Auto-Updater** | Seamless OTA updates via GitHub Releases *(Phase 5)* |
 | **Local Vision** | Multimodal image analysis via llava/llama3.2-vision — drag-drop or camera capture *(Phase 5.5)* |
+| **Document Analysis** | Upload PDF, DOCX, PPTX, XLSX for AI-powered summaries & analysis — text extracted locally *(Phase 5.5)* |
 
 Everything runs offline. All inference via local [Ollama](https://ollama.com) models.
 
@@ -215,7 +216,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.2.1** | ✅ Done | 65 tests, CI/CD, config centralization, streaming progress bars, docs polish |
 | **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
 | **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
-| **v0.5.0** | ✅ Current | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision (llava/llama3.2-vision) |
+| **v0.5.0** | ✅ Current | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
 | **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 

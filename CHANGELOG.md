@@ -29,20 +29,31 @@ PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native 
   - `ollama_bridge.rs`: `GenerateRequest` struct extended with `images: Option<Vec<String>>` for base64 image arrays
   - Auto-detects vision-capable models; defaults to "llava" when current model doesn't support vision
   - `MainView.tsx`: Vision path in `handleIntent` — routes image+prompt to `query_ollama_vision`, shows 👁️ Vision metadata
+- **Document Analysis Engine** — Upload and analyze PDF, DOCX, PPTX, XLSX documents entirely offline:
+  - `extract_file_text` enhanced: now handles binary document formats (PDF, DOCX, PPTX, XLSX) in addition to text files
+  - PDF extraction via `pdf-extract` crate — extracts text from digital PDFs, reports page count
+  - DOCX extraction via XML parsing + `docx-rs` fallback — reads `word/document.xml` inside the zip archive
+  - PPTX extraction via slide XML parsing — reads `ppt/slides/slideN.xml`, outputs per-slide text
+  - XLSX/XLS extraction via `calamine` crate — reads all sheets, outputs tab-separated cell data
+  - `extract_document_for_analysis` Tauri command for dedicated document workflow
+  - `IntentInput.tsx`: 📄 document upload button, drag-drop document detection, document preview card with type-specific emoji icons
+  - `MainView.tsx`: Document analysis path — injects document text as context, sends to Ollama, shows 📄 Document Analyst metadata
+  - 50MB file size limit for documents; 12KB context truncation for model input
+  - Supports: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.xls`, `.txt`, `.md`, `.csv`, `.json`, `.rtf`
 
 ### Changed
 
 - `tauri.conf.json`: `decorations` set to `false`, added `trayIcon` and `plugins.updater` config, version bumped to v0.5.0
-- `lib.rs`: Registered `tauri-plugin-updater` and `tauri-plugin-window-state` plugins; added tray menu with event handlers; added `extract_file_text` Tauri IPC command; added `query_ollama_vision` and `read_image_as_base64` commands; startup banner updated with Local Vision Engine line
+- `lib.rs`: Registered `tauri-plugin-updater` and `tauri-plugin-window-state` plugins; added tray menu with event handlers; enhanced `extract_file_text` with PDF/DOCX/PPTX/XLSX support; added `extract_document_for_analysis`, `query_ollama_vision`, and `read_image_as_base64` commands; startup banner updated with Local Vision + Document Ingest Engine lines
 - `ollama_bridge.rs`: `GenerateRequest` struct extended with `images` field; `generate()` and `generate_stream()` accept images parameter
 - `refractive_core.rs`: Updated `generate()` call to pass `None` for images
 - `agents/langgraph_workflow.rs`: Updated `generate()` call to pass `None` for images
 - `App.tsx`: New `TitleBar` component rendered at top of layout; `.app-body` wrapper for sidebar + main content
-- `IntentInput.tsx`: Added drag-over/drop handlers with visual feedback, file text extraction via Tauri IPC; added vision UI (image attachment, camera capture, file picker, image preview)
-- `IntentInput.css`: Added vision CSS classes (preview, camera viewfinder, vision buttons, animations)
-- `MainView.tsx`: `handleIntent` accepts optional `imageData` parameter; vision path routes to `query_ollama_vision`
-- `IntentInput.test.tsx`: Updated `onSubmit` assertion for new `(input, imageData?)` signature; updated button selector for vision buttons
-- `Cargo.toml`: Added `tauri-plugin-updater`, `tauri-plugin-window-state`; enabled `tray-icon` feature on `tauri` crate
+- `IntentInput.tsx`: Added drag-over/drop handlers with visual feedback, file text extraction via Tauri IPC; added vision UI (image attachment, camera capture, file picker, image preview); added document upload UI (📄 button, document preview card, drag-drop document detection)
+- `IntentInput.css`: Added vision CSS classes (preview, camera viewfinder, vision buttons, animations); added document CSS classes (doc-preview, doc-btn, type-specific styling)
+- `MainView.tsx`: `handleIntent` accepts optional `imageData` and `documentText` parameters; vision path routes to `query_ollama_vision`; document path extracts text, builds context prompt, routes to `query_ollama`
+- `IntentInput.test.tsx`: Updated `onSubmit` assertion for new `(input, imageData?, documentText?)` signature; updated button selector for vision/document buttons
+- `Cargo.toml`: Added `tauri-plugin-updater`, `tauri-plugin-window-state`, `pdf-extract`, `docx-rs`, `calamine`, `zip`; enabled `tray-icon` feature on `tauri` crate
 - `capabilities/default.json`: Added `updater:default` and `window-state:default` permissions
 - All version references updated from v0.4.0 to v0.5.0
 

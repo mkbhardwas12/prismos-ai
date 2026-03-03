@@ -1,7 +1,7 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Spectrum Explorer — Full Knowledge Graph Browser
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SpectrumNode, SpectrumEdge, GraphStats } from "../types";
 import "./SpectrumExplorer.css";
@@ -12,7 +12,7 @@ interface SpectrumExplorerProps {
   onDataChanged: () => void;
 }
 
-export default function SpectrumExplorer({
+export default memo(function SpectrumExplorer({
   nodes,
   stats,
   onDataChanged,
@@ -27,6 +27,15 @@ export default function SpectrumExplorer({
   const [newNodeType, setNewNodeType] = useState("note");
   const [showAddForm, setShowAddForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Auto-dismiss error after 5 seconds
+  useEffect(() => {
+    if (actionError) {
+      const t = setTimeout(() => setActionError(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [actionError]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -34,6 +43,7 @@ export default function SpectrumExplorer({
       return;
     }
     setIsSearching(true);
+    setActionError(null);
     try {
       const result = await invoke<string>("search_spectrum_nodes", {
         query: searchQuery,
@@ -41,6 +51,7 @@ export default function SpectrumExplorer({
       setSearchResults(JSON.parse(result));
     } catch (e) {
       console.error("Search failed:", e);
+      setActionError(`Search failed: ${String(e)}`);
     } finally {
       setIsSearching(false);
     }
@@ -73,6 +84,7 @@ export default function SpectrumExplorer({
         onDataChanged();
       } catch (e) {
         console.error("Delete failed:", e);
+        setActionError(`Failed to delete node: ${String(e)}`);
       }
     },
     [onDataChanged, confirmDeleteId]
@@ -92,13 +104,20 @@ export default function SpectrumExplorer({
       onDataChanged();
     } catch (e) {
       console.error("Add node failed:", e);
+      setActionError(`Failed to add node: ${String(e)}`);
     }
   }, [newNodeLabel, newNodeContent, newNodeType, onDataChanged]);
 
-  const displayNodes = searchResults ?? nodes;
+  const displayNodes = useMemo(() => searchResults ?? nodes, [searchResults, nodes]);
 
   return (
     <>
+      {actionError && (
+        <div className="explorer-error-banner" role="alert">
+          <span>⚠️ {actionError}</span>
+          <button onClick={() => setActionError(null)} className="explorer-error-close">×</button>
+        </div>
+      )}
       <div className="main-header">
         <h2>🌈 Spectrum Explorer</h2>
         <div className="graph-stats">
@@ -296,4 +315,4 @@ export default function SpectrumExplorer({
       </div>
     </>
   );
-}
+})

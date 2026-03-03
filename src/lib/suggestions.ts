@@ -56,9 +56,9 @@ export function generateGraphSuggestions(
   nodes: SpectrumNode[],
   backendSuggestions: ProactiveSuggestion[],
 ): ProactiveSuggestion[] {
-  // If backend returned good suggestions, use those first
+  // If backend returned good suggestions, use those first (deduped)
   if (backendSuggestions.length >= 2) {
-    return backendSuggestions.slice(0, 3);
+    return dedup(backendSuggestions).slice(0, 3);
   }
 
   const results: ProactiveSuggestion[] = [...backendSuggestions];
@@ -107,19 +107,30 @@ export function generateGraphSuggestions(
     }
   }
 
-  return results.slice(0, 3);
+  return dedup(results).slice(0, 3);
 }
 
 /**
  * Generate follow-up suggestion cards to show after each AI response.
  * Uses context from the user's query and the AI response.
  */
+/** Remove suggestions with near-identical text (first 50 chars, case-insensitive) */
+function dedup(suggestions: ProactiveSuggestion[]): ProactiveSuggestion[] {
+  const seen = new Set<string>();
+  return suggestions.filter((s) => {
+    const key = s.text.toLowerCase().slice(0, 50);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function generateFollowUpSuggestions(
   userQuery: string,
   backendSuggestions: ProactiveSuggestion[],
 ): ProactiveSuggestion[] {
   if (backendSuggestions.length >= 2) {
-    return backendSuggestions.slice(0, 3);
+    return dedup(backendSuggestions).slice(0, 3);
   }
 
   const results: ProactiveSuggestion[] = [...backendSuggestions];
@@ -169,5 +180,5 @@ export function generateFollowUpSuggestions(
     results.push(g);
   }
 
-  return results.slice(0, 3);
+  return dedup(results).slice(0, 3);
 }

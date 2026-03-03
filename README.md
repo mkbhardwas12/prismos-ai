@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.4.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
+[![Version](https://img.shields.io/badge/version-0.5.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 [![Patent](https://img.shields.io/badge/Patent-Pending-10b981)](.)
@@ -224,9 +224,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📊 Project Stats
 
-- **16 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer
+- **18 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, LangGraph Workflow, Agent Graph
 - **65 tests passing** across 7 test files (Vitest + React Testing Library)
-- **55+ Tauri IPC commands** — full frontend↔backend communication
+- **71 Tauri IPC commands** — full frontend↔backend communication
 - **Zero cloud dependencies** — everything runs on your machine
 
 ---

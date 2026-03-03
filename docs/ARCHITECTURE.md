@@ -22,7 +22,7 @@ The frontend provides the user interface and communicates with the Rust backend 
 | `SpectrumExplorer` | Browse, search, and manage individual nodes |
 | `ActiveAgents` | Live agent activity, Sandbox Prism badges, LangGraph trace |
 | `DailyBrief` | Morning Brief / Evening Recap summaries |
-| `IntentInput` | Text + voice input with auto-resize |
+| `IntentInput` | Text + voice + image + document input with auto-resize |
 | `SandboxPanel` | WASM sandbox inspection and rollback controls |
 | `SpectralTimeline` | Time-series view of knowledge evolution |
 

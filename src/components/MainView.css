@@ -38,6 +38,8 @@
   background-color: rgba(15, 20, 25, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  position: relative;
+  z-index: 100;
 }
 
 .main-header h2 {
@@ -102,14 +104,14 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  min-width: 220px;
-  max-height: 320px;
+  min-width: 280px;
+  max-height: 420px;
   overflow-y: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  box-shadow: var(--shadow-lg);
-  z-index: 1000;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  z-index: 1001;
   animation: dropdown-in 0.15s ease;
   padding: 4px;
 }

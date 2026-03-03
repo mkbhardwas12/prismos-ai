@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] — 2026-03-03
+
+### 🎯 Highlights
+
+PrismOS v0.2.1 is a polish and stability release focusing on code quality, test coverage, CI/CD automation, and professional repository standards.
+
+### Added
+
+- **Test Coverage Expansion** — 65 comprehensive unit and integration tests across 7 test files (was 16 tests)
+  - Frontend tests: Ollama client (8 tests), Agent definitions (22 tests), IntentInput component (7 tests), DailyBrief component (5 tests), Sidebar component (6 tests)
+  - Backend tests: Type safety, Settings validation
+- **Enhanced CI/CD Pipeline** — GitHub Actions now includes Rust `cargo clippy` linting, test coverage reporting, and full release-build verification
+- **Centralized Configuration** — New `src/lib/config.ts` module consolidates Ollama URL, model defaults, and settings constants
+- **Streaming Progress Bars** — Model pulls now display real-time progress with MB downloaded, percent complete, and visual progress bar via Tauri event streaming
+- **SECURITY.md** — Security policy and vulnerability reporting guidelines
+- **CODE_OF_CONDUCT.md** — Community guidelines for contributors and participants
+- **Pull Request Template** — Standardized PR format with checklist and guidelines
+- **.gitattributes** — Consistent line-ending and binary file handling across platforms
+
+### Changed
+
+- Improved UI feedback during long-running operations (Ollama model pulls)
+- Enhanced README.md with badges, architecture diagrams, and configuration documentation
+- New `docs/ARCHITECTURE.md` with complete technical architecture, data flow diagrams, and module inventory
+
+### Fixed
+
+- Hardcoded Ollama URLs centralized into configuration module (13 occurrences across 7 files)
+- Model pull timeout increased to 30 minutes for large models
+- All tests now passing (65/65) with improved coverage
+
+### Documentation
+
+- Expanded README with feature table, quick-start guide, configuration reference, security model, and project structure
+- Added comprehensive ARCHITECTURE.md covering layers, components, data flow, and security design
+- Created SECURITY.md with vulnerability reporting and supported versions
+
+---
+
 ## [0.2.0] — 2026-03-02
 
 ### 🎉 Highlights

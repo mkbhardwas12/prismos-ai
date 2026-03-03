@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "../types";
 import ActiveAgents from "./ActiveAgents";
+import DailySuggestions from "./DailySuggestions";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./Sidebar.css";
 
@@ -245,36 +246,18 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* Proactive Daily Assistance */}
-          {proactiveSuggestions.length > 0 && (
-            <div className="sidebar-section">
-              <div className="sidebar-section-title">
-                Proactive
-                <span className="sidebar-badge">{proactiveSuggestions.length}</span>
-              </div>
-              <div className="sidebar-proactive">
-                <div className="sidebar-proactive-greeting">{dailyGreeting}</div>
-                <ul className="sidebar-proactive-list">
-                  {proactiveSuggestions.slice(0, 3).map((sug) => (
-                    <li key={sug.id}>
-                      <button
-                        className="sidebar-proactive-item"
-                        onClick={() => {
-                          handleNavigate("chat");
-                          // Dispatch custom event so MainView auto-processes the intent
-                          window.dispatchEvent(new CustomEvent("prismos:process-intent", { detail: sug.action_intent }));
-                        }}
-                        title={sug.action_intent}
-                      >
-                        <span className="sidebar-proactive-icon">{sug.icon}</span>
-                        <span className="sidebar-proactive-text">{sug.text}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
+          {/* Permanent Daily Suggestions Section (always visible, graph-aware) */}
+          <div className="sidebar-section">
+            <DailySuggestions
+              nodes={nodes}
+              dailyGreeting={dailyGreeting}
+              onSuggestionSelect={(intent) => {
+                handleNavigate("chat");
+                // Auto-fill the intent box (not auto-execute) so user can review
+                window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: intent }));
+              }}
+            />
+          </div>
 
           {/* Active Agents */}
           <div className="sidebar-section">

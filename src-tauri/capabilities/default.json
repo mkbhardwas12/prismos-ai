@@ -7,6 +7,8 @@
     "shell:allow-open",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
-    "global-shortcut:allow-is-registered"
+    "global-shortcut:allow-is-registered",
+    "updater:default",
+    "window-state:default"
   ]
 }

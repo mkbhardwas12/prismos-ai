@@ -109,7 +109,7 @@
   <!-- ═══ Layer 6: Ollama ═══ -->
   <rect x="120" y="605" width="660" height="65" rx="10" fill="#0d2535" fill-opacity="0.6" stroke="#e76f51" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="450" y="632" text-anchor="middle" font-size="14" font-weight="600" fill="#f4a261">Ollama — Local LLM Inference</text>
-  <text x="450" y="654" text-anchor="middle" font-size="12" fill="#94a3b8">mistral · llama3 · phi3 · codellama · gemma2 — 100% On-Device</text>
+  <text x="450" y="654" text-anchor="middle" font-size="12" fill="#94a3b8">mistral · llama3 · phi3 · codellama · gemma2 · llava · llama3.2-vision — 100% On-Device</text>
 
   <!-- Side labels -->
   <text x="25" y="305" text-anchor="middle" font-size="9" fill="#4b5563" transform="rotate(-90,25,305)" letter-spacing="1">RUST BACKEND</text>

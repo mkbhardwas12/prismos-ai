@@ -4,12 +4,15 @@
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.4.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
+[![Patent](https://img.shields.io/badge/Patent-Pending-10b981)](.)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS-AI is a **local-first agentic personal AI operating system** that runs 100% on your device. Your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you.
+PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 4 (v0.4.0) adds a local voice engine, Spotlight-style command palette, local file indexing with RAG, and deep motion polish.
 
 <p align="center">
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to five AI agents at once" />
@@ -37,21 +40,30 @@ PrismOS-AI is a **local-first agentic personal AI operating system** that runs 1
 
 ---
 
-## ✨ Core Features (v0.2.1)
+## ✨ Core Features (v0.4.0)
 
 | Feature | Description |
 |---------|-------------|
-| **Refractive Core** | Intent → 5-agent pipeline → Spectrum Graph → response |
-| **Spectrum Graph** | Persistent Multi-dimensional knowledge graph |
+| **Refractive Core™** | Intent → 5-agent pipeline → Spectrum Graph → response |
+| **Spectrum Graph™** | Persistent multi-dimensional knowledge graph |
 | **5 AI Agents** | Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel |
 | **LangGraph Debates** | Multi-agent debate with formal consensus voting |
-| **Sandbox Prism** | WASM-isolated execution with HMAC-SHA256 signing & auto-rollback |
+| **Sandbox Prism™** | WASM-isolated execution environment |
 | **Proactive Suggestions** | Context-aware cards that auto-process on click |
 | **Morning Brief / Evening Recap** | Daily summary of your knowledge graph activity |
-| **You-Port** | Encrypted state migration — export/import your entire graph |
-| **Voice I/O** | Browser-native speech input/output (no cloud transcription) |
+| **You-Port™** | Encrypted state migration |
+| **Voice I/O** | Hybrid local voice engine (cpal audio capture + Web Speech API fallback) |
 | **Spectral Timeline** | Time-series view of knowledge evolution |
 | **Multi-Window** | Open Spectrum Graph in a separate window |
+| **Onboarding Wizard** | Multi-step first-run setup experience *(Phase 3)* |
+| **Model Hub** | Browse, download & manage Ollama models in-app *(Phase 3)* |
+| **Spectrum Theming** | Dynamic themes driven by Spectrum Graph spectral properties *(Phase 3)* |
+| **Framer Motion Polish** | Smooth page transitions, card animations, stagger effects *(Phase 3)* |
+| **Global Hotkey** | `Ctrl+Space` / `Cmd+Space` to instantly summon the app *(Phase 3)* |
+| **Intent Templates** | Pre-built templates for common workflows *(Phase 3)* |
+| **Spotlight Overlay** | macOS Spotlight-style command palette with graph search *(Phase 4)* |
+| **Local Voice Engine** | cpal-based microphone capture + Whisper model download infra *(Phase 4)* |
+| **Local File Indexer (RAG)** | Watches `~/Documents/PrismDocs`, auto-ingests into Spectrum Graph *(Phase 4)* |
 
 Everything runs offline. All inference via local [Ollama](https://ollama.com) models.
 
@@ -173,13 +185,53 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ---
 
+## �️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Desktop Shell** | [Tauri 2.0](https://v2.tauri.app/) — lightweight native wrapper |
+| **Frontend** | React 18 · TypeScript 5.5 · Vite 5.4 · Framer Motion |
+| **Backend** | Rust (edition 2021) · SQLite (rusqlite) · wasmtime 27 |
+| **LLM Inference** | [Ollama](https://ollama.com/) — 100% local, no cloud |
+| **Audio Capture** | cpal 0.15 (cross-platform) · hound 3.5 (WAV encoding) |
+| **File Watching** | notify 6.1 · walkdir 2 |
+| **Security** | AES-256-GCM · HMAC-SHA256 · WASM sandboxing |
+| **CI/CD** | GitHub Actions — TypeScript check, Vitest, cargo check/clippy/test, release builds |
+| **Platforms** | Windows (.msi/.exe) · macOS (.dmg) · Linux (.deb/.AppImage) · Android (.apk) |
+
+---
+
+## 🗺️ Roadmap
+
+| Version | Status | Highlights |
+|---------|--------|-----------|
+| **v0.1.0-alpha** | ✅ Done | Spectrum Graph, Refractive Core, 5 agents, Sandbox Prism, You-Port, Ollama |
+| **v0.2.0** | ✅ Done | WASM sandbox, Voice I/O, Multi-Window, Timeline, LangGraph debates, Merge/Diff, Accessibility |
+| **v0.2.1** | ✅ Done | 65 tests, CI/CD, config centralization, streaming progress bars, docs polish |
+| **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
+| **v0.4.0** | ✅ Current | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
+| **v0.5.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
+| **v0.6.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
+
+---
+
+## 📊 Project Stats
+
+- **16 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer
+- **65 tests passing** across 7 test files (Vitest + React Testing Library)
+- **50+ Tauri IPC commands** — full frontend↔backend communication
+- **Zero cloud dependencies** — everything runs on your machine
+
+---
+
 ## 📜 Patent Notice
 
-PrismOS-AI and its core architectures (Spectrum Graph, Refractive Core, Sandbox Prism, You-Port) are protected by a US Provisional Patent filed February 2026. This open-source release is for personal and educational use.
+PrismOS-AI and its core architectures (Spectrum Graph™, Refractive Core™, Sandbox Prism™, You-Port™) are protected by a US Provisional Patent filed February 2026. This open-source release is for personal and educational use.
 
 ---
 
 <p align="center">
-  <strong>PrismOS-AI</strong> — Your mind, your machine, your OS.<br />
-  <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">Request Feature</a>
+  <strong>PrismOS-AI v0.4.0</strong> — Your mind, your machine, your OS.<br />
+  Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
+  <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
 </p>

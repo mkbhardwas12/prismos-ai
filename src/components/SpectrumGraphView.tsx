@@ -56,6 +56,8 @@ interface GraphLink {
   weight: number;
   momentum: number;
   edge_id: string;
+  reinforcements: number;
+  last_reinforced: string | null;
 }
 
 interface GraphData {
@@ -79,6 +81,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
   const [glowPhase, setGlowPhase] = useState(0);
   const glowRef = useRef<number>(0);
+  const [recentEdges, setRecentEdges] = useState<Set<string>>(new Set());
 
   // Animate glow pulse for high-momentum edges
   useEffect(() => {
@@ -122,7 +125,20 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           weight: e.weight,
           momentum: e.momentum || 0,
           edge_id: e.id,
+          reinforcements: e.reinforcements || 0,
+          last_reinforced: e.last_reinforced || null,
         }));
+
+      // Compute recently strengthened edges (reinforced within last 5 minutes)
+      const recentCutoff = Date.now() - 5 * 60 * 1000;
+      const recent = new Set<string>();
+      for (const link of links) {
+        if (link.reinforcements > 0 && link.last_reinforced) {
+          const ts = new Date(link.last_reinforced).getTime();
+          if (ts > recentCutoff) recent.add(link.edge_id);
+        }
+      }
+      setRecentEdges(recent);
 
       setGraphData({ nodes, links });
       setMetrics(snapshot.stats);
@@ -249,6 +265,22 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       if (link.momentum > 0.05) color = "rgba(100, 180, 255, 0.6)";
       else if (link.momentum < -0.05) color = "rgba(255, 100, 100, 0.4)";
 
+      // Glow effect for newly strengthened edges (golden pulse)
+      const isRecent = recentEdges.has(link.edge_id);
+      if (isRecent) {
+        const pulse = 0.5 + 0.5 * Math.abs(Math.sin(glowPhase * 1.5 + link.weight * 3));
+        ctx.save();
+        ctx.shadowColor = "rgba(255, 200, 60, " + (0.6 * pulse) + ")";
+        ctx.shadowBlur = (6 + 4 * pulse) / globalScale;
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.strokeStyle = `rgba(255, 210, 80, ${0.4 + 0.25 * pulse})`;
+        ctx.lineWidth = (width * 1.5);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Glow effect for high-momentum edges (Phase 1 — Alive Graph)
       const isHighMomentum = link.momentum > 0.1;
       if (isHighMomentum) {
@@ -272,7 +304,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       ctx.lineWidth = width;
       ctx.stroke();
     },
-    [glowPhase]
+    [glowPhase, recentEdges]
   );
 
   // ─── Render ────────────────────────────────────────────────────────────

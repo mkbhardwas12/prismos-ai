@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // Intent Lens — Natural Language Decomposition Engine
 //
 // Intent Lenses parse raw natural language input into structured intents

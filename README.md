@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/mkbhardwas12/prismos-ai"><img src="https://img.shields.io/badge/v0.2.0-Release-0ea5e9?style=for-the-badge&logo=github" alt="Release" /></a>
-  <img src="https://img.shields.io/badge/Patent_Pending-US_63%2F993%2C589-10b981?style=for-the-badge" alt="Patent Pending" />
+  <img src="https://img.shields.io/badge/Patent_Pending-US_Provisional-10b981?style=for-the-badge" alt="Patent Pending" />
   <img src="https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge" alt="License" />
   <img src="https://img.shields.io/badge/100%25_Offline-Local_First-f59e0b?style=for-the-badge" alt="100% Local" />
 </p>
@@ -436,7 +436,7 @@ PrismOS exposes **53 Tauri commands** for frontend–backend communication:
 
 ## 🗺️ Roadmap
 
-### v0.1.0-alpha ✅ (Feb 28, 2026)
+### v0.1.0-alpha ✅ (Feb 2026)
 
 - [x] Spectrum Graph with 7-dimensional spectral embeddings
 - [x] SQLite persistence with full CRUD
@@ -525,20 +525,13 @@ PrismOS exposes **53 Tauri commands** for frontend–backend communication:
 
 ## ⚖️ Patent Notice
 
-> **PrismOS** is protected under **US Provisional Patent Application No. [application number]**,
-> filed **February 28, 2026** (Patent Pending).
->
-> The following architectures are patent-pending inventions:
-> - **Spectrum Graph™** — Multi-dimensional spectral knowledge graph
-> - **Refractive Core™** — Intent processing through spectral analysis
-> - **You-Port™** — Encrypted personality migration
->
-> This software is released under the MIT License for personal and educational use.
-> Commercial use of the patented architectures requires a separate license.
->
-> **Author:** Manish Kumar  
-> **Filing Date:** February 28, 2026  
-> **Application No.:** [application number]
+**Patent Pending** — US Provisional Patent Application (filed February 2026).
+
+PrismOS and its core architectures (Spectrum Graph, Refractive Core, and You-Port) are protected by a pending U.S. patent.  
+This open-source release is for personal and educational use under the MIT License.  
+Commercial use of the patented inventions requires a separate license.
+
+Inventor: Manish Kumar
 
 ---
 
@@ -594,7 +587,7 @@ Copyright © 2026 Manish Kumar
 
 **🔷 PrismOS** — Your mind, refracted.
 
-*Patent Pending — US [application number] · Local-First · Privacy-First · Agentic AI*
+*Patent Pending · Local-First · Privacy-First · Agentic AI*
 
 **[⭐ Star on GitHub](https://github.com/mkbhardwas12/prismos-ai)** · **[📖 Release Notes](RELEASE_NOTES.md)** · **[🐛 Report a Bug](https://github.com/mkbhardwas12/prismos-ai/issues)**
 

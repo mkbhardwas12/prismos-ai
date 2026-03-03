@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Model Verification — SHA-256 Hash Checking for LLM Integrity
 //
 // Before loading any LLM model, PrismOS verifies its integrity by checking

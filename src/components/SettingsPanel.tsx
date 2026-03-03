@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Settings Panel — Full Configuration, Export/Import, Theme, About
 
 import { useState, useCallback, useEffect } from "react";
@@ -416,7 +416,7 @@ export default function SettingsPanel({
           </div>
         </div>
 
-        {/* ── Multi-Device Sync (Patent [application number] — Graph Merge/Diff) ── */}
+        {/* ── Multi-Device Sync (Patent Pending — Graph Merge/Diff) ── */}
         <div className="settings-group">
           <h3>🔄 Multi-Device Sync</h3>
           <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
@@ -591,7 +591,7 @@ export default function SettingsPanel({
 
           <div className="settings-hint">
             Sync uses passphrase-based encryption — portable across devices.
-            Use "Preview Merge" to see conflicts before applying. Patent Pending US [application number].
+            Use "Preview Merge" to see conflicts before applying. Patent Pending.
           </div>
         </div>
 
@@ -617,7 +617,7 @@ export default function SettingsPanel({
           </div>
         </div>
 
-        {/* ── Voice I/O (Patent [application number]) ── */}
+        {/* ── Voice I/O (Patent Pending) ── */}
         <div className="settings-group">
           <h3>🎙️ Voice Input / Output</h3>
           <div className="settings-item">
@@ -644,7 +644,7 @@ export default function SettingsPanel({
           </div>
           <div className="settings-hint">
             Voice uses Web Speech API — all processing stays in your browser.
-            No audio is sent to any server. Patent Pending US [application number].
+            No audio is sent to any server. Patent Pending.
           </div>
         </div>
 
@@ -790,10 +790,8 @@ export default function SettingsPanel({
           <div className="settings-patent-notice">
             <div className="settings-patent-badge">⚖️ PATENT PENDING</div>
             <p>
-              <strong>US Provisional Patent Application No. [application number]</strong><br />
-              Filed: February 28, 2026<br />
-              Title: "Local-First Agentic Personal AI Operating System with
-              Persistent Spectrum Graph Memory and Multi-Agent Refractive Core"
+              <strong>US Provisional Patent Application</strong><br />
+              Filed: February 2026
             </p>
             <p className="settings-patent-legal">
               This software and its core architectures are protected under US Patent Law.

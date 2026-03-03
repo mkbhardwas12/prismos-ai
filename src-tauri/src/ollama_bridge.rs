@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // Ollama Bridge — Local LLM Inference Interface
 //
 // Provides a Rust HTTP client for the Ollama REST API running on localhost.

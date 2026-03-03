@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // LangGraph Messages — Structured Inter-Agent Communication Protocol
 //
 // Agents communicate through typed messages that carry proposals, votes,

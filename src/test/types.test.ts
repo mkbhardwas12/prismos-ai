@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS — Type & Settings Unit Tests
 //
 // Validates default settings values, type shapes, and data transformations

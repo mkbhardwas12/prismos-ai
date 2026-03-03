@@ -27,4 +27,4 @@ Place screenshots here for the README and GitHub Release page.
 - **Format**: PNG
 - **Theme**: Dark (primary) + Light (secondary)
 
-> Patent Pending — US [application number] (Feb 28, 2026)
+> Patent Pending — PrismOS (US Provisional Patent, Feb 2026)

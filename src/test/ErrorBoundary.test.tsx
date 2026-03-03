@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS — ErrorBoundary Tests
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

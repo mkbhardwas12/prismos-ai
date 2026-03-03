@@ -1,6 +1,6 @@
 # Contributing to PrismOS
 
-> Patent Pending — US [application number] (Feb 28, 2026)
+> Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 
 Thank you for your interest in contributing to PrismOS! This document provides guidelines for contributing to the project.
 
@@ -90,7 +90,7 @@ npm run tauri dev
 - Use `Result<T, E>` for error handling (no `unwrap()` in production code)
 - Add patent notice header to all source files:
   ```rust
-  // Patent Pending — US [application number] (Feb 28, 2026)
+  // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
   ```
 - Add `#[cfg(test)]` test modules where appropriate
 
@@ -110,7 +110,7 @@ docs/                → Architecture diagrams
 
 ## ⚖️ Patent Notice
 
-PrismOS is protected under US Provisional Patent [application number]. By contributing, you agree that your contributions may be covered by this patent. All contributors retain their copyright but grant the project a license to use contributions under the project's MIT license.
+PrismOS is protected under US Provisional Patent Patent Pending. By contributing, you agree that your contributions may be covered by this patent. All contributors retain their copyright but grant the project a license to use contributions under the project's MIT license.
 
 ## 📜 License
 

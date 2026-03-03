@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Test Setup — Vitest + JSDOM + Testing Library
 
 import "@testing-library/jest-dom/vitest";

@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS LangGraph Multi-Agent Collaboration Framework
 //
 // This module implements the LangGraph-style multi-agent workflow described

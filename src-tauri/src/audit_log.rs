@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Audit Log — Tamper-Evident Cryptographic Hash Chain
 //
 // Every significant action in PrismOS is recorded in a tamper-evident log.
@@ -81,7 +81,7 @@ impl AuditLog {
                 timestamp: Utc::now().to_rfc3339(),
                 action: "genesis".to_string(),
                 actor: "system".to_string(),
-                details: "PrismOS audit chain initialized — Patent Pending US [application number]".to_string(),
+                details: "PrismOS audit chain initialized — Patent Pending".to_string(),
                 prev_hash: GENESIS_HASH.to_string(),
                 hash: String::new(), // Will be computed below
             };

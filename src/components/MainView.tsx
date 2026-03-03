@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Main View — Intent Console + Conversation
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -260,7 +260,7 @@ export default function MainView({
     setIsProcessing(true);
 
     try {
-      // Use full Refractive Core pipeline (Patent [application number])
+      // Use full Refractive Core pipeline (Patent Pending)
       const resultJson = await invoke<string>("refract_intent", { input });
       const result: RefractiveResult = JSON.parse(resultJson);
 

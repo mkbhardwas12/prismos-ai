@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Spectrum Graph View — Force-Directed Knowledge Graph Visualization
 //
 // Renders the multi-layered Spectrum Graph using react-force-graph-2d.

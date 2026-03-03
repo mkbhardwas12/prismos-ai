@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // LangGraph Workflow Engine — Formal State-Graph Multi-Agent Orchestration
 //
 // This module implements a formal LangGraph-style state graph for

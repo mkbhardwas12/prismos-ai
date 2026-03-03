@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Spectral Timeline — Time-Based History of Spectrum Graph Events
 //
 // Renders a vertical timeline showing node creation, updates, edge creation,

@@ -1,7 +1,7 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // Spectrum Graph — Persistent Multi-Layered Knowledge Graph
 //
-// The Spectrum Graph is PrismOS's persistent memory system per Patent [application number].
+// The Spectrum Graph is PrismOS's persistent memory system.
 // Architecture:
 //   Layer 1 — SQLite relational store: nodes (life facets), edges, metadata
 //   Layer 2 — Intent weight layer: dynamic edge weights with closed-loop feedback
@@ -1002,7 +1002,7 @@ impl SpectrumGraph {
         Ok((node_count, edge_count))
     }
 
-    /// Clear all nodes and edges from the Spectrum Graph (Patent [application number])
+    /// Clear all nodes and edges from the Spectrum Graph (Patent Pending)
     /// Returns the count of deleted nodes and edges.
     pub fn clear_graph(&self) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
         let (nodes, edges) = self.stats()?;
@@ -1096,7 +1096,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  PERSIST / LOAD — Explicit Graph Serialization (Patent [application number])
+    //  PERSIST / LOAD — Explicit Graph Serialization (Patent Pending)
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Persist the current graph state to a JSON export file.
@@ -1109,7 +1109,7 @@ impl SpectrumGraph {
         // Add metadata envelope
         let export = serde_json::json!({
             "format": "prismos-spectrum-graph-v1",
-            "patent": "US [application number]",
+            "patent": "Patent Pending",
             "exported_at": Utc::now().to_rfc3339(),
             "snapshot": snapshot,
             "intent_log_count": self.conn.query_row(
@@ -1186,7 +1186,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  VECTOR SIMILARITY — NPU-Ready Embedding Support (Patent [application number])
+    //  VECTOR SIMILARITY — NPU-Ready Embedding Support (Patent Pending)
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Store a vector embedding for a node (stored as BLOB in SQLite).
@@ -1330,7 +1330,7 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  GRAPH MERGE/DIFF ENGINE — Multi-Device Sync (Patent [application number])
+//  GRAPH MERGE/DIFF ENGINE — Multi-Device Sync (Patent Pending)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 //  Supports three merge strategies:
@@ -1774,7 +1774,7 @@ impl SpectrumGraph {
         let snapshot = self.get_full_graph()?;
         let package = serde_json::json!({
             "format": "prismos-sync-v1",
-            "patent": "US [application number]",
+            "patent": "Patent Pending",
             "device_id": Uuid::new_v4().to_string(),
             "exported_at": Utc::now().to_rfc3339(),
             "snapshot": snapshot,

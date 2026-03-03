@@ -1,5 +1,5 @@
 """
-Patent Pending — US [application number] (Feb 28, 2026)
+Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 PrismOS Refractive Core — LangGraph Multi-Agent Orchestration
 
 This module implements the 5-agent Refractive Core using LangGraph
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     query = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "What is PrismOS?"
     print("╔══════════════════════════════════════════════╗")
     print("║  ◈ PrismOS Refractive Core — Agent Pipeline  ║")
-    print("║  Patent Pending — US [application number]               ║")
+    print("║  Patent Pending               ║")
     print("╚══════════════════════════════════════════════╝")
     print(f"\n🔮 Processing: {query}\n")
     print(f"📡 Response:\n{process_intent(query)}")

@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Voice Engine — Web Speech API Integration
 //
 // Provides voice input (Speech-to-Text) and voice output (Text-to-Speech)

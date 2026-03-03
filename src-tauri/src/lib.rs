@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS — Local-First Agentic Personal AI Operating System
 // Main application library — Tauri command handlers and system initialization
 
@@ -23,7 +23,7 @@ pub struct DbState(pub Mutex<spectrum_graph::SpectrumGraph>);
 
 // ─── Tauri Commands ────────────────────────────────────────────────────────────
 
-/// process_intent — Full Refractive Core pipeline (Patent [application number])
+/// process_intent — Full Refractive Core pipeline (Patent Pending)
 /// Parses raw input → Intent Lens → Spectrum Graph context → NPU scoring →
 /// Agent selection → LLM inference → Closed-loop feedback → Result
 #[tauri::command]
@@ -287,7 +287,7 @@ async fn rollback_sandbox(name: String) -> Result<String, String> {
     serde_json::to_string(&checkpoint).map_err(|e| e.to_string())
 }
 
-/// execute_in_sandbox — Primary Sandbox Prism entry point (Patent [application number])
+/// execute_in_sandbox — Primary Sandbox Prism entry point (Patent Pending)
 /// Validates, signs, and executes an action within the WASM-isolated Sandbox Prism.
 /// Returns a fully auditable result with HMAC-SHA256 signature and side effects.
 #[tauri::command]
@@ -296,7 +296,7 @@ async fn execute_in_sandbox(action: String, agent_id: String) -> Result<String, 
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-// ─── New Spectrum Graph Commands (Patent [application number]) ───────────────────────────
+// ─── New Spectrum Graph Commands (Patent Pending) ───────────────────────────
 
 /// Get the full Spectrum Graph snapshot for frontend visualization
 #[tauri::command]
@@ -405,7 +405,7 @@ async fn update_spectrum_node(
     graph.update_node(&id, &label, &content).map_err(|e| e.to_string())
 }
 
-// ─── You-Port Encrypted State Handoff (Patent [application number]) ──────────────────────
+// ─── You-Port Encrypted State Handoff (Patent Pending) ──────────────────────
 
 /// Save complete PrismOS state to encrypted file (Spectrum Graph + agents + metadata)
 /// Called on app close or manually by the user.
@@ -432,7 +432,7 @@ async fn has_saved_state(app: tauri::AppHandle) -> Result<bool, String> {
     Ok(you_port::has_saved_state(&app_dir))
 }
 
-// ─── Settings Commands (Patent [application number]) ─────────────────────────────────────
+// ─── Settings Commands (Patent Pending) ─────────────────────────────────────
 
 /// Export the Spectrum Graph as an encrypted JSON package (You-Port encryption)
 /// Returns the encrypted package JSON string for the user to save externally.
@@ -576,7 +576,7 @@ async fn clear_graph(db: tauri::State<'_, DbState>) -> Result<String, String> {
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-// ─── LangGraph Workflow Commands (Patent [application number]) ───────────────────────────
+// ─── LangGraph Workflow Commands (Patent Pending) ───────────────────────────
 
 /// Run a full LangGraph multi-agent collaboration for a given intent.
 /// Returns a WorkflowSummary with debate log, consensus, and transitions.
@@ -612,7 +612,7 @@ async fn get_debate_log() -> Result<String, String> {
     serde_json::to_string(&empty).map_err(|e| e.to_string())
 }
 
-// ─── Multi-Window Support (Patent [application number] — Spectral Timeline) ──────────────
+// ─── Multi-Window Support (Patent Pending — Spectral Timeline) ──────────────
 
 /// Open a secondary window (e.g. Spectrum Graph or Spectral Timeline in its own window).
 /// Creates a new Tauri webview window pointed at the same frontend with a route hash.
@@ -734,7 +734,7 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
     serde_json::to_string(&events).map_err(|e| e.to_string())
 }
 
-// ─── Graph Merge/Diff Commands (Patent [application number] — Multi-Device Sync) ───────
+// ─── Graph Merge/Diff Commands (Patent Pending — Multi-Device Sync) ───────
 
 /// Export the local Spectrum Graph as a passphrase-encrypted sync package.
 /// The resulting file can be transferred to another PrismOS instance and
@@ -793,7 +793,7 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
-// ─── Security Commands (Patent [application number]) ─────────────────────────────────────
+// ─── Security Commands (Patent Pending) ─────────────────────────────────────
 
 /// Get the most recent audit log entries (tamper-evident hash chain)
 #[tauri::command]
@@ -910,7 +910,7 @@ pub fn run() {
 
             println!("╔══════════════════════════════════════════════╗");
             println!("║  ◈ PrismOS v0.2.0 — Local-First AI OS       ║");
-            println!("║  Patent Pending — US [application number]              ║");
+            println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
@@ -924,7 +924,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Core pipeline (Patent [application number])
+            // Core pipeline (Patent Pending)
             process_intent,
             process_intent_full,
             refract_intent,
@@ -939,7 +939,7 @@ pub fn run() {
             add_spectrum_edge,
             get_node_connections,
             get_graph_stats,
-            // Spectrum Graph — Patent [application number]
+            // Spectrum Graph — Patent Pending
             get_spectrum_graph,
             update_edge_weight,
             query_spectrum_intent,
@@ -954,7 +954,7 @@ pub fn run() {
             get_recent_intents,
             // Agents
             get_active_agents,
-            // LangGraph Workflow (Patent [application number] — Multi-Agent Collaboration)
+            // LangGraph Workflow (Patent Pending — Multi-Agent Collaboration)
             run_collaboration,
             get_workflow_graph,
             get_debate_log,
@@ -963,29 +963,29 @@ pub fn run() {
             launch_ollama,
             pull_ollama_model,
             list_ollama_models,
-            // Sandbox (Patent [application number] — WASM Isolation + Cryptographic Signing)
+            // Sandbox (Patent Pending — WASM Isolation + Cryptographic Signing)
             create_sandbox,
             execute_in_sandbox,
             rollback_sandbox,
-            // You-Port (Patent [application number] — Encrypted State Migration)
+            // You-Port (Patent Pending — Encrypted State Migration)
             export_you_port,
             import_you_port,
             save_state,
             load_state,
             has_saved_state,
-            // Settings (Patent [application number] — Graph Export/Import/Clear)
+            // Settings (Patent Pending — Graph Export/Import/Clear)
             export_graph,
             import_graph,
             clear_graph,
-            // Multi-Window + Spectral Timeline (Patent [application number])
+            // Multi-Window + Spectral Timeline (Patent Pending)
             open_graph_window,
             get_timeline_data,
-            // Graph Merge/Diff — Multi-Device Sync (Patent [application number])
+            // Graph Merge/Diff — Multi-Device Sync (Patent Pending)
             export_sync_package,
             import_sync_package,
             preview_sync_merge,
             diff_graph,
-            // Security Hardening (Patent [application number])
+            // Security Hardening (Patent Pending)
             get_audit_log,
             verify_audit_chain,
             verify_model,

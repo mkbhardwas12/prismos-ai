@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS User Guide — In-app help & onboarding
 
 import { useState, useCallback } from "react";
@@ -284,7 +284,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card highlight">
                   <h4>📋 Patent Notice</h4>
-                  <p><strong>Patent Pending</strong> — US Provisional Patent Application No. <strong>[application number]</strong>, filed <strong>February 28, 2026</strong>.</p>
+                  <p><strong>Patent Pending</strong> — US Provisional Patent Application (filed February 2026).</p>
                   <p>PrismOS and its core architectures are protected by a pending United States patent:</p>
                   <ul>
                     <li><strong>Spectrum Graph™</strong> — Multi-dimensional spectral knowledge representation</li>

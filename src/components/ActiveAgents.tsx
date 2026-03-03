@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
 import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary } from "../types";

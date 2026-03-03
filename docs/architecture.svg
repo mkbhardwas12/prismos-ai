@@ -31,7 +31,7 @@
 
   <!-- Title -->
   <text x="450" y="45" text-anchor="middle" font-size="22" font-weight="700" fill="url(#headerGrad)">PrismOS Architecture</text>
-  <text x="450" y="65" text-anchor="middle" font-size="11" fill="#64748b" letter-spacing="2">PATENT PENDING — US [application number]</text>
+  <text x="450" y="65" text-anchor="middle" font-size="11" fill="#64748b" letter-spacing="2">PATENT PENDING</text>
 
   <!-- ═══ Layer 1: Frontend ═══ -->
   <rect x="60" y="85" width="780" height="70" rx="10" fill="#0d2535" fill-opacity="0.5" stroke="#00b4d8" stroke-width="1.5" filter="url(#shadow)"/>
@@ -116,5 +116,5 @@
   <text x="880" y="305" text-anchor="middle" font-size="9" fill="#4b5563" transform="rotate(90,880,305)" letter-spacing="1">TAURI 2.0 IPC</text>
 
   <!-- Footer -->
-  <text x="450" y="700" text-anchor="middle" font-size="10" fill="#475569">Patent Pending — US [application number] (Feb 28, 2026) · Local-First · No Cloud · No Telemetry</text>
+  <text x="450" y="700" text-anchor="middle" font-size="10" fill="#475569">Patent Pending (Feb 2026) · Local-First · No Cloud · No Telemetry</text>
 </svg>

@@ -39,7 +39,7 @@ HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 has
 → 16 Rust backend modules
 → 15,800+ lines of hand-written code
 → 5 autonomous AI agents with consensus voting
-→ Patent pending (US [application number])
+→ Patent pending
 
 I built every line of this. Frontend. Backend. Security. Agents. Graph engine. UI. All of it.
 
@@ -139,7 +139,7 @@ All hand-written. All local. All open source. ⚡
 
 ### Tweet 7 — Call to Action
 ```
-PrismOS is patent-pending (US [application number]) and fully open source under MIT.
+PrismOS is patent-pending (Patent Pending) and fully open source under MIT.
 
 If you believe your AI should work for YOU — not a platform — take a look.
 
@@ -175,7 +175,7 @@ Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persiste
 
 The guided setup wizard walks you through installing Ollama on first launch. Supports Mistral, Llama 3.x, Phi-3, Gemma 2, DeepSeek, and others.
 
-Patent pending: US Provisional Application No. [application number].
+Patent pending — US Provisional Patent Application (filed February 2026).
 
 GitHub: https://github.com/mkbhardwas12/prismos-ai
 

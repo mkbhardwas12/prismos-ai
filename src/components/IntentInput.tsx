@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Intent Input — Natural Language Input with Voice Support
 //
 // Supports both typed and voice input via Web Speech API.
@@ -145,7 +145,7 @@ export default function IntentInput({
       <div className="intent-hint">
         <span className="intent-hint-keys">Enter ↵ send · Shift+Enter ↵ newline</span>
         <span className="intent-hint-sep">·</span>
-        <span>100% local · Patent Pending US [application number]</span>
+        <span>100% local · Patent Pending</span>
       </div>
     </div>
   );

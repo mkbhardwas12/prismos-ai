@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS — Type Definitions
 
 export interface Agent {
@@ -289,7 +289,7 @@ export interface AgentState {
   last_active: string | null;
 }
 
-// ─── Graph Merge/Diff Types (Patent [application number] — Multi-Device Sync) ───────────
+// ─── Graph Merge/Diff Types (Patent Pending — Multi-Device Sync) ───────────
 
 export interface MergeConflict {
   entity_type: string;

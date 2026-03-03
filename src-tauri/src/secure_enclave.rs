@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Secure Enclave — Hardware Security Module Abstraction
 //
 // Provides a hardware-backed key derivation layer for PrismOS cryptographic

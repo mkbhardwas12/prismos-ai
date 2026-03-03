@@ -1,5 +1,5 @@
 # PrismOS Refractive Core — LangGraph Agent Dependencies
-# Patent Pending — US [application number] (Feb 28, 2026)
+# Patent Pending (Feb 2026)
 
 langgraph>=0.2.0
 langchain>=0.3.0

@@ -1,4 +1,4 @@
-// Patent Pending — US [application number] (Feb 28, 2026)
+// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
 import { useState, useEffect, useCallback } from "react";
@@ -240,9 +240,9 @@ export default function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          Patent Pending — US [application number]
+          Patent Pending
           <br />
-          Feb 28, 2026 · Local-First AI
+          Local-First AI · Feb 2026
         </div>
       </div>
     </>

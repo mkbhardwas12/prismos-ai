@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } fro
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { motion, AnimatePresence } from "framer-motion";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
@@ -862,29 +863,32 @@ export default function MainView({
                 <div className="inline-suggestions">
                   <div className="inline-suggestions__label">💡 Suggested next steps</div>
                   <div className="inline-suggestions__cards">
-                    {messageSuggestions[msg.id].map((sug) => (
-                      <SuggestionCard
-                        key={sug.id}
-                        suggestion={sug}
-                        variant="inline"
-                        onSelect={(s) => {
-                          // Auto-fill intent box (not auto-execute) so user can review
-                          setPendingIntent(s.action_intent);
-                        }}
-                        onDismiss={(id) => {
-                          setMessageSuggestions(prev => {
-                            const current = prev[msg.id] ?? [];
-                            const filtered = current.filter(s => s.id !== id);
-                            if (filtered.length === 0) {
-                              const next = { ...prev };
-                              delete next[msg.id];
-                              return next;
-                            }
-                            return { ...prev, [msg.id]: filtered };
-                          });
-                        }}
+                    <AnimatePresence>
+                      {messageSuggestions[msg.id].map((sug, i) => (
+                        <SuggestionCard
+                          key={sug.id}
+                          suggestion={sug}
+                          variant="inline"
+                          index={i}
+                          onSelect={(s) => {
+                            // Auto-fill intent box (not auto-execute) so user can review
+                            setPendingIntent(s.action_intent);
+                          }}
+                          onDismiss={(id) => {
+                            setMessageSuggestions(prev => {
+                              const current = prev[msg.id] ?? [];
+                              const filtered = current.filter(s => s.id !== id);
+                              if (filtered.length === 0) {
+                                const next = { ...prev };
+                                delete next[msg.id];
+                                return next;
+                              }
+                              return { ...prev, [msg.id]: filtered };
+                            });
+                          }}
                       />
-                    ))}
+                      ))}
+                    </AnimatePresence>
                   </div>
                 </div>
               )}
@@ -911,19 +915,25 @@ export default function MainView({
               {/* ── Phase 2: Live Agent Debate Log ── */}
               {liveAgentSteps.length > 0 && (
                 <div className="live-debate-log" role="log" aria-label="Agent collaboration log">
-                  {liveAgentSteps.map((step, i) => (
-                    <div
-                      key={i}
-                      className={`live-step live-step-${step.status} live-phase-${step.phase}`}
-                      style={{ animationDelay: `${i * 0.05}s` }}
-                    >
-                      <span className={`live-step-dot ${step.status === "completed" ? "dot-done" : "dot-active"}`} />
-                      <span className="live-step-agent">{step.agent}</span>
-                      <span className="live-step-action">{step.action}</span>
-                      {step.status === "completed" && <span className="live-step-check">✓</span>}
-                      {step.status === "thinking" && <span className="live-step-pulse">…</span>}
-                    </div>
-                  ))}
+                  <AnimatePresence>
+                    {liveAgentSteps.map((step, i) => (
+                      <motion.div
+                        key={`step-${i}-${step.agent}-${step.action}`}
+                        className={`live-step live-step-${step.status} live-phase-${step.phase}`}
+                        initial={{ opacity: 0, x: -16, height: 0 }}
+                        animate={{ opacity: 1, x: 0, height: "auto" }}
+                        exit={{ opacity: 0, x: 16 }}
+                        transition={{ duration: 0.22, delay: i * 0.04, ease: "easeOut" }}
+                        layout
+                      >
+                        <span className={`live-step-dot ${step.status === "completed" ? "dot-done" : "dot-active"}`} />
+                        <span className="live-step-agent">{step.agent}</span>
+                        <span className="live-step-action">{step.action}</span>
+                        {step.status === "completed" && <span className="live-step-check">✓</span>}
+                        {step.status === "thinking" && <span className="live-step-pulse">…</span>}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
             </div>
@@ -945,15 +955,18 @@ export default function MainView({
             </button>
           </div>
           <div className="proactive-cards">
-            {proactiveSuggestions.slice(0, 3).map((sug) => (
-              <SuggestionCard
-                key={sug.id}
-                suggestion={sug}
-                variant="inline"
-                onSelect={(s) => setPendingIntent(s.action_intent)}
-                onDismiss={(id) => setProactiveSuggestions(prev => prev.filter(s => s.id !== id))}
-              />
-            ))}
+            <AnimatePresence>
+              {proactiveSuggestions.slice(0, 3).map((sug, i) => (
+                <SuggestionCard
+                  key={sug.id}
+                  suggestion={sug}
+                  variant="inline"
+                  index={i}
+                  onSelect={(s) => setPendingIntent(s.action_intent)}
+                  onDismiss={(id) => setProactiveSuggestions(prev => prev.filter(s => s.id !== id))}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         </div>
       )}

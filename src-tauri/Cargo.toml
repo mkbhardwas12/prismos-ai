@@ -1,6 +1,6 @@
 [package]
 name = "prismos"
-version = "0.2.1"
+version = "0.4.0"
 description = "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)"
 authors = ["PrismOS-AI Contributors"]
 edition = "2021"
@@ -30,3 +30,10 @@ futures-util = "0.3"
 thiserror = "1"
 wasmtime = "27"
 tauri-plugin-global-shortcut = "2.3.1"
+
+# Phase 4 — Local Voice + File Indexing
+cpal = "0.15"
+hound = "3.5"
+notify = "6.1"
+walkdir = "2"
+dirs = "6"

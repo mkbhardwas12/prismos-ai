@@ -57,7 +57,7 @@ jobs:
             libssl-dev \
             libgtk-3-dev \
             libsoup-3.0-dev \
-            javascriptcoregtk-4.1-dev
+            libjavascriptcoregtk-4.1-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -84,7 +84,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name || inputs.version || 'draft' }}
-          releaseName: 'PrismOS-AI ${{ github.ref_name || inputs.version || 'draft' }}'
+          releaseName: "PrismOS-AI ${{ github.ref_name || inputs.version || 'draft' }}"
           releaseBody: |
             ## PrismOS-AI — Local-First Agentic Personal AI Operating System
 

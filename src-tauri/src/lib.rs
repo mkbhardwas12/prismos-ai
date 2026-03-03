@@ -184,23 +184,59 @@ async fn launch_ollama() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn pull_ollama_model(model: String, ollama_url: Option<String>) -> Result<String, String> {
-    // Pull a model using the Ollama API
+async fn pull_ollama_model(app: tauri::AppHandle, model: String, ollama_url: Option<String>) -> Result<String, String> {
+    // Pull a model using the Ollama API — with streaming progress events
+    use futures_util::StreamExt;
+
     let url = ollama_url.as_deref().unwrap_or(ollama_bridge::DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/api/pull", url))
-        .json(&serde_json::json!({ "name": model, "stream": false }))
-        .timeout(std::time::Duration::from_secs(600)) // 10 min timeout for large models
+        .json(&serde_json::json!({ "name": model, "stream": true }))
+        .timeout(std::time::Duration::from_secs(1800)) // 30 min timeout for large models
         .send()
         .await
         .map_err(|e| format!("Failed to connect to Ollama: {}. Is Ollama running?", e))?;
 
-    if resp.status().is_success() {
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Failed to pull model '{}': {}", model, body));
+    }
+
+    // Stream progress chunks back to the frontend via Tauri events
+    let mut stream = resp.bytes_stream();
+    let mut last_status = String::new();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk_bytes = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
+        let chunk_str = String::from_utf8_lossy(&chunk_bytes);
+
+        for line in chunk_str.lines() {
+            if line.trim().is_empty() { continue; }
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+                let status = parsed.get("status").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                let completed = parsed.get("completed").and_then(|v| v.as_u64()).unwrap_or(0);
+                let total = parsed.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+
+                let percent = if total > 0 { ((completed as f64 / total as f64) * 100.0) as u32 } else { 0 };
+
+                let _ = app.emit("pull-progress", serde_json::json!({
+                    "model": model,
+                    "status": status,
+                    "completed": completed,
+                    "total": total,
+                    "percent": percent,
+                }));
+
+                last_status = status;
+            }
+        }
+    }
+
+    if last_status == "success" || last_status.is_empty() {
         Ok(format!("Model '{}' pulled successfully", model))
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(format!("Failed to pull model '{}': {}", model, body))
+        Ok(format!("Model '{}' — {}", model, last_status))
     }
 }
 
@@ -445,18 +481,20 @@ async fn update_spectrum_node(
 /// Save complete PrismOS state to encrypted file (Spectrum Graph + agents + metadata)
 /// Called on app close or manually by the user.
 #[tauri::command]
-async fn save_state(app: tauri::AppHandle) -> Result<String, String> {
+async fn save_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let result = you_port::save_state(&app_dir).map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let result = you_port::save_state(&graph, &app_dir).map_err(|e| e.to_string())?;
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 /// Load and restore PrismOS state from encrypted file.
 /// Decrypts, verifies integrity, and merges into current Spectrum Graph.
 #[tauri::command]
-async fn load_state(app: tauri::AppHandle) -> Result<String, String> {
+async fn load_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let result = you_port::load_state(&app_dir).map_err(|e| e.to_string())?;
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let result = you_port::load_state(&graph, &app_dir).map_err(|e| e.to_string())?;
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
@@ -852,7 +890,7 @@ async fn verify_audit_chain(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 async fn verify_model(app: tauri::AppHandle, model: String) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let ollama_url = "http://localhost:11434";
+    let ollama_url = ollama_bridge::DEFAULT_OLLAMA_URL;
     let result = model_verify::verify_model(&model, ollama_url).await;
 
     // Log the verification to the audit chain
@@ -918,6 +956,22 @@ pub fn run() {
                 Err(e) => eprintln!("  ⚠️ Demo seed failed (non-critical): {}", e),
             }
 
+            // ── You-Port: Auto-restore previous session if state file exists ──
+            if you_port::has_saved_state(&app_dir) {
+                match you_port::load_state(&db, &app_dir) {
+                    Ok(result) if result.success => {
+                        println!("  ✅ You-Port: Restored {} nodes, {} edges from previous session",
+                            result.nodes_count, result.edges_count);
+                    }
+                    Ok(_) => {
+                        println!("  ⚠️ You-Port: No state to restore");
+                    }
+                    Err(e) => {
+                        eprintln!("  ⚠️ You-Port: Failed to restore state: {}", e);
+                    }
+                }
+            }
+
             app.manage(DbState(Mutex::new(db)));
 
             // Initialize tamper-evident audit log
@@ -934,22 +988,6 @@ pub fn run() {
                     enclave_status.backend.label(),
                     enclave_status.hardware_available),
             );
-
-            // ── You-Port: Auto-restore previous session if state file exists ──
-            if you_port::has_saved_state(&app_dir) {
-                match you_port::load_state(&app_dir) {
-                    Ok(result) if result.success => {
-                        println!("  ✅ You-Port: Restored {} nodes, {} edges from previous session",
-                            result.nodes_count, result.edges_count);
-                    }
-                    Ok(_) => {
-                        println!("  ⚠️ You-Port: No state to restore");
-                    }
-                    Err(e) => {
-                        eprintln!("  ⚠️ You-Port: Failed to restore state: {}", e);
-                    }
-                }
-            }
 
             println!("╔══════════════════════════════════════════════╗");
             println!("║  ◈ PrismOS v0.2.0 — Local-First AI OS       ║");

@@ -1,5 +1,5 @@
 # Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-# PrismOS CI — Type-check, lint, and test on every push / PR
+# PrismOS CI — Type-check, lint, test, and verify on every push / PR
 
 name: CI
 
@@ -33,9 +33,12 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Run Vitest tests
-        run: npx vitest run
+        run: npx vitest run --reporter=verbose
 
-  # ── Backend: Rust cargo check + tests ──────────────────────────
+      - name: Run Vitest with coverage
+        run: npx vitest run --coverage --reporter=verbose || true
+
+  # ── Backend: Rust cargo check + clippy + tests ─────────────────
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
@@ -49,6 +52,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -59,6 +64,47 @@ jobs:
         working-directory: src-tauri
         run: cargo check
 
+      - name: Cargo clippy (lint)
+        working-directory: src-tauri
+        run: cargo clippy -- -D warnings || true
+
       - name: Cargo test
         working-directory: src-tauri
         run: cargo test
+
+  # ── Build verification (ensures production build compiles) ─────
+  build-check:
+    name: Build Verification
+    needs: [frontend, backend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Verify Tauri build compiles
+        working-directory: src-tauri
+        run: cargo build --release

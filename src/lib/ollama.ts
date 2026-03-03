@@ -1,7 +1,9 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // Ollama TypeScript Client — for direct frontend calls when needed
 
-const OLLAMA_BASE = "http://localhost:11434";
+import { DEFAULT_OLLAMA_URL } from "./config";
+
+const OLLAMA_BASE = DEFAULT_OLLAMA_URL;
 
 export interface OllamaGenerateResponse {
   response: string;

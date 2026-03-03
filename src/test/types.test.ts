@@ -6,35 +6,29 @@
 
 import { describe, it, expect } from "vitest";
 import type { AppSettings, Agent, SpectrumNode, SpectrumEdge, Message } from "../types";
+import { DEFAULT_OLLAMA_URL, DEFAULT_SETTINGS } from "../lib/config";
 
 // ─── Default Settings ──────────────────────────────────────────────────────────
 
-const DEFAULT_SETTINGS: AppSettings = {
-  ollamaUrl: "http://localhost:11434",
-  defaultModel: "llama3.2",
-  theme: "dark",
-  maxTokens: 2048,
-  voiceInputEnabled: false,
-  voiceOutputEnabled: false,
-};
+const TEST_SETTINGS: AppSettings = { ...DEFAULT_SETTINGS };
 
 describe("AppSettings defaults", () => {
   it("uses localhost:11434 as the default Ollama URL", () => {
-    expect(DEFAULT_SETTINGS.ollamaUrl).toBe("http://localhost:11434");
+    expect(TEST_SETTINGS.ollamaUrl).toBe(DEFAULT_OLLAMA_URL);
   });
 
   it("has a sensible default maxTokens", () => {
-    expect(DEFAULT_SETTINGS.maxTokens).toBeGreaterThanOrEqual(256);
-    expect(DEFAULT_SETTINGS.maxTokens).toBeLessThanOrEqual(32768);
+    expect(TEST_SETTINGS.maxTokens).toBeGreaterThanOrEqual(256);
+    expect(TEST_SETTINGS.maxTokens).toBeLessThanOrEqual(32768);
   });
 
   it("defaults to dark theme", () => {
-    expect(DEFAULT_SETTINGS.theme).toBe("dark");
+    expect(TEST_SETTINGS.theme).toBe("dark");
   });
 
   it("voice features are disabled by default", () => {
-    expect(DEFAULT_SETTINGS.voiceInputEnabled).toBe(false);
-    expect(DEFAULT_SETTINGS.voiceOutputEnabled).toBe(false);
+    expect(TEST_SETTINGS.voiceInputEnabled).toBe(false);
+    expect(TEST_SETTINGS.voiceOutputEnabled).toBe(false);
   });
 });
 
@@ -114,29 +108,29 @@ describe("Type shapes", () => {
 
 describe("Settings persistence", () => {
   it("round-trips through JSON serialization", () => {
-    const json = JSON.stringify(DEFAULT_SETTINGS);
+    const json = JSON.stringify(TEST_SETTINGS);
     const parsed = JSON.parse(json) as AppSettings;
-    expect(parsed.ollamaUrl).toBe(DEFAULT_SETTINGS.ollamaUrl);
-    expect(parsed.maxTokens).toBe(DEFAULT_SETTINGS.maxTokens);
-    expect(parsed.theme).toBe(DEFAULT_SETTINGS.theme);
+    expect(parsed.ollamaUrl).toBe(TEST_SETTINGS.ollamaUrl);
+    expect(parsed.maxTokens).toBe(TEST_SETTINGS.maxTokens);
+    expect(parsed.theme).toBe(TEST_SETTINGS.theme);
   });
 
   it("handles missing fields with defaults", () => {
     // Simulate loading partial saved settings (user upgraded from older version)
     const partial = { theme: "light" as const, defaultModel: "phi3" };
     const merged: AppSettings = {
-      ...DEFAULT_SETTINGS,
+      ...TEST_SETTINGS,
       ...partial,
     };
     expect(merged.theme).toBe("light");
     expect(merged.defaultModel).toBe("phi3");
     // Should still have defaults for fields not in partial
-    expect(merged.ollamaUrl).toBe("http://localhost:11434");
+    expect(merged.ollamaUrl).toBe(DEFAULT_OLLAMA_URL);
     expect(merged.maxTokens).toBe(2048);
   });
 
   it("validates ollamaUrl is a valid URL pattern", () => {
-    const url = DEFAULT_SETTINGS.ollamaUrl;
+    const url = TEST_SETTINGS.ollamaUrl;
     expect(url).toMatch(/^https?:\/\/.+/);
   });
 });

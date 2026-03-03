@@ -1,14 +1,15 @@
 /* Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026) */
-/* DailyBrief — Morning Brief, Evening Recap & "What PrismOS-AI did today" */
+/* DailyBrief — Morning Brief, Evening Recap & Daily Summary */
 
 .daily-brief {
   margin: 12px 0;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.06) 0%, rgba(139, 92, 246, 0.04) 100%);
-  border: 1px solid rgba(14, 165, 233, 0.15);
-  border-radius: 14px;
-  backdrop-filter: blur(12px);
+  padding: 0;
+  position: relative;
   animation: briefSlideIn 0.4s ease-out;
+}
+
+.daily-brief--collapsed {
+  margin: 8px 0 4px;
 }
 
 @keyframes briefSlideIn {
@@ -22,6 +23,15 @@
   }
 }
 
+/* ── Greeting card wrapper ── */
+.daily-brief-greeting-card {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.07) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+}
+
 .daily-brief-header {
   margin-bottom: 14px;
 }
@@ -33,10 +43,18 @@
 }
 
 .daily-brief-title {
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  font-weight: 650;
   color: var(--text-primary);
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.daily-brief-emoji {
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .daily-brief-dismiss {
@@ -185,7 +203,26 @@
   color: #e57373;
 }
 
-/* ── Quick actions ── */
+/* ── Graph-personalized suggestion cards ── */
+.daily-brief-suggestion-cards {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.daily-brief-suggestion-cards::-webkit-scrollbar {
+  height: 3px;
+}
+
+.daily-brief-suggestion-cards::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+/* ── Quick actions fallback ── */
 .daily-brief-actions {
   display: flex;
   flex-direction: column;
@@ -205,6 +242,7 @@
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
+  font-family: var(--font-sans);
 }
 
 .brief-action-btn:hover {
@@ -238,10 +276,187 @@
   transform: translateX(2px);
 }
 
+/* ═══════════ Daily Summary Button & Panel ═══════════ */
+
+.daily-summary-trigger {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.daily-summary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 550;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.daily-summary-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(139, 92, 246, 0.12);
+}
+
+.daily-summary-btn-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.daily-summary-btn-text {
+  letter-spacing: -0.01em;
+}
+
+/* ── Summary dropdown panel ── */
+.daily-summary-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 300px;
+  background: var(--bg-elevated, #1a1f2e);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  z-index: 200;
+  animation: summaryPanelIn 0.2s ease;
+  overflow: hidden;
+}
+
+@keyframes summaryPanelIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.daily-summary-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+}
+
+.daily-summary-panel-title {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.daily-summary-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.daily-summary-panel-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+/* Stats within summary panel */
+.daily-summary-panel-stats {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px 10px;
+}
+
+.dsps-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.dsps-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent-primary, #0ea5e9);
+  line-height: 1.2;
+}
+
+.dsps-label {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 1px;
+}
+
+/* Highlights in summary panel */
+.daily-summary-panel-highlights {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dsps-highlight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+/* Full summary CTA button */
+.daily-summary-full-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(14, 165, 233, 0.08) 100%);
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.daily-summary-full-btn:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.18) 0%, rgba(14, 165, 233, 0.14) 100%);
+}
+
+.daily-summary-full-arrow {
+  margin-left: auto;
+  opacity: 0.5;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.daily-summary-full-btn:hover .daily-summary-full-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
 /* ── Light theme ── */
-[data-theme="light"] .daily-brief {
+[data-theme="light"] .daily-brief-greeting-card {
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.04) 0%, rgba(139, 92, 246, 0.03) 100%);
-  border-color: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.14);
 }
 
 [data-theme="light"] .daily-brief-stats {
@@ -268,4 +483,45 @@
 
 [data-theme="light"] .brief-action-btn:hover {
   background: rgba(14, 165, 233, 0.08);
+}
+
+[data-theme="light"] .daily-summary-btn {
+  background: rgba(139, 92, 246, 0.05);
+  border-color: rgba(139, 92, 246, 0.15);
+}
+
+[data-theme="light"] .daily-summary-btn:hover {
+  background: rgba(139, 92, 246, 0.1);
+  box-shadow: 0 3px 12px rgba(139, 92, 246, 0.08);
+}
+
+[data-theme="light"] .daily-summary-panel {
+  background: var(--bg-elevated, #fff);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .dsps-stat {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .dsps-highlight {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .daily-summary-full-btn {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06) 0%, rgba(14, 165, 233, 0.04) 100%);
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .daily-summary-full-btn:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(14, 165, 233, 0.08) 100%);
+}
+
+[data-theme="light"] .daily-brief-dismiss:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .daily-summary-panel-close:hover {
+  background: rgba(0, 0, 0, 0.05);
 }

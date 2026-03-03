@@ -922,6 +922,111 @@
   background: rgba(0, 0, 0, 0.06);
 }
 
+/* ── Inline Suggestion Cards (after each AI response) ── */
+
+.inline-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 12px 44px;
+  animation: slideUpFadeIn 0.35s ease-out both;
+}
+
+.inline-suggestion-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 6px 10px;
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 20px;
+  background: rgba(14, 165, 233, 0.06);
+  backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.inline-suggestion-card:hover {
+  background: rgba(14, 165, 233, 0.13);
+  border-color: rgba(14, 165, 233, 0.35);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.12);
+}
+
+.inline-suggestion-card:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.inline-sug-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.inline-sug-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-sug-arrow {
+  font-size: 0.85rem;
+  opacity: 0.4;
+  transition: opacity 0.2s, transform 0.2s;
+  flex-shrink: 0;
+}
+
+.inline-suggestion-card:hover .inline-sug-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+/* Category accent border colors for inline cards (reuses proactive-cat system) */
+.inline-suggestion-card.proactive-cat-learning {
+  border-color: rgba(100, 181, 246, 0.25);
+}
+.inline-suggestion-card.proactive-cat-work {
+  border-color: rgba(79, 195, 247, 0.25);
+}
+.inline-suggestion-card.proactive-cat-health {
+  border-color: rgba(129, 199, 132, 0.25);
+}
+.inline-suggestion-card.proactive-cat-finance {
+  border-color: rgba(255, 183, 77, 0.25);
+}
+.inline-suggestion-card.proactive-cat-social {
+  border-color: rgba(206, 147, 216, 0.25);
+}
+.inline-suggestion-card.proactive-cat-memory {
+  border-color: rgba(144, 164, 174, 0.25);
+}
+
+@keyframes slideUpFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Light theme overrides for inline suggestion cards */
+[data-theme="light"] .inline-suggestion-card {
+  background: rgba(14, 165, 233, 0.04);
+  border-color: rgba(14, 165, 233, 0.15);
+}
+
+[data-theme="light"] .inline-suggestion-card:hover {
+  background: rgba(14, 165, 233, 0.09);
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.08);
+}
+
 /* ── First-Time Setup Wizard Modal ── */
 .ftw-overlay {
   position: fixed;

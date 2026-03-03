@@ -1,7 +1,7 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Main View — Intent Console + Conversation
 
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import prismosLogo from "../assets/prismos-logo.svg";
@@ -39,6 +39,7 @@ export default function MainView({
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingIntent, setPendingIntent] = useState("");
   const [proactiveSuggestions, setProactiveSuggestions] = useState<ProactiveSuggestion[]>([]);
+  const [messageSuggestions, setMessageSuggestions] = useState<Record<string, ProactiveSuggestion[]>>({});
   const conversationRef = useRef<HTMLDivElement>(null);
 
   // P1: Seed proactive suggestions from startup (before user's first intent)
@@ -357,6 +358,7 @@ export default function MainView({
         const sugJson = await invoke<string>("get_proactive_suggestions");
         const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
         setProactiveSuggestions(sug);
+        setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: sug.slice(0, 3) }));
       } catch {
         // Non-critical — don't block the intent flow
       }
@@ -378,6 +380,7 @@ export default function MainView({
           const sugJson = await invoke<string>("get_proactive_suggestions");
           const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
           setProactiveSuggestions(sug);
+          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: sug.slice(0, 3) }));
         } catch { /* non-critical */ }
       } catch (fallbackErr) {
         const errorStr = String(fallbackErr);
@@ -727,20 +730,45 @@ export default function MainView({
           </div>
         ) : (
           messages.map((msg) => (
-            <div key={msg.id} className={`message message-${msg.role}`}>
-              <div className="message-bubble">
-                {msg.content.split("\n").map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < msg.content.split("\n").length - 1 && <br />}
-                  </span>
-                ))}
+            <Fragment key={msg.id}>
+              <div className={`message message-${msg.role}`}>
+                <div className="message-bubble">
+                  {msg.content.split("\n").map((line, i) => (
+                    <span key={i}>
+                      {line}
+                      {i < msg.content.split("\n").length - 1 && <br />}
+                    </span>
+                  ))}
+                </div>
+                <div className="message-meta">
+                  {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS · ${msg.agent}` : "PrismOS"}</> : "You"} ·{" "}
+                  {msg.timestamp.toLocaleTimeString()}
+                </div>
               </div>
-              <div className="message-meta">
-                {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS · ${msg.agent}` : "PrismOS"}</> : "You"} ·{" "}
-                {msg.timestamp.toLocaleTimeString()}
-              </div>
-            </div>
+              {msg.role === "ai" && messageSuggestions[msg.id]?.length > 0 && (
+                <div className="inline-suggestions">
+                  {messageSuggestions[msg.id].map((sug) => (
+                    <button
+                      key={sug.id}
+                      className={`inline-suggestion-card proactive-cat-${sug.category}`}
+                      onClick={() => {
+                        setMessageSuggestions(prev => {
+                          const next = { ...prev };
+                          delete next[msg.id];
+                          return next;
+                        });
+                        handleIntent(sug.action_intent);
+                      }}
+                      title="Click to process this suggestion"
+                    >
+                      <span className="inline-sug-icon">{sug.icon}</span>
+                      <span className="inline-sug-text">{sug.text}</span>
+                      <span className="inline-sug-arrow">→</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Fragment>
           ))
         )}
         {isProcessing && (

@@ -194,6 +194,49 @@
   margin-bottom: 0;
 }
 
+/* ── Requirements Table ── */
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.guide-table th {
+  text-align: left;
+  padding: 6px 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.guide-table td {
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.guide-table td:first-child {
+  color: var(--text-primary);
+  white-space: nowrap;
+  width: 80px;
+}
+
+.guide-table tr:last-child td {
+  border-bottom: none;
+}
+
+.guide-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme="light"] .guide-table tbody tr:hover td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
 .guide-card ul {
   margin: 6px 0 0 0;
   padding-left: 18px;

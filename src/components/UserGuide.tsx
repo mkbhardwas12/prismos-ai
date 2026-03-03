@@ -60,6 +60,26 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 <h3>🚀 Getting Started</h3>
                 <p>PrismOS is a <strong>local-first AI operating system</strong> that runs entirely on your device. No cloud, no data sharing, no subscriptions.</p>
 
+                <div className="guide-card highlight">
+                  <h4>💻 System Requirements</h4>
+                  <table className="guide-table">
+                    <thead>
+                      <tr><th></th><th>Minimum</th><th>Recommended</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><strong>OS</strong></td><td>Windows 10 / macOS 12 / Linux</td><td>Windows 11 / macOS 14+</td></tr>
+                      <tr><td><strong>RAM</strong></td><td>8 GB</td><td>16 GB or more</td></tr>
+                      <tr><td><strong>Storage</strong></td><td>10 GB free</td><td>20+ GB free</td></tr>
+                      <tr><td><strong>CPU</strong></td><td>4-core (Intel i5 / AMD Ryzen 5)</td><td>8-core (i7 / Ryzen 7)</td></tr>
+                      <tr><td><strong>GPU</strong></td><td>Not required</td><td>NVIDIA 6GB+ VRAM (CUDA) for fast inference</td></tr>
+                    </tbody>
+                  </table>
+                  <p style={{ marginTop: "10px", fontSize: "12px" }}>
+                    <strong>Model sizes vs RAM:</strong> Small models (2-3B) need ~4 GB RAM. Medium models (7B) need ~8 GB. Large models (13B+) need 16+ GB. 
+                    A GPU with 6GB+ VRAM will make responses 5-10× faster but is not required — CPU-only works fine.
+                  </p>
+                </div>
+
                 <div className="guide-card">
                   <h4>Step 1 — Install Ollama</h4>
                   <p>Ollama powers the AI models. Download it free from <strong>ollama.com</strong> and install it. It runs quietly in the background.</p>
@@ -233,6 +253,10 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                   <p>Response speed depends on your hardware. Tips to speed things up:</p>
                   <ul>
                     <li>Use a smaller model (Llama 3.2 at 3B is very fast)</li>
+                    <li>Lower the Max Tokens slider in the model dropdown</li>
+                    <li>Close other heavy applications to free up RAM</li>
+                    <li>An NVIDIA GPU with 6GB+ VRAM will make responses 5-10× faster</li>
+                    <li>Minimum: 8 GB RAM + 4-core CPU. Recommended: 16 GB RAM + dedicated GPU</li>
                     <li>Lower the Max Tokens setting</li>
                     <li>Close other heavy applications</li>
                     <li>A GPU significantly speeds up inference</li>

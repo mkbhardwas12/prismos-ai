@@ -254,6 +254,44 @@ select:focus-visible {
 }
 
 /* ===============================================================================
+   DYNAMIC SPECTRUM THEMING — Accent hue shifts per active view
+   =============================================================================== */
+[data-spectrum="chat"] {
+  --color-primary: #2563eb;
+  --color-accent: #06b6d4;
+}
+
+[data-spectrum="graph"] {
+  --color-primary: #8b5cf6;
+  --color-accent: #a78bfa;
+}
+
+[data-spectrum="spectrum"] {
+  --color-primary: #06b6d4;
+  --color-accent: #22d3ee;
+}
+
+[data-spectrum="sandbox"] {
+  --color-primary: #f59e0b;
+  --color-accent: #fbbf24;
+}
+
+[data-spectrum="settings"] {
+  --color-primary: #6366f1;
+  --color-accent: #818cf8;
+}
+
+[data-spectrum="timeline"] {
+  --color-primary: #10b981;
+  --color-accent: #34d399;
+}
+
+/* -- Smooth accent transition across all views -- */
+html[data-spectrum] {
+  transition: --color-primary 0.4s ease, --color-accent 0.4s ease;
+}
+
+/* ===============================================================================
    SCROLLBAR
    =============================================================================== */
 ::-webkit-scrollbar {

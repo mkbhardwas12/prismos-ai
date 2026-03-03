@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "./components/Sidebar";
 import MainView from "./components/MainView";
 import SettingsPanel from "./components/SettingsPanel";
@@ -12,6 +13,7 @@ import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
 import ErrorBoundary from "./components/ErrorBoundary";
+import OnboardingWizard from "./components/OnboardingWizard";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
 
@@ -53,6 +55,9 @@ function App() {
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [startupSuggestions, setStartupSuggestions] = useState<ProactiveSuggestion[]>([]);
   const [dailyGreeting] = useState(getDailyGreeting);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem("prismos-onboarding-done")
+  );
 
   // ── Settings: load from localStorage (persists across restarts) ──
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -262,6 +267,37 @@ function App() {
     setLiveAgentSteps([]);
   }, []);
 
+  // ── Dynamic Spectrum Theming: change accent hue based on active view ──
+  useEffect(() => {
+    document.documentElement.setAttribute("data-spectrum", view);
+  }, [view]);
+
+  // ── Global Hotkey: Ctrl+Space to focus PrismOS-AI ──
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    (async () => {
+      try {
+        const { register, unregister } = await import("@tauri-apps/plugin-global-shortcut");
+        await register("CommandOrControl+Space", (event) => {
+          if (event.state === "Pressed") {
+            // Bring window to front and focus the intent input
+            setView("chat");
+            window.focus();
+            // Focus the intent input (will be picked up by IntentInput via DOM)
+            setTimeout(() => {
+              const input = document.querySelector<HTMLTextAreaElement>(".intent-textarea");
+              if (input) input.focus();
+            }, 100);
+          }
+        });
+        cleanup = () => { unregister("CommandOrControl+Space").catch(() => {}); };
+      } catch (e) {
+        console.warn("Global shortcut registration failed (non-critical):", e);
+      }
+    })();
+    return () => { if (cleanup) cleanup(); };
+  }, []);
+
   function renderView() {
     switch (view) {
       case "chat":
@@ -343,9 +379,29 @@ function App() {
           </div>
         )}
         <ErrorBoundary fallbackView={view}>
-          {renderView()}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={view}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              style={{ display: "contents" }}
+            >
+              {renderView()}
+            </motion.div>
+          </AnimatePresence>
         </ErrorBoundary>
       </main>
+
+      {/* First-run onboarding wizard */}
+      {showOnboarding && (
+        <OnboardingWizard
+          settings={settings}
+          onSettingsChange={handleSettingsChange}
+          onComplete={() => setShowOnboarding(false)}
+        />
+      )}
 
       {/* You-Port session restore toast */}
       {toast?.visible && (

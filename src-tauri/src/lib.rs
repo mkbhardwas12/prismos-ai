@@ -249,6 +249,26 @@ async fn list_ollama_models(ollama_url: Option<String>) -> Result<String, String
 }
 
 #[tauri::command]
+async fn delete_ollama_model(model_name: String, ollama_url: Option<String>) -> Result<String, String> {
+    let url = ollama_url.as_deref().unwrap_or(ollama_bridge::DEFAULT_OLLAMA_URL);
+    let client = reqwest::Client::new();
+    let resp = client
+        .delete(format!("{}/api/delete", url))
+        .json(&serde_json::json!({ "name": model_name }))
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to Ollama: {}", e))?;
+
+    if resp.status().is_success() {
+        Ok(format!("Model '{}' deleted successfully", model_name))
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Failed to delete model '{}': {}", model_name, body))
+    }
+}
+
+#[tauri::command]
 async fn create_sandbox(name: String, agent_id: Option<String>) -> Result<String, String> {
     let aid = agent_id.unwrap_or_else(|| "unknown".to_string());
     let prism = sandbox_prism::create_prism_for_agent(&name, &aid);
@@ -956,6 +976,7 @@ async fn get_security_status(app: tauri::AppHandle) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
@@ -1012,7 +1033,7 @@ pub fn run() {
             );
 
             println!("╔══════════════════════════════════════════════╗");
-            println!("║  ◈ PrismOS-AI v0.2.0 — Local-First AI OS       ║");
+            println!("║  ◈ PrismOS-AI v0.3.0 — Local-First AI OS       ║");
             println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
@@ -1069,6 +1090,7 @@ pub fn run() {
             launch_ollama,
             pull_ollama_model,
             list_ollama_models,
+            delete_ollama_model,
             // Sandbox (Patent Pending — WASM Isolation + Cryptographic Signing)
             create_sandbox,
             execute_in_sandbox,

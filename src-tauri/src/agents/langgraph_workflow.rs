@@ -1,4 +1,4 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // LangGraph Workflow Engine — Formal State-Graph Multi-Agent Orchestration
 //
 // This module implements a formal LangGraph-style state graph for
@@ -125,11 +125,11 @@ pub struct StateGraph {
 }
 
 impl StateGraph {
-    /// Build the default PrismOS multi-agent collaboration graph
+    /// Build the default PrismOS-AI multi-agent collaboration graph
     pub fn default_collaboration_graph() -> Self {
         let mut graph = Self {
             id: Uuid::new_v4().to_string(),
-            name: "PrismOS Multi-Agent Collaboration".to_string(),
+            name: "PrismOS-AI Multi-Agent Collaboration".to_string(),
             nodes: vec![],
             edges: vec![],
             entry_node: "orchestrator".to_string(),

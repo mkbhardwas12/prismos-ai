@@ -1,8 +1,8 @@
 # Changelog
 
-All notable changes to PrismOS are documented in this file.
+All notable changes to PrismOS-AI are documented in this file.
 
-> Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+> Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Highlights
 
-PrismOS v0.2.1 is a polish and stability release focusing on code quality, test coverage, CI/CD automation, and professional repository standards.
+PrismOS-AI v0.2.1 is a polish and stability release focusing on code quality, test coverage, CI/CD automation, and professional repository standards.
 
 ### Added
 
@@ -52,7 +52,7 @@ PrismOS v0.2.1 is a polish and stability release focusing on code quality, test 
 
 ### 🎉 Highlights
 
-PrismOS v0.2.0 is a major feature release bringing WASM sandbox isolation, voice I/O,
+PrismOS-AI v0.2.0 is a major feature release bringing WASM sandbox isolation, voice I/O,
 multi-window support, a spectral timeline, graph merge/diff for multi-device sync,
 and full release polish with accessibility improvements.
 

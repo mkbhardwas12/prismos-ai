@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Main View — Intent Console + Conversation
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Main View — Intent Console + Conversation
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -559,8 +559,8 @@ export default function MainView({
 
         {messages.length === 0 ? (
           <div className="welcome-message">
-            <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS" className="welcome-logo-img" /></div>
-            <h1>Welcome to PrismOS</h1>
+            <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS-AI" className="welcome-logo-img" /></div>
+            <h1>Welcome to PrismOS-AI</h1>
             <p>
               Your local-first agentic AI operating system. All processing
               happens on your device — your data never leaves.
@@ -575,7 +575,7 @@ export default function MainView({
                     <strong className="setup-wizard-title">Quick Setup</strong>
                     <span className="setup-wizard-subtitle">
                       {wizardExpanded
-                        ? "Get PrismOS running in 3 steps"
+                        ? "Get PrismOS-AI running in 3 steps"
                         : `Step ${getSetupStep() === "start" ? "2" : "3"} — ${getSetupStep() === "start" ? "Start Ollama to continue" : "Pull a model to get started"}`
                       }
                     </span>
@@ -786,7 +786,7 @@ export default function MainView({
                   ))}
                 </div>
                 <div className="message-meta">
-                  {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS · ${msg.agent}` : "PrismOS"}</> : "You"} ·{" "}
+                  {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
                   {msg.timestamp.toLocaleTimeString()}
                 </div>
               </div>
@@ -928,8 +928,8 @@ export default function MainView({
         <div className="ftw-overlay" onClick={dismissFirstTimeWizard}>
           <div className="ftw-modal" onClick={(e) => e.stopPropagation()}>
             <div className="ftw-header">
-              <img src={prismosLogo} alt="PrismOS" className="ftw-logo" />
-              <h2 className="ftw-title">Welcome to PrismOS!</h2>
+              <img src={prismosLogo} alt="PrismOS-AI" className="ftw-logo" />
+              <h2 className="ftw-title">Welcome to PrismOS-AI!</h2>
               <p className="ftw-subtitle">Your local-first AI assistant. Let's get you set up in under 2 minutes.</p>
             </div>
 

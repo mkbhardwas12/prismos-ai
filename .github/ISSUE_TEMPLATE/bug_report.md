@@ -1,6 +1,6 @@
 ---
 name: 🐛 Bug Report
-about: Report a bug to help us improve PrismOS
+about: Report a bug to help us improve PrismOS-AI
 title: "[Bug] "
 labels: bug
 assignees: ''
@@ -35,7 +35,7 @@ Paste logs here
 
 ## Environment
 - **OS:** [e.g. Windows 11, macOS 14, Ubuntu 24.04]
-- **PrismOS Version:** [e.g. v0.2.0]
+- **PrismOS-AI Version:** [e.g. v0.2.0]
 - **Ollama Version:** [e.g. 0.6.x]
 - **Model(s) in use:** [e.g. mistral, llama3.2]
 - **RAM / GPU:** [e.g. 16 GB RAM, NVIDIA RTX 3060]

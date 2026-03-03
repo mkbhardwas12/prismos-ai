@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability in PrismOS, please email **via GitHub Issues** with:
+If you discover a security vulnerability in PrismOS-AI, please email **via GitHub Issues** with:
 
 1. **Description** — What is the vulnerability?
 2. **Steps to Reproduce** — How can it be triggered?
@@ -22,7 +22,7 @@ Security updates will be released as patch versions (e.g., 0.2.1).
 
 ## Security Features
 
-PrismOS implements defense-in-depth security:
+PrismOS-AI implements defense-in-depth security:
 
 - **WASM Sandboxing** — All agent code runs in isolated containers via wasmtime
 - **Cryptographic Signing** — HMAC-SHA256 authentication for all operations
@@ -44,8 +44,8 @@ We appreciate responsible disclosure. After confirming a vulnerability:
 
 ## Privacy & Data
 
-PrismOS is **fully local** — your data never leaves your machine. All inference runs on your device via Ollama. No telemetry is sent to external servers.
+PrismOS-AI is **fully local** — your data never leaves your machine. All inference runs on your device via Ollama. No telemetry is sent to external servers.
 
 ---
 
-Thank you for helping keep PrismOS secure! 🔒
+Thank you for helping keep PrismOS-AI secure! 🔒

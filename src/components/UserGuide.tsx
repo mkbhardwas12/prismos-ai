@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS User Guide — In-app help & onboarding
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI User Guide — In-app help & onboarding
 
 import { useState, useCallback } from "react";
 import "./UserGuide.css";
@@ -27,7 +27,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
         <div className="guide-header">
           <div className="guide-header-title">
             <span className="guide-header-icon">📖</span>
-            <h2>PrismOS User Guide</h2>
+            <h2>PrismOS-AI User Guide</h2>
           </div>
           <button className="guide-close-btn" onClick={onClose} aria-label="Close guide">✕</button>
         </div>
@@ -59,7 +59,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
             {activeSection === "getting-started" && (
               <div className="guide-section">
                 <h3>🚀 Getting Started</h3>
-                <p>PrismOS is a <strong>local-first AI operating system</strong> that runs entirely on your device. No cloud, no data sharing, no subscriptions.</p>
+                <p>PrismOS-AI is a <strong>local-first AI operating system</strong> that runs entirely on your device. No cloud, no data sharing, no subscriptions.</p>
 
                 <div className="guide-card highlight">
                   <h4>💻 System Requirements</h4>
@@ -97,12 +97,12 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>Step 3 — Start Chatting</h4>
-                  <p>Type any intent in the input bar at the bottom. PrismOS will route it through its <strong>Refractive Core</strong> pipeline — analyzing, selecting the best agent, and building knowledge in your Spectrum Graph.</p>
+                  <p>Type any intent in the input bar at the bottom. PrismOS-AI will route it through its <strong>Refractive Core</strong> pipeline — analyzing, selecting the best agent, and building knowledge in your Spectrum Graph.</p>
                 </div>
 
                 <div className="guide-card highlight">
                   <h4>🔒 Your Privacy</h4>
-                  <p>Everything runs locally. Your conversations, data, and knowledge graph never leave your computer. PrismOS uses AES-256-GCM encryption for all stored data.</p>
+                  <p>Everything runs locally. Your conversations, data, and knowledge graph never leave your computer. PrismOS-AI uses AES-256-GCM encryption for all stored data.</p>
                 </div>
               </div>
             )}
@@ -113,7 +113,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>💬 Intent Console</h4>
-                  <p>Your main conversation view. Type natural language intents and PrismOS intelligently routes them to the best agent. The AI learns from each interaction, building your personal knowledge graph.</p>
+                  <p>Your main conversation view. Type natural language intents and PrismOS-AI intelligently routes them to the best agent. The AI learns from each interaction, building your personal knowledge graph.</p>
                 </div>
 
                 <div className="guide-card">
@@ -143,7 +143,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>🤖 Multi-Agent Collaboration</h4>
-                  <p>PrismOS can coordinate multiple AI agents working together on complex tasks. View agent activity, collaboration traces, and debate panels in real time.</p>
+                  <p>PrismOS-AI can coordinate multiple AI agents working together on complex tasks. View agent activity, collaboration traces, and debate panels in real time.</p>
                 </div>
 
                 <div className="guide-card">
@@ -185,7 +185,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>Build Your Knowledge Graph</h4>
-                  <p>Regular usage builds a richer Spectrum Graph. Visit the Spectrum Explorer to see your knowledge network grow. The more you use PrismOS, the smarter it gets about your interests.</p>
+                  <p>Regular usage builds a richer Spectrum Graph. Visit the Spectrum Explorer to see your knowledge network grow. The more you use PrismOS-AI, the smarter it gets about your interests.</p>
                 </div>
 
                 <div className="guide-card">
@@ -240,13 +240,13 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 <h3>❓ Frequently Asked Questions</h3>
 
                 <div className="guide-card">
-                  <h4>Is PrismOS free?</h4>
-                  <p>Yes! PrismOS is free to use. It runs open-source AI models locally on your machine through Ollama. No subscriptions, no API keys, no usage limits.</p>
+                  <h4>Is PrismOS-AI free?</h4>
+                  <p>Yes! PrismOS-AI is free to use. It runs open-source AI models locally on your machine through Ollama. No subscriptions, no API keys, no usage limits.</p>
                 </div>
 
                 <div className="guide-card">
                   <h4>Does my data go to the cloud?</h4>
-                  <p><strong>No.</strong> Everything stays on your device. PrismOS never sends your data anywhere. All AI processing happens locally using Ollama.</p>
+                  <p><strong>No.</strong> Everything stays on your device. PrismOS-AI never sends your data anywhere. All AI processing happens locally using Ollama.</p>
                 </div>
 
                 <div className="guide-card">
@@ -263,7 +263,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>Can I use my own models?</h4>
-                  <p>Yes! Any model available in Ollama works with PrismOS. You can also create custom Modelfiles. Just pull the model via <code>ollama pull model-name</code> and it will appear in the model selector.</p>
+                  <p>Yes! Any model available in Ollama works with PrismOS-AI. You can also create custom Modelfiles. Just pull the model via <code>ollama pull model-name</code> and it will appear in the model selector.</p>
                 </div>
 
                 <div className="guide-card">
@@ -273,7 +273,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>What is the Spectrum Graph?</h4>
-                  <p>It's your personal knowledge network. Every conversation adds nodes (concepts) and edges (connections) to the graph. Over time, it becomes a rich map of your interests and knowledge that helps PrismOS give better answers.</p>
+                  <p>It's your personal knowledge network. Every conversation adds nodes (concepts) and edges (connections) to the graph. Over time, it becomes a rich map of your interests and knowledge that helps PrismOS-AI give better answers.</p>
                 </div>
               </div>
             )}
@@ -285,27 +285,22 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 <div className="guide-card highlight">
                   <h4>📋 Patent Notice</h4>
                   <p><strong>Patent Pending</strong> — US Provisional Patent Application (filed February 2026).</p>
-                  <p>PrismOS and its core architectures are protected by a pending United States patent:</p>
-                  <ul>
-                    <li><strong>Spectrum Graph™</strong> — Multi-dimensional spectral knowledge representation</li>
-                    <li><strong>Refractive Core™</strong> — Intent processing through spectral analysis</li>
-                    <li><strong>You-Port™</strong> — Encrypted personality migration</li>
-                  </ul>
+                  <p>PrismOS-AI and its core architectures are protected by a pending United States patent.</p>
                   <p style={{ marginTop: "10px", fontSize: "12px", opacity: 0.8 }}>Created by Manish Kumar</p>
                 </div>
 
                 <div className="guide-card">
                   <h4>📄 License</h4>
-                  <p>PrismOS is released under the <strong>MIT License</strong> for personal and educational use.</p>
+                  <p>PrismOS-AI is released under the <strong>MIT License</strong> for personal and educational use.</p>
                   <p>Commercial use of the patented inventions (Spectrum Graph, Refractive Core, You-Port) requires a separate license from the creator.</p>
                 </div>
 
                 <div className="guide-card">
-                  <h4>🔷 About PrismOS</h4>
+                  <h4>🔷 About PrismOS-AI</h4>
                   <p><strong>Version:</strong> 0.2.0</p>
                   <p><strong>Released:</strong> March 2, 2026</p>
                   <p><strong>GitHub:</strong> github.com/mkbhardwas12/prismos-ai</p>
-                  <p>PrismOS is a local-first AI operating system built on a physics-inspired 7-dimensional knowledge graph. It processes your intents through multi-agent collaboration — all running 100% offline on your own hardware.</p>
+                  <p>PrismOS-AI is a local-first AI operating system built on a physics-inspired 7-dimensional knowledge graph. It processes your intents through multi-agent collaboration — all running 100% offline on your own hardware.</p>
                 </div>
 
                 <div className="guide-card">

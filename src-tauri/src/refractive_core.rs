@@ -1,7 +1,7 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Refractive Core — NPU-Accelerated Multi-Agent Orchestration Engine
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Refractive Core — NPU-Accelerated Multi-Agent Orchestration Engine
 //
-// The Refractive Core is the central nervous system of PrismOS.
+// The Refractive Core is the central nervous system of PrismOS-AI.
 // Architecture:
 //   1. Ingest raw user input
 //   2. Apply Intent Lens decomposition (NLU → structured intent)
@@ -276,7 +276,7 @@ impl NpuScorer {
 
 // ─── Core Agent Registry ───────────────────────────────────────────────────────
 
-/// Returns the 5 core PrismOS agents
+/// Returns the 5 core PrismOS-AI agents
 pub fn get_agents() -> Vec<Agent> {
     get_agents_with_active(None)
 }
@@ -303,7 +303,7 @@ pub fn get_agents_with_active(active_id: Option<&str>) -> Vec<Agent> {
 
 // ─── Refractive Core Engine ────────────────────────────────────────────────────
 
-/// The Refractive Core: PrismOS's central processing pipeline.
+/// The Refractive Core: PrismOS-AI's central processing pipeline.
 /// Ingests inputs → applies Intent Lenses → queries Spectrum Graph →
 /// routes through agents → updates graph with feedback → returns results.
 pub struct RefractiveEngine {
@@ -440,31 +440,31 @@ impl RefractiveEngine {
         match intent.intent_type {
             IntentType::Query => (
                 "reasoner".into(),
-                "You are PrismOS Reasoner, a local-first AI assistant powered by the Refractive Core. \
+                "You are PrismOS-AI Reasoner, a local-first AI assistant powered by the Refractive Core. \
                  You have access to the user's Spectrum Graph for contextual memory. \
                  Provide clear, concise, and helpful answers grounded in the user's knowledge graph when relevant.".into(),
             ),
             IntentType::Create => (
                 "tool_smith".into(),
-                "You are PrismOS Tool Smith, a local-first AI assistant powered by the Refractive Core. \
+                "You are PrismOS-AI Tool Smith, a local-first AI assistant powered by the Refractive Core. \
                  Help the user create, build, or generate what they need. \
                  Reference their Spectrum Graph context to personalize output.".into(),
             ),
             IntentType::Analyze => (
                 "reasoner".into(),
-                "You are PrismOS Reasoner in analysis mode, powered by the Refractive Core. \
+                "You are PrismOS-AI Reasoner in analysis mode, powered by the Refractive Core. \
                  Perform deep analysis with structured reasoning. \
                  Use Spectrum Graph context to provide insights grounded in the user's knowledge.".into(),
             ),
             IntentType::Connect => (
                 "memory_keeper".into(),
-                "You are PrismOS Memory Keeper, a local-first AI assistant powered by the Refractive Core. \
+                "You are PrismOS-AI Memory Keeper, a local-first AI assistant powered by the Refractive Core. \
                  Help connect ideas and find relationships across the user's Spectrum Graph. \
                  Suggest new edges, patterns, and overlooked connections.".into(),
             ),
             IntentType::System => (
                 "sentinel".into(),
-                "You are PrismOS Sentinel, the local-first system agent of the Refractive Core. \
+                "You are PrismOS-AI Sentinel, the local-first system agent of the Refractive Core. \
                  Provide system information, configuration help, and privacy assurance. \
                  All data stays local — no telemetry, no cloud sync.".into(),
             ),
@@ -538,19 +538,19 @@ pub async fn route_intent(
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let system_prompt = match intent.intent_type {
         IntentType::Query => {
-            "You are PrismOS Reasoner, a local-first AI assistant. Provide a clear, concise, and helpful answer."
+            "You are PrismOS-AI Reasoner, a local-first AI assistant. Provide a clear, concise, and helpful answer."
         }
         IntentType::Create => {
-            "You are PrismOS Tool Smith, a local-first AI assistant. Help the user create, build, or generate what they need."
+            "You are PrismOS-AI Tool Smith, a local-first AI assistant. Help the user create, build, or generate what they need."
         }
         IntentType::Analyze => {
-            "You are PrismOS Reasoner, a local-first AI assistant. Perform deep analysis with structured reasoning."
+            "You are PrismOS-AI Reasoner, a local-first AI assistant. Perform deep analysis with structured reasoning."
         }
         IntentType::Connect => {
-            "You are PrismOS Memory Keeper, a local-first AI assistant. Help connect ideas and find relationships."
+            "You are PrismOS-AI Memory Keeper, a local-first AI assistant. Help connect ideas and find relationships."
         }
         IntentType::System => {
-            "You are PrismOS Sentinel, a local-first AI system agent. Provide system information and configuration help."
+            "You are PrismOS-AI Sentinel, a local-first AI system agent. Provide system information and configuration help."
         }
     };
 

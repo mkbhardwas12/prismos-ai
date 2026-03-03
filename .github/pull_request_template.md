@@ -1,6 +1,6 @@
 ---
 name: Pull Request
-about: Submit a pull request to contribute code to PrismOS
+about: Submit a pull request to contribute code to PrismOS-AI
 title: '[PR] '
 labels: ''
 assignees: ''

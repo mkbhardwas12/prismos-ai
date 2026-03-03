@@ -93,7 +93,7 @@
   <circle cx="490" cy="315" r="5" fill="#3b82f6" filter="url(#glow)" opacity="0.8"/>
   <circle cx="490" cy="380" r="5" fill="#60a5fa" filter="url(#glow)" opacity="0.8"/>
 
-  <!-- PrismOS text -->
-  <text x="256" y="460" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="700" font-size="48" fill="url(#prismGrad)">PrismOS</text>
+  <!-- PrismOS-AI text -->
+  <text x="256" y="460" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="700" font-size="48" fill="url(#prismGrad)">PrismOS-AI</text>
   <text x="256" y="490" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="400" font-size="16" fill="#94a3b8" letter-spacing="4">LOCAL-FIRST AI</text>
 </svg>

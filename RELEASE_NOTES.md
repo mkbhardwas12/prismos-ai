@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔷 PrismOS v0.2.0
+# 🔷 PrismOS-AI v0.2.0
 
 ### The Local-First AI Operating System
 
@@ -19,7 +19,7 @@
 
 ## 🎯 What Is This Release?
 
-PrismOS v0.2.0 is the **first feature-complete desktop release** of a patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+PrismOS-AI v0.2.0 is the **first feature-complete desktop release** of a patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
 
 > **In one sentence:** A Tauri 2.0 desktop app with 5 AI agents, a physics-inspired knowledge graph, WASM sandboxing, 9 security layers, and a modern glassmorphism UI — all running 100% offline.
 
@@ -121,7 +121,7 @@ Security Layers     6                   9           (+50%)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    PrismOS Desktop App                    │
+│                    PrismOS-AI Desktop App                    │
 ├──────────────────────────────────────────────────────────┤
 │  React 18 + TypeScript 5.5            (Frontend)         │
 │  ├── Intent Console         Natural language chat        │

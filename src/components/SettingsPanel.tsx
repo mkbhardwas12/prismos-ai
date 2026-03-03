@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// PrismOS Settings Panel — Full Configuration, Export/Import, Theme, About
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// PrismOS-AI Settings Panel — Full Configuration, Export/Import, Theme, About
 
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -734,7 +734,7 @@ export default function SettingsPanel({
             )}
           </div>
           <div className="settings-hint">
-            All protections are always active. PrismOS is designed with security-by-default — no configuration needed.
+            All protections are always active. PrismOS-AI is designed with security-by-default — no configuration needed.
           </div>
         </div>
 
@@ -744,7 +744,7 @@ export default function SettingsPanel({
           <div className="settings-version-banner">
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
-              <span className="settings-version-name">PrismOS</span>
+              <span className="settings-version-name">PrismOS-AI</span>
               <span className="settings-version-number">v0.2.0</span>
             </div>
             <div className="settings-version-badges">
@@ -780,9 +780,9 @@ export default function SettingsPanel({
 
         {/* ── About + Patent Notice ── */}
         <div className="settings-group settings-about">
-          <h3><img src={prismosIcon} alt="" className="header-icon" /> About PrismOS</h3>
+          <h3><img src={prismosIcon} alt="" className="header-icon" /> About PrismOS-AI</h3>
           <p className="settings-about-text">
-            PrismOS is a local-first agentic personal AI operating system. All
+            PrismOS-AI is a local-first agentic personal AI operating system. All
             data stays on your device. Powered by Ollama for local LLM
             inference and a multi-agent Refractive Core architecture with
             persistent Spectrum Graph memory.
@@ -797,7 +797,7 @@ export default function SettingsPanel({
               This software and its core architectures are protected under US Patent Law.
             </p>
             <p className="settings-patent-legal">
-              © 2026 PrismOS Contributors. All rights reserved.
+              © 2026 PrismOS-AI Contributors. All rights reserved.
             </p>
           </div>
         </div>

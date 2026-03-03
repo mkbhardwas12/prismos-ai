@@ -1,8 +1,8 @@
-# Contributing to PrismOS
+# Contributing to PrismOS-AI
 
-> Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+> Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 
-Thank you for your interest in contributing to PrismOS! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to PrismOS-AI! This document provides guidelines for contributing to the project.
 
 ## 🏗️ Development Setup
 
@@ -90,7 +90,7 @@ npm run tauri dev
 - Use `Result<T, E>` for error handling (no `unwrap()` in production code)
 - Add patent notice header to all source files:
   ```rust
-  // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+  // Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
   ```
 - Add `#[cfg(test)]` test modules where appropriate
 
@@ -128,7 +128,7 @@ Please ensure all checks pass before submitting a PR.
 
 ## ⚖️ Patent Notice
 
-**Patent Pending** — PrismOS is protected under a US Provisional Patent (filed February 2026).
+**Patent Pending** — PrismOS-AI is protected under a US Provisional Patent (filed February 2026).
 
 The core architectures — Spectrum Graph, Refractive Core, and You-Port — are patent-pending inventions. By contributing, you agree that your contributions may be covered by this patent. All contributors retain their copyright but grant the project a license to use contributions under the project's MIT license.
 
@@ -138,4 +138,4 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ---
 
-Thank you for helping make PrismOS better! 🔷
+Thank you for helping make PrismOS-AI better! 🔷

@@ -1,8 +1,8 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Sandbox Prism v0.2.0 — TRUE WASM Isolation with Cryptographic Signing,
 //                         Allow-List Enforcement, and Automatic Rollback
 //
-// Sandbox Prisms are the core security component of PrismOS.
+// Sandbox Prisms are the core security component of PrismOS-AI.
 // Every agent action passes through the Sandbox Prism before execution:
 //   1. Cryptographic signing — HMAC-SHA256 signs every action for tamper proof
 //   2. Allow-list enforcement — only pre-approved operation categories execute
@@ -1061,7 +1061,7 @@ fn native_sandbox_execute(
             format!("✅ [WASM Sandbox] File access approved for agent '{}'. App data directory only.", agent_id),
             vec![SideEffect {
                 effect_type: "file_access".to_string(),
-                description: "File access scoped to PrismOS app data directory only (WASM isolated)".to_string(),
+                description: "File access scoped to PrismOS-AI app data directory only (WASM isolated)".to_string(),
                 reversible: true,
             }],
         ),

@@ -1,4 +1,4 @@
-# PrismOS — Local-First Agentic Personal AI Operating System
+# PrismOS-AI — Local-First Agentic Personal AI Operating System
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
@@ -6,10 +6,10 @@
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS is a **local-first agentic personal AI operating system** that runs 100% on your device. Your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you.
+PrismOS-AI is a **local-first agentic personal AI operating system** that runs 100% on your device. Your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you.
 
 <p align="center">
-  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS Intent Console" />
+  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console" />
 </p>
 
 ---
@@ -37,7 +37,7 @@ Everything runs offline. All inference via local [Ollama](https://ollama.com) mo
 ## 🏗️ Architecture
 
 <p align="center">
-  <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS Architecture Diagram" />
+  <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS-AI Architecture Diagram" />
 </p>
 
 See [docs/architecture.svg](docs/architecture.svg) and the [docs/diagrams/](docs/diagrams/) folder for detailed visual diagrams.
@@ -64,7 +64,7 @@ cd prismos-ai
 # Install frontend dependencies
 npm install
 
-# Pull a local model (PrismOS will guide you through this on first launch)
+# Pull a local model (PrismOS-AI will guide you through this on first launch)
 ollama pull mistral
 
 # Start Ollama in the background
@@ -86,7 +86,7 @@ Pre-built installers are available on the [Releases page](https://github.com/mkb
 
 ## 🔧 Configuration
 
-PrismOS uses [Ollama](https://ollama.com/) for local LLM inference. The default configuration:
+PrismOS-AI uses [Ollama](https://ollama.com/) for local LLM inference. The default configuration:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -124,14 +124,14 @@ CI runs automatically on every push and PR via [GitHub Actions](.github/workflow
 ## 📁 Project Structure
 
 <p align="center">
-  <img src="docs/diagrams/project-structure.svg" width="750" alt="PrismOS Project Structure" />
+  <img src="docs/diagrams/project-structure.svg" width="750" alt="PrismOS-AI Project Structure" />
 </p>
 
 ---
 
 ## 🔒 Security Model
 
-PrismOS implements defense-in-depth with patent-pending security:
+PrismOS-AI implements defense-in-depth with patent-pending security:
 
 1. **Sandbox Prism** — Every agent action runs inside an isolated WASM container
 2. **HMAC-SHA256 Signing** — All actions are cryptographically signed
@@ -152,4 +152,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📜 Patent Notice
 
-PrismOS and its core architectures (Spectrum Graph, Refractive Core, Sandbox Prism, You-Port) are protected by a US Provisional Patent filed February 2026. This open-source release is for personal and educational use.
+PrismOS-AI and its core architectures (Spectrum Graph, Refractive Core, Sandbox Prism, You-Port) are protected by a US Provisional Patent filed February 2026. This open-source release is for personal and educational use.

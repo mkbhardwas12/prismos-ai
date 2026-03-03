@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔷 PrismOS — Launch Posts
+# 🔷 PrismOS-AI — Launch Posts
 
 ### Ready-to-copy social media content for the v0.2.0 public launch
 
@@ -16,7 +16,7 @@
 
 **I quit trusting the cloud with my thinking. So I built my own AI operating system.**
 
-For the past several months, I've been building PrismOS — a desktop AI that runs 100% on your machine. No cloud. No telemetry. No API keys. Your data never leaves your device. Ever.
+For the past several months, I've been building PrismOS-AI — a desktop AI that runs 100% on your machine. No cloud. No telemetry. No API keys. Your data never leaves your device. Ever.
 
 But this isn't just "ChatGPT but local." I designed something fundamentally different.
 
@@ -26,10 +26,10 @@ Every AI tool today works the same way — you type, it responds, and all your c
 **What I built instead:**
 
 🔷 **A knowledge graph that thinks in 7 dimensions.**
-PrismOS stores your knowledge in what I call the Spectrum Graph — every idea carries spectral properties like cognitive depth, emotional resonance, temporal relevance, and creative associations. It's not a flat database. It's a living map of how you think.
+PrismOS-AI stores your knowledge in what I call the Spectrum Graph — every idea carries spectral properties like cognitive depth, emotional resonance, temporal relevance, and creative associations. It's not a flat database. It's a living map of how you think.
 
 🔷 **AI that reasons like light through a prism.**
-When you ask PrismOS something, your intent passes through the "Refractive Core" — it gets decomposed across those 7 dimensions, processed by 5 specialized AI agents who actually *debate* each other, and reassembled into a response that understands context most AI never sees.
+When you ask PrismOS-AI something, your intent passes through the "Refractive Core" — it gets decomposed across those 7 dimensions, processed by 5 specialized AI agents who actually *debate* each other, and reassembled into a response that understands context most AI never sees.
 
 🔷 **9 layers of security. Not 1. Nine.**
 HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 hash chains. Hardware TPM integration. LLM model verification. If one layer fails, eight others hold. AI safety shouldn't be a checkbox — it should be the architecture.
@@ -64,7 +64,7 @@ I built an AI operating system that never phones home.
 No cloud. No API keys. No telemetry.
 Your data stays on YOUR machine. Period.
 
-It's called PrismOS, it's patent-pending, and I just open-sourced it.
+It's called PrismOS-AI, it's patent-pending, and I just open-sourced it.
 
 🧵 Here's what makes it different ↓
 ```
@@ -139,7 +139,7 @@ All hand-written. All local. All open source. ⚡
 
 ### Tweet 7 — Call to Action
 ```
-PrismOS is patent-pending (Patent Pending) and fully open source under MIT.
+PrismOS-AI is patent-pending (Patent Pending) and fully open source under MIT.
 
 If you believe your AI should work for YOU — not a platform — take a look.
 
@@ -154,14 +154,14 @@ RT if this needs to exist. 🔷
 
 ### Title
 ```
-Show HN: PrismOS – I built a local-first AI OS with a 7D knowledge graph and 9 security layers
+Show HN: PrismOS-AI – I built a local-first AI OS with a 7D knowledge graph and 9 security layers
 ```
 
 ### Body
 ```
 Hey HN,
 
-I've been building PrismOS — an AI operating system that runs entirely on your device. No cloud, no telemetry, no data exfiltration. I just open-sourced it.
+I've been building PrismOS-AI — an AI operating system that runs entirely on your device. No cloud, no telemetry, no data exfiltration. I just open-sourced it.
 
 The core ideas:
 
@@ -193,9 +193,9 @@ Your AI, on your machine. Zero cloud. Zero telemetry. Nine security layers.
 
 ### Description
 ```
-PrismOS is a patent-pending AI operating system that runs entirely on your device.
+PrismOS-AI is a patent-pending AI operating system that runs entirely on your device.
 
-Unlike cloud AI tools, PrismOS keeps everything local — your conversations, your knowledge graph, your data. Nothing ever leaves your machine.
+Unlike cloud AI tools, PrismOS-AI keeps everything local — your conversations, your knowledge graph, your data. Nothing ever leaves your machine.
 
 What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), an AI processing engine modeled on light refraction (the Refractive Core), 5 AI agents that debate and reach consensus, WASM sandboxed execution, and 9 layers of security including a tamper-evident audit log and hardware enclave integration.
 

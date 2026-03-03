@@ -1,8 +1,8 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // You-Port — Encrypted State Migration & Session Handoff
 //
 // You-Port enables secure, end-to-end encrypted export/import of the complete
-// PrismOS state for device-to-device handoff and session persistence.
+// PrismOS-AI state for device-to-device handoff and session persistence.
 //
 // Architecture:
 //   1. Serialize full Spectrum Graph (nodes + edges + metrics)
@@ -33,14 +33,14 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// State file name in the app data directory
 const STATE_FILE: &str = "prismos-handoff.state";
-/// Encryption key derivation salt (unique to PrismOS)
+/// Encryption key derivation salt (unique to PrismOS-AI)
 const KEY_SALT: &[u8] = b"PrismOS-YouPort-Default-Salt-v1";
 /// Current format version (v3 = AES-256-GCM, v2 = XOR legacy)
 const FORMAT_VERSION: &str = "prismos-youport-v3";
 
 // ─── Data Models ───────────────────────────────────────────────────────────────
 
-/// The complete PrismOS state snapshot for handoff
+/// The complete PrismOS-AI state snapshot for handoff
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YouPortState {
     pub id: String,
@@ -278,7 +278,7 @@ pub fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
 
 // ─── State Capture ─────────────────────────────────────────────────────────────
 
-/// Capture the complete PrismOS state: Spectrum Graph + agent states + metadata.
+/// Capture the complete PrismOS-AI state: Spectrum Graph + agent states + metadata.
 /// This is the full "You-Port snapshot" for encrypted device handoff.
 pub fn capture_state(
     graph: &crate::spectrum_graph::SpectrumGraph,
@@ -326,7 +326,7 @@ pub fn capture_state(
 
 // ─── Save State (Encrypted) ───────────────────────────────────────────────────
 
-/// Save the complete PrismOS state to an encrypted file.
+/// Save the complete PrismOS-AI state to an encrypted file.
 /// Uses device-derived key encryption so the file is bound to this device.
 pub fn save_state(
     graph: &crate::spectrum_graph::SpectrumGraph,
@@ -397,7 +397,7 @@ pub fn save_state(
 
 // ─── Load State (Decrypt + Restore) ───────────────────────────────────────────
 
-/// Load and restore PrismOS state from an encrypted handoff file.
+/// Load and restore PrismOS-AI state from an encrypted handoff file.
 /// Decrypts, verifies integrity, and merges into the current Spectrum Graph.
 pub fn load_state(
     graph: &crate::spectrum_graph::SpectrumGraph,
@@ -532,7 +532,7 @@ pub struct CrossDeviceMergeResult {
 }
 
 /// Export the local graph as an encrypted sync package for another device.
-/// The exported package includes a "shared key" nonce that any PrismOS instance
+/// The exported package includes a "shared key" nonce that any PrismOS-AI instance
 /// can use with a user-supplied passphrase for decryption.
 pub fn export_sync_package(
     app_dir: &Path,
@@ -717,7 +717,7 @@ mod tests {
 
     #[test]
     fn test_legacy_export_import_roundtrip() {
-        let original = "PrismOS test data — local-first AI";
+        let original = "PrismOS-AI test data — local-first AI";
         let package = create_export_package(original);
 
         assert_eq!(package.version, "0.1.0");
@@ -742,7 +742,7 @@ mod tests {
     #[test]
     fn test_xor_cipher_roundtrip() {
         let key = derive_key("test-device", "test-nonce");
-        let plaintext = b"Hello PrismOS! Patent Pending - encrypted handoff test data that spans multiple blocks to verify counter mode works correctly.";
+        let plaintext = b"Hello PrismOS-AI! Patent Pending - encrypted handoff test data that spans multiple blocks to verify counter mode works correctly.";
 
         let ciphertext = xor_stream_cipher(&key, plaintext);
         assert_ne!(&ciphertext, plaintext);
@@ -787,7 +787,7 @@ mod tests {
     #[test]
     fn test_aes_gcm_roundtrip() {
         let key = derive_key("test-device", "test-nonce");
-        let plaintext = b"Hello PrismOS! AES-256-GCM authenticated encryption test across multiple blocks.";
+        let plaintext = b"Hello PrismOS-AI! AES-256-GCM authenticated encryption test across multiple blocks.";
 
         let ciphertext = aes_encrypt(&key, plaintext).expect("Encryption should succeed");
         // AES-GCM adds 12-byte nonce + 16-byte auth tag

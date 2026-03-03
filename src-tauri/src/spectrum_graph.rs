@@ -1,7 +1,7 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Spectrum Graph — Persistent Multi-Layered Knowledge Graph
 //
-// The Spectrum Graph is PrismOS's persistent memory system.
+// The Spectrum Graph is PrismOS-AI's persistent memory system.
 // Architecture:
 //   Layer 1 — SQLite relational store: nodes (life facets), edges, metadata
 //   Layer 2 — Intent weight layer: dynamic edge weights with closed-loop feedback
@@ -232,7 +232,7 @@ impl SpectrumGraph {
 
         let now = chrono::Utc::now().to_rfc3339();
 
-        // ── Demo nodes showing PrismOS as a daily productivity tool ──
+        // ── Demo nodes showing PrismOS-AI as a daily productivity tool ──
         let demo_nodes = vec![
             ("demo-work-1", "Weekly Goals", "Track and review weekly professional goals, deadlines, and deliverables", "work", "core"),
             ("demo-work-2", "Meeting Notes", "Capture and organize notes from team meetings, 1:1s, and standups", "work", "context"),

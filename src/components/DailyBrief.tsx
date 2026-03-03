@@ -1,5 +1,5 @@
-// Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
-// DailyBrief — Morning Brief, Evening Recap & "What PrismOS did today"
+// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
+// DailyBrief — Morning Brief, Evening Recap & "What PrismOS-AI did today"
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -66,7 +66,7 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
   const subtitle = isMorning
     ? "Here's what your Spectrum Graph has been up to"
     : hasActivity
-    ? "Here's what PrismOS did for you today"
+    ? "Here's what PrismOS-AI did for you today"
     : "Your graph is ready — start an intent to build knowledge";
 
   // Quick action suggestions based on time of day

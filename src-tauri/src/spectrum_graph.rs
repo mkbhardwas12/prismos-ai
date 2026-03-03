@@ -1000,7 +1000,8 @@ impl SpectrumGraph {
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.1
                AND ns.label != nt.label
-             ORDER BY COALESCE(e.momentum, 0.0) DESC LIMIT 5",
+               AND SUBSTR(LOWER(ns.label), 1, 40) != SUBSTR(LOWER(nt.label), 1, 40)
+             ORDER BY COALESCE(e.momentum, 0.0) DESC LIMIT 8",
         )?;
 
         let momentum_edges: Vec<(String, String, String, String, f64, f64, String, String)> = stmt
@@ -1150,7 +1151,8 @@ impl SpectrumGraph {
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.08
                AND ns.label != nt.label
-             ORDER BY mom DESC LIMIT 2",
+               AND SUBSTR(LOWER(ns.label), 1, 40) != SUBSTR(LOWER(nt.label), 1, 40)
+             ORDER BY mom DESC LIMIT 6",
         )?;
 
         let high_momentum: Vec<(String, String, String, String, f64, f64)> = stmt
@@ -1325,6 +1327,18 @@ impl SpectrumGraph {
                 }
             }
         }
+
+        // ── Final dedup: remove suggestions with near-identical text ──
+        let mut seen_texts: Vec<String> = Vec::new();
+        suggestions.retain(|s| {
+            let norm: String = s.text.to_lowercase().chars().take(50).collect();
+            if seen_texts.iter().any(|t| t == &norm) {
+                false
+            } else {
+                seen_texts.push(norm);
+                true
+            }
+        });
 
         suggestions.truncate(3);
         Ok(suggestions)

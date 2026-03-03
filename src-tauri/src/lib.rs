@@ -420,6 +420,14 @@ async fn get_recent_intents(db: tauri::State<'_, DbState>, days: u32) -> Result<
     serde_json::to_string(&intents).map_err(|e| e.to_string())
 }
 
+/// Get daily brief/recap — activity summary from Spectrum Graph
+#[tauri::command]
+async fn get_daily_brief(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let brief = graph.get_daily_brief().map_err(|e| e.to_string())?;
+    serde_json::to_string(&brief).map_err(|e| e.to_string())
+}
+
 /// Update a node's label and content
 #[tauri::command]
 async fn update_spectrum_node(
@@ -981,6 +989,7 @@ pub fn run() {
             load_graph,
             get_feedback_count,
             get_recent_intents,
+            get_daily_brief,
             // Agents
             get_active_agents,
             // LangGraph Workflow (Patent Pending — Multi-Agent Collaboration)

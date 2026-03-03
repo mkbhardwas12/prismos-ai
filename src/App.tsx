@@ -330,6 +330,8 @@ function App() {
         collaboration={lastCollaboration}
         debateSummary={lastDebate}
         liveAgentSteps={liveAgentSteps}
+        proactiveSuggestions={startupSuggestions}
+        dailyGreeting={dailyGreeting}
       />
       <main className="main-content" id="main-content" role="main" aria-label="Main content">
         {/* Global error banner */}

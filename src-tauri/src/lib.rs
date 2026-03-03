@@ -649,6 +649,21 @@ async fn clear_graph(db: tauri::State<'_, DbState>) -> Result<String, String> {
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
+/// Deduplicate nodes in the Spectrum Graph — merge nodes with same label+type
+#[tauri::command]
+async fn deduplicate_graph(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let merged = graph.deduplicate_nodes().map_err(|e| e.to_string())?;
+
+    let result = serde_json::json!({
+        "success": true,
+        "message": format!("Merged {} duplicate nodes", merged),
+        "nodes_merged": merged,
+    });
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
 // ─── LangGraph Workflow Commands (Patent Pending) ───────────────────────────
 
 /// Run a full LangGraph multi-agent collaboration for a given intent.
@@ -972,6 +987,13 @@ pub fn run() {
                 }
             }
 
+            // ── Auto-deduplicate on startup (clean up any duplicate nodes) ──
+            match db.deduplicate_nodes() {
+                Ok(0) => {} // No duplicates
+                Ok(n) => println!("  🧹 Deduplicated {} duplicate nodes from Spectrum Graph", n),
+                Err(e) => eprintln!("  ⚠️ Dedup failed (non-critical): {}", e),
+            }
+
             app.manage(DbState(Mutex::new(db)));
 
             // Initialize tamper-evident audit log
@@ -1061,6 +1083,7 @@ pub fn run() {
             export_graph,
             import_graph,
             clear_graph,
+            deduplicate_graph,
             // Multi-Window + Spectral Timeline (Patent Pending)
             open_graph_window,
             get_timeline_data,

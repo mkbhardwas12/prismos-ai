@@ -308,7 +308,10 @@ impl SpectrumGraph {
         self.add_node_with_layer(label, content, node_type, "context")
     }
 
-    /// Add a node with explicit layer assignment
+    /// Add a node with explicit layer assignment.
+    /// **Deduplicates**: if a node with the same label AND node_type already exists,
+    /// it updates the content and bumps access_count + updated_at instead of
+    /// creating a duplicate. Returns the existing node in that case.
     pub fn add_node_with_layer(
         &self,
         label: &str,
@@ -316,9 +319,33 @@ impl SpectrumGraph {
         node_type: &str,
         layer: &str,
     ) -> Result<SpectrumNode, Box<dyn std::error::Error + Send + Sync>> {
-        let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
 
+        // ── Dedup check: same label + node_type → update instead of insert ──
+        let existing: Option<String> = self.conn.prepare(
+            "SELECT id FROM nodes WHERE label = ?1 AND node_type = ?2 LIMIT 1",
+        )?
+        .query_row(params![label, node_type], |row| row.get::<_, String>(0))
+        .ok();
+
+        if let Some(existing_id) = existing {
+            // Merge: append new content if different, bump access + timestamp
+            self.conn.execute(
+                "UPDATE nodes SET access_count = access_count + 1,
+                                  last_accessed = ?1, updated_at = ?1,
+                                  content = CASE WHEN content = ?2 THEN content
+                                                 ELSE content || '\n---\n' || ?2 END
+                 WHERE id = ?3",
+                params![now, content, existing_id],
+            )?;
+
+            if let Some(node) = self.get_node(&existing_id)? {
+                return Ok(node);
+            }
+        }
+
+        // No duplicate — fresh insert
+        let id = Uuid::new_v4().to_string();
         self.conn.execute(
             "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6, ?6)",
@@ -851,6 +878,105 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    //  DEDUPLICATE NODES — Clean up duplicate label+type entries
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Merge duplicate nodes (same label + node_type) into one.
+    /// Keeps the oldest node, merges content, sums access_count,
+    /// re-points edges, and deletes the extras. Returns count merged.
+    pub fn deduplicate_nodes(
+        &self,
+    ) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+        // Find groups of duplicates
+        let mut stmt = self.conn.prepare(
+            "SELECT label, node_type, COUNT(*) AS cnt
+             FROM nodes
+             GROUP BY label, node_type
+             HAVING cnt > 1
+             ORDER BY cnt DESC",
+        )?;
+
+        let dup_groups: Vec<(String, String, u32)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut total_merged: u32 = 0;
+
+        for (label, node_type, _count) in &dup_groups {
+            // Get all nodes in this group, oldest first
+            let mut grp = self.conn.prepare(
+                "SELECT id, content, COALESCE(access_count, 0)
+                 FROM nodes
+                 WHERE label = ?1 AND node_type = ?2
+                 ORDER BY created_at ASC",
+            )?;
+
+            let members: Vec<(String, String, u32)> = grp
+                .query_map(params![label, node_type], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, u32>(2)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if members.len() < 2 {
+                continue;
+            }
+
+            let keeper_id = &members[0].0;
+            let mut total_access: u32 = members[0].2;
+
+            for dup in &members[1..] {
+                let dup_id = &dup.0;
+                total_access += dup.2;
+
+                // Re-point edges from duplicate → keeper
+                self.conn.execute(
+                    "UPDATE OR IGNORE edges SET source_id = ?1 WHERE source_id = ?2",
+                    params![keeper_id, dup_id],
+                )?;
+                self.conn.execute(
+                    "UPDATE OR IGNORE edges SET target_id = ?1 WHERE target_id = ?2",
+                    params![keeper_id, dup_id],
+                )?;
+
+                // Delete orphan edges that now point to same node on both sides
+                self.conn.execute(
+                    "DELETE FROM edges WHERE source_id = target_id",
+                    [],
+                )?;
+
+                // Delete duplicate edges that couldn't be re-pointed (OR IGNORE skipped them)
+                self.conn.execute(
+                    "DELETE FROM edges WHERE source_id = ?1 OR target_id = ?1",
+                    params![dup_id],
+                )?;
+
+                // Delete the duplicate node
+                self.conn.execute("DELETE FROM nodes WHERE id = ?1", params![dup_id])?;
+                total_merged += 1;
+            }
+
+            // Update keeper with merged access count
+            let now = Utc::now().to_rfc3339();
+            self.conn.execute(
+                "UPDATE nodes SET access_count = ?1, updated_at = ?2 WHERE id = ?3",
+                params![total_access, now, keeper_id],
+            )?;
+        }
+
+        Ok(total_merged)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     //  ANTICIPATE NEEDS — Predictive Intent Engine
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -863,6 +989,7 @@ impl SpectrumGraph {
         let mut needs: Vec<AnticipatedNeed> = Vec::new();
 
         // Strategy 1: High-momentum edges indicate emerging interests
+        // Skip edges where source and target have the same label (duplicates)
         let mut stmt = self.conn.prepare(
             "SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
                     COALESCE(e.momentum, 0.0), COALESCE(e.reinforcements, 0),
@@ -872,6 +999,7 @@ impl SpectrumGraph {
              JOIN nodes ns ON e.source_id = ns.id
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.1
+               AND ns.label != nt.label
              ORDER BY COALESCE(e.momentum, 0.0) DESC LIMIT 5",
         )?;
 
@@ -893,6 +1021,20 @@ impl SpectrumGraph {
         for (src_label, src_type, tgt_label, tgt_type, weight, momentum, src_id, tgt_id) in
             &momentum_edges
         {
+            // Skip if both labels are near-identical (truncated duplicates)
+            let src_norm = src_label.to_lowercase().chars().take(40).collect::<String>();
+            let tgt_norm = tgt_label.to_lowercase().chars().take(40).collect::<String>();
+            if src_norm == tgt_norm {
+                continue;
+            }
+            // Skip if we already have a suggestion about this pair
+            let already_seen = needs.iter().any(|n| {
+                n.related_nodes.contains(src_id) && n.related_nodes.contains(tgt_id)
+            });
+            if already_seen {
+                continue;
+            }
+
             needs.push(AnticipatedNeed {
                 suggestion: format!(
                     "Growing connection between \"{}\" and \"{}\" (momentum: {:.2})",

@@ -910,6 +910,14 @@ pub fn run() {
             // Initialize Spectrum Graph database — shared across all commands
             let db = spectrum_graph::SpectrumGraph::new(&app_dir)
                 .expect("Failed to initialize Spectrum Graph");
+
+            // Seed demo data for first-time users (runs only if graph is empty)
+            match db.seed_demo_data() {
+                Ok(true) => println!("  🌱 Demo data seeded — graph ready for first-time users"),
+                Ok(false) => {} // Already has data
+                Err(e) => eprintln!("  ⚠️ Demo seed failed (non-critical): {}", e),
+            }
+
             app.manage(DbState(Mutex::new(db)));
 
             // Initialize tamper-evident audit log

@@ -1,0 +1,174 @@
+# PrismOS Cross-Platform Release Build
+# Builds Windows (.msi, .exe), macOS (.dmg, .app), Linux (.deb, .AppImage), and Android (.apk)
+# Triggered on version tags or manual dispatch
+
+name: 'Release Build'
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.2.0)'
+        required: false
+        default: 'draft'
+
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Desktop builds (Windows, macOS, Linux)
+  # ──────────────────────────────────────────────
+  build-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+            rust-targets: ''
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin'
+          - platform: 'macos-13'
+            args: '--target x86_64-apple-darwin'
+            rust-targets: 'x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+            rust-targets: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            javascriptcoregtk-4.1-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name || inputs.version || 'draft' }}
+          releaseName: 'PrismOS ${{ github.ref_name || inputs.version || 'draft' }}'
+          releaseBody: |
+            ## PrismOS — Local-First Agentic Personal AI Operating System
+
+            ### What's New
+            - 🧠 5-Agent Collaborative AI System (Mnemonic, Sentinel, Oracle, Artisan, Nexus)
+            - 🌈 7D Alive Spectrum Graph — your knowledge, visualized and growing
+            - 🔒 Fully local: your data never leaves your machine
+            - ⚡ Proactive suggestions that auto-process with one click
+            - 📊 Morning Brief & Evening Recap
+            - 🔄 You-Port: Export/import your entire knowledge graph
+            - 🏖️ WASM Sandbox for safe code execution
+
+            ### Installation
+            - **Windows**: Download `.msi` (recommended) or `.exe` installer
+            - **macOS**: Download `.dmg` for Apple Silicon or Intel
+            - **Linux**: Download `.deb` or `.AppImage`
+
+            ### Requirements
+            - [Ollama](https://ollama.com) installed locally with at least one model (`ollama pull mistral`)
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  # ──────────────────────────────────────────────
+  # Android build
+  # ──────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;29.0.13846066"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Initialize Tauri Android
+        run: npx tauri android init
+
+      - name: Build Android APK
+        run: npx tauri android build --apk
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.13846066
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: prismos-android-apk
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+
+      - name: Attach APK to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          tag_name: ${{ github.ref_name }}
+          draft: true

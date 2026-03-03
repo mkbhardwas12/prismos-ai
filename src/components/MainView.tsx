@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
@@ -73,6 +74,7 @@ export default function MainView({
   const [availableModels, setAvailableModels] = useState<OllamaModel[]>([]);
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<string | null>(null);
+  const [pullPercent, setPullPercent] = useState<number>(0);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [showGuide, setShowGuide] = useState(false);
 
@@ -246,18 +248,39 @@ export default function MainView({
   const pullModelFromDropdown = useCallback(async (modelName: string) => {
     setPullingModel(modelName);
     setPullProgress("Starting download…");
+    setPullPercent(0);
+
+    // Listen for streaming progress events from the Rust backend
+    const unlisten = await listen<{ model: string; status: string; completed: number; total: number; percent: number }>(
+      "pull-progress",
+      (event) => {
+        const { status, completed, total, percent } = event.payload;
+        if (total > 0) {
+          const mb = (completed / 1_000_000).toFixed(0);
+          const totalMb = (total / 1_000_000).toFixed(0);
+          setPullProgress(`${status} — ${mb} / ${totalMb} MB (${percent}%)`);
+          setPullPercent(percent);
+        } else if (status) {
+          setPullProgress(status);
+        }
+      }
+    );
+
     try {
       const result = await invoke<string>("pull_ollama_model", { model: modelName, ollamaUrl: settings.ollamaUrl });
       setPullProgress(`✅ ${result}`);
+      setPullPercent(100);
       // Refresh model list
       const listResult = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
       setAvailableModels(JSON.parse(listResult));
       // Auto-select the newly pulled model
       onSettingsChange({ ...settings, defaultModel: modelName });
-      setTimeout(() => { setPullingModel(null); setPullProgress(null); }, 2000);
+      setTimeout(() => { setPullingModel(null); setPullProgress(null); setPullPercent(0); }, 2000);
     } catch (e) {
       setPullProgress(`❌ ${String(e)}`);
-      setTimeout(() => { setPullingModel(null); setPullProgress(null); }, 4000);
+      setTimeout(() => { setPullingModel(null); setPullProgress(null); setPullPercent(0); }, 4000);
+    } finally {
+      unlisten();
     }
   }, [settings, onSettingsChange]);
 
@@ -462,7 +485,17 @@ export default function MainView({
                 <div className="model-dropdown-header">Get More Models</div>
                 {pullingModel && (
                   <div className="model-pull-status">
-                    <span className="model-pull-spinner">⏳</span> {pullProgress}
+                    <div className="model-pull-text">
+                      <span className="model-pull-spinner">⏳</span> {pullProgress}
+                    </div>
+                    {pullPercent > 0 && (
+                      <div className="progress-bar">
+                        <div
+                          className="progress-bar-fill"
+                          style={{ width: `${pullPercent}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
                 {RECOMMENDED_MODELS

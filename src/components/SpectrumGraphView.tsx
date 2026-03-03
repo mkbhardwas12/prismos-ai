@@ -78,6 +78,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
   const [glowPhase, setGlowPhase] = useState(0);
   const glowRef = useRef<number>(0);
@@ -165,21 +166,22 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     loadAnticipations();
   }, [loadGraph, loadAnticipations, refreshKey]);
 
-  // ─── Resize handling ──────────────────────────────────────────────────
+  // ─── Resize handling (measure canvas area, not full container) ────────
 
   useEffect(() => {
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight - 40,
-        });
-      }
+    const el = canvasRef.current;
+    if (!el) return;
+    const update = () => {
+      setDimensions({
+        width: el.clientWidth,
+        height: el.clientHeight,
+      });
     };
-    updateDimensions();
-    window.addEventListener("resize", updateDimensions);
-    return () => window.removeEventListener("resize", updateDimensions);
-  }, []);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
 
   // ─── Node click handler ───────────────────────────────────────────────
 
@@ -323,7 +325,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   return (
     <div className="spectrum-graph-view" ref={containerRef}>
       {/* ── Graph Canvas ── */}
-      <div className="sg-canvas">
+      <div className="sg-canvas" ref={canvasRef}>
         {graphData.nodes.length === 0 ? (
           <div className="sg-empty">
             <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS-AI" className="sg-empty-logo" /></div>

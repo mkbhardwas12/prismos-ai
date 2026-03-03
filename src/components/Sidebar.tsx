@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary } from "../types";
+import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary, AgentActivity } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./Sidebar.css";
@@ -18,6 +18,7 @@ interface SidebarProps {
   graphStats: GraphStats;
   collaboration?: CollaborationSummary | null;
   debateSummary?: DebateSummary | null;
+  liveAgentSteps?: AgentActivity[];
 }
 
 export default function Sidebar({
@@ -28,6 +29,7 @@ export default function Sidebar({
   graphStats,
   collaboration,
   debateSummary,
+  liveAgentSteps,
 }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -236,7 +238,7 @@ export default function Sidebar({
           {/* Active Agents */}
           <div className="sidebar-section">
             <div className="sidebar-section-title">Active Agents</div>
-            <ActiveAgents agents={agents} collaboration={collaboration} debateSummary={debateSummary} />
+            <ActiveAgents agents={agents} collaboration={collaboration} debateSummary={debateSummary} liveAgentSteps={liveAgentSteps} />
           </div>
         </nav>
 

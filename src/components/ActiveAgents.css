@@ -542,3 +542,50 @@
 [data-theme="light"] .agents-status-bar.agents-active {
   background: rgba(8, 145, 178, 0.06);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PHASE 2 — LIVE AGENT GLOW / THINKING STATE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Agent card glows cyan when actively "thinking" */
+.agent-card.agent-live-thinking {
+  background-color: rgba(6, 182, 212, 0.06);
+  border-left: 2px solid rgba(6, 182, 212, 0.6);
+  animation: agentThinkGlow 2s ease-in-out infinite;
+}
+
+@keyframes agentThinkGlow {
+  0%, 100% { background-color: rgba(6, 182, 212, 0.04); }
+  50%      { background-color: rgba(6, 182, 212, 0.1); }
+}
+
+/* Agent card briefly flashes green on completion */
+.agent-card.agent-live-done:not(.agent-live-thinking) {
+  border-left: 2px solid rgba(16, 185, 129, 0.6);
+  transition: border-left-color 0.3s ease, background-color 0.3s ease;
+}
+
+/* Thinking emoji chip pulse */
+.agent-thinking-chip {
+  font-size: 13px;
+  animation: thinkChipPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes thinkChipPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.15); }
+}
+
+/* Completed check chip */
+.agent-done-chip {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(16, 185, 129, 0.9);
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -322,6 +322,7 @@ impl RefractiveEngine {
         &self,
         intent: ParsedIntent,
         app_dir: &Path,
+        app_handle: tauri::AppHandle,
     ) -> Result<RefractiveResult, Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
 
@@ -366,6 +367,7 @@ impl RefractiveEngine {
             &scored_context,
             self.scorer.accelerated,
             app_dir,
+            app_handle,
         )
         .await?;
 
@@ -501,12 +503,13 @@ impl RefractiveEngine {
 pub async fn process_intent_full(
     raw_input: &str,
     app_dir: &Path,
+    app_handle: tauri::AppHandle,
 ) -> Result<RefractiveResult, Box<dyn std::error::Error + Send + Sync>> {
     let lens = crate::intent_lens::IntentLens::new();
     let parsed = lens.parse(raw_input);
 
     let engine = RefractiveEngine::new();
-    engine.refract(parsed, app_dir).await
+    engine.refract(parsed, app_dir, app_handle).await
 }
 
 /// Get the full Spectrum Graph snapshot for frontend visualization.

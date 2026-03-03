@@ -22,7 +22,37 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use tauri::Emitter;
 use uuid::Uuid;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIVE AGENT ACTIVITY EVENT — emitted to frontend for real-time collaboration
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Event payload emitted to the frontend during workflow execution so the UI
+/// can show real-time "Reasoner is analyzing…", "Consensus reached", etc.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentActivityEvent {
+    pub agent: String,
+    pub action: String,
+    /// "started" | "thinking" | "completed"
+    pub status: String,
+    /// Workflow phase: orchestrate | analyze | debate | review | vote | execute
+    pub phase: String,
+}
+
+/// Helper: fire an `agent-activity` event (silently ignores errors)
+fn emit_activity(app: &tauri::AppHandle, agent: &str, action: &str, status: &str, phase: &str) {
+    let _ = app.emit(
+        "agent-activity",
+        AgentActivityEvent {
+            agent: agent.to_string(),
+            action: action.to_string(),
+            status: status.to_string(),
+            phase: phase.to_string(),
+        },
+    );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATE GRAPH — Typed state machine for agent collaboration
@@ -674,6 +704,7 @@ impl WorkflowEngine {
         scored_context: &[(String, f64)],
         npu_accelerated: bool,
         app_dir: &Path,
+        app_handle: tauri::AppHandle,
     ) -> Result<
         (crate::refractive_core::RefractiveResult, WorkflowState),
         Box<dyn std::error::Error + Send + Sync>,
@@ -706,6 +737,7 @@ impl WorkflowEngine {
         state.visit_node("orchestrator");
         session.current_phase = CollaborationPhase::Orchestrating;
         session.push_trace("Orchestrator", "Decomposing intent", StepStatus::Active);
+        emit_activity(&app_handle, "Orchestrator", "Decomposing intent into work units…", "thinking", "orchestrate");
 
         let work_units =
             OrchestratorNode::decompose(&intent, context_summary, context_node_ids);
@@ -715,6 +747,7 @@ impl WorkflowEngine {
         session.complete_trace_step("Orchestrator");
         state.checkpoint("orchestrator");
         state.transition("orchestrator", "parallel_analyze", "broadcast work units", node_start);
+        emit_activity(&app_handle, "Orchestrator", &format!("Dispatched {} work units to specialists", work_units.len()), "completed", "orchestrate");
 
         eprintln!(
             "[LangGraph-WF] Orchestrator decomposed intent → {} work units",
@@ -731,6 +764,7 @@ impl WorkflowEngine {
         let reasoner_start = std::time::Instant::now();
         state.visit_node("reasoner");
         session.push_trace("Reasoner", "Analyzing intent via LLM", StepStatus::Active);
+        emit_activity(&app_handle, "Reasoner", "Analyzing intent via LLM…", "thinking", "analyze");
 
         let reasoner_work = work_units
             .iter()
@@ -784,11 +818,13 @@ impl WorkflowEngine {
         session.complete_trace_step("Reasoner");
         state.checkpoint("reasoner");
         state.transition("reasoner", "parallel_join", "reasoner proposal", reasoner_start);
+        emit_activity(&app_handle, "Reasoner", "Analysis complete — proposal ready", "completed", "analyze");
 
         // ── 2b: Tool Smith ──
         let ts_start = std::time::Instant::now();
         state.visit_node("tool_smith");
         session.push_trace("Tool Smith", "Evaluating tool needs", StepStatus::Active);
+        emit_activity(&app_handle, "Tool Smith", "Evaluating tool and execution needs…", "thinking", "analyze");
 
         let tool_smith_work = work_units
             .iter()
@@ -810,11 +846,13 @@ impl WorkflowEngine {
         session.complete_trace_step("Tool Smith");
         state.checkpoint("tool_smith");
         state.transition("tool_smith", "parallel_join", "tool smith proposal", ts_start);
+        emit_activity(&app_handle, "Tool Smith", "Tool evaluation complete", "completed", "analyze");
 
         // ── 2c: Memory Keeper ──
         let mk_start = std::time::Instant::now();
         state.visit_node("memory_keeper");
         session.push_trace("Memory Keeper", "Processing graph context", StepStatus::Active);
+        emit_activity(&app_handle, "Memory Keeper", "Querying Spectrum Graph for context…", "thinking", "analyze");
 
         let memory_keeper_work = work_units
             .iter()
@@ -836,6 +874,7 @@ impl WorkflowEngine {
         session.complete_trace_step("Memory Keeper");
         state.checkpoint("memory_keeper");
         state.transition("memory_keeper", "parallel_join", "memory keeper proposal", mk_start);
+        emit_activity(&app_handle, "Memory Keeper", "Graph context processed", "completed", "analyze");
 
         eprintln!("[LangGraph-WF] All 3 specialists completed analysis");
 
@@ -848,6 +887,7 @@ impl WorkflowEngine {
         state.status = WorkflowStatus::DebateInProgress;
         session.current_phase = CollaborationPhase::Proposing;
         session.push_trace("Debate", "Agents debating proposals", StepStatus::Active);
+        emit_activity(&app_handle, "Debate", "Agents debating proposals…", "thinking", "debate");
 
         let all_proposals = vec![
             reasoner_proposal.clone(),
@@ -856,6 +896,27 @@ impl WorkflowEngine {
         ];
 
         let debate_result = run_debate(&all_proposals, &intent, 3);
+
+        // Emit individual debate arguments for live log
+        for arg in &debate_result.arguments {
+            let arg_label = match arg.argument_type {
+                ArgumentType::Position => "states position",
+                ArgumentType::Challenge => "challenges",
+                ArgumentType::Rebuttal => "rebuts",
+                ArgumentType::Support => "supports",
+                ArgumentType::Concession => "concedes",
+            };
+            let target_str = arg.target_agent.as_ref()
+                .map(|t| format!(" → {}", t.display_name()))
+                .unwrap_or_default();
+            emit_activity(
+                &app_handle,
+                arg.from.display_name(),
+                &format!("{}{}: {}", arg_label, target_str, &arg.content.chars().take(80).collect::<String>()),
+                "thinking",
+                "debate",
+            );
+        }
 
         // Record debate arguments as messages
         for arg in &debate_result.arguments {
@@ -879,6 +940,13 @@ impl WorkflowEngine {
         session.complete_trace_step("Debate");
         state.checkpoint("debate");
         state.transition("debate", "sentinel_review", "debate complete", debate_start);
+        emit_activity(
+            &app_handle,
+            "Debate",
+            &format!("Debate {} — {:.0}% agreement", if debate_result.resolved { "resolved" } else { "unresolved" }, debate_result.agreement_score * 100.0),
+            "completed",
+            "debate",
+        );
 
         eprintln!(
             "[LangGraph-WF] Debate: {} rounds, {} arguments, agreement {:.0}%",
@@ -894,12 +962,14 @@ impl WorkflowEngine {
         state.visit_node("sentinel_review");
         session.current_phase = CollaborationPhase::SecurityReview;
         session.push_trace("Sentinel", "Security review", StepStatus::Active);
+        emit_activity(&app_handle, "Sentinel", "Reviewing all proposals for security…", "thinking", "review");
 
         let security_review = SentinelNode::review(&all_proposals, &intent);
         session.add_message(security_review);
         session.complete_trace_step("Sentinel");
         state.checkpoint("sentinel_review");
         state.transition("sentinel_review", "consensus", "security review done", sentinel_start);
+        emit_activity(&app_handle, "Sentinel", "Security review passed ✓", "completed", "review");
 
         eprintln!("[LangGraph-WF] Sentinel security review complete");
 
@@ -911,6 +981,7 @@ impl WorkflowEngine {
         state.status = WorkflowStatus::VotingInProgress;
         session.current_phase = CollaborationPhase::Voting;
         session.push_trace("Consensus", "Voting round", StepStatus::Active);
+        emit_activity(&app_handle, "Consensus", "All 5 agents casting votes…", "thinking", "vote");
 
         // Collect votes — influenced by debate results
         let debate_bonus: f64 = if debate_result.resolved { 0.1 } else { -0.05 };
@@ -953,6 +1024,13 @@ impl WorkflowEngine {
         session.consensus = Some(consensus.clone());
         state.consensus = Some(consensus.clone());
         session.complete_trace_step("Consensus");
+        emit_activity(
+            &app_handle,
+            "Consensus",
+            &format!("Consensus {} — {}/{} approved", if consensus.approved { "reached ✓" } else { "rejected ✗" }, consensus.approve_count, votes.len()),
+            "completed",
+            "vote",
+        );
 
         // Record consensus message
         session.add_message(AgentMessage::new(
@@ -983,6 +1061,7 @@ impl WorkflowEngine {
         state.visit_node(target_node);
         session.current_phase = CollaborationPhase::Executing;
         session.push_trace("Sandbox Prism", "Executing approved actions", StepStatus::Active);
+        emit_activity(&app_handle, "Sandbox Prism", "Executing through isolated sandbox…", "thinking", "execute");
 
         let final_response;
         let mut edges_reinforced = vec![];
@@ -1020,6 +1099,7 @@ impl WorkflowEngine {
         session.complete();
         state.checkpoint(target_node);
         state.completed_at = Some(Utc::now().to_rfc3339());
+        emit_activity(&app_handle, "Sandbox Prism", "Workflow complete — all actions executed safely", "completed", "execute");
 
         // Record execution result
         session.add_message(AgentMessage::new(

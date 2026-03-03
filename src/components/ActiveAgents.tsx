@@ -1,13 +1,14 @@
 // Patent Pending — PrismOS (US Provisional Patent, Feb 2026)
 // PrismOS Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
-import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary } from "../types";
+import type { Agent, CollaborationSummary, DebateSummary, ArgumentSummary, AgentActivity } from "../types";
 import "./ActiveAgents.css";
 
 interface ActiveAgentsProps {
   agents: Agent[];
   collaboration?: CollaborationSummary | null;
   debateSummary?: DebateSummary | null;
+  liveAgentSteps?: AgentActivity[];
 }
 
 function ArgumentTypeIcon({ type: argType }: { type: string }) {
@@ -75,7 +76,7 @@ function DebatePanel({ debate }: { debate: DebateSummary }) {
   );
 }
 
-export default function ActiveAgents({ agents, collaboration, debateSummary }: ActiveAgentsProps) {
+export default function ActiveAgents({ agents, collaboration, debateSummary, liveAgentSteps }: ActiveAgentsProps) {
   if (agents.length === 0) {
     return (
       <div className="agents-panel">
@@ -87,9 +88,28 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
     );
   }
 
-  // Count active agents
+  // Count active agents — include live agent step data
+  const liveSteps = liveAgentSteps ?? [];
+  const hasLiveActivity = liveSteps.length > 0;
+
+  // Determine which agents are currently "thinking" based on live events
+  const liveThinkingAgents = new Set<string>();
+  const liveCompletedAgents = new Set<string>();
+  for (const step of liveSteps) {
+    if (step.status === "thinking") liveThinkingAgents.add(step.agent.toLowerCase().replace(/ /g, "_"));
+    if (step.status === "completed") {
+      liveThinkingAgents.delete(step.agent.toLowerCase().replace(/ /g, "_"));
+      liveCompletedAgents.add(step.agent.toLowerCase().replace(/ /g, "_"));
+    }
+  }
+  // The most recent live action for each agent (for label display)
+  const latestLiveAction = new Map<string, string>();
+  for (const step of liveSteps) {
+    latestLiveAction.set(step.agent.toLowerCase().replace(/ /g, "_"), step.action);
+  }
+
   const processingCount = agents.filter(a => a.status === "Processing").length;
-  const isAnyActive = processingCount > 0;
+  const isAnyActive = processingCount > 0 || hasLiveActivity;
 
   return (
     <div className="agents-panel">
@@ -97,7 +117,20 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
       <div className={`agents-status-bar ${isAnyActive ? "agents-active" : "agents-idle"}`}>
         <span className={`agents-status-dot ${isAnyActive ? "active" : ""}`} />
         <span className="agents-status-text">
-          {isAnyActive
+          {hasLiveActivity
+            ? (() => {
+                const last = liveSteps[liveSteps.length - 1];
+                const phaseLabel: Record<string, string> = {
+                  orchestrate: "🧭 Orchestrating",
+                  analyze: "🔬 Analyzing",
+                  debate: "⚖️ Debating",
+                  review: "🛡️ Security review",
+                  vote: "🗳️ Voting",
+                  execute: "⚡ Executing",
+                };
+                return phaseLabel[last.phase] ?? `${liveThinkingAgents.size} agents working…`;
+              })()
+            : isAnyActive
             ? `${processingCount} agent${processingCount > 1 ? "s" : ""} working…`
             : "All agents standing by"}
         </span>
@@ -160,8 +193,16 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
         );
         const inDebate = !!debateArg;
 
+        // Phase 2: live agent status from real-time events
+        const isLiveThinking = liveThinkingAgents.has(agent.id);
+        const isLiveCompleted = liveCompletedAgents.has(agent.id);
+        const liveAction = latestLiveAction.get(agent.id);
+
         // Dynamic action text based on agent role + state
         const actionText = (() => {
+          // Phase 2: live action text takes precedence
+          if (isLiveThinking && liveAction) return liveAction;
+          if (isLiveCompleted && liveAction) return liveAction;
           if (agent.status === "Processing") {
             switch (agent.id) {
               case "orchestrator": return "Routing intent…";
@@ -177,20 +218,32 @@ export default function ActiveAgents({ agents, collaboration, debateSummary }: A
           return agent.role;
         })();
 
+        const isAgentActive = agent.status === 'Processing' || isLiveThinking;
+
         return (
           <div
             key={agent.id}
-            className={`agent-card ${isCollabActive ? 'agent-collab-active' : ''} ${inDebate ? 'agent-debate-active' : ''} ${agent.status === 'Processing' ? 'agent-processing' : ''}`}
+            className={`agent-card ${isCollabActive ? 'agent-collab-active' : ''} ${inDebate ? 'agent-debate-active' : ''} ${isAgentActive ? 'agent-processing' : ''} ${isLiveThinking ? 'agent-live-thinking' : ''} ${isLiveCompleted ? 'agent-live-done' : ''}`}
             title={agent.description}
           >
             <div
-              className={`agent-status-indicator ${agent.status.toLowerCase()}`}
+              className={`agent-status-indicator ${isLiveThinking ? 'processing' : isLiveCompleted ? 'idle' : agent.status.toLowerCase()}`}
             />
             <div className="agent-info">
               <div className="agent-name">{agent.name}</div>
-              <div className={`agent-role ${agent.status === 'Processing' ? 'agent-role-active' : ''}`}>{actionText}</div>
+              <div className={`agent-role ${isAgentActive ? 'agent-role-active' : ''}`}>{actionText}</div>
             </div>
             <div className="agent-badges">
+              {isLiveThinking && (
+                <span className="agent-thinking-chip" title="Currently thinking">
+                  💭
+                </span>
+              )}
+              {isLiveCompleted && !isLiveThinking && (
+                <span className="agent-done-chip" title="Completed">
+                  ✓
+                </span>
+              )}
               {inDebate && (
                 <span className="agent-debate-chip" title={`Debated: ${debateArg?.argument_type}`}>
                   ⚖️

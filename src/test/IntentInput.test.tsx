@@ -17,7 +17,7 @@ describe("IntentInput", () => {
     render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
     const textarea = screen.getByRole("textbox");
     await userEvent.type(textarea, "What is PrismOS-AI?{enter}");
-    expect(onSubmit).toHaveBeenCalledWith("What is PrismOS-AI?");
+    expect(onSubmit).toHaveBeenCalledWith("What is PrismOS-AI?", undefined);
   });
 
   it("does NOT submit when processing is in progress", async () => {
@@ -61,7 +61,7 @@ describe("IntentInput", () => {
 
   it("shows send button", () => {
     render(<IntentInput onSubmit={vi.fn()} isProcessing={false} />);
-    const sendBtn = screen.getByRole("button");
+    const sendBtn = screen.getByRole("button", { name: /send intent/i });
     expect(sendBtn).toBeInTheDocument();
   });
 });

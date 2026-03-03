@@ -108,10 +108,34 @@ tests/               → Test documentation
 docs/                → Architecture diagrams
 ```
 
+## 🧪 Testing
+
+```bash
+# Frontend type-check
+npx tsc --noEmit
+
+# Frontend unit tests
+npx vitest run
+
+# Rust backend tests
+cd src-tauri && cargo test
+
+# Full production build verification
+npm run tauri build
+```
+
+Please ensure all checks pass before submitting a PR.
+
 ## ⚖️ Patent Notice
 
-PrismOS is protected under US Provisional Patent Patent Pending. By contributing, you agree that your contributions may be covered by this patent. All contributors retain their copyright but grant the project a license to use contributions under the project's MIT license.
+**Patent Pending** — PrismOS is protected under a US Provisional Patent (filed February 2026).
+
+The core architectures — Spectrum Graph, Refractive Core, and You-Port — are patent-pending inventions. By contributing, you agree that your contributions may be covered by this patent. All contributors retain their copyright but grant the project a license to use contributions under the project's MIT license.
 
 ## 📜 License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+Thank you for helping make PrismOS better! 🔷

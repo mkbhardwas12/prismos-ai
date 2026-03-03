@@ -1,15 +1,18 @@
 # PrismOS-AI — Local-First Agentic Personal AI Operating System
 
+> **Try it in 30 seconds:** `git clone https://github.com/mkbhardwas12/prismos-ai.git && cd prismos-ai && npm install && npm run tauri dev`
+
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
 PrismOS-AI is a **local-first agentic personal AI operating system** that runs 100% on your device. Your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you.
 
 <p align="center">
-  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console" />
+  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to five AI agents at once" />
 </p>
 
 <details>
@@ -18,11 +21,17 @@ PrismOS-AI is a **local-first agentic personal AI operating system** that runs 1
 
 | Spectrum Graph | Spectrum Explorer |
 |:-:|:-:|
-| <img src="docs/screenshots/spectrum-graph.png" width="400" alt="Spectrum Graph" /> | <img src="docs/screenshots/Spectrum-Explorer.png" width="400" alt="Spectrum Explorer" /> |
+| <img src="docs/screenshots/spectrum-graph.png" width="400" alt="Spectrum Graph — force-directed knowledge visualization" /> | <img src="docs/screenshots/Spectrum-Explorer.png" width="400" alt="Spectrum Explorer — browse and search nodes" /> |
 
 | Sandbox Prisms | Spectral Timeline |
 |:-:|:-:|
-| <img src="docs/screenshots/Sandbox-Prisms.png" width="400" alt="Sandbox Prisms" /> | <img src="docs/screenshots/Spectral-Timeline.png" width="400" alt="Spectral Timeline" /> |
+| <img src="docs/screenshots/Sandbox-Prisms.png" width="400" alt="Sandbox Prisms — WASM-isolated execution" /> | <img src="docs/screenshots/Spectral-Timeline.png" width="400" alt="Spectral Timeline — knowledge evolution over time" /> |
+
+<!-- 🔜 Add voice-input.png and security-audit.png here for 7 total screenshots:
+| Voice Input | Security Audit Log |
+|:-:|:-:|
+| <img src="docs/screenshots/voice-input.png" width="400" alt="Voice Input — speak your intents" /> | <img src="docs/screenshots/security-audit.png" width="400" alt="Security Audit Log — tamper-proof action trail" /> |
+-->
 
 </details>
 
@@ -167,3 +176,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 ## 📜 Patent Notice
 
 PrismOS-AI and its core architectures (Spectrum Graph, Refractive Core, Sandbox Prism, You-Port) are protected by a US Provisional Patent filed February 2026. This open-source release is for personal and educational use.
+
+---
+
+<p align="center">
+  <strong>PrismOS-AI</strong> — Your mind, your machine, your OS.<br />
+  <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">Request Feature</a>
+</p>

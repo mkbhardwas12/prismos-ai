@@ -324,11 +324,11 @@ export default function MainView({
     throw new Error("Unreachable");
   }
 
-  async function handleIntent(input: string) {
+  async function handleIntent(input: string, imageData?: string) {
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input,
+      content: imageData ? `🖼️ [Image attached]\n${input}` : input,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -336,85 +336,29 @@ export default function MainView({
     clearLiveSteps(); // Phase 2: clear previous live steps
 
     try {
-      // Use full Refractive Core pipeline (Patent Pending) — with retry
-      const resultJson = await withRetry(() => invoke<string>("refract_intent", { input }));
-      const result: RefractiveResult = JSON.parse(resultJson);
+      // ── Vision path: image attached → use local vision model ──
+      if (imageData) {
+        const visionModel = settings.defaultModel?.includes("llava") || settings.defaultModel?.includes("vision")
+          ? settings.defaultModel
+          : "llava";  // Default to llava for vision tasks
+        const response = await invoke<string>("query_ollama_vision", {
+          prompt: input,
+          imageData,
+          model: visionModel,
+          ollamaUrl: settings.ollamaUrl || null,
+        });
 
-      // Build metadata footer
-      const metaParts: string[] = [];
-      if (result.agent_used) metaParts.push(`Agent: ${result.agent_used}`);
-      if (result.processing_time_ms) metaParts.push(`${result.processing_time_ms}ms`);
-      if (result.npu_accelerated) metaParts.push("NPU⚡");
-      if (result.context_nodes?.length) metaParts.push(`${result.context_nodes.length} ctx nodes`);
-      if (result.edges_reinforced?.length) metaParts.push(`${result.edges_reinforced.length} edges reinforced`);
-
-      // Collaboration trace
-      if (result.collaboration) {
-        const c = result.collaboration;
-        metaParts.push(`🔗 ${c.approve_count}/${c.vote_count} consensus`);
-        metaParts.push(`💬 ${c.message_count} agent msgs`);
-      }
-
-      const metaLine = metaParts.length > 0 ? `\n\n───\n📡 ${metaParts.join(" · ")}` : "";
-
-      // Collaboration consensus line
-      const collabLine = result.collaboration
-        ? `\n${result.collaboration.consensus_approved ? '✅' : '🛡️'} ${result.collaboration.consensus_summary}`
-        : "";
-
-      // Build anticipation hint
-      const hintLine = result.anticipations?.length
-        ? `\n🔮 ${result.anticipations[0]}`
-        : "";
-
-      const aiContent = result.response + metaLine + collabLine + hintLine;
-      const aiMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "ai",
-        content: aiContent,
-        timestamp: new Date(),
-        agent: result.agent_used,
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-
-      // Voice output — speak the AI response
-      if (settings.voiceOutputEnabled) {
-        voiceOutput.speak(result.response);
-      }
-
-      onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null); // Refresh sidebar + graph + agent status
-
-      // Phase 1 — Alive Graph: auto-strengthen related edges + fetch proactive suggestions
-      try {
-        const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
-        if (keywords.length > 0) {
-          await invoke("strengthen_related_edges", { keywords });
-        }
-        const sugJson = await invoke<string>("get_proactive_suggestions");
-        const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-        const enriched = generateFollowUpSuggestions(input, sug);
-        setProactiveSuggestions(enriched);
-        setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
-      } catch {
-        // Non-critical — generate client-side suggestions as fallback
-        const fallback = generateFollowUpSuggestions(input, []);
-        setProactiveSuggestions(fallback);
-        setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
-      }
-    } catch (e) {
-      // Fallback to legacy process_intent if refract_intent fails
-      try {
-        const response = await invoke<string>("process_intent", { input });
         const aiMsg: Message = {
           id: crypto.randomUUID(),
           role: "ai",
-          content: response,
+          content: response + "\n\n───\n👁️ Vision · Model: " + visionModel + " · 100% local",
           timestamp: new Date(),
+          agent: "Vision",
         };
         setMessages((prev) => [...prev, aiMsg]);
-        onIntentProcessed();
+        onIntentProcessed("Vision");
 
-        // Fetch proactive suggestions even on fallback path
+        // Generate follow-up suggestions
         try {
           const sugJson = await invoke<string>("get_proactive_suggestions");
           const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
@@ -426,22 +370,115 @@ export default function MainView({
           setProactiveSuggestions(fallback);
           setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
         }
-      } catch (fallbackErr) {
-        const errorStr = String(fallbackErr);
-        const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
-        const isModelError = errorStr.includes("model") || errorStr.includes("not found");
-        const errorMsg: Message = {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: isOllamaError
-            ? `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`
-            : isModelError
-            ? `⚠️ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`
-            : `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify your model is downloaded: ollama list\n  • Check Settings for the correct Ollama URL\n  • Try a simpler intent to test the connection`,
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
-      }
+      } else {
+        // ── Standard text path (existing Refractive Core pipeline) ──
+        try {
+          // Use full Refractive Core pipeline (Patent Pending) — with retry
+          const resultJson = await withRetry(() => invoke<string>("refract_intent", { input }));
+          const result: RefractiveResult = JSON.parse(resultJson);
+
+          // Build metadata footer
+          const metaParts: string[] = [];
+          if (result.agent_used) metaParts.push(`Agent: ${result.agent_used}`);
+          if (result.processing_time_ms) metaParts.push(`${result.processing_time_ms}ms`);
+          if (result.npu_accelerated) metaParts.push("NPU⚡");
+          if (result.context_nodes?.length) metaParts.push(`${result.context_nodes.length} ctx nodes`);
+          if (result.edges_reinforced?.length) metaParts.push(`${result.edges_reinforced.length} edges reinforced`);
+
+          // Collaboration trace
+          if (result.collaboration) {
+            const c = result.collaboration;
+            metaParts.push(`🔗 ${c.approve_count}/${c.vote_count} consensus`);
+            metaParts.push(`💬 ${c.message_count} agent msgs`);
+          }
+
+          const metaLine = metaParts.length > 0 ? `\n\n───\n📡 ${metaParts.join(" · ")}` : "";
+
+          // Collaboration consensus line
+          const collabLine = result.collaboration
+            ? `\n${result.collaboration.consensus_approved ? '✅' : '🛡️'} ${result.collaboration.consensus_summary}`
+            : "";
+
+          // Build anticipation hint
+          const hintLine = result.anticipations?.length
+            ? `\n🔮 ${result.anticipations[0]}`
+            : "";
+
+          const aiContent = result.response + metaLine + collabLine + hintLine;
+          const aiMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: aiContent,
+            timestamp: new Date(),
+            agent: result.agent_used,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+
+          // Voice output — speak the AI response
+          if (settings.voiceOutputEnabled) {
+            voiceOutput.speak(result.response);
+          }
+
+          onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null);
+
+          // Phase 1 — Alive Graph: auto-strengthen related edges + fetch proactive suggestions
+          try {
+            const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+            if (keywords.length > 0) {
+              await invoke("strengthen_related_edges", { keywords });
+            }
+            const sugJson = await invoke<string>("get_proactive_suggestions");
+            const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
+            const enriched = generateFollowUpSuggestions(input, sug);
+            setProactiveSuggestions(enriched);
+            setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
+          } catch {
+            const fallback = generateFollowUpSuggestions(input, []);
+            setProactiveSuggestions(fallback);
+            setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
+          }
+        } catch (e) {
+          // Fallback to legacy process_intent if refract_intent fails
+          try {
+            const response = await invoke<string>("process_intent", { input });
+            const aiMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "ai",
+              content: response,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+            onIntentProcessed();
+
+            try {
+              const sugJson = await invoke<string>("get_proactive_suggestions");
+              const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
+              const enriched = generateFollowUpSuggestions(input, sug);
+              setProactiveSuggestions(enriched);
+              setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
+            } catch {
+              const fallback = generateFollowUpSuggestions(input, []);
+              setProactiveSuggestions(fallback);
+              setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
+            }
+          } catch (fallbackErr) {
+            const errorStr = String(fallbackErr);
+            const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
+            const isModelError = errorStr.includes("model") || errorStr.includes("not found");
+            const errorMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: isOllamaError
+                ? `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`
+                : isModelError
+                ? `⚠️ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`
+                : `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify your model is downloaded: ollama list\n  • Check Settings for the correct Ollama URL\n  • Try a simpler intent to test the connection`,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, errorMsg]);
+          }
+        }
+      } // end if/else imageData
     } finally {
       setIsProcessing(false);
     }

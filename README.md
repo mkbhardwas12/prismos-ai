@@ -239,10 +239,10 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 ## 📸 Screenshots
 
 <p align="center">
-  <em>PrismOS v0.2.0 — Modern glassmorphism dark UI with full light theme support</em>
+  <img src="docs/screenshots/intent-console.png" alt="PrismOS Intent Console" width="900" />
+  <br />
+  <em>PrismOS v0.2.0 — Intent Console with Ollama connected, example prompts, and module cards</em>
 </p>
-
-<!-- To add screenshots: place PNG/JPG files in docs/screenshots/ and uncomment the relevant lines below -->
 
 | # | View | Description |
 |:-:|------|-------------|
@@ -254,22 +254,7 @@ PrismOS follows a **6-layer architecture** as described in the patent:
 | 6 | **⚙️ Settings & Security** | Configuration, encrypted export/import, sync, live security dashboard |
 | 7 | **💬 Agent Debate** | Live debate panel with argument types and agreement scoring |
 
-<!--
-### Intent Console
-![Intent Console](docs/screenshots/intent-console.png)
-
-### Spectrum Graph
-![Spectrum Graph](docs/screenshots/spectrum-graph.png)
-
-### Spectral Timeline
-![Spectral Timeline](docs/screenshots/spectral-timeline.png)
-
-### Sandbox Prisms
-![Sandbox Prisms](docs/screenshots/sandbox-prisms.png)
-
-### Settings & Security
-![Settings](docs/screenshots/settings.png)
--->
+<!-- To add more screenshots: place PNG/JPG files in docs/screenshots/ and add img tags above -->
 
 ---
 

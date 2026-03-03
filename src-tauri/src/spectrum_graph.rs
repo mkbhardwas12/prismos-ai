@@ -79,6 +79,21 @@ pub struct AnticipatedNeed {
     pub reasoning: String,
 }
 
+/// A proactive suggestion — structured, actionable, stored in the graph
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProactiveSuggestion {
+    pub id: String,
+    pub text: String,
+    /// The full intent string to send when the user clicks the card
+    pub action_intent: String,
+    /// Emoji icon for the card
+    pub icon: String,
+    /// Category label: "patterns", "momentum", "connections", "habits"
+    pub category: String,
+    /// 0.0–1.0 confidence in the suggestion
+    pub confidence: f64,
+}
+
 /// Intent query result with relevance scoring
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntentQueryResult {
@@ -906,16 +921,14 @@ impl SpectrumGraph {
     //  PROACTIVE SUGGESTIONS — Human-friendly actionable cards (Phase 1)
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Generate 2-3 proactive, conversational suggestions based on graph state.
-    /// Unlike anticipate_needs() which returns structured data for the side panel,
-    /// this returns short action-oriented strings displayed as clickable cards
-    /// in the Intent Console after each response.
+    /// Generate 2-3 proactive, structured suggestions based on graph patterns.
+    /// Returns rich ProactiveSuggestion cards with one-click action intents.
     pub fn generate_proactive_suggestions(
         &self,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut suggestions: Vec<String> = Vec::new();
+    ) -> Result<Vec<ProactiveSuggestion>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut suggestions: Vec<ProactiveSuggestion> = Vec::new();
 
-        // Strategy 1: High-momentum edges — suggest deepening the connection
+        // ── Strategy 1: High-momentum edges — trending connections ──
         let mut stmt = self.conn.prepare(
             "SELECT ns.label, ns.node_type, nt.label, nt.node_type,
                     e.weight, COALESCE(e.momentum, 0.0) AS mom
@@ -939,33 +952,47 @@ impl SpectrumGraph {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        for (src, src_type, tgt, _tgt_type, _w, _m) in &high_momentum {
-            let action = match src_type.as_str() {
-                "work" => format!(
-                    "Your \"{}\" ↔ \"{}\" connection is growing — want me to summarize recent progress?",
-                    src, tgt
+        for (src, src_type, tgt, _tgt_type, w, m) in &high_momentum {
+            let (text, action, icon) = match src_type.as_str() {
+                "work" => (
+                    format!("Your \"{}\" ↔ \"{}\" connection is growing fast", src, tgt),
+                    format!("Summarize my recent progress on \"{}\" and how it relates to \"{}\"", src, tgt),
+                    "📈".to_string(),
                 ),
-                "health" => format!(
-                    "I notice \"{}\" and \"{}\" are linked — shall I suggest a wellness routine?",
-                    src, tgt
+                "health" => (
+                    format!("\"{}\" and \"{}\" are linked in your health data", src, tgt),
+                    format!("Suggest a wellness routine connecting \"{}\" and \"{}\"", src, tgt),
+                    "💪".to_string(),
                 ),
-                "finance" => format!(
-                    "\"{}\" and \"{}\" are trending together — want a quick budget check?",
-                    src, tgt
+                "finance" => (
+                    format!("\"{}\" and \"{}\" are trending together", src, tgt),
+                    format!("Give me a quick budget check for \"{}\" and \"{}\"", src, tgt),
+                    "💰".to_string(),
                 ),
-                "learning" => format!(
-                    "Your learning in \"{}\" connects to \"{}\" — ready for a deeper dive?",
-                    src, tgt
+                "learning" => (
+                    format!("Your learning in \"{}\" connects to \"{}\"", src, tgt),
+                    format!("Create a deeper study plan connecting \"{}\" and \"{}\"", src, tgt),
+                    "📚".to_string(),
                 ),
-                _ => format!(
-                    "\"{}\" and \"{}\" are becoming strongly connected — explore this further?",
-                    src, tgt
+                _ => (
+                    format!("\"{}\" and \"{}\" are becoming strongly linked", src, tgt),
+                    format!("Explore how \"{}\" and \"{}\" are connected and what I should do next", src, tgt),
+                    "🔗".to_string(),
                 ),
             };
-            suggestions.push(action);
+            let confidence = (*w / MAX_EDGE_WEIGHT).min(1.0).max(0.3) * 0.7
+                + (*m).min(1.0) * 0.3;
+            suggestions.push(ProactiveSuggestion {
+                id: Uuid::new_v4().to_string(),
+                text,
+                action_intent: action,
+                icon,
+                category: "momentum".to_string(),
+                confidence: (confidence * 100.0).round() / 100.0,
+            });
         }
 
-        // Strategy 2: Repeated intent patterns — suggest balance or follow-up
+        // ── Strategy 2: Repeated intent patterns — habit detection ──
         let mut stmt2 = self.conn.prepare(
             "SELECT intent_type, COUNT(*) as cnt
              FROM intent_log
@@ -982,29 +1009,40 @@ impl SpectrumGraph {
 
         for (intent_type, count) in &patterns {
             if *count >= 3 && suggestions.len() < 3 {
-                let tip = match intent_type.as_str() {
-                    "task" | "work" => format!(
-                        "You've sent {} work-related intents recently — want me to organize your priorities?",
-                        count
+                let (text, action, icon) = match intent_type.as_str() {
+                    "task" | "work" => (
+                        format!("You've had {} work intents in 3 days", count),
+                        "Organize my current priorities and suggest what to focus on next".to_string(),
+                        "📋".to_string(),
                     ),
-                    "question" | "learning" => format!(
-                        "You've been researching a lot ({} queries) — shall I create a study summary?",
-                        count
+                    "question" | "learning" => (
+                        format!("Research streak — {} queries recently", count),
+                        "Create a summary of everything I've been researching recently".to_string(),
+                        "🔬".to_string(),
                     ),
-                    "creative" => format!(
-                        "Creative streak! {} creative intents lately — want me to capture your ideas?",
-                        count
+                    "creative" => (
+                        format!("Creative streak! {} creative intents", count),
+                        "Capture and organize all my recent creative ideas into a coherent plan".to_string(),
+                        "🎨".to_string(),
                     ),
-                    _ => format!(
-                        "You've been active with \"{}\" ({} times) — need help organizing?",
-                        intent_type, count
+                    _ => (
+                        format!("Active with \"{}\" — {} times recently", intent_type, count),
+                        format!("Help me organize my recent activity around \"{}\"", intent_type),
+                        "⚡".to_string(),
                     ),
                 };
-                suggestions.push(tip);
+                suggestions.push(ProactiveSuggestion {
+                    id: Uuid::new_v4().to_string(),
+                    text,
+                    action_intent: action,
+                    icon,
+                    category: "patterns".to_string(),
+                    confidence: (0.5 + (*count as f64 * 0.08).min(0.45)),
+                });
             }
         }
 
-        // Strategy 3: Orphan nodes that keep getting accessed — suggest connecting
+        // ── Strategy 3: Orphan nodes — unconnected but frequently accessed ──
         let mut stmt3 = self.conn.prepare(
             "SELECT n.label, n.node_type, COALESCE(n.access_count, 0) as ac
              FROM nodes n
@@ -1023,18 +1061,77 @@ impl SpectrumGraph {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        for (label, _ntype, _ac) in &orphans {
+        for (label, _ntype, ac) in &orphans {
             if suggestions.len() < 3 {
-                suggestions.push(format!(
-                    "\"{}\" keeps coming up but isn't connected to anything — want me to link it to your graph?",
-                    label
-                ));
+                suggestions.push(ProactiveSuggestion {
+                    id: Uuid::new_v4().to_string(),
+                    text: format!("\"{}\" keeps coming up but isn't connected", label),
+                    action_intent: format!("Find connections between \"{}\" and my other knowledge, then link them", label),
+                    icon: "🧩".to_string(),
+                    category: "connections".to_string(),
+                    confidence: (0.4 + (*ac as f64 * 0.05).min(0.4)),
+                });
             }
         }
 
-        // Ensure max 3 suggestions
+        // ── Strategy 4: Most-accessed node — suggest review ──
+        if suggestions.len() < 3 {
+            let mut stmt4 = self.conn.prepare(
+                "SELECT label, node_type, access_count
+                 FROM nodes
+                 WHERE access_count > 5
+                 ORDER BY access_count DESC LIMIT 1",
+            )?;
+            let top_node: Vec<(String, String, u32)> = stmt4
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, u32>(2)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            for (label, _ntype, ac) in &top_node {
+                if suggestions.len() < 3 {
+                    suggestions.push(ProactiveSuggestion {
+                        id: Uuid::new_v4().to_string(),
+                        text: format!("\"{}\" is your most active topic ({} accesses)", label, ac),
+                        action_intent: format!("Give me an overview of everything I know about \"{}\" and suggest next steps", label),
+                        icon: "⭐".to_string(),
+                        category: "habits".to_string(),
+                        confidence: (0.6 + (*ac as f64 * 0.02).min(0.35)),
+                    });
+                }
+            }
+        }
+
         suggestions.truncate(3);
         Ok(suggestions)
+    }
+
+    /// Store a proactive suggestion as a node in the graph for later recall.
+    pub fn store_proactive_suggestion(
+        &self,
+        suggestion: &ProactiveSuggestion,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+        let content = format!(
+            "Suggestion: {}\nAction: {}\nCategory: {}\nConfidence: {:.0}%",
+            suggestion.text, suggestion.action_intent, suggestion.category,
+            suggestion.confidence * 100.0
+        );
+        self.conn.execute(
+            "INSERT OR REPLACE INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'suggestion', 'ephemeral', 0, ?4, ?4, ?4)",
+            params![
+                suggestion.id,
+                format!("{} {}", suggestion.icon, suggestion.text),
+                content,
+                now,
+            ],
+        )?;
+        Ok(())
     }
 
     /// Strengthen edges between nodes whose labels fuzzy-match any of the given keywords.

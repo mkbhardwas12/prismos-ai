@@ -343,13 +343,17 @@ async fn anticipate_needs(db: tauri::State<'_, DbState>) -> Result<String, Strin
     serde_json::to_string(&needs).map_err(|e| e.to_string())
 }
 
-/// Get 2-3 proactive human-friendly suggestion strings (Phase 1 — Alive Graph)
+/// Get 2-3 proactive structured suggestions (Phase 3 — Proactive Spectrum Graph)
 #[tauri::command]
 async fn get_proactive_suggestions(db: tauri::State<'_, DbState>) -> Result<String, String> {
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let suggestions = graph
         .generate_proactive_suggestions()
         .map_err(|e| e.to_string())?;
+    // Store each suggestion in the graph for later recall
+    for sug in &suggestions {
+        let _ = graph.store_proactive_suggestion(sug);
+    }
     serde_json::to_string(&suggestions).map_err(|e| e.to_string())
 }
 

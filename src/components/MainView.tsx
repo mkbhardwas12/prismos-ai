@@ -726,8 +726,9 @@ export default function MainView({
 
             {/* Quick-start example intents — auto-fill input box */}
             <div className="welcome-examples">
-              <div className="welcome-examples-label">Click an example to try it</div>
+              <div className="welcome-examples-label">Quick-start templates — click to try</div>
               <div className="welcome-example-chips">
+                {/* Productivity */}
                 <button
                   className="example-chip"
                   onClick={() => setPendingIntent("Summarize what I worked on this week and suggest priorities for tomorrow")}
@@ -735,8 +736,20 @@ export default function MainView({
                 >
                   <span className="example-chip-icon">📋</span>
                   <span className="example-chip-text">Summarize my week &amp; suggest priorities</span>
+                  <span className="example-chip-badge">Productivity</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
+                <button
+                  className="example-chip"
+                  onClick={() => setPendingIntent("Create a structured daily plan with time blocks for deep work, meetings, and breaks")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">📅</span>
+                  <span className="example-chip-text">Build a time-blocked daily plan</span>
+                  <span className="example-chip-badge">Productivity</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
+                {/* Creative */}
                 <button
                   className="example-chip"
                   onClick={() => setPendingIntent("Draft a short professional bio based on my recent projects")}
@@ -744,8 +757,20 @@ export default function MainView({
                 >
                   <span className="example-chip-icon">✍️</span>
                   <span className="example-chip-text">Draft a professional bio for me</span>
+                  <span className="example-chip-badge">Creative</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
+                <button
+                  className="example-chip"
+                  onClick={() => setPendingIntent("Brainstorm 5 creative side-project ideas that combine AI with everyday problems")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">💡</span>
+                  <span className="example-chip-text">Brainstorm creative side-project ideas</span>
+                  <span className="example-chip-badge">Creative</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
+                {/* Knowledge */}
                 <button
                   className="example-chip"
                   onClick={() => setPendingIntent("What connections exist in my knowledge graph and what patterns do you see?")}
@@ -753,6 +778,38 @@ export default function MainView({
                 >
                   <span className="example-chip-icon">🔮</span>
                   <span className="example-chip-text">Analyze my knowledge graph patterns</span>
+                  <span className="example-chip-badge">Knowledge</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
+                <button
+                  className="example-chip"
+                  onClick={() => setPendingIntent("Explain the key concepts of retrieval-augmented generation (RAG) and how it improves AI accuracy")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">🧠</span>
+                  <span className="example-chip-text">Explain RAG and how it improves AI</span>
+                  <span className="example-chip-badge">Knowledge</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
+                {/* Planning */}
+                <button
+                  className="example-chip"
+                  onClick={() => setPendingIntent("Help me create a 30-day learning roadmap for Rust programming with milestones")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">🗺️</span>
+                  <span className="example-chip-text">Create a 30-day learning roadmap</span>
+                  <span className="example-chip-badge">Planning</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
+                <button
+                  className="example-chip"
+                  onClick={() => setPendingIntent("Review my recent work and suggest areas where I can improve my workflow efficiency")}
+                  disabled={isProcessing}
+                >
+                  <span className="example-chip-icon">📊</span>
+                  <span className="example-chip-text">Review &amp; improve my workflow efficiency</span>
+                  <span className="example-chip-badge">Planning</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
               </div>

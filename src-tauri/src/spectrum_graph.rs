@@ -903,6 +903,217 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    //  PROACTIVE SUGGESTIONS — Human-friendly actionable cards (Phase 1)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Generate 2-3 proactive, conversational suggestions based on graph state.
+    /// Unlike anticipate_needs() which returns structured data for the side panel,
+    /// this returns short action-oriented strings displayed as clickable cards
+    /// in the Intent Console after each response.
+    pub fn generate_proactive_suggestions(
+        &self,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut suggestions: Vec<String> = Vec::new();
+
+        // Strategy 1: High-momentum edges — suggest deepening the connection
+        let mut stmt = self.conn.prepare(
+            "SELECT ns.label, ns.node_type, nt.label, nt.node_type,
+                    e.weight, COALESCE(e.momentum, 0.0) AS mom
+             FROM edges e
+             JOIN nodes ns ON e.source_id = ns.id
+             JOIN nodes nt ON e.target_id = nt.id
+             WHERE COALESCE(e.momentum, 0.0) > 0.08
+             ORDER BY mom DESC LIMIT 2",
+        )?;
+
+        let high_momentum: Vec<(String, String, String, String, f64, f64)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, f64>(4)?,
+                    row.get::<_, f64>(5)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (src, src_type, tgt, _tgt_type, _w, _m) in &high_momentum {
+            let action = match src_type.as_str() {
+                "work" => format!(
+                    "Your \"{}\" ↔ \"{}\" connection is growing — want me to summarize recent progress?",
+                    src, tgt
+                ),
+                "health" => format!(
+                    "I notice \"{}\" and \"{}\" are linked — shall I suggest a wellness routine?",
+                    src, tgt
+                ),
+                "finance" => format!(
+                    "\"{}\" and \"{}\" are trending together — want a quick budget check?",
+                    src, tgt
+                ),
+                "learning" => format!(
+                    "Your learning in \"{}\" connects to \"{}\" — ready for a deeper dive?",
+                    src, tgt
+                ),
+                _ => format!(
+                    "\"{}\" and \"{}\" are becoming strongly connected — explore this further?",
+                    src, tgt
+                ),
+            };
+            suggestions.push(action);
+        }
+
+        // Strategy 2: Repeated intent patterns — suggest balance or follow-up
+        let mut stmt2 = self.conn.prepare(
+            "SELECT intent_type, COUNT(*) as cnt
+             FROM intent_log
+             WHERE created_at > datetime('now', '-3 days')
+             GROUP BY intent_type
+             ORDER BY cnt DESC LIMIT 2",
+        )?;
+
+        let patterns: Vec<(String, u32)> = stmt2
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (intent_type, count) in &patterns {
+            if *count >= 3 && suggestions.len() < 3 {
+                let tip = match intent_type.as_str() {
+                    "task" | "work" => format!(
+                        "You've sent {} work-related intents recently — want me to organize your priorities?",
+                        count
+                    ),
+                    "question" | "learning" => format!(
+                        "You've been researching a lot ({} queries) — shall I create a study summary?",
+                        count
+                    ),
+                    "creative" => format!(
+                        "Creative streak! {} creative intents lately — want me to capture your ideas?",
+                        count
+                    ),
+                    _ => format!(
+                        "You've been active with \"{}\" ({} times) — need help organizing?",
+                        intent_type, count
+                    ),
+                };
+                suggestions.push(tip);
+            }
+        }
+
+        // Strategy 3: Orphan nodes that keep getting accessed — suggest connecting
+        let mut stmt3 = self.conn.prepare(
+            "SELECT n.label, n.node_type, COALESCE(n.access_count, 0) as ac
+             FROM nodes n
+             WHERE COALESCE(n.access_count, 0) > 2
+               AND n.id NOT IN (SELECT source_id FROM edges UNION SELECT target_id FROM edges)
+             ORDER BY ac DESC LIMIT 1",
+        )?;
+
+        let orphans: Vec<(String, String, u32)> = stmt3
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (label, _ntype, _ac) in &orphans {
+            if suggestions.len() < 3 {
+                suggestions.push(format!(
+                    "\"{}\" keeps coming up but isn't connected to anything — want me to link it to your graph?",
+                    label
+                ));
+            }
+        }
+
+        // Ensure max 3 suggestions
+        suggestions.truncate(3);
+        Ok(suggestions)
+    }
+
+    /// Strengthen edges between nodes whose labels fuzzy-match any of the given keywords.
+    /// Called automatically after each intent to make the graph react in real-time.
+    /// Returns the number of edges strengthened.
+    pub fn strengthen_related_edges(
+        &self,
+        keywords: &[String],
+    ) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+        if keywords.is_empty() {
+            return Ok(0);
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let mut strengthened = 0u32;
+
+        // Find node IDs whose labels contain any keyword (case-insensitive)
+        let mut matching_ids: Vec<String> = Vec::new();
+        for kw in keywords {
+            let pattern = format!("%{}%", kw.to_lowercase());
+            let mut stmt = self.conn.prepare(
+                "SELECT id FROM nodes WHERE LOWER(label) LIKE ?1 LIMIT 10",
+            )?;
+            let ids: Vec<String> = stmt
+                .query_map(params![pattern], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            matching_ids.extend(ids);
+        }
+
+        matching_ids.sort();
+        matching_ids.dedup();
+
+        if matching_ids.len() < 2 {
+            return Ok(0);
+        }
+
+        // Reinforce all edges between matching nodes with a gentle signal
+        let signal = 0.3_f64; // gentle reinforcement
+        for i in 0..matching_ids.len() {
+            for j in (i + 1)..matching_ids.len() {
+                let mut stmt = self.conn.prepare(
+                    "SELECT id, weight, COALESCE(momentum, 0.0), COALESCE(reinforcements, 0)
+                     FROM edges
+                     WHERE (source_id = ?1 AND target_id = ?2)
+                        OR (source_id = ?2 AND target_id = ?1)",
+                )?;
+
+                let edges: Vec<(String, f64, f64, u32)> = stmt
+                    .query_map(params![&matching_ids[i], &matching_ids[j]], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, f64>(1)?,
+                            row.get::<_, f64>(2)?,
+                            row.get::<_, u32>(3)?,
+                        ))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                for (edge_id, weight, momentum, reinforcements) in &edges {
+                    let new_momentum =
+                        MOMENTUM_ALPHA * signal + (1.0 - MOMENTUM_ALPHA) * momentum;
+                    let new_weight =
+                        (weight + REINFORCEMENT_DELTA * signal).clamp(MIN_EDGE_WEIGHT, MAX_EDGE_WEIGHT);
+                    let new_reinforcements = reinforcements + 1;
+
+                    self.conn.execute(
+                        "UPDATE edges SET weight = ?1, momentum = ?2, reinforcements = ?3, last_reinforced = ?4
+                         WHERE id = ?5",
+                        params![new_weight, new_momentum, new_reinforcements, now, edge_id],
+                    )?;
+                    strengthened += 1;
+                }
+            }
+        }
+
+        Ok(strengthened)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     //  GRAPH SNAPSHOT — Full Graph for Visualization
     // ═══════════════════════════════════════════════════════════════════════
 

@@ -68,34 +68,9 @@ The Rust backend handles all data processing, storage, and AI inference.
 
 ## Data Flow: Intent Processing
 
-```
-User types intent
-        ↓
-  IntentInput.tsx
-        ↓  invoke("process_intent")
-  lib.rs → refractive_core.rs
-        ↓
-  ┌─────────────────────────────────┐
-  │  LangGraph Multi-Agent Pipeline │
-  │                                 │
-  │  Orchestrator → Memory Keeper   │
-  │       ↓              ↓          │
-  │  Reasoner ←→ Tool Smith         │
-  │       ↓                         │
-  │  Sentinel (security review)     │
-  │       ↓                         │
-  │  Formal Debate + Consensus Vote │
-  └─────────────────────────────────┘
-        ↓
-  spectrum_graph.rs (store nodes/edges)
-        ↓
-  sandbox_prism.rs (sign + log action)
-        ↓
-  Response sent back to frontend
-        ↓
-  MainView.tsx renders AI response
-  + proactive suggestion cards
-```
+<p align="center">
+  <img src="diagrams/data-flow.svg" width="650" alt="PrismOS Intent Processing Data Flow" />
+</p>
 
 ## Security Architecture
 

@@ -9,7 +9,7 @@ import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import UserGuide from "./UserGuide";
 import { useVoice } from "../hooks/useVoice";
-import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel, AgentActivity } from "../types";
+import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel, AgentActivity, ProactiveSuggestion } from "../types";
 import "./MainView.css";
 
 interface MainViewProps {
@@ -34,7 +34,7 @@ export default function MainView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingIntent, setPendingIntent] = useState("");
-  const [proactiveSuggestions, setProactiveSuggestions] = useState<string[]>([]);
+  const [proactiveSuggestions, setProactiveSuggestions] = useState<ProactiveSuggestion[]>([]);
   const conversationRef = useRef<HTMLDivElement>(null);
 
   // ── Inline model selector state ──
@@ -321,7 +321,7 @@ export default function MainView({
           await invoke("strengthen_related_edges", { keywords });
         }
         const sugJson = await invoke<string>("get_proactive_suggestions");
-        const sug: string[] = JSON.parse(sugJson);
+        const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
         setProactiveSuggestions(sug);
       } catch {
         // Non-critical — don't block the intent flow
@@ -342,7 +342,7 @@ export default function MainView({
         // Fetch proactive suggestions even on fallback path
         try {
           const sugJson = await invoke<string>("get_proactive_suggestions");
-          const sug: string[] = JSON.parse(sugJson);
+          const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
           setProactiveSuggestions(sug);
         } catch { /* non-critical */ }
       } catch (fallbackErr) {
@@ -749,11 +749,11 @@ export default function MainView({
         )}
       </div>
 
-      {/* ── Proactive Suggestion Cards (Phase 1 — Alive Graph) ── */}
+      {/* ── Proactive Suggestion Cards (Phase 3 — Proactive Spectrum Graph) ── */}
       {proactiveSuggestions.length > 0 && !isProcessing && messages.length > 0 && (
         <div className="proactive-suggestions">
           <div className="proactive-header">
-            <span className="proactive-label">💡 Suggestions</span>
+            <span className="proactive-label">🧠 Graph Insights</span>
             <button
               className="proactive-dismiss-all"
               onClick={() => setProactiveSuggestions([])}
@@ -763,17 +763,30 @@ export default function MainView({
             </button>
           </div>
           <div className="proactive-cards">
-            {proactiveSuggestions.map((sug, i) => (
+            {proactiveSuggestions.map((sug) => (
               <button
-                key={i}
-                className="proactive-card"
+                key={sug.id}
+                className={`proactive-card proactive-cat-${sug.category}`}
                 onClick={() => {
                   setProactiveSuggestions([]);
-                  handleIntent(sug);
+                  handleIntent(sug.action_intent);
                 }}
-                title="Click to send as intent"
+                title="Click to act on this suggestion"
               >
-                <span className="proactive-card-text">{sug}</span>
+                <div className="proactive-card-top">
+                  <span className="proactive-card-icon">{sug.icon}</span>
+                  <span className="proactive-card-badge">{sug.category}</span>
+                </div>
+                <span className="proactive-card-text">{sug.text}</span>
+                <div className="proactive-card-bottom">
+                  <div className="proactive-confidence-bar">
+                    <div
+                      className="proactive-confidence-fill"
+                      style={{ width: `${Math.round(sug.confidence * 100)}%` }}
+                    />
+                  </div>
+                  <span className="proactive-card-action">→</span>
+                </div>
               </button>
             ))}
           </div>

@@ -82,6 +82,23 @@ export interface AnticipatedNeed {
   reasoning: string;
 }
 
+// ─── Proactive Suggestions (Phase 3 — Proactive Spectrum Graph) ────────────
+
+/** A rich proactive suggestion card returned from the Spectrum Graph engine */
+export interface ProactiveSuggestion {
+  id: string;
+  /** Short human-readable description of what was detected */
+  text: string;
+  /** Full intent string sent when the user clicks the card */
+  action_intent: string;
+  /** Emoji icon for the card */
+  icon: string;
+  /** Category: "momentum" | "patterns" | "connections" | "habits" */
+  category: string;
+  /** 0.0–1.0 confidence score */
+  confidence: number;
+}
+
 export interface RefractiveResult {
   response: string;
   intent: ParsedIntent;

@@ -1,0 +1,53 @@
+PATENT NOTICE
+=============
+
+Patent Pending — US Provisional Patent Application No. [application number]
+Filed: February 28, 2026
+Inventor: Manish Kumar
+
+PrismOS and its core architectures are protected by a pending United States
+patent. The following inventions are covered:
+
+  • Spectrum Graph™ — Multi-dimensional spectral knowledge representation
+  • Refractive Core™ — Intent processing through spectral analysis
+  • You-Port™ — Encrypted personality migration
+
+
+OPEN-SOURCE LICENSE
+===================
+
+This software is released under the MIT License (see LICENSE file) for
+personal and educational use.
+
+
+COMMERCIAL USE
+==============
+
+Commercial use of the patented inventions described above requires a separate
+license from the creator. For licensing inquiries, contact:
+
+  Manish Kumar
+  GitHub: https://github.com/mkbhardwas12
+
+
+TRADEMARKS
+==========
+
+PrismOS, Spectrum Graph, Refractive Core, and You-Port are trademarks of
+Manish Kumar. Use of these names in derivative works must include proper
+attribution.
+
+
+THIRD-PARTY NOTICES
+===================
+
+PrismOS incorporates the following open-source components:
+
+  • Tauri 2.0 — MIT License — https://tauri.app
+  • React 18 — MIT License — https://react.dev
+  • Rust — MIT/Apache-2.0 — https://www.rust-lang.org
+  • Ollama — MIT License — https://ollama.com
+  • wasmtime — Apache-2.0 — https://wasmtime.dev
+  • rusqlite — MIT License — https://github.com/rusqlite/rusqlite
+  • aes-gcm — MIT/Apache-2.0 — https://github.com/RustCrypto/AEADs
+  • react-force-graph-2d — MIT License — https://github.com/vasturiano/react-force-graph

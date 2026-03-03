@@ -9,7 +9,7 @@ interface UserGuideProps {
   onClose: () => void;
 }
 
-type GuideSection = "getting-started" | "features" | "tips" | "keyboard" | "faq";
+type GuideSection = "getting-started" | "features" | "tips" | "keyboard" | "faq" | "about";
 
 export default function UserGuide({ open, onClose }: UserGuideProps) {
   const [activeSection, setActiveSection] = useState<GuideSection>("getting-started");
@@ -41,6 +41,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
               { id: "tips", icon: "💡", label: "Tips & Best Practices" },
               { id: "keyboard", icon: "⌨️", label: "Keyboard Shortcuts" },
               { id: "faq", icon: "❓", label: "FAQ" },
+              { id: "about", icon: "⚖️", label: "About & Legal" },
             ] as { id: GuideSection; icon: string; label: string }[]).map(s => (
               <button
                 key={s.id}
@@ -257,9 +258,6 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                     <li>Close other heavy applications to free up RAM</li>
                     <li>An NVIDIA GPU with 6GB+ VRAM will make responses 5-10× faster</li>
                     <li>Minimum: 8 GB RAM + 4-core CPU. Recommended: 16 GB RAM + dedicated GPU</li>
-                    <li>Lower the Max Tokens setting</li>
-                    <li>Close other heavy applications</li>
-                    <li>A GPU significantly speeds up inference</li>
                   </ul>
                 </div>
 
@@ -276,6 +274,50 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 <div className="guide-card">
                   <h4>What is the Spectrum Graph?</h4>
                   <p>It's your personal knowledge network. Every conversation adds nodes (concepts) and edges (connections) to the graph. Over time, it becomes a rich map of your interests and knowledge that helps PrismOS give better answers.</p>
+                </div>
+              </div>
+            )}
+
+            {activeSection === "about" && (
+              <div className="guide-section">
+                <h3>⚖️ About & Legal</h3>
+
+                <div className="guide-card highlight">
+                  <h4>📋 Patent Notice</h4>
+                  <p><strong>Patent Pending</strong> — US Provisional Patent Application No. <strong>[application number]</strong>, filed <strong>February 28, 2026</strong>.</p>
+                  <p>PrismOS and its core architectures are protected by a pending United States patent:</p>
+                  <ul>
+                    <li><strong>Spectrum Graph™</strong> — Multi-dimensional spectral knowledge representation</li>
+                    <li><strong>Refractive Core™</strong> — Intent processing through spectral analysis</li>
+                    <li><strong>You-Port™</strong> — Encrypted personality migration</li>
+                  </ul>
+                  <p style={{ marginTop: "10px", fontSize: "12px", opacity: 0.8 }}>Created by Manish Kumar</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>📄 License</h4>
+                  <p>PrismOS is released under the <strong>MIT License</strong> for personal and educational use.</p>
+                  <p>Commercial use of the patented inventions (Spectrum Graph, Refractive Core, You-Port) requires a separate license from the creator.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🔷 About PrismOS</h4>
+                  <p><strong>Version:</strong> 0.2.0</p>
+                  <p><strong>Released:</strong> March 2, 2026</p>
+                  <p><strong>GitHub:</strong> github.com/mkbhardwas12/prismos-ai</p>
+                  <p>PrismOS is a local-first AI operating system built on a physics-inspired 7-dimensional knowledge graph. It processes your intents through multi-agent collaboration — all running 100% offline on your own hardware.</p>
+                </div>
+
+                <div className="guide-card">
+                  <h4>🏗️ Built With</h4>
+                  <ul>
+                    <li><strong>Tauri 2.0</strong> — Desktop shell &amp; native integration</li>
+                    <li><strong>React 18</strong> — User interface</li>
+                    <li><strong>Rust</strong> — Backend, graph engine &amp; security</li>
+                    <li><strong>Ollama</strong> — Local AI model serving</li>
+                    <li><strong>SQLite</strong> — Persistent knowledge storage</li>
+                    <li><strong>wasmtime</strong> — WASM sandbox isolation</li>
+                  </ul>
                 </div>
               </div>
             )}

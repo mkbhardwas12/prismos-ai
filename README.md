@@ -523,6 +523,24 @@ PrismOS exposes **53 Tauri commands** for frontend–backend communication:
 
 ---
 
+## 🔷 What Makes PrismOS Different
+
+Most local AI tools today are either simple chat interfaces or agent frameworks that still rely on the cloud.
+
+PrismOS is built differently — it is the **first true local-first agentic personal operating system** with these patented innovations (filed February 2026):
+
+- **Refractive Core** — Processes your intent like light passing through a prism: it decomposes the request across multiple dimensions, routes it through 5 collaborating agents, and reassembles a refined response.
+- **Spectrum Graph** — A persistent, living 7-dimensional knowledge memory that evolves with every interaction and uses closed-loop feedback to anticipate your needs.
+- **Sandbox Prisms** — Full WASM-based isolation with HMAC-SHA256 cryptographic signing, strict per-agent allow-lists, real-time anomaly detection, and automatic rollback with plain-English explanations.
+- **You-Port Handoff** — Encrypted live state migration that lets your entire agent memory and graph travel securely between devices.
+- **Complete Desktop Experience** — Voice input/output, multi-window support, Spectral Timeline visualization, and guided Ollama setup — all running 100% offline.
+
+**Patent Pending** — US Provisional Patent filed February 2026.
+
+> This is not just another AI chat — it's your personal AI operating system that actually remembers you.
+
+---
+
 ## ⚖️ Patent Notice
 
 **Patent Pending** — US Provisional Patent Application (filed February 2026).

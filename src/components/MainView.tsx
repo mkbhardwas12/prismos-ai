@@ -48,6 +48,16 @@ export default function MainView({
     }
   }, [startupSuggestions]);
 
+  // Listen for sidebar proactive clicks — auto-fill intent box
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const intent = (e as CustomEvent<string>).detail;
+      if (intent) setPendingIntent(intent);
+    };
+    window.addEventListener("prismos:fill-intent", handler);
+    return () => window.removeEventListener("prismos:fill-intent", handler);
+  }, []);
+
   // ── Inline model selector state ──
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<OllamaModel[]>([]);
@@ -773,7 +783,7 @@ export default function MainView({
         )}
       </div>
 
-      {/* ── Proactive Suggestion Cards (Phase 3 — Proactive Spectrum Graph) ── */}
+      {/* ── Proactive Daily Assistance — Greeting Card + Clickable Suggestions ── */}
       {proactiveSuggestions.length > 0 && !isProcessing && (
         <div className="proactive-suggestions">
           <div className="proactive-header">
@@ -787,15 +797,15 @@ export default function MainView({
             </button>
           </div>
           <div className="proactive-cards">
-            {proactiveSuggestions.map((sug) => (
+            {proactiveSuggestions.slice(0, 3).map((sug) => (
               <button
                 key={sug.id}
                 className={`proactive-card proactive-cat-${sug.category}`}
                 onClick={() => {
+                  setPendingIntent(sug.action_intent);
                   setProactiveSuggestions(prev => prev.filter(s => s.id !== sug.id));
-                  handleIntent(sug.action_intent);
                 }}
-                title="Click to act on this suggestion"
+                title="Click to auto-fill this suggestion"
               >
                 <div className="proactive-card-top">
                   <span className="proactive-card-icon">{sug.icon}</span>

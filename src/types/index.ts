@@ -9,6 +9,18 @@ export interface Agent {
   description: string;
 }
 
+// ─── Live Agent Activity Event (Phase 2 — Collaborative Agents) ────────────────
+
+/** Real-time event emitted from the Rust backend during LangGraph workflow execution */
+export interface AgentActivity {
+  agent: string;
+  action: string;
+  /** "started" | "thinking" | "completed" */
+  status: string;
+  /** "orchestrate" | "analyze" | "debate" | "review" | "vote" | "execute" */
+  phase: string;
+}
+
 export interface SpectrumNode {
   id: string;
   label: string;

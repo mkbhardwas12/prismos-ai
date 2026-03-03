@@ -36,6 +36,7 @@ pub async fn execute_collaboration(
     scored_context: &[(String, f64)],
     npu_accelerated: bool,
     app_dir: &Path,
+    app_handle: tauri::AppHandle,
 ) -> Result<
     (RefractiveResult, CollaborationSession, Option<super::langgraph_workflow::WorkflowState>),
     Box<dyn std::error::Error + Send + Sync>,
@@ -50,6 +51,7 @@ pub async fn execute_collaboration(
         scored_context,
         npu_accelerated,
         app_dir,
+        app_handle,
     )
     .await?;
 

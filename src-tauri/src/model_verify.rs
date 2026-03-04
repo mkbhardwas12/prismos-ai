@@ -34,62 +34,62 @@ fn known_model_registry() -> HashMap<&'static str, KnownModel> {
     registry.insert("llama3.2", KnownModel {
         family: "llama",
         expected_families: &["llama"],
-        min_size_bytes: 1_000_000_000,  // ~1GB minimum for any llama variant
-        max_size_bytes: 100_000_000_000, // ~100GB max
+        _min_size_bytes: 1_000_000_000,  // ~1GB minimum for any llama variant
+        _max_size_bytes: 100_000_000_000, // ~100GB max
     });
     registry.insert("llama3.1", KnownModel {
         family: "llama",
         expected_families: &["llama"],
-        min_size_bytes: 1_000_000_000,
-        max_size_bytes: 100_000_000_000,
+        _min_size_bytes: 1_000_000_000,
+        _max_size_bytes: 100_000_000_000,
     });
     registry.insert("llama3", KnownModel {
         family: "llama",
         expected_families: &["llama"],
-        min_size_bytes: 1_000_000_000,
-        max_size_bytes: 100_000_000_000,
+        _min_size_bytes: 1_000_000_000,
+        _max_size_bytes: 100_000_000_000,
     });
     registry.insert("mistral", KnownModel {
         family: "mistral",
         expected_families: &["mistral"],
-        min_size_bytes: 2_000_000_000,
-        max_size_bytes: 50_000_000_000,
+        _min_size_bytes: 2_000_000_000,
+        _max_size_bytes: 50_000_000_000,
     });
     registry.insert("phi3", KnownModel {
         family: "phi",
         expected_families: &["phi", "phi3"],
-        min_size_bytes: 1_000_000_000,
-        max_size_bytes: 30_000_000_000,
+        _min_size_bytes: 1_000_000_000,
+        _max_size_bytes: 30_000_000_000,
     });
     registry.insert("gemma2", KnownModel {
         family: "gemma",
         expected_families: &["gemma", "gemma2"],
-        min_size_bytes: 1_000_000_000,
-        max_size_bytes: 60_000_000_000,
+        _min_size_bytes: 1_000_000_000,
+        _max_size_bytes: 60_000_000_000,
     });
     registry.insert("qwen2.5", KnownModel {
         family: "qwen",
         expected_families: &["qwen", "qwen2", "qwen2.5"],
-        min_size_bytes: 500_000_000,
-        max_size_bytes: 80_000_000_000,
+        _min_size_bytes: 500_000_000,
+        _max_size_bytes: 80_000_000_000,
     });
     registry.insert("deepseek-r1", KnownModel {
         family: "deepseek",
         expected_families: &["deepseek", "deepseek-r1"],
-        min_size_bytes: 500_000_000,
-        max_size_bytes: 100_000_000_000,
+        _min_size_bytes: 500_000_000,
+        _max_size_bytes: 100_000_000_000,
     });
     registry.insert("codellama", KnownModel {
         family: "codellama",
         expected_families: &["llama", "codellama"],
-        min_size_bytes: 2_000_000_000,
-        max_size_bytes: 50_000_000_000,
+        _min_size_bytes: 2_000_000_000,
+        _max_size_bytes: 50_000_000_000,
     });
     registry.insert("nomic-embed-text", KnownModel {
         family: "nomic",
         expected_families: &["nomic", "nomic-embed"],
-        min_size_bytes: 100_000_000,
-        max_size_bytes: 5_000_000_000,
+        _min_size_bytes: 100_000_000,
+        _max_size_bytes: 5_000_000_000,
     });
 
     registry
@@ -99,8 +99,8 @@ fn known_model_registry() -> HashMap<&'static str, KnownModel> {
 struct KnownModel {
     family: &'static str,
     expected_families: &'static [&'static str],
-    min_size_bytes: u64,
-    max_size_bytes: u64,
+    _min_size_bytes: u64,
+    _max_size_bytes: u64,
 }
 
 /// Verification status for a model

@@ -1,0 +1,397 @@
+/* Patent Pending — PrismOS-AI
+ * ProactivePanel — "Most visible helpful part of the UI"
+ * Glassmorphism, collapsible, color-coded by source.
+ */
+
+/* ── Panel shell ── */
+.proactive-panel {
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.13) 0%, rgba(59,130,246,0.09) 100%);
+  border: 1px solid rgba(139,92,246,0.25);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 0 18px rgba(139,92,246,0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* Collapsed state — shrink smoothly */
+.proactive-panel--collapsed {
+  background: rgba(139,92,246,0.07);
+  border-color: rgba(139,92,246,0.14);
+}
+
+/* ── Header toggle ── */
+.proactive-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 13px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+
+.proactive-panel__header:hover {
+  background: rgba(139,92,246,0.10);
+}
+
+.proactive-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Live pulse dot */
+.proactive-panel__pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  box-shadow: 0 0 6px rgba(139,92,246,0.7);
+  animation: proactive-pulse 2.4s ease-in-out infinite;
+}
+@keyframes proactive-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.75); }
+}
+
+.proactive-panel__icon {
+  font-size: 15px;
+}
+
+.proactive-panel__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255,255,255,0.92);
+}
+
+.proactive-panel__count {
+  font-size: 10px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.proactive-panel__chevron {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.50);
+  transition: transform 0.3s ease;
+  transform: rotate(0deg);
+}
+.proactive-panel__chevron--open {
+  transform: rotate(90deg);
+}
+
+/* ── Collapsible body ── */
+.proactive-panel__body {
+  padding: 0 11px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  animation: proactive-slideDown 0.25s ease;
+}
+@keyframes proactive-slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.proactive-panel__greeting {
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+  padding: 0 2px 2px;
+  line-height: 1.4;
+}
+
+/* ── Feed sections ── */
+.proactive-panel__feed,
+.proactive-panel__suggestions,
+.proactive-panel__graph-insight {
+  border-radius: 9px;
+  padding: 7px 8px;
+  background: rgba(255,255,255,0.04);
+}
+
+.proactive-panel__feed--calendar { border-left: 3px solid rgba(52,211,153,0.65); }
+.proactive-panel__feed--email    { border-left: 3px solid rgba(96,165,250,0.65); }
+.proactive-panel__feed--finance  { border-left: 3px solid rgba(251,191,36,0.65); }
+.proactive-panel__suggestions    { border-left: 3px solid rgba(139,92,246,0.55); }
+.proactive-panel__graph-insight  { border-left: 3px solid rgba(236,72,153,0.50); }
+
+.proactive-panel__feed-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.proactive-panel__feed-icon {
+  font-size: 13px;
+}
+
+.proactive-panel__feed-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.82);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.proactive-panel__feed-alert {
+  font-size: 10px;
+  margin-left: auto;
+}
+
+/* ── Feed items ── */
+.proactive-panel__feed-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.proactive-panel__feed-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.proactive-panel__feed-item:hover {
+  background: rgba(139,92,246,0.14);
+  border-color: rgba(139,92,246,0.25);
+}
+
+.proactive-panel__feed-item-time {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(52,211,153,0.85);
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.proactive-panel__feed-item-text {
+  color: rgba(255,255,255,0.82);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.proactive-panel__feed-item-text em {
+  font-style: normal;
+  color: rgba(255,255,255,0.52);
+}
+
+/* ── Ticker row ── */
+.proactive-panel__feed-items--tickers {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.proactive-panel__ticker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: 11px;
+  background: rgba(255,255,255,0.04);
+  transition: background 0.15s, border-color 0.15s;
+  min-width: 58px;
+}
+
+.proactive-panel__ticker:hover {
+  background: rgba(251,191,36,0.12);
+  border-color: rgba(251,191,36,0.25);
+}
+
+.proactive-panel__ticker-symbol {
+  font-weight: 700;
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+}
+
+.proactive-panel__ticker-change {
+  font-size: 10px;
+  font-weight: 600;
+}
+.proactive-panel__ticker-change.up   { color: rgba(52,211,153,0.9); }
+.proactive-panel__ticker-change.down { color: rgba(248,113,113,0.9); }
+
+.proactive-panel__ticker--up   { border-color: rgba(52,211,153,0.15); }
+.proactive-panel__ticker--down { border-color: rgba(248,113,113,0.15); }
+
+/* ── Suggestion items ── */
+.proactive-panel__sug-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.proactive-panel__sug-item:hover {
+  background: rgba(139,92,246,0.14);
+  border-color: rgba(139,92,246,0.25);
+}
+
+.proactive-panel__sug-icon { font-size: 13px; flex-shrink: 0; }
+
+.proactive-panel__sug-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,0.82);
+  line-height: 1.35;
+}
+
+.proactive-panel__sug-dismiss {
+  font-size: 14px;
+  color: rgba(255,255,255,0.30);
+  cursor: pointer;
+  padding: 0 3px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.proactive-panel__sug-dismiss:hover { color: rgba(255,255,255,0.65); }
+
+/* Category tint */
+.proactive-panel__sug--general  { border-left: 2px solid rgba(139,92,246,0.40); }
+.proactive-panel__sug--learning { border-left: 2px solid rgba(96,165,250,0.45); }
+.proactive-panel__sug--health   { border-left: 2px solid rgba(52,211,153,0.45); }
+.proactive-panel__sug--creative { border-left: 2px solid rgba(251,191,36,0.45); }
+.proactive-panel__sug--finance  { border-left: 2px solid rgba(251,191,36,0.45); }
+.proactive-panel__sug--email    { border-left: 2px solid rgba(96,165,250,0.45); }
+.proactive-panel__sug--calendar { border-left: 2px solid rgba(52,211,153,0.45); }
+
+/* ── Footer (refresh + timestamp) ── */
+.proactive-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 3px;
+}
+
+.proactive-panel__refresh {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s;
+}
+.proactive-panel__refresh:hover {
+  background: rgba(139,92,246,0.14);
+  color: rgba(255,255,255,0.80);
+}
+.proactive-panel__refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.proactive-panel__refresh--spinning {
+  animation: proactive-spin 0.8s linear infinite;
+}
+@keyframes proactive-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.proactive-panel__updated {
+  font-size: 10px;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ══════════════════════════════
+   Light theme overrides
+   ══════════════════════════════ */
+[data-theme="light"] .proactive-panel {
+  background: linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(59,130,246,0.06) 100%);
+  border-color: rgba(139,92,246,0.16);
+  box-shadow: 0 0 14px rgba(139,92,246,0.06);
+}
+
+[data-theme="light"] .proactive-panel--collapsed {
+  background: rgba(139,92,246,0.04);
+}
+
+[data-theme="light"] .proactive-panel__title {
+  color: rgba(0,0,0,0.80);
+}
+
+[data-theme="light"] .proactive-panel__greeting,
+[data-theme="light"] .proactive-panel__feed-label {
+  color: rgba(0,0,0,0.58);
+}
+
+[data-theme="light"] .proactive-panel__feed-item,
+[data-theme="light"] .proactive-panel__sug-item,
+[data-theme="light"] .proactive-panel__ticker {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .proactive-panel__feed-item:hover,
+[data-theme="light"] .proactive-panel__sug-item:hover {
+  background: rgba(139,92,246,0.08);
+  border-color: rgba(139,92,246,0.18);
+}
+
+[data-theme="light"] .proactive-panel__feed-item-text,
+[data-theme="light"] .proactive-panel__sug-text,
+[data-theme="light"] .proactive-panel__ticker-symbol {
+  color: rgba(0,0,0,0.72);
+}
+
+[data-theme="light"] .proactive-panel__feed-item-text em {
+  color: rgba(0,0,0,0.42);
+}
+
+[data-theme="light"] .proactive-panel__chevron { color: rgba(0,0,0,0.35); }
+[data-theme="light"] .proactive-panel__sug-dismiss { color: rgba(0,0,0,0.25); }
+[data-theme="light"] .proactive-panel__sug-dismiss:hover { color: rgba(0,0,0,0.55); }
+
+[data-theme="light"] .proactive-panel__refresh {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.08);
+  color: rgba(0,0,0,0.45);
+}
+[data-theme="light"] .proactive-panel__refresh:hover {
+  background: rgba(139,92,246,0.08);
+  color: rgba(0,0,0,0.70);
+}
+[data-theme="light"] .proactive-panel__updated { color: rgba(0,0,0,0.30); }

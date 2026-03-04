@@ -294,6 +294,11 @@ select:focus-visible {
   --color-accent: #34d399;
 }
 
+[data-spectrum="dashboard"] {
+  --color-primary: #8b5cf6;
+  --color-accent: #06b6d4;
+}
+
 /* -- Smooth accent transition across all views -- */
 html[data-spectrum] {
   transition: --color-primary 0.4s ease, --color-accent 0.4s ease;

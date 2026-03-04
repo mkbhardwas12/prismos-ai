@@ -8,8 +8,8 @@ PrismOS-AI has two test layers:
 
 | Layer | Language | Runner | Description |
 |-------|----------|--------|-------------|
-| **Backend (Rust)** | Rust | `cargo test` | Unit + integration tests for Spectrum Graph, Sandbox, You-Port, Agents |
-| **Frontend (TypeScript)** | TypeScript | Manual / E2E | Smoke tests and UI verification |
+| **Backend (Rust)** | Rust | `cargo test` | 65 unit + integration tests for Spectrum Graph, Sandbox, You-Port, Agents |
+| **Frontend (TypeScript)** | TypeScript | `vitest run` | 97 automated unit/component tests (Vitest + React Testing Library) |
 
 ---
 
@@ -46,8 +46,24 @@ Use this checklist to verify all features before a release:
 - [ ] App shows loading screen with progress animation
 - [ ] Loading screen transitions smoothly to main view
 - [ ] You-Port auto-restore toast appears if previous session exists
-- [ ] Sidebar shows all 6 navigation items
-- [ ] Version badge shows v0.5.0
+- [ ] Sidebar shows all 7 navigation items (Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings)
+- [ ] Version badge shows v0.5.2
+
+#### Daily Dashboard
+- [ ] Dashboard view loads with hero greeting (time-of-day)
+- [ ] Stats strip shows nodes, today's additions, agents, health
+- [ ] Calendar, Email, Finance, Highlights, Pending, Suggestions cards render
+- [ ] Quick links grid shows all 6 view shortcuts
+- [ ] Auto-refresh triggers every 10 minutes
+- [ ] Manual refresh button works
+- [ ] Ctrl+7 shortcut navigates to Dashboard
+
+#### ProactivePanel
+- [ ] ProactivePanel visible in sidebar below navigation
+- [ ] Collapse/expand toggle works
+- [ ] Calendar, Email, Finance, Suggestions sections load
+- [ ] Graph insight card shows top node
+- [ ] Collapse state persists after re-opening sidebar
 
 #### Intent Console
 - [ ] Welcome screen shows with 3 feature cards
@@ -100,6 +116,7 @@ Use this checklist to verify all features before a release:
 - [ ] Model selector loads and switches models
 - [ ] Theme toggle (dark mode)
 - [ ] Voice input/output toggles
+- [ ] Startup View dropdown changes default view
 - [ ] Export Graph (encrypted) downloads .prismos file
 - [ ] Import Graph loads from .prismos file
 - [ ] Clear Graph shows confirm → then clears
@@ -111,7 +128,7 @@ Use this checklist to verify all features before a release:
   - [ ] Apply Merge runs merge with selected strategy
   - [ ] Strategy selector (Latest/Theirs/Ours) works
 - [ ] Patent notice visible
-- [ ] Version banner shows v0.5.0
+- [ ] Version banner shows v0.5.2
 
 #### Frameless Window & System Tray
 - [ ] Frameless window renders with custom titlebar

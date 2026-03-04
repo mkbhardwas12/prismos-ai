@@ -294,6 +294,12 @@ pub fn get_agents_with_active(active_id: Option<&str>) -> Vec<Agent> {
          "Manages WASM sandboxes for safe code execution, file operations, and tool use within deterministic Prism boundaries"),
         ("sentinel", "Sentinel", "Monitors security, privacy, and system health",
          "Validates all operations against privacy policies, manages encryption, monitors resource usage, and enforces local-first data sovereignty"),
+        ("email_keeper", "Email Keeper", "Summarizes unread emails locally (read-only IMAP)",
+         "Connects to your IMAP mailbox in read-only mode, fetches envelope metadata only (subject + sender), and produces a private summary via local LLM. No email content ever leaves the sandbox."),
+        ("calendar_keeper", "Calendar Keeper", "Reads local .ics calendars and summarizes today's schedule",
+         "Parses local .ics (iCalendar) files in read-only mode, extracts today's events, detects scheduling conflicts, suggests free time blocks, and produces a private summary via local LLM. No calendar data ever leaves the sandbox."),
+        ("finance_keeper", "Finance Keeper", "Tracks your stock watchlist with public market data",
+         "Fetches read-only public market data for your ticker watchlist, summarizes price changes, identifies gainers and losers, and produces a private portfolio summary via local LLM. No trades are ever executed and no financial accounts are accessed."),
     ];
     agents_def.into_iter().map(|(id, name, role, desc)| {
         let status = if active_id == Some(id) { AgentStatus::Processing } else { AgentStatus::Idle };
@@ -435,6 +441,8 @@ impl RefractiveEngine {
     }
 
     /// Select the appropriate agent based on intent type
+    /// (Superseded by LangGraph multi-agent collaboration in refract())
+    #[allow(dead_code)]
     fn select_agent(&self, intent: &ParsedIntent) -> (String, String) {
         match intent.intent_type {
             IntentType::Query => (
@@ -513,6 +521,7 @@ pub async fn process_intent_full(
 
 /// Get the full Spectrum Graph snapshot for frontend visualization.
 /// Convenience wrapper around SpectrumGraph::get_full_graph().
+#[allow(dead_code)]
 pub fn get_spectrum_graph_snapshot(
     app_dir: &Path,
 ) -> Result<crate::spectrum_graph::GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
@@ -521,6 +530,7 @@ pub fn get_spectrum_graph_snapshot(
 }
 
 /// Get all active agents with their current status
+#[allow(dead_code)]
 pub fn get_active_agents() -> Vec<Agent> {
     get_agents()
 }
@@ -529,6 +539,7 @@ pub fn get_active_agents() -> Vec<Agent> {
 
 /// Simple intent routing (legacy fallback — used when Ollama is available
 /// but full pipeline isn't needed)
+#[allow(dead_code)]
 pub async fn route_intent(
     intent: ParsedIntent,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {

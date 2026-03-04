@@ -1,6 +1,6 @@
 [package]
 name = "prismos"
-version = "0.5.0"
+version = "0.5.2"
 description = "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)"
 authors = ["PrismOS-AI Contributors"]
 edition = "2021"
@@ -50,3 +50,10 @@ zip = "2"
 # Phase 7 — Contextual Screen Awareness (local screen capture)
 xcap = "0.0.14"
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Email Keeper — Read-only IMAP summary (Patent Pending)
+imap = "2.4"
+native-tls = "0.2"
+
+# Calendar Keeper — Local .ics calendar integration (Patent Pending)
+ical = "0.11"

@@ -1,6 +1,6 @@
 {
   "productName": "PrismOS-AI",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "identifier": "com.prismos.app",
   "build": {
     "beforeDevCommand": "npm run dev",

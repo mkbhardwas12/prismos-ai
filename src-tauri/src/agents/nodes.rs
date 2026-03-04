@@ -328,7 +328,7 @@ impl MemoryKeeperNode {
                 for j in (i + 1)..scored_context.len().min(5) {
                     let (ref id_a, score_a) = scored_context[i];
                     let (ref id_b, score_b) = scored_context[j];
-                    let edge = graph.get_or_create_edge(id_a, id_b, "co_referenced")?;
+                    let (edge, _) = graph.get_or_create_edge(id_a, id_b, "co_referenced")?;
                     let feedback = (score_a + score_b) / 2.0;
                     let updated = graph.update_edge_weight(&edge.id, feedback)?;
                     edges_reinforced.push(updated.id);
@@ -363,7 +363,7 @@ impl MemoryKeeperNode {
             );
             if link_result.success {
                 for (ctx_id, _) in scored_context.iter().take(3) {
-                    let edge = graph.get_or_create_edge(&conv_node.id, ctx_id, "derived_from")?;
+                    let (edge, _) = graph.get_or_create_edge(&conv_node.id, ctx_id, "derived_from")?;
                     graph.update_edge_weight(&edge.id, 0.5)?;
                 }
             }

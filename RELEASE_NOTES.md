@@ -1,12 +1,12 @@
 <div align="center">
 
-# 🔷 PrismOS-AI v0.5.0
+# 🔷 PrismOS-AI v0.5.2
 
 ### The Local-First AI Operating System
 
 **Your AI. Your Data. Your Machine. Period.**
 
-[![Release](https://img.shields.io/badge/Release-v0.5.0-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
+[![Release](https://img.shields.io/badge/Release-v0.5.2-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
 [![Patent](https://img.shields.io/badge/Patent-Pending-10b981?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
 [![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
@@ -19,22 +19,64 @@
 
 ## 🎯 What Is This Release?
 
-PrismOS-AI v0.5.0 is a major feature release of the patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+PrismOS-AI v0.5.2 is a feature release of the patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
 
-> **In one sentence:** A Tauri 2.0 desktop app with 5 AI agents, a physics-inspired knowledge graph, WASM sandboxing, Local Vision, Document Analysis, frameless window, system tray, auto-updater, and a modern glassmorphism UI — all running 100% offline.
+> **In one sentence:** A Tauri 2.0 desktop app with 8 AI agents, a physics-inspired knowledge graph, WASM sandboxing, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Local Vision, Document Analysis, frameless window, system tray, auto-updater, and a modern glassmorphism UI — all running 100% offline.
 
 ### 📌 Key Numbers
 
 | | |
 |:--|:--|
-| 🔌 **76** Tauri IPC commands | 🤖 **5** autonomous AI agents |
-| 🦀 **20** Rust backend modules | ⚛️ **30** core features |
+| 🔌 **76** Tauri IPC commands | 🤖 **8** autonomous AI agents |
+| 🦀 **20** Rust backend modules | ⚛️ **30+** core features |
 | 🔒 **7** security layers | 🌈 **7** spectral dimensions |
-| ✅ **99** automated tests | 📄 **4** document formats supported |
+| ✅ **162** automated tests | 📄 **4** document formats supported |
 
 ---
 
-## ✨ What's New in v0.5.0
+## ✨ What's New in v0.5.2
+
+### 🏠 Daily Dashboard
+> Your unified morning-brief command center.
+
+- Hero greeting with time-of-day awareness (morning/afternoon/evening/night)
+- Stats strip: total nodes, today's additions, active agents, health score
+- Six content cards: Calendar Events, Email Summary, Finance Overview, Today's Highlights, Pending Topics, Daily Suggestions
+- Quick links grid for one-click navigation to all views
+- Auto-refresh every 10 minutes; keyboard shortcut `Ctrl+7`
+
+### 📊 ProactivePanel
+> A permanent sidebar panel that keeps you in the loop.
+
+- Live feeds: calendar events, email summaries, finance updates, daily suggestions
+- Graph insight card showing top Spectrum Graph node
+- Collapsible with smooth animation; state persists across sessions
+
+### 📧 Keeper Agents (Email, Calendar, Finance)
+> Three new specialized AI agents join the roster.
+
+- **Email Keeper** — Email monitoring, inbox summaries, and smart notifications
+- **Calendar Keeper** — Calendar awareness, upcoming events, and scheduling reminders
+- **Finance Keeper** — Portfolio tracking, market alerts, and financial insights
+- Total AI agents: **8** (was 5)
+
+### ⚙️ Startup View Setting
+> Choose what greets you when PrismOS opens.
+
+- New "Startup View" dropdown in Settings → Appearance
+- Options: Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings
+- Persists via localStorage
+
+### 📊 162 Automated Tests
+> Comprehensive quality coverage.
+
+- 97 frontend tests (Vitest + React Testing Library)
+- 65 backend tests (cargo test)
+- 9 test files covering all major components
+
+---
+
+## ✨ Previously in v0.5.0 / v0.5.1
 
 ### 🖼️ Frameless Window & Native Feel
 > A true desktop OS experience.
@@ -106,9 +148,11 @@ Frameless Window    No                  Yes         (NEW)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│              PrismOS-AI Desktop App (v0.5.0)             │
+│              PrismOS-AI Desktop App (v0.5.2)             │
 ├──────────────────────────────────────────────────────────┤
 │  React 18 + TypeScript 5.5            (Frontend)         │
+│  ├── Daily Dashboard      Morning brief + proactive cards │
+│  ├── ProactivePanel       Live sidebar feeds              │
 │  ├── Intent Console       NL chat + vision + documents   │
 │  ├── Spectrum Graph       7D force-directed viz          │
 │  ├── Sandbox Prisms       WASM execution sandbox         │
@@ -119,7 +163,7 @@ Frameless Window    No                  Yes         (NEW)
 │  ├── spectrum_graph.rs    SQLite knowledge store          │
 │  ├── ollama_bridge.rs     LLM + vision inference         │
 │  ├── sandbox_prism.rs     wasmtime WASM runtime          │
-│  ├── agents/              5 LangGraph AI agents          │
+│  ├── agents/              8 AI agents (incl. Keepers)    │
 │  ├── you_port.rs          Encrypted sync/export          │
 │  ├── audit_log.rs         SHA-256 hash chain             │
 │  ├── model_verify.rs      LLM integrity checking         │
@@ -149,10 +193,9 @@ Frameless Window    No                  Yes         (NEW)
 ## 🛤️ What's Next — v0.6.0
 
 | Feature | Description |
-|---------|-------------|
+|---------|-----------|
 | 🎤 Whisper.cpp | Local audio transcription via Whisper |
 | 🧩 Plugin Marketplace | Community-built extensions |
-| ⚙️ Settings UI | Voice & indexer configuration panels |
 | 🧠 Federated Learning | Privacy-preserving model updates |
 | 📱 Mobile Companion | React Native companion app |
 | 🔗 P2P Sync | Device-to-device, no central server |

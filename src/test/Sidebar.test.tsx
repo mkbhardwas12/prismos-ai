@@ -2,7 +2,7 @@
 // PrismOS-AI — Sidebar Component Tests
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import Sidebar from "../components/Sidebar";
 import type { Agent, SpectrumNode, GraphStats } from "../types";
 
@@ -31,46 +31,53 @@ const defaultProps = {
   graphStats: mockStats,
 };
 
+/** Helper: render inside act() so ProactivePanel's async useEffect settles */
+async function renderSidebar(overrides = {}) {
+  await act(async () => {
+    render(<Sidebar {...defaultProps} {...overrides} />);
+  });
+}
+
 describe("Sidebar", () => {
-  it("renders the PrismOS-AI logo/icon", () => {
-    render(<Sidebar {...defaultProps} />);
+  it("renders the PrismOS-AI logo/icon", async () => {
+    await renderSidebar();
     expect(screen.getByAltText(/prism/i)).toBeInTheDocument();
   });
 
-  it("renders navigation items", () => {
-    render(<Sidebar {...defaultProps} />);
+  it("renders navigation items", async () => {
+    await renderSidebar();
     // Should have navigation buttons for chat, graph, settings, etc.
     const buttons = screen.getAllByRole("button");
     expect(buttons.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("calls onNavigate when a nav item is clicked", () => {
+  it("calls onNavigate when a nav item is clicked", async () => {
     const onNavigate = vi.fn();
-    render(<Sidebar {...defaultProps} onNavigate={onNavigate} />);
+    await renderSidebar({ onNavigate });
     // First button is the hamburger menu — skip it; click a sidebar-item nav button
     const navButtons = document.querySelectorAll<HTMLButtonElement>(".sidebar-item");
     expect(navButtons.length).toBeGreaterThan(0);
-    fireEvent.click(navButtons[1]); // Click the second nav item (not the already-active one)
+    fireEvent.click(navButtons[0]); // Click the first nav item (Daily Dashboard — not the active one)
     expect(onNavigate).toHaveBeenCalled();
   });
 
-  it("highlights the current view", () => {
-    render(<Sidebar {...defaultProps} currentView="chat" />);
+  it("highlights the current view", async () => {
+    await renderSidebar({ currentView: "chat" });
     // The active nav item should have an active class or aria-current
     const activeItem = document.querySelector(".active, .nav-active, [aria-current]");
     expect(activeItem).toBeTruthy();
   });
 
-  it("displays graph stats in the sidebar", () => {
-    render(<Sidebar {...defaultProps} />);
+  it("displays graph stats in the sidebar", async () => {
+    await renderSidebar();
     // Stats are rendered somewhere — check for nodes or edges text
     const statsSection = document.querySelector(".sidebar");
     expect(statsSection).toBeTruthy();
     expect(statsSection!.textContent).toMatch(/node|edge|knowledge/i);
   });
 
-  it("shows agent activity indicators", () => {
-    render(<Sidebar {...defaultProps} />);
+  it("shows agent activity indicators", async () => {
+    await renderSidebar();
     // Multiple agents may match — use getAllByText
     const agents = screen.getAllByText(/Orchestrator|Reasoner/);
     expect(agents.length).toBeGreaterThan(0);

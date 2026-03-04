@@ -96,8 +96,6 @@ fn known_model_registry() -> HashMap<&'static str, KnownModel> {
 }
 
 // ─── Data Models ───────────────────────────────────────────────────────────────
-
-#[allow(dead_code)]
 struct KnownModel {
     family: &'static str,
     expected_families: &'static [&'static str],

@@ -313,13 +313,11 @@ impl StateGraph {
     }
 
     /// Get outgoing edges from a node
-    #[allow(dead_code)]
     pub fn outgoing_edges(&self, node_id: &str) -> Vec<&GraphEdge> {
         self.edges.iter().filter(|e| e.from == node_id).collect()
     }
 
     /// Get a node by ID
-    #[allow(dead_code)]
     pub fn get_node(&self, id: &str) -> Option<&GraphNode> {
         self.nodes.iter().find(|n| n.id == id)
     }
@@ -639,7 +637,6 @@ pub struct WorkflowCheckpoint {
 
 /// Extended collaboration summary for frontend (includes debate)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct WorkflowSummary {
     pub workflow_id: String,
     pub status: String,
@@ -658,7 +655,6 @@ pub struct WorkflowSummary {
 
 /// Compact transition info for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct TransitionSummary {
     pub from: String,
     pub to: String,
@@ -668,7 +664,6 @@ pub struct TransitionSummary {
 
 /// Compact debate info for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct DebateSummary {
     pub rounds: usize,
     pub total_arguments: usize,
@@ -683,7 +678,6 @@ pub struct DebateSummary {
 
 /// A single argument for frontend display
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct ArgumentSummary {
     pub agent: String,
     pub argument_type: String,
@@ -760,123 +754,133 @@ impl WorkflowEngine {
         state.visit_node("parallel_analyze");
         session.current_phase = CollaborationPhase::Analyzing;
 
-        // ── 2a: Reasoner ──
-        let reasoner_start = std::time::Instant::now();
-        state.visit_node("reasoner");
-        session.push_trace("Reasoner", "Analyzing intent via LLM", StepStatus::Active);
-        emit_activity(&app_handle, "Reasoner", "Analyzing intent via LLM…", "thinking", "analyze");
-
+        // ── Prepare work units for all three specialists ──
         let reasoner_work = work_units
             .iter()
             .find(|m| m.to == MessageTarget::Agent(AgentRole::Reasoner))
             .cloned();
-
-        let llm_response = if let Some(ref work) = reasoner_work {
-            let llm_action = "llm_inference:generate:model=mistral:agent=reasoner";
-            let prism_name = format!("wf_reasoner_{}", &state.workflow_id[..8]);
-            let mut prism =
-                crate::sandbox_prism::create_prism_for_agent(&prism_name, "reasoner");
-            let sandbox_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
-                &mut prism,
-                llm_action,
-                "reasoner",
-            );
-
-            if sandbox_result.success {
-                let prompt = ReasonerNode::build_prompt(work, &intent);
-                match crate::ollama_bridge::generate("mistral", &prompt, None, None, None).await {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("[LangGraph-WF] Ollama unavailable: {}", e);
-                        format!(
-                            "⚡ [Offline Mode — Multi-Agent Workflow] Processed locally.\n\n\
-                             Intent: {} | Type: {} | Context: {} nodes\n\n\
-                             💡 Start Ollama for full AI: `ollama serve`",
-                            intent.raw, intent.intent_type, context_node_ids.len()
-                        )
-                    }
-                }
-            } else {
-                format!(
-                    "🛡️ [Sandbox] LLM inference denied for Reasoner: {}",
-                    sandbox_result.output
-                )
-            }
-        } else {
-            "Reasoner: no work unit received".to_string()
-        };
-
-        let reasoner_confidence = if llm_response.contains("Offline") {
-            0.5
-        } else {
-            0.85
-        };
-        let reasoner_proposal =
-            ReasonerNode::propose(&llm_response, reasoner_confidence, context_node_ids.to_vec());
-        session.add_message(reasoner_proposal.clone());
-        state.proposals.push(reasoner_proposal.clone());
-        session.complete_trace_step("Reasoner");
-        state.checkpoint("reasoner");
-        state.transition("reasoner", "parallel_join", "reasoner proposal", reasoner_start);
-        emit_activity(&app_handle, "Reasoner", "Analysis complete — proposal ready", "completed", "analyze");
-
-        // ── 2b: Tool Smith ──
-        let ts_start = std::time::Instant::now();
-        state.visit_node("tool_smith");
-        session.push_trace("Tool Smith", "Evaluating tool needs", StepStatus::Active);
-        emit_activity(&app_handle, "Tool Smith", "Evaluating tool and execution needs…", "thinking", "analyze");
-
         let tool_smith_work = work_units
             .iter()
             .find(|m| matches!(m.to, MessageTarget::Agent(AgentRole::ToolSmith)))
             .cloned();
-
-        let tool_smith_proposal = if let Some(ref work) = tool_smith_work {
-            ToolSmithNode::evaluate(work, &intent)
-        } else {
-            AgentMessage::new(
-                AgentRole::ToolSmith,
-                MessageTarget::Consensus,
-                MessageType::Proposal,
-                "Tool Smith: no tool execution required".to_string(),
-            )
-        };
-        session.add_message(tool_smith_proposal.clone());
-        state.proposals.push(tool_smith_proposal.clone());
-        session.complete_trace_step("Tool Smith");
-        state.checkpoint("tool_smith");
-        state.transition("tool_smith", "parallel_join", "tool smith proposal", ts_start);
-        emit_activity(&app_handle, "Tool Smith", "Tool evaluation complete", "completed", "analyze");
-
-        // ── 2c: Memory Keeper ──
-        let mk_start = std::time::Instant::now();
-        state.visit_node("memory_keeper");
-        session.push_trace("Memory Keeper", "Processing graph context", StepStatus::Active);
-        emit_activity(&app_handle, "Memory Keeper", "Querying Spectrum Graph for context…", "thinking", "analyze");
-
         let memory_keeper_work = work_units
             .iter()
             .find(|m| matches!(m.to, MessageTarget::Agent(AgentRole::MemoryKeeper)))
             .cloned();
 
-        let memory_keeper_proposal = if let Some(ref work) = memory_keeper_work {
-            MemoryKeeperNode::process(work, &intent, context_node_ids.len())
-        } else {
-            AgentMessage::new(
-                AgentRole::MemoryKeeper,
-                MessageTarget::Consensus,
-                MessageType::Proposal,
-                "Memory Keeper: no graph updates needed".to_string(),
-            )
-        };
+        // Push all trace entries before the parallel section
+        session.push_trace("Reasoner", "Analyzing intent via LLM", StepStatus::Active);
+        session.push_trace("Tool Smith", "Evaluating tool needs", StepStatus::Active);
+        session.push_trace("Memory Keeper", "Processing graph context", StepStatus::Active);
+        emit_activity(&app_handle, "Reasoner", "Analyzing intent via LLM…", "thinking", "analyze");
+        emit_activity(&app_handle, "Tool Smith", "Evaluating tool and execution needs…", "thinking", "analyze");
+        emit_activity(&app_handle, "Memory Keeper", "Querying Spectrum Graph for context…", "thinking", "analyze");
+
+        let parallel_start = std::time::Instant::now();
+        let wf_id_prefix = state.workflow_id[..8].to_string();
+        let intent_for_ts = intent.clone();
+        let intent_for_mk = intent.clone();
+        let ctx_len = context_node_ids.len();
+
+        // ── Run all three specialists concurrently via tokio::join! ──
+        // Reasoner awaits the LLM network call while Tool Smith and Memory
+        // Keeper complete their synchronous evaluations in the same task.
+        let (llm_response, tool_smith_proposal, memory_keeper_proposal) = tokio::join!(
+            // 2a: Reasoner — async LLM inference (I/O-bound, yields at .await)
+            async {
+                if let Some(ref work) = reasoner_work {
+                    let llm_action = "llm_inference:generate:model=mistral:agent=reasoner";
+                    let prism_name = format!("wf_reasoner_{}", wf_id_prefix);
+                    let mut prism =
+                        crate::sandbox_prism::create_prism_for_agent(&prism_name, "reasoner");
+                    let sandbox_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
+                        &mut prism,
+                        llm_action,
+                        "reasoner",
+                    );
+                    if sandbox_result.success {
+                        let prompt = ReasonerNode::build_prompt(work, &intent);
+                        match crate::ollama_bridge::generate("mistral", &prompt, None, None, None).await {
+                            Ok(r) => r,
+                            Err(e) => {
+                                eprintln!("[LangGraph-WF] Ollama unavailable: {}", e);
+                                format!(
+                                    "⚡ [Offline Mode — Multi-Agent Workflow] Processed locally.\n\n\
+                                     Intent: {} | Type: {} | Context: {} nodes\n\n\
+                                     💡 Start Ollama for full AI: `ollama serve`",
+                                    intent.raw, intent.intent_type, ctx_len
+                                )
+                            }
+                        }
+                    } else {
+                        format!(
+                            "🛡️ [Sandbox] LLM inference denied for Reasoner: {}",
+                            sandbox_result.output
+                        )
+                    }
+                } else {
+                    "Reasoner: no work unit received".to_string()
+                }
+            },
+            // 2b: Tool Smith — sync evaluation (completes instantly)
+            async {
+                if let Some(ref work) = tool_smith_work {
+                    ToolSmithNode::evaluate(work, &intent_for_ts)
+                } else {
+                    AgentMessage::new(
+                        AgentRole::ToolSmith,
+                        MessageTarget::Consensus,
+                        MessageType::Proposal,
+                        "Tool Smith: no tool execution required".to_string(),
+                    )
+                }
+            },
+            // 2c: Memory Keeper — sync processing (completes instantly)
+            async {
+                if let Some(ref work) = memory_keeper_work {
+                    MemoryKeeperNode::process(work, &intent_for_mk, ctx_len)
+                } else {
+                    AgentMessage::new(
+                        AgentRole::MemoryKeeper,
+                        MessageTarget::Consensus,
+                        MessageType::Proposal,
+                        "Memory Keeper: no graph updates needed".to_string(),
+                    )
+                }
+            }
+        );
+
+        // ── Record Reasoner results ──
+        let reasoner_confidence = if llm_response.contains("Offline") { 0.5 } else { 0.85 };
+        let reasoner_proposal =
+            ReasonerNode::propose(&llm_response, reasoner_confidence, context_node_ids.to_vec());
+        state.visit_node("reasoner");
+        session.add_message(reasoner_proposal.clone());
+        state.proposals.push(reasoner_proposal.clone());
+        session.complete_trace_step("Reasoner");
+        state.checkpoint("reasoner");
+        state.transition("reasoner", "parallel_join", "reasoner proposal", parallel_start);
+        emit_activity(&app_handle, "Reasoner", "Analysis complete — proposal ready", "completed", "analyze");
+
+        // ── Record Tool Smith results ──
+        state.visit_node("tool_smith");
+        session.add_message(tool_smith_proposal.clone());
+        state.proposals.push(tool_smith_proposal.clone());
+        session.complete_trace_step("Tool Smith");
+        state.checkpoint("tool_smith");
+        state.transition("tool_smith", "parallel_join", "tool smith proposal", parallel_start);
+        emit_activity(&app_handle, "Tool Smith", "Tool evaluation complete", "completed", "analyze");
+
+        // ── Record Memory Keeper results ──
+        state.visit_node("memory_keeper");
         session.add_message(memory_keeper_proposal.clone());
         state.proposals.push(memory_keeper_proposal.clone());
         session.complete_trace_step("Memory Keeper");
         state.checkpoint("memory_keeper");
-        state.transition("memory_keeper", "parallel_join", "memory keeper proposal", mk_start);
+        state.transition("memory_keeper", "parallel_join", "memory keeper proposal", parallel_start);
         emit_activity(&app_handle, "Memory Keeper", "Graph context processed", "completed", "analyze");
 
-        eprintln!("[LangGraph-WF] All 3 specialists completed analysis");
+        eprintln!("[LangGraph-WF] All 3 specialists completed analysis (parallel via tokio::join!)");
 
         // ═══════════════════════════════════════════════════════════════
         // NODE 3: PARALLEL JOIN + DEBATE — Agents debate proposals
@@ -965,11 +969,18 @@ impl WorkflowEngine {
         emit_activity(&app_handle, "Sentinel", "Reviewing all proposals for security…", "thinking", "review");
 
         let security_review = SentinelNode::review(&all_proposals, &intent);
+        let sentinel_passed = security_review.content.contains("✅ CLEAR");
         session.add_message(security_review);
         session.complete_trace_step("Sentinel");
         state.checkpoint("sentinel_review");
         state.transition("sentinel_review", "consensus", "security review done", sentinel_start);
-        emit_activity(&app_handle, "Sentinel", "Security review passed ✓", "completed", "review");
+        emit_activity(
+            &app_handle,
+            "Sentinel",
+            if sentinel_passed { "Security review passed ✓" } else { "Security review flagged ⚠️ concerns" },
+            "completed",
+            "review",
+        );
 
         eprintln!("[LangGraph-WF] Sentinel security review complete");
 
@@ -992,7 +1003,7 @@ impl WorkflowEngine {
             reason: "Orchestrator approves: workflow executed as planned".to_string(),
             confidence: (0.9 + debate_bonus).clamp(0.0, 1.0),
         };
-        let reasoner_vote = ReasonerNode::vote(&llm_response, &llm_response);
+        let reasoner_vote = ReasonerNode::vote(&llm_response, &reasoner_proposal.content);
         let tool_smith_vote = ToolSmithNode::vote(&llm_response);
         let memory_keeper_vote = MemoryKeeperNode::vote(&llm_response, context_node_ids);
         let sentinel_vote = SentinelNode::vote(&all_proposals, &intent);
@@ -1153,7 +1164,6 @@ impl WorkflowEngine {
     }
 
     /// Convert a WorkflowState into a compact WorkflowSummary for the frontend
-    #[allow(dead_code)]
     pub fn summarize(state: &WorkflowState, session: &CollaborationSession) -> WorkflowSummary {
         let debate_summary = state.debate.as_ref().map(|d| DebateSummary {
             rounds: d.rounds_completed,

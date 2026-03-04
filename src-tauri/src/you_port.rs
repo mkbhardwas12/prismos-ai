@@ -33,8 +33,13 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// State file name in the app data directory
 const STATE_FILE: &str = "prismos-handoff.state";
-/// Encryption key derivation salt (unique to PrismOS-AI)
-const KEY_SALT: &[u8] = b"PrismOS-YouPort-Default-Salt-v1";
+/// Encryption key derivation salt.
+/// Uses PRISMOS_KEY_SALT environment variable at build time if set,
+/// otherwise falls back to a default. Override for production deployments.
+const KEY_SALT: &[u8] = match option_env!("PRISMOS_KEY_SALT") {
+    Some(s) => s.as_bytes(),
+    None => b"PrismOS-YouPort-Default-Salt-v1",
+};
 /// Current format version (v3 = AES-256-GCM, v2 = XOR legacy)
 const FORMAT_VERSION: &str = "prismos-youport-v3";
 
@@ -171,16 +176,18 @@ pub fn aes_encrypt(key: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
     let cipher = <Aes256Gcm as AesKeyInit>::new_from_slice(key)
         .map_err(|e| format!("AES key error: {}", e))?;
 
-    // Generate a 12-byte nonce from the data hash (deterministic per content + key)
-    let nonce_bytes = &Sha256::digest(data)[..12];
-    let nonce = AesNonce::from_slice(nonce_bytes);
+    // Generate a cryptographically random 12-byte nonce (never reuse with same key)
+    let mut nonce_bytes = [0u8; 12];
+    getrandom::getrandom(&mut nonce_bytes)
+        .map_err(|e| format!("Failed to generate random nonce: {}", e))?;
+    let nonce = AesNonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher.encrypt(nonce, data)
         .map_err(|e| format!("AES encryption failed: {}", e))?;
 
     // Prepend nonce to ciphertext so decrypt can extract it
     let mut result = Vec::with_capacity(12 + ciphertext.len());
-    result.extend_from_slice(nonce_bytes);
+    result.extend_from_slice(&nonce_bytes);
     result.extend_from_slice(&ciphertext);
     Ok(result)
 }

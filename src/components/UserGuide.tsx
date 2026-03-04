@@ -102,7 +102,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card highlight">
                   <h4>🔒 Your Privacy</h4>
-                  <p>Everything runs locally. Your conversations, data, and knowledge graph never leave your computer. PrismOS-AI uses AES-256-GCM encryption for all stored data.</p>
+                  <p>Everything runs locally. Your conversations, data, and knowledge graph never leave your computer. PrismOS-AI uses AES-256-GCM authenticated encryption for all stored data.</p>
                 </div>
               </div>
             )}
@@ -297,7 +297,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>🔷 About PrismOS-AI</h4>
-                  <p><strong>Version:</strong> 0.4.0</p>
+                  <p><strong>Version:</strong> 0.5.0</p>
                   <p><strong>Released:</strong> March 3, 2026</p>
                   <p><strong>GitHub:</strong> github.com/mkbhardwas12/prismos-ai</p>
                   <p>PrismOS-AI is a local-first AI operating system built on a physics-inspired 7-dimensional knowledge graph. It processes your intents through multi-agent collaboration — all running 100% offline on your own hardware.</p>

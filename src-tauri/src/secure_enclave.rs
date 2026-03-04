@@ -23,7 +23,12 @@ type HmacSha256 = Hmac<Sha256>;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const ENCLAVE_SALT: &[u8] = b"PrismOS-SecureEnclave-Default-Salt-v1";
+/// Uses PRISMOS_ENCLAVE_SALT environment variable at build time if set.
+/// Override for production deployments.
+const ENCLAVE_SALT: &[u8] = match option_env!("PRISMOS_ENCLAVE_SALT") {
+    Some(s) => s.as_bytes(),
+    None => b"PrismOS-SecureEnclave-Default-Salt-v1",
+};
 const KEY_SIZE: usize = 32; // 256-bit key
 
 // ─── Data Models ───────────────────────────────────────────────────────────────
@@ -72,8 +77,6 @@ pub struct SecureEnclave {
     backend: EnclaveBackend,
     key: [u8; KEY_SIZE],
 }
-
-#[allow(dead_code)]
 impl SecureEnclave {
     /// Initialize the secure enclave, probing for hardware security modules.
     pub fn new() -> Self {

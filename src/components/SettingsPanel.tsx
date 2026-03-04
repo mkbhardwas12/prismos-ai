@@ -576,7 +576,7 @@ export default function SettingsPanel({
             </button>
           </div>
           <div className="settings-hint">
-            Export uses You-Port end-to-end encryption (HMAC-SHA256 + XOR stream cipher).
+            Export uses You-Port end-to-end encryption (AES-256-GCM authenticated encryption).
             Files are device-bound and cannot be read on other devices.
           </div>
         </div>
@@ -774,7 +774,7 @@ export default function SettingsPanel({
               </button>
               <button
                 className={`settings-theme-btn ${settings.theme === "light" ? "active" : ""}`}
-                onClick={toggleTheme}
+                onClick={() => { update("theme", "light"); document.documentElement.setAttribute("data-theme", "light"); }}
               >
                 ☀️ Light
               </button>
@@ -852,7 +852,7 @@ export default function SettingsPanel({
               <span className="security-check-icon">✅</span>
               <div className="security-check-info">
                 <span className="security-check-label">Encrypted Storage</span>
-                <span className="security-check-desc">Graph data encrypted with HMAC-SHA256 + XOR stream cipher, device-bound</span>
+                <span className="security-check-desc">Graph data encrypted with AES-256-GCM authenticated encryption, device-bound</span>
               </div>
             </div>
             <div className="security-check">
@@ -939,7 +939,7 @@ export default function SettingsPanel({
           </div>
           <div className="settings-item">
             <label>Encryption</label>
-            <input className="settings-input" value="You-Port — HMAC-SHA256 + XOR Stream Cipher (Device-Bound)" readOnly />
+            <input className="settings-input" value="You-Port — AES-256-GCM Authenticated Encryption (Device-Bound)" readOnly />
           </div>
         </div>
 

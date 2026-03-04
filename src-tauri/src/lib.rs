@@ -1270,6 +1270,16 @@ async fn download_whisper_model(app: tauri::AppHandle, size: Option<String>) -> 
 async fn start_voice_recording(app: tauri::AppHandle) -> Result<(), String> {
     let stop_flag = Arc::new(AtomicBool::new(false));
     app.manage(VoiceStopFlag(Arc::clone(&stop_flag)));
+
+    // Actually start recording in a background thread
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let flag_clone = Arc::clone(&stop_flag);
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = whisper_engine::record_audio(&app_dir, flag_clone) {
+            eprintln!("[Voice] Recording error: {}", e);
+        }
+    });
+
     Ok(())
 }
 
@@ -2090,7 +2100,10 @@ pub fn run() {
 
             // Initialize Spectrum Graph database — shared across all commands
             let db = spectrum_graph::SpectrumGraph::new(&app_dir)
-                .expect("Failed to initialize Spectrum Graph");
+                .map_err(|e| {
+                    eprintln!("❌ Failed to initialize Spectrum Graph: {}", e);
+                    Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error>
+                })?;
 
             // Seed demo data for first-time users (runs only if graph is empty)
             match db.seed_demo_data() {
@@ -2166,7 +2179,9 @@ pub fn run() {
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().cloned().expect("no icon"))
+                .icon(app.default_window_icon().cloned().unwrap_or_else(|| {
+                    tauri::image::Image::new(&[], 0, 0)
+                }))
                 .tooltip("PrismOS-AI — Local AI Operating System")
                 .menu(&tray_menu)
                 .on_menu_event(|app, event| {
@@ -2313,5 +2328,8 @@ pub fn run() {
             index_document_chunks,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running PrismOS-AI");
+        .unwrap_or_else(|e| {
+            eprintln!("❌ Fatal: PrismOS-AI failed to start: {}", e);
+            std::process::exit(1);
+        });
 }

@@ -378,51 +378,106 @@ export default function MainView({
         const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · 100% local`;
 
         const streamMsgId = crypto.randomUUID();
-        const streamMsg: Message = {
-          id: streamMsgId,
-          role: "ai",
-          content: "",
-          timestamp: new Date(),
-          agent: "Document Analyst",
-        };
-        setMessages((prev) => [...prev, streamMsg]);
-        setIsProcessing(false); // Hide spinner — tokens are now streaming
 
-        // Listen for streaming tokens
-        const { listen: listenEvent } = await import("@tauri-apps/api/event");
-        const unlistenStream = await listenEvent<{ token: string; done: boolean }>(
-          "ollama-stream",
-          (event) => {
-            const { token, done } = event.payload;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === streamMsgId
-                  ? { ...m, content: m.content + token }
-                  : m
-              )
-            );
-            if (done) {
-              // Append metadata footer when streaming completes
-              setMessages((prev) =>
-                prev.map((m) =>
+        // Try streaming first, fall back to blocking if streaming fails
+        let docResponse = "";
+        let streamWorked = false;
+
+        try {
+          // Insert empty AI bubble and start streaming tokens into it
+          setMessages((prev) => [...prev, {
+            id: streamMsgId,
+            role: "ai" as const,
+            content: "",
+            timestamp: new Date(),
+            agent: "Document Analyst",
+          }]);
+          setIsProcessing(false); // Hide spinner — tokens are now streaming
+
+          const { listen: listenEvent } = await import("@tauri-apps/api/event");
+          const unlistenStream = await listenEvent<{ token: string; done: boolean }>(
+            "ollama-stream",
+            (event) => {
+              const { token, done } = event.payload;
+              if (token) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === streamMsgId
+                      ? { ...m, content: m.content + token }
+                      : m
+                  )
+                );
+              }
+              if (done) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === streamMsgId
+                      ? { ...m, content: m.content + metaLine }
+                      : m
+                  )
+                );
+              }
+            }
+          );
+
+          try {
+            const fullText = await invoke<string>("query_ollama_stream", {
+              prompt: docPrompt,
+              model: settings.defaultModel || "mistral",
+              ollamaUrl: settings.ollamaUrl || null,
+              maxTokens: settings.maxTokens || 4096,
+            });
+            docResponse = fullText;
+            streamWorked = true;
+          } finally {
+            unlistenStream();
+          }
+
+          // Safety net: if stream events didn't fire but we got a full response back,
+          // populate the bubble with the complete text
+          if (streamWorked && docResponse) {
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === streamMsgId);
+              if (existing && !existing.content) {
+                // Events never fired — use full response
+                return prev.map((m) =>
+                  m.id === streamMsgId
+                    ? { ...m, content: docResponse + metaLine }
+                    : m
+                );
+              } else if (existing && !existing.content.includes("───")) {
+                // Events fired but done event missed — append footer
+                return prev.map((m) =>
                   m.id === streamMsgId
                     ? { ...m, content: m.content + metaLine }
                     : m
-                )
-              );
-            }
+                );
+              }
+              return prev;
+            });
           }
-        );
+        } catch (streamErr) {
+          // Streaming failed — remove empty bubble and fall back to blocking call
+          console.warn("Streaming failed, falling back to blocking:", streamErr);
+          setMessages((prev) => prev.filter((m) => m.id !== streamMsgId));
+          setIsProcessing(true);
+          setProcessingPhase(`Analyzing document (fallback)…`);
 
-        try {
-          await invoke<string>("query_ollama_stream", {
+          docResponse = await invoke<string>("query_ollama", {
             prompt: docPrompt,
             model: settings.defaultModel || "mistral",
             ollamaUrl: settings.ollamaUrl || null,
             maxTokens: settings.maxTokens || 4096,
           });
-        } finally {
-          unlistenStream();
+
+          const aiMsg: Message = {
+            id: streamMsgId,
+            role: "ai",
+            content: docResponse + metaLine,
+            timestamp: new Date(),
+            agent: "Document Analyst",
+          };
+          setMessages((prev) => [...prev, aiMsg]);
         }
 
         // Silently index chunks into Spectrum Graph (non-blocking)

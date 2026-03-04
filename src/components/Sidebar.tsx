@@ -101,7 +101,7 @@ export default function Sidebar({
       <div className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`} role="complementary" aria-label="Sidebar navigation">
         <div className="sidebar-header">
           <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS-AI" className="sidebar-logo-img" /> PrismOS-AI</span>
-          <span className="sidebar-version">v0.5.2</span>
+          <span className="sidebar-version">v0.5.1</span>
         </div>
 
         <nav className="sidebar-nav" aria-label="Main navigation">

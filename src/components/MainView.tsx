@@ -42,6 +42,7 @@ export default function MainView({
 }: MainViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<string>("");
   const [pendingIntent, setPendingIntent] = useState("");
   const [proactiveSuggestions, setProactiveSuggestions] = useState<ProactiveSuggestion[]>([]);
   const [messageSuggestions, setMessageSuggestions] = useState<Record<string, ProactiveSuggestion[]>>({});
@@ -342,12 +343,20 @@ export default function MainView({
     try {
       // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
       if (documentText) {
+        // Fast pre-check: is Ollama reachable? (3s timeout instead of 120s)
+        setProcessingPhase("Checking Ollama connection…");
+        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        if (!ollamaOk) {
+          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+        }
+
         // Extract source name from document metadata
         const sourceMatch = documentText.match(/\[Document:\s*(.*?)\]/);
         const fileMatch = documentText.match(/\[File:\s*(.*?)\]/);
         const sourceName = sourceMatch?.[1] || fileMatch?.[1] || "document";
 
         // Use Rust RAG engine: chunks document → retrieves relevant sections → builds context
+        setProcessingPhase(`Chunking & indexing "${sourceName}"…`);
         const ragJson = await invoke<string>("rag_query", {
           documentText,
           query: input,
@@ -360,6 +369,7 @@ export default function MainView({
           ? `The following are the most relevant sections from "${sourceName}" (${ragResult.chunks_used}/${ragResult.total_chunks} sections retrieved via RAG):\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`
           : `Here is a document for analysis:\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`;
 
+        setProcessingPhase(`Analyzing document (${ragResult.rag_used ? ragResult.chunks_used + " chunks" : "full doc"})…`);
         const response = await invoke<string>("query_ollama", {
           prompt: docPrompt,
           model: settings.defaultModel || "mistral",
@@ -399,6 +409,13 @@ export default function MainView({
         }
       } else if (imageData) {
         // ── Vision path: Smart Model Routing (Phase 6) — auto-swap to vision model ──
+        setProcessingPhase("Checking Ollama connection…");
+        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        if (!ollamaOk) {
+          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+        }
+
+        setProcessingPhase("Routing to vision model…");
         const routeJson = await invoke<string>("smart_route_model", {
           userModel: settings.defaultModel || "mistral",
           hasImage: true,
@@ -407,6 +424,7 @@ export default function MainView({
         });
         const route: { model: string; auto_swapped: boolean; original_model: string; reason: string; is_vision: boolean } = JSON.parse(routeJson);
 
+        setProcessingPhase(`Analyzing image with ${route.model}…`);
         const response = await invoke<string>("query_ollama_vision", {
           prompt: input,
           imageData,
@@ -566,6 +584,7 @@ export default function MainView({
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsProcessing(false);
+      setProcessingPhase("");
     }
   }
 
@@ -1025,11 +1044,11 @@ export default function MainView({
                   <span /><span /><span />
                 </div>
                 <div className="processing-text">
-                  <span className="processing-label">Refracting your intent…</span>
+                  <span className="processing-label">{processingPhase || "Refracting your intent…"}</span>
                   <span className="processing-detail">
                     {liveAgentSteps.length > 0
                       ? liveAgentSteps[liveAgentSteps.length - 1].action
-                      : "Agents collaborating · Graph context loading"}
+                      : processingPhase ? "Processing locally · 100% private" : "Agents collaborating · Graph context loading"}
                   </span>
                 </div>
               </div>

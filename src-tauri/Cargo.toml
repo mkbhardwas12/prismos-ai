@@ -48,7 +48,7 @@ calamine = "0.26"
 zip = "2"
 
 # Phase 7 — Contextual Screen Awareness (local screen capture)
-xcap = "0.0.14"
+xcap = "0.8"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Email Keeper — Read-only IMAP summary (Patent Pending)
@@ -57,3 +57,10 @@ native-tls = "0.2"
 
 # Calendar Keeper — Local .ics calendar integration (Patent Pending)
 ical = "0.11"
+
+# Vendored OpenSSL for Android cross-compilation
+openssl = { version = "0.10", features = ["vendored"], optional = true }
+
+[features]
+default = []
+vendored-ssl = ["openssl"]

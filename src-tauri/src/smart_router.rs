@@ -19,12 +19,14 @@ const VISION_MODEL_PATTERNS: &[&str] = &[
     "llava-phi3",
     "minicpm-v",
     "cogvlm",
+    "qwen2-vl",
 ];
 
 /// Priority order for auto-selecting a vision model when none is specified
 const VISION_MODEL_PRIORITY: &[&str] = &[
     "llama3.2-vision",
     "llava",
+    "qwen2-vl",
     "llava-llama3",
     "bakllava",
     "moondream",
@@ -199,9 +201,11 @@ mod tests {
         assert!(is_vision_model("llama3.2-vision:11b"));
         assert!(is_vision_model("bakllava:latest"));
         assert!(is_vision_model("moondream:1.8b"));
+        assert!(is_vision_model("qwen2-vl:latest"));
         assert!(!is_vision_model("mistral"));
         assert!(!is_vision_model("llama3.1"));
         assert!(!is_vision_model("phi3"));
+        assert!(!is_vision_model("qwen2.5")); // text-only qwen
     }
 
     #[test]
@@ -242,6 +246,30 @@ mod tests {
     fn test_find_best_vision_model_none_available() {
         let models = vec!["mistral:latest".to_string(), "phi3:latest".to_string()];
         assert_eq!(find_best_vision_model(&models), None);
+    }
+
+    #[test]
+    fn test_find_best_vision_model_qwen2_vl() {
+        let models = vec![
+            "mistral:latest".to_string(),
+            "qwen2-vl:latest".to_string(),
+        ];
+        assert_eq!(
+            find_best_vision_model(&models),
+            Some("qwen2-vl:latest".to_string())
+        );
+    }
+
+    #[test]
+    fn test_qwen2_vl_lower_priority_than_llama_vision() {
+        let models = vec![
+            "qwen2-vl:latest".to_string(),
+            "llama3.2-vision:11b".to_string(),
+        ];
+        assert_eq!(
+            find_best_vision_model(&models),
+            Some("llama3.2-vision:11b".to_string())
+        );
     }
 
     #[test]

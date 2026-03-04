@@ -82,16 +82,23 @@ export default function MainView({
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [showGuide, setShowGuide] = useState(false);
 
-  // Recommended models catalog — shown in dropdown for easy install
+  // Recommended models catalog — tiered by purpose, shown in dropdown for easy install
   const RECOMMENDED_MODELS = useMemo(() => [
-    { name: "mistral", label: "Mistral 7B", desc: "Great all-rounder", size: "4.1 GB" },
-    { name: "llama3.2", label: "Llama 3.2 3B", desc: "Fast & lightweight", size: "2.0 GB" },
-    { name: "phi3", label: "Phi-3 3.8B", desc: "Strong reasoning", size: "2.2 GB" },
-    { name: "llama3.1", label: "Llama 3.1 8B", desc: "Best quality", size: "4.7 GB" },
-    { name: "gemma2:2b", label: "Gemma 2 2B", desc: "Ultra-light", size: "1.6 GB" },
-    { name: "deepseek-r1", label: "DeepSeek R1 8B", desc: "Chain-of-thought", size: "4.7 GB" },
-    { name: "qwen2.5", label: "Qwen 2.5 7B", desc: "Multilingual", size: "4.7 GB" },
-    { name: "codellama", label: "Code Llama 7B", desc: "Code specialist", size: "3.8 GB" },
+    // ── Text & Reasoning (High Context, High Quality) ──
+    { name: "llama3.2", label: "Llama 3.2 3B", desc: "🏆 Default Text — 128k context, fast", size: "2.0 GB", tier: "text" },
+    { name: "llama3.1", label: "Llama 3.1 8B", desc: "128k context, best local quality", size: "4.7 GB", tier: "text" },
+    { name: "mistral", label: "Mistral 7B", desc: "Great all-rounder", size: "4.1 GB", tier: "text" },
+    { name: "mistral-nemo", label: "Mistral Nemo 12B", desc: "⚡ Fast + structured output", size: "7.1 GB", tier: "text" },
+    { name: "deepseek-r1", label: "DeepSeek R1 8B", desc: "Chain-of-thought reasoning", size: "4.7 GB", tier: "text" },
+    // ── Vision & Image Analysis (Camera & Uploads) ──
+    { name: "llama3.2-vision", label: "Llama 3.2 Vision 11B", desc: "🏆 Default Vision — best OCR & image", size: "7.9 GB", tier: "vision" },
+    { name: "llava", label: "LLaVA 13B", desc: "Battle-tested vision model", size: "8.0 GB", tier: "vision" },
+    { name: "qwen2-vl", label: "Qwen2 VL", desc: "Charts, receipts & dense docs", size: "5.5 GB", tier: "vision" },
+    { name: "moondream", label: "Moondream 1.8B", desc: "Ultra-light vision", size: "1.7 GB", tier: "vision" },
+    // ── Power User & Coding ──
+    { name: "qwen2.5", label: "Qwen 2.5 7B", desc: "Multilingual + deep coding", size: "4.7 GB", tier: "power" },
+    { name: "codellama", label: "Code Llama 7B", desc: "Code specialist", size: "3.8 GB", tier: "power" },
+    { name: "gemma2:2b", label: "Gemma 2 2B", desc: "Ultra-light for low RAM", size: "1.6 GB", tier: "power" },
   ], []);
 
   // Ollama setup wizard state
@@ -740,23 +747,34 @@ export default function MainView({
                     )}
                   </div>
                 )}
-                {RECOMMENDED_MODELS
-                  .filter(r => !availableModels.some(m => m.name.startsWith(r.name)))
-                  .map(r => (
-                    <button
-                      key={r.name}
-                      className="model-dropdown-item model-download-item"
-                      onClick={() => pullModelFromDropdown(r.name)}
-                      disabled={pullingModel !== null}
-                    >
-                      <div className="model-download-info">
-                        <span className="model-dropdown-name">{r.label}</span>
-                        <span className="model-download-desc">{r.desc}</span>
+                {/* Tiered model sections */}
+                {(["text", "vision", "power"] as const).map(tier => {
+                  const tierModels = RECOMMENDED_MODELS
+                    .filter(r => r.tier === tier && !availableModels.some(m => m.name.startsWith(r.name)));
+                  if (tierModels.length === 0) return null;
+                  return (
+                    <div key={tier}>
+                      <div className="model-dropdown-tier">
+                        {tier === "text" ? "📝 Text & Reasoning" : tier === "vision" ? "👁️ Vision & Image" : "⚡ Power User"}
                       </div>
-                      <span className="model-dropdown-size">{r.size}</span>
-                      <span className="model-download-btn">{pullingModel === r.name ? "⏳" : "⬇"}</span>
-                    </button>
-                  ))}
+                      {tierModels.map(r => (
+                        <button
+                          key={r.name}
+                          className="model-dropdown-item model-download-item"
+                          onClick={() => pullModelFromDropdown(r.name)}
+                          disabled={pullingModel !== null}
+                        >
+                          <div className="model-download-info">
+                            <span className="model-dropdown-name">{r.label}</span>
+                            <span className="model-download-desc">{r.desc}</span>
+                          </div>
+                          <span className="model-dropdown-size">{r.size}</span>
+                          <span className="model-download-btn">{pullingModel === r.name ? "⏳" : "⬇"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
                 {RECOMMENDED_MODELS.filter(r => !availableModels.some(m => m.name.startsWith(r.name))).length === 0 && (
                   <div className="model-dropdown-empty">All recommended models installed ✓</div>
                 )}

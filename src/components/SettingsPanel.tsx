@@ -406,7 +406,7 @@ export default function SettingsPanel({
                 className="settings-input"
                 value={settings.defaultModel}
                 onChange={(e) => update("defaultModel", e.target.value)}
-                placeholder="mistral, llama3, phi3, gemma2..."
+                placeholder="llama3.2 (recommended), mistral, llava..."
               />
               <button className="settings-btn settings-btn-sm" onClick={loadModels}>
                 {modelsLoaded ? "↻ Refresh" : "Load Models"}
@@ -426,7 +426,7 @@ export default function SettingsPanel({
               </div>
             )}
             {modelsLoaded && models.length === 0 && (
-              <div className="settings-hint">No models found. Run: ollama pull mistral</div>
+              <div className="settings-hint">No models found. Run: ollama pull llama3.2</div>
             )}
           </div>
           <div className="settings-item">
@@ -516,7 +516,7 @@ export default function SettingsPanel({
           <div className="settings-model-hub-quick">
             <div className="settings-model-hub-label">Quick Pull</div>
             <div className="settings-model-hub-quick-chips">
-              {["llama3.2", "mistral", "deepseek-r1:1.5b", "gemma2:2b", "phi3:mini", "codellama:7b"].map((name) => {
+              {["llama3.2", "llama3.2-vision", "mistral", "llava", "deepseek-r1:1.5b", "qwen2.5"].map((name) => {
                 const isInstalled = models.some((m) => m.name.startsWith(name.split(":")[0]));
                 return (
                   <button

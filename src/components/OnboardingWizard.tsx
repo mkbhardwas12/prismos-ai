@@ -21,12 +21,15 @@ interface OnboardingWizardProps {
 }
 
 const POPULAR_MODELS = [
-  { name: "llama3.2", desc: "Meta's latest — fast & capable (2B)", size: "~1.3 GB" },
+  // Text & Reasoning
+  { name: "llama3.2", desc: "🏆 Recommended — 128k context, fast & capable", size: "~2.0 GB" },
   { name: "mistral", desc: "Mistral 7B — great all-rounder", size: "~4.1 GB" },
-  { name: "deepseek-r1:1.5b", desc: "DeepSeek R1 — reasoning model", size: "~1.1 GB" },
-  { name: "gemma2:2b", desc: "Google Gemma 2 — compact & quick", size: "~1.6 GB" },
-  { name: "phi3:mini", desc: "Microsoft Phi-3 Mini — efficient", size: "~2.3 GB" },
-  { name: "codellama:7b", desc: "Meta Code Llama — for coding", size: "~3.8 GB" },
+  { name: "deepseek-r1:1.5b", desc: "DeepSeek R1 — chain-of-thought reasoning", size: "~1.1 GB" },
+  // Vision
+  { name: "llama3.2-vision", desc: "🏆 Vision — best OCR & image understanding", size: "~7.9 GB" },
+  { name: "llava", desc: "LLaVA — classic vision model", size: "~8.0 GB" },
+  // Lightweight
+  { name: "gemma2:2b", desc: "Google Gemma 2 — ultra-light for low RAM", size: "~1.6 GB" },
 ];
 
 export default function OnboardingWizard({

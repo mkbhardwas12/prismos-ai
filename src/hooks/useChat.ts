@@ -306,6 +306,60 @@ export function useChat({
   // Keep ref in sync so event listeners always call the latest handleIntent
   handleIntentRef.current = handleIntent;
 
+  // ── Contextual Screen Awareness (Phase 7) ──
+  // Captures the screen via Rust, sends to a local vision model, and injects
+  // the extracted context into the conversation as if the user pasted it.
+  async function handleScreenRead(userPrompt?: string) {
+    const label = userPrompt?.trim() || "Summarize what I'm looking at";
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: `🖥️ [Screen Read]\n${label}`,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsProcessing(true);
+    clearLiveSteps();
+
+    try {
+      setProcessingPhase("Capturing screen…");
+
+      const resultJson = await invoke<string>("read_screen", {
+        prompt: label,
+        ollamaUrl: settings.ollamaUrl || null,
+      });
+
+      const result: { context: string; model: string; auto_routed: boolean } =
+        JSON.parse(resultJson);
+
+      setProcessingPhase("");
+
+      const metaLine = `\n\n───\n🖥️ Screen Read · ${result.model}${result.auto_routed ? " (auto-routed)" : ""} · 100% local`;
+      const aiMsgId = crypto.randomUUID();
+      const aiMsg: Message = {
+        id: aiMsgId,
+        role: "ai",
+        content: result.context + metaLine,
+        timestamp: new Date(),
+        agent: "Screen Reader",
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (voiceEnabled) {
+        voiceSpeak(result.context);
+      }
+
+      onIntentProcessed("Screen Reader");
+      await refreshSuggestions(label, aiMsgId);
+    } catch (err) {
+      setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
+    } finally {
+      setIsProcessing(false);
+      setProcessingPhase("");
+    }
+  }
+
   return {
     messages,
     isProcessing,
@@ -314,6 +368,7 @@ export function useChat({
     setPendingIntent,
     conversationRef,
     handleIntent,
+    handleScreenRead,
     clearConversation,
   };
 }

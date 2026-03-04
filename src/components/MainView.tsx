@@ -555,6 +555,7 @@ export default function MainView({
         voiceEnabled={settings.voiceInputEnabled ?? false}
         pendingIntent={chat.pendingIntent}
         onPendingConsumed={() => chat.setPendingIntent("")}
+        onScreenRead={chat.handleScreenRead}
       />
 
       {/* ── First-Time Setup Wizard Modal ── */}

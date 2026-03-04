@@ -679,3 +679,61 @@
   background: rgba(249, 115, 22, 0.04);
   border-color: rgba(249, 115, 22, 0.2);
 }
+
+/* ── Screen Reading Indicator (Phase 7 — Contextual Screen Awareness) ── */
+.screen-reading-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.10));
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  animation: screen-read-in 0.3s ease-out;
+}
+
+@keyframes screen-read-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.screen-reading-pulse {
+  font-size: 16px;
+  animation: screen-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes screen-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+
+.screen-reading-text {
+  flex: 1;
+  font-weight: 500;
+}
+
+/* Read Screen menu item — subtle highlight to distinguish from file-based options */
+.attach-menu-screen {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+}
+
+.attach-menu-screen .attach-menu-title {
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .screen-reading-bar {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.06));
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+[data-theme="light"] .attach-menu-screen {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}

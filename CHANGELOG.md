@@ -9,6 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] — 2026-03-03
+
+### 🎯 Highlights
+
+PrismOS-AI v0.5.1 — **Phase 6: Brain Upgrades** release. Adds Smart Model Routing (auto-swap to vision models for images), intelligent Document Chunking + RAG retrieval for large documents, Background Omnipresence via Alt+Space global hotkey, and a tiered model recommendation catalog.
+
+### Added
+
+- **Smart Model Router** — `smart_router.rs` with automatic vision model detection and routing:
+  - Auto-detects vision-capable models (llama3.2-vision, llava, qwen2-vl, bakllava, moondream, etc.)
+  - Priority-based selection: prefers llama3.2-vision → llava → qwen2-vl → bakllava → moondream
+  - `RoutingDecision` type with `auto_swapped`, `original_model`, `reason`, and `is_vision` fields
+  - `route_model()` handles image, document, and code routing decisions
+  - `classify_models()` returns `ModelCapabilities` for all installed models
+  - 11 unit tests covering vision detection, priority ordering, and routing logic
+- **Document Chunking + RAG** — `doc_chunker.rs` with intelligent text chunking and retrieval:
+  - Paragraph-aware splitting with 2000-char chunks and 200-char overlap
+  - TF-IDF-lite scoring with coverage and position bonuses
+  - `build_rag_context()` end-to-end pipeline: chunk → score → retrieve top-5
+  - `index_chunks_to_graph()` stores chunks as `doc_chunk` nodes in Spectrum Graph with `next_chunk` edges
+  - Replaces naive 12KB truncation for large documents
+  - 10 unit tests covering chunking, retrieval, and graph indexing
+- **Background Omnipresence** — `Alt+Space` global hotkey:
+  - Registers alongside existing `Ctrl+Space` / `Cmd+Space`
+  - `bringToFront()` helper: sets always-on-top, unminimizes, shows, focuses, then releases after 500ms
+  - PrismOS pops up over any app the user is currently using
+- **Tiered Model Recommendations** — Curated model catalog organized by purpose:
+  - 📝 Text & Reasoning tier: llama3.2 (🏆 default), llama3.1, mistral, mistral-nemo, deepseek-r1
+  - 👁️ Vision & Image tier: llama3.2-vision (🏆 default), llava, qwen2-vl, moondream
+  - ⚡ Power User tier: qwen2.5, codellama, gemma2:2b
+  - Model dropdown shows tiered sections with category headers
+  - Updated OnboardingWizard with vision model options
+  - Updated SettingsPanel Quick Pull chips and default placeholder
+
+### Changed
+
+- `lib.rs`: Added `mod smart_router; mod doc_chunker;` declarations; 5 new Tauri commands (`smart_route_model`, `classify_installed_models`, `chunk_document`, `rag_query`, `index_document_chunks`); total IPC commands now **76**
+- `MainView.tsx`: Document analysis path now uses RAG chunking + streaming with fallback; Vision path uses Smart Model Routing with auto-swap badge
+- `App.tsx`: Global hotkey block registers both `Ctrl+Space` and `Alt+Space`; `bringToFront()` always-on-top helper
+- `ollama_bridge.rs`: `GENERATE_TIMEOUT` increased from 120s to 300s for large reasoning models
+- `smart_router.rs`: Added `qwen2-vl` to vision model patterns and priority ordering
+- `OnboardingWizard.tsx`: Updated `POPULAR_MODELS` with vision model options and accurate descriptions
+- `SettingsPanel.tsx`: Quick Pull chips updated; default model placeholder and hint text updated
+
+### Fixed
+
+- Document analysis no longer hangs — Ollama pre-check (3s fast-fail) before expensive generate calls
+- "Error sending request" now correctly detected as Ollama connectivity error
+- Empty AI response bubble after document attachment — safety net fills content from full response
+- Streaming fallback: if streaming fails, removes empty bubble and falls back to blocking `query_ollama`
+- Garbled Unicode in error messages cleaned up
+
+---
+
 ## [0.5.0] — 2026-03-03
 
 ### 🎯 Highlights
@@ -233,6 +287,7 @@ and full release polish with accessibility improvements.
 
 ---
 
+[0.5.1]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.2.1...v0.3.0

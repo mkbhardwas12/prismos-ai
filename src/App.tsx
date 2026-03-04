@@ -16,6 +16,7 @@ import SpectralTimeline from "./components/SpectralTimeline";
 import ErrorBoundary from "./components/ErrorBoundary";
 import OnboardingWizard from "./components/OnboardingWizard";
 import SpotlightOverlay from "./components/SpotlightOverlay";
+import { DEFAULT_SETTINGS } from "./lib/config";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
 
@@ -69,26 +70,19 @@ function App() {
       if (saved) {
         const parsed = JSON.parse(saved) as Partial<AppSettings>;
         const merged = {
-          ollamaUrl: parsed.ollamaUrl ?? "http://localhost:11434",
-          defaultModel: parsed.defaultModel ?? "mistral",
-          theme: parsed.theme ?? "dark",
-          maxTokens: parsed.maxTokens ?? 2048,
-          voiceInputEnabled: parsed.voiceInputEnabled ?? false,
-          voiceOutputEnabled: parsed.voiceOutputEnabled ?? false,
+          ollamaUrl: parsed.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
+          defaultModel: parsed.defaultModel ?? DEFAULT_SETTINGS.defaultModel,
+          theme: parsed.theme ?? DEFAULT_SETTINGS.theme,
+          maxTokens: parsed.maxTokens ?? DEFAULT_SETTINGS.maxTokens,
+          voiceInputEnabled: parsed.voiceInputEnabled ?? DEFAULT_SETTINGS.voiceInputEnabled,
+          voiceOutputEnabled: parsed.voiceOutputEnabled ?? DEFAULT_SETTINGS.voiceOutputEnabled,
         };
         // Apply saved theme immediately
         document.documentElement.setAttribute("data-theme", merged.theme);
         return merged;
       }
     } catch { /* ignore corrupt data */ }
-    return {
-      ollamaUrl: "http://localhost:11434",
-      defaultModel: "mistral",
-      theme: "dark",
-      maxTokens: 2048,
-      voiceInputEnabled: false,
-      voiceOutputEnabled: false,
-    };
+    return { ...DEFAULT_SETTINGS };
   });
 
   // Persist settings whenever they change

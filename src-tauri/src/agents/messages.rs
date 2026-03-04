@@ -22,7 +22,6 @@ pub enum AgentRole {
 }
 
 impl AgentRole {
-    #[allow(dead_code)]
     pub fn id(&self) -> &'static str {
         match self {
             Self::Orchestrator => "orchestrator",
@@ -126,8 +125,6 @@ impl AgentMessage {
             metadata: MessageMetadata::default(),
         }
     }
-
-    #[allow(dead_code)]
     pub fn with_metadata(mut self, metadata: MessageMetadata) -> Self {
         self.metadata = metadata;
         self
@@ -200,7 +197,6 @@ pub enum CollaborationPhase {
 }
 
 impl CollaborationPhase {
-    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Orchestrating => "Orchestrator decomposing intent",
@@ -277,8 +273,6 @@ impl CollaborationSession {
         self.current_phase = CollaborationPhase::Completed;
         self.completed_at = Some(Utc::now().to_rfc3339());
     }
-
-    #[allow(dead_code)]
     pub fn fail(&mut self) {
         self.current_phase = CollaborationPhase::Failed;
         self.completed_at = Some(Utc::now().to_rfc3339());

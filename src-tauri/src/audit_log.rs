@@ -108,24 +108,50 @@ impl AuditLog {
         entry
     }
 
-    /// Get the hash of the last entry in the chain
+    /// Get the hash of the last entry in the chain.
+    /// Reads from the end of the file for O(1) performance instead of scanning every line.
     fn last_hash(&self) -> (u64, String) {
-        let file = match fs::File::open(&self.log_path) {
+        use std::io::{Read, Seek, SeekFrom};
+
+        let mut file = match fs::File::open(&self.log_path) {
             Ok(f) => f,
             Err(_) => return (0, GENESIS_HASH.to_string()),
         };
-        let reader = BufReader::new(file);
-        let mut last_hash = GENESIS_HASH.to_string();
-        let mut last_index = 0u64;
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if let Ok(entry) = serde_json::from_str::<AuditEntry>(&line) {
-                    last_hash = entry.hash.clone();
-                    last_index = entry.index;
-                }
+
+        // Seek to the end and read backwards to find the last complete JSON line
+        let file_len = match file.seek(SeekFrom::End(0)) {
+            Ok(len) => len,
+            Err(_) => return (0, GENESIS_HASH.to_string()),
+        };
+
+        if file_len == 0 {
+            return (0, GENESIS_HASH.to_string());
+        }
+
+        // Read the last chunk (up to 4KB covers any reasonable audit entry)
+        let read_size = (file_len as usize).min(4096);
+        let seek_pos = file_len.saturating_sub(read_size as u64);
+        if file.seek(SeekFrom::Start(seek_pos)).is_err() {
+            return (0, GENESIS_HASH.to_string());
+        }
+
+        let mut buf = String::new();
+        if file.read_to_string(&mut buf).is_err() {
+            return (0, GENESIS_HASH.to_string());
+        }
+
+        // Find the last non-empty line and parse it
+        for line in buf.lines().rev() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(entry) = serde_json::from_str::<AuditEntry>(trimmed) {
+                return (entry.index, entry.hash);
             }
         }
-        (last_index, last_hash)
+
+        (0, GENESIS_HASH.to_string())
     }
 
     /// Append a new entry to the audit log.

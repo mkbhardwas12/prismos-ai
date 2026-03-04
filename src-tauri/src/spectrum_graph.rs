@@ -394,15 +394,44 @@ impl SpectrumGraph {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Populate connection IDs for each node
-        for node in &mut nodes {
-            let mut edge_stmt = self.conn.prepare(
-                "SELECT CASE WHEN source_id = ?1 THEN target_id ELSE source_id END
-                 FROM edges WHERE source_id = ?1 OR target_id = ?1",
-            )?;
-            node.connections = edge_stmt
-                .query_map(params![node.id], |row| row.get(0))?
-                .collect::<Result<Vec<String>, _>>()?;
+        // Populate connections for all nodes in a single query (avoids N+1)
+        let node_ids: Vec<String> = nodes.iter().map(|n| n.id.clone()).collect();
+        if !node_ids.is_empty() {
+            let placeholders: String = node_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT source_id, target_id FROM edges WHERE source_id IN ({p}) OR target_id IN ({p})",
+                p = placeholders
+            );
+            let mut edge_stmt = self.conn.prepare(&sql)?;
+            // Build params: each node_id appears twice (for source_id IN + target_id IN)
+            let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+            for id in &node_ids {
+                params.push(Box::new(id.clone()));
+            }
+            for id in &node_ids {
+                params.push(Box::new(id.clone()));
+            }
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+            let edges: Vec<(String, String)> = edge_stmt
+                .query_map(param_refs.as_slice(), |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            // Build a lookup: node_id → list of connected node_ids
+            let mut conn_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+            for (src, tgt) in &edges {
+                conn_map.entry(src.clone()).or_default().push(tgt.clone());
+                conn_map.entry(tgt.clone()).or_default().push(src.clone());
+            }
+
+            for node in &mut nodes {
+                if let Some(conns) = conn_map.remove(&node.id) {
+                    node.connections = conns;
+                }
+            }
         }
 
         Ok(nodes)
@@ -1735,7 +1764,6 @@ impl SpectrumGraph {
     /// When a full embedding model (e.g., ONNX + sentence-transformers) is
     /// integrated, this enables semantic vector search alongside the
     /// relational graph layer.
-    #[allow(dead_code)]
     pub fn set_node_embedding(
         &self,
         node_id: &str,
@@ -1754,7 +1782,6 @@ impl SpectrumGraph {
     }
 
     /// Retrieve a node's vector embedding
-    #[allow(dead_code)]
     pub fn get_node_embedding(
         &self,
         node_id: &str,
@@ -1783,7 +1810,6 @@ impl SpectrumGraph {
     /// Cosine similarity search across all nodes with embeddings.
     /// Returns (node_id, similarity_score) pairs sorted by similarity.
     /// This is the vector layer of the multi-layered Spectrum Graph per patent.
-    #[allow(dead_code)]
     pub fn vector_search(
         &self,
         query_embedding: &[f64],
@@ -1981,7 +2007,6 @@ impl SpectrumGraph {
 // ─── Utility: Cosine Similarity ────────────────────────────────────────────────
 
 /// Compute cosine similarity between two vectors
-#[allow(dead_code)]
 fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     let len = a.len().min(b.len());
     if len == 0 {
@@ -2437,7 +2462,6 @@ impl SpectrumGraph {
 
     /// Export the current graph as a portable sync package (unencrypted JSON).
     /// Used for cross-device sync where You-Port encryption wraps the transport.
-    #[allow(dead_code)]
     pub fn export_sync_package(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let snapshot = self.get_full_graph()?;
         let package = serde_json::json!({

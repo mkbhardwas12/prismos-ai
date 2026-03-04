@@ -435,7 +435,6 @@ impl RefractiveEngine {
     }
 
     /// Select the appropriate agent based on intent type
-    #[allow(dead_code)]
     fn select_agent(&self, intent: &ParsedIntent) -> (String, String) {
         match intent.intent_type {
             IntentType::Query => (
@@ -514,7 +513,6 @@ pub async fn process_intent_full(
 
 /// Get the full Spectrum Graph snapshot for frontend visualization.
 /// Convenience wrapper around SpectrumGraph::get_full_graph().
-#[allow(dead_code)]
 pub fn get_spectrum_graph_snapshot(
     app_dir: &Path,
 ) -> Result<crate::spectrum_graph::GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
@@ -523,7 +521,6 @@ pub fn get_spectrum_graph_snapshot(
 }
 
 /// Get all active agents with their current status
-#[allow(dead_code)]
 pub fn get_active_agents() -> Vec<Agent> {
     get_agents()
 }
@@ -532,7 +529,6 @@ pub fn get_active_agents() -> Vec<Agent> {
 
 /// Simple intent routing (legacy fallback — used when Ollama is available
 /// but full pipeline isn't needed)
-#[allow(dead_code)]
 pub async fn route_intent(
     intent: ParsedIntent,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {

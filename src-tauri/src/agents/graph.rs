@@ -119,7 +119,6 @@ pub async fn execute_collaboration(
 }
 
 /// Determine the primary agent based on intent type
-#[allow(dead_code)]
 fn determine_primary_agent(intent: &ParsedIntent) -> String {
     match intent.intent_type {
         IntentType::Query | IntentType::Analyze => "reasoner".to_string(),

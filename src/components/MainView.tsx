@@ -370,29 +370,63 @@ export default function MainView({
           : `Here is a document for analysis:\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`;
 
         setProcessingPhase(`Analyzing document (${ragResult.rag_used ? ragResult.chunks_used + " chunks" : "full doc"})…`);
-        const response = await invoke<string>("query_ollama", {
-          prompt: docPrompt,
-          model: settings.defaultModel || "mistral",
-          ollamaUrl: settings.ollamaUrl || null,
-          maxTokens: settings.maxTokens || 4096,
-        });
 
-        // Silently index chunks into Spectrum Graph (non-blocking)
-        invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
-
+        // Use streaming so user sees tokens appear in real-time (avoids blank wait on large models)
         const ragBadge = ragResult.rag_used
           ? `RAG: ${ragResult.chunks_used}/${ragResult.total_chunks} chunks`
           : "Full document";
         const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · 100% local`;
 
-        const aiMsg: Message = {
-          id: crypto.randomUUID(),
+        const streamMsgId = crypto.randomUUID();
+        const streamMsg: Message = {
+          id: streamMsgId,
           role: "ai",
-          content: response + metaLine,
+          content: "",
           timestamp: new Date(),
           agent: "Document Analyst",
         };
-        setMessages((prev) => [...prev, aiMsg]);
+        setMessages((prev) => [...prev, streamMsg]);
+        setIsProcessing(false); // Hide spinner — tokens are now streaming
+
+        // Listen for streaming tokens
+        const { listen: listenEvent } = await import("@tauri-apps/api/event");
+        const unlistenStream = await listenEvent<{ token: string; done: boolean }>(
+          "ollama-stream",
+          (event) => {
+            const { token, done } = event.payload;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamMsgId
+                  ? { ...m, content: m.content + token }
+                  : m
+              )
+            );
+            if (done) {
+              // Append metadata footer when streaming completes
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamMsgId
+                    ? { ...m, content: m.content + metaLine }
+                    : m
+                )
+              );
+            }
+          }
+        );
+
+        try {
+          await invoke<string>("query_ollama_stream", {
+            prompt: docPrompt,
+            model: settings.defaultModel || "mistral",
+            ollamaUrl: settings.ollamaUrl || null,
+            maxTokens: settings.maxTokens || 4096,
+          });
+        } finally {
+          unlistenStream();
+        }
+
+        // Silently index chunks into Spectrum Graph (non-blocking)
+        invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
         onIntentProcessed("Document Analyst");
 
         // Generate follow-up suggestions
@@ -401,11 +435,11 @@ export default function MainView({
           const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
           const enriched = generateFollowUpSuggestions(input, sug);
           setProactiveSuggestions(enriched);
-          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
+          setMessageSuggestions(prev => ({ ...prev, [streamMsgId]: enriched.slice(0, 3) }));
         } catch {
           const fallback = generateFollowUpSuggestions(input, []);
           setProactiveSuggestions(fallback);
-          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
+          setMessageSuggestions(prev => ({ ...prev, [streamMsgId]: fallback.slice(0, 3) }));
         }
       } else if (imageData) {
         // ── Vision path: Smart Model Routing (Phase 6) — auto-swap to vision model ──
@@ -551,7 +585,7 @@ export default function MainView({
             }
           } catch (fallbackErr) {
             const errorStr = String(fallbackErr);
-            const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
+            const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
             const isModelError = errorStr.includes("model") || errorStr.includes("not found");
             const errorMsg: Message = {
               id: crypto.randomUUID(),
@@ -569,7 +603,7 @@ export default function MainView({
       } // end if/else documentText/imageData
     } catch (err) {
       const errorStr = String(err);
-      const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
+      const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
       const isModelError = errorStr.includes("model") || errorStr.includes("not found");
       const errorMsg: Message = {
         id: crypto.randomUUID(),

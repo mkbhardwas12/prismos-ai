@@ -14,6 +14,8 @@ mod model_verify;
 mod secure_enclave;
 mod whisper_engine;
 mod file_indexer;
+mod smart_router;
+mod doc_chunker;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -157,6 +159,80 @@ async fn read_image_as_base64(path: String) -> Result<String, String> {
 
     let bytes = std::fs::read(file_path).map_err(|e| e.to_string())?;
     Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
+}
+
+// ─── Smart Model Router (Phase 6) — Auto-swap to vision model when image attached ──
+
+/// Route to the best model based on payload type.
+/// Queries installed Ollama models and returns a routing decision.
+#[tauri::command]
+async fn smart_route_model(
+    user_model: String,
+    has_image: bool,
+    has_document: bool,
+    ollama_url: Option<String>,
+) -> Result<String, String> {
+    // Fetch available models from Ollama
+    let models = ollama_bridge::list_models(ollama_url.as_deref())
+        .await
+        .unwrap_or_default();
+    let model_names: Vec<String> = models.iter().map(|m| m.name.clone()).collect();
+
+    let decision = smart_router::route_model(
+        &user_model,
+        has_image,
+        has_document,
+        false,
+        &model_names,
+    );
+
+    serde_json::to_string(&decision).map_err(|e| e.to_string())
+}
+
+/// Get capability badges for all installed models
+#[tauri::command]
+async fn classify_installed_models(ollama_url: Option<String>) -> Result<String, String> {
+    let models = ollama_bridge::list_models(ollama_url.as_deref())
+        .await
+        .unwrap_or_default();
+    let model_names: Vec<String> = models.iter().map(|m| m.name.clone()).collect();
+    let caps = smart_router::classify_models(&model_names);
+    serde_json::to_string(&caps).map_err(|e| e.to_string())
+}
+
+// ─── Document Chunking + RAG (Phase 6) — Retrieval-Augmented Generation ────────
+
+/// Chunk a document and return the chunks (for frontend display/debugging)
+#[tauri::command]
+async fn chunk_document(text: String, source: String) -> Result<String, String> {
+    let result = doc_chunker::chunk_document(&text, &source);
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// RAG query: chunk a document, retrieve relevant sections, build context prompt.
+/// Returns the assembled RAG context ready for LLM injection.
+#[tauri::command]
+async fn rag_query(
+    document_text: String,
+    query: String,
+    source: String,
+) -> Result<String, String> {
+    let result = doc_chunker::build_rag_context(&document_text, &query, &source);
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Index a document's chunks into the Spectrum Graph for persistent retrieval.
+#[tauri::command]
+async fn index_document_chunks(
+    text: String,
+    source: String,
+    db: tauri::State<'_, DbState>,
+) -> Result<String, String> {
+    let chunked = doc_chunker::chunk_document(&text, &source);
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let node_ids = doc_chunker::index_chunks_to_graph(&graph, &chunked)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&node_ids).map_err(|e| e.to_string())
 }
 
 // ─── Spectrum Graph Commands ───────────────────────────────────────────────────
@@ -1829,6 +1905,12 @@ pub fn run() {
             // Local Vision — Multimodal (Phase 5.5)
             query_ollama_vision,
             read_image_as_base64,
+            // Phase 6 — Smart Model Router + Document RAG
+            smart_route_model,
+            classify_installed_models,
+            chunk_document,
+            rag_query,
+            index_document_chunks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrismOS-AI");

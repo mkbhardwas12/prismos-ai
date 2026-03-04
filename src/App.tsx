@@ -275,20 +275,49 @@ function App() {
     document.documentElement.setAttribute("data-spectrum", view);
   }, [view]);
 
-  // ── Global Hotkey: Ctrl+Space to open Spotlight overlay ──
+  // ── Global Hotkey: Ctrl+Space AND Alt+Space — Background Omnipresence ──
+  // Alt+Space summons PrismOS over any app (always-on-top, focused, ready to go)
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     (async () => {
       try {
         const { register, unregister } = await import("@tauri-apps/plugin-global-shortcut");
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
+        const bringToFront = async () => {
+          const win = getCurrentWindow();
+          try {
+            await win.setAlwaysOnTop(true);
+            await win.unminimize();
+            await win.show();
+            await win.setFocus();
+            // Release always-on-top after a short delay so it doesn't stay pinned
+            setTimeout(async () => {
+              try { await win.setAlwaysOnTop(false); } catch { /* ignore */ }
+            }, 500);
+          } catch { /* window API not available */ }
+        };
+
+        // Register Ctrl+Space (legacy shortcut)
         await register("CommandOrControl+Space", (event) => {
           if (event.state === "Pressed") {
-            // Toggle the Spotlight overlay
             setSpotlightOpen((prev) => !prev);
-            window.focus();
+            bringToFront();
           }
         });
-        cleanup = () => { unregister("CommandOrControl+Space").catch(() => {}); };
+
+        // Register Alt+Space — Background Omnipresence shortcut
+        await register("Alt+Space", (event) => {
+          if (event.state === "Pressed") {
+            setSpotlightOpen((prev) => !prev);
+            bringToFront();
+          }
+        });
+
+        cleanup = () => {
+          unregister("CommandOrControl+Space").catch(() => {});
+          unregister("Alt+Space").catch(() => {});
+        };
       } catch (e) {
         console.warn("Global shortcut registration failed (non-critical):", e);
       }
@@ -425,7 +454,7 @@ function App() {
         />
       )}
 
-      {/* Spotlight overlay — global command palette (Ctrl+Space) */}
+      {/* Spotlight overlay — global command palette (Ctrl+Space / Alt+Space) — Background Omnipresence */}
       <SpotlightOverlay
         visible={spotlightOpen}
         onClose={() => setSpotlightOpen(false)}

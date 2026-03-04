@@ -70,6 +70,10 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 | **Auto-Updater** | Seamless OTA updates via GitHub Releases *(Phase 5)* |
 | **Local Vision** | Multimodal image analysis via llava/llama3.2-vision — drag-drop or camera capture *(Phase 5.5)* |
 | **Document Analysis** | Upload PDF, DOCX, PPTX, XLSX for AI-powered summaries & analysis — text extracted locally *(Phase 5.5)* |
+| **Smart Model Routing** | Auto-swaps to vision model (llama3.2-vision/llava) when image attached, reverts after *(Phase 6)* |
+| **Document RAG** | Intelligent chunking + TF-IDF retrieval for large documents instead of naive truncation *(Phase 6)* |
+| **Background Omnipresence** | `Alt+Space` global hotkey — PrismOS pops up over any app, always-on-top *(Phase 6)* |
+| **Tiered Model Catalog** | Curated model recommendations: Text, Vision & Power User tiers with one-click install *(Phase 6)* |
 
 Everything runs offline. All inference via local [Ollama](https://ollama.com) models.
 
@@ -106,7 +110,7 @@ cd prismos-ai
 npm install
 
 # Pull a local model (PrismOS-AI will guide you through this on first launch)
-ollama pull mistral
+ollama pull llama3.2
 
 # Start Ollama in the background
 ollama serve &
@@ -216,7 +220,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.2.1** | ✅ Done | 65 tests, CI/CD, config centralization, streaming progress bars, docs polish |
 | **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
 | **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
-| **v0.5.0** | ✅ Current | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
+| **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
+| **v0.5.1** | ✅ Current | Smart Model Routing, Document RAG, Background Omnipresence (Alt+Space), Tiered Model Catalog |
 | **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
@@ -224,9 +229,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📊 Project Stats
 
-- **18 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, LangGraph Workflow, Agent Graph
-- **65 tests passing** across 7 test files (Vitest + React Testing Library)
-- **71 Tauri IPC commands** — full frontend↔backend communication
+- **20 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, LangGraph Workflow, Agent Graph, Smart Router, Doc Chunker
+- **99 tests passing** — 65 frontend (Vitest) + 34 backend (cargo test)
+- **76 Tauri IPC commands** — full frontend↔backend communication
 - **Zero cloud dependencies** — everything runs on your machine
 
 ---

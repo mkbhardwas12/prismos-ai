@@ -1698,6 +1698,238 @@ async fn extract_document_for_analysis(path: String) -> Result<String, String> {
     extract_file_text(path).await
 }
 
+/// Extract text from a document provided as base64-encoded bytes.
+/// This is used when the frontend doesn't have a file path (e.g. <input type="file"> picker
+/// in Tauri 2.0 doesn't expose paths). The binary data is decoded and parsed in-memory.
+#[tauri::command]
+async fn extract_document_from_bytes(data: String, file_name: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    if bytes.len() > 50 * 1024 * 1024 {
+        return Err("File too large (max 50 MB)".to_string());
+    }
+
+    let ext = file_name
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "pdf" => extract_pdf_from_bytes(&bytes, &file_name),
+        "docx" => extract_docx_from_bytes(&bytes, &file_name),
+        "pptx" => extract_pptx_from_bytes(&bytes, &file_name),
+        "xlsx" | "xls" => extract_xlsx_from_bytes(&bytes, &file_name),
+        _ => {
+            // Try reading as UTF-8 text
+            match String::from_utf8(bytes) {
+                Ok(content) => Ok(format!("[File: {}]\n{}", file_name, content)),
+                Err(_) => Err(format!("Unsupported binary format: .{}", ext)),
+            }
+        }
+    }
+}
+
+/// Extract text from PDF bytes in memory
+fn extract_pdf_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, String> {
+    let text = pdf_extract::extract_text_from_mem(bytes)
+        .map_err(|e| format!("Failed to parse PDF: {}", e))?;
+
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("PDF contains no extractable text (may be scanned/image-based)".to_string());
+    }
+
+    let page_count = text.matches('\u{000C}').count().max(1);
+
+    Ok(format!(
+        "[Document: {} | Type: PDF | ~{} pages | {} chars]\n\n{}",
+        file_name, page_count, trimmed.len(), trimmed
+    ))
+}
+
+/// Extract text from DOCX bytes in memory
+fn extract_docx_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|e| format!("Failed to read DOCX archive: {}", e))?;
+
+    let mut text_parts: Vec<String> = Vec::new();
+
+    if let Ok(mut doc_xml) = archive.by_name("word/document.xml") {
+        let mut xml_content = String::new();
+        std::io::Read::read_to_string(&mut doc_xml, &mut xml_content)
+            .map_err(|e| format!("Failed to read document.xml: {}", e))?;
+
+        let mut result = String::new();
+        let mut in_paragraph = false;
+        let mut current_para = String::new();
+
+        for part in xml_content.split('<') {
+            if part.starts_with("w:p>") || part.starts_with("w:p ") {
+                in_paragraph = true;
+                current_para.clear();
+            } else if part.starts_with("/w:p>") {
+                if !current_para.trim().is_empty() {
+                    result.push_str(current_para.trim());
+                    result.push('\n');
+                }
+                in_paragraph = false;
+                current_para.clear();
+            } else if in_paragraph {
+                if let Some(pos) = part.find('>') {
+                    let text_after = &part[pos + 1..];
+                    if !text_after.is_empty() {
+                        current_para.push_str(text_after);
+                    }
+                }
+            }
+        }
+
+        if !result.trim().is_empty() {
+            text_parts.push(result);
+        }
+    }
+
+    let combined = text_parts.join("\n").trim().to_string();
+
+    if combined.is_empty() {
+        // Fallback: try docx-rs
+        let docx = docx_rs::read_docx(bytes)
+            .map_err(|e| format!("Failed to parse DOCX: {:?}", e))?;
+        let json_str = serde_json::to_string(&docx.document)
+            .map_err(|e| format!("Failed to serialize DOCX: {}", e))?;
+        let mut texts: Vec<String> = Vec::new();
+        extract_text_from_json_str(&json_str, &mut texts);
+        let fallback = texts.join(" ").trim().to_string();
+        if fallback.is_empty() {
+            return Err("DOCX contains no extractable text".to_string());
+        }
+        let word_count = fallback.split_whitespace().count();
+        return Ok(format!(
+            "[Document: {} | Type: DOCX | ~{} words | {} chars]\n\n{}",
+            file_name, word_count, fallback.len(), fallback
+        ));
+    }
+
+    let word_count = combined.split_whitespace().count();
+    Ok(format!(
+        "[Document: {} | Type: DOCX | ~{} words | {} chars]\n\n{}",
+        file_name, word_count, combined.len(), combined
+    ))
+}
+
+/// Extract text from PPTX bytes in memory
+fn extract_pptx_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|e| format!("Failed to read PPTX archive: {}", e))?;
+
+    let mut slides: Vec<(usize, String)> = Vec::new();
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .map_err(|e| format!("Failed to read PPTX entry: {}", e))?;
+        let entry_name = entry.name().to_string();
+
+        if entry_name.starts_with("ppt/slides/slide") && entry_name.ends_with(".xml") {
+            let slide_num = entry_name
+                .trim_start_matches("ppt/slides/slide")
+                .trim_end_matches(".xml")
+                .parse::<usize>()
+                .unwrap_or(0);
+
+            let mut xml_content = String::new();
+            std::io::Read::read_to_string(&mut entry, &mut xml_content)
+                .map_err(|e| format!("Failed to read slide XML: {}", e))?;
+
+            let mut slide_text = String::new();
+            for part in xml_content.split("<a:t>") {
+                if let Some(end_pos) = part.find("</a:t>") {
+                    let text = &part[..end_pos];
+                    if !text.trim().is_empty() {
+                        slide_text.push_str(text);
+                        slide_text.push(' ');
+                    }
+                }
+            }
+
+            if !slide_text.trim().is_empty() {
+                slides.push((slide_num, slide_text.trim().to_string()));
+            }
+        }
+    }
+
+    if slides.is_empty() {
+        return Err("PPTX contains no extractable text".to_string());
+    }
+
+    slides.sort_by_key(|(num, _)| *num);
+
+    let mut result = String::new();
+    for (num, text) in &slides {
+        result.push_str(&format!("── Slide {} ──\n{}\n\n", num, text));
+    }
+
+    let total_words: usize = slides.iter().map(|(_, t)| t.split_whitespace().count()).sum();
+
+    Ok(format!(
+        "[Document: {} | Type: PPTX | {} slides | ~{} words]\n\n{}",
+        file_name, slides.len(), total_words, result.trim()
+    ))
+}
+
+/// Extract text from XLSX bytes in memory
+fn extract_xlsx_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, String> {
+    use calamine::{Reader, Xlsx};
+    let cursor = std::io::Cursor::new(bytes);
+    let mut workbook: Xlsx<_> = Xlsx::new(cursor)
+        .map_err(|e| format!("Failed to open spreadsheet: {}", e))?;
+
+    let mut result = String::new();
+    let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
+    let mut total_rows = 0usize;
+
+    for sheet_name in &sheet_names {
+        if let Ok(range) = workbook.worksheet_range(sheet_name) {
+            result.push_str(&format!("── Sheet: {} ──\n", sheet_name));
+            for row in range.rows() {
+                let cells: Vec<String> = row.iter().map(|cell| {
+                    match cell {
+                        calamine::Data::Empty => String::new(),
+                        calamine::Data::String(s) => s.clone(),
+                        calamine::Data::Float(f) => format!("{}", f),
+                        calamine::Data::Int(i) => format!("{}", i),
+                        calamine::Data::Bool(b) => format!("{}", b),
+                        calamine::Data::DateTime(dt) => format!("{}", dt),
+                        calamine::Data::DateTimeIso(s) => s.clone(),
+                        calamine::Data::DurationIso(s) => s.clone(),
+                        calamine::Data::Error(e) => format!("ERR:{:?}", e),
+                    }
+                }).collect();
+                if cells.iter().all(|c| c.is_empty()) { continue; }
+                result.push_str(&cells.join("\t"));
+                result.push('\n');
+                total_rows += 1;
+            }
+            result.push('\n');
+        }
+    }
+
+    if result.trim().is_empty() {
+        return Err("Spreadsheet contains no data".to_string());
+    }
+
+    let ext_label = if file_name.to_lowercase().ends_with(".xls") { "XLS" } else { "XLSX" };
+    Ok(format!(
+        "[Document: {} | Type: {} | {} sheets | {} rows]\n\n{}",
+        file_name, ext_label, sheet_names.len(), total_rows, result.trim()
+    ))
+}
+
 // ─── Application Setup ────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -1902,6 +2134,7 @@ pub fn run() {
             // Drag & Drop File Ingest (Phase 5) + Document Extraction (Phase 5.5)
             extract_file_text,
             extract_document_for_analysis,
+            extract_document_from_bytes,
             // Local Vision — Multimodal (Phase 5.5)
             query_ollama_vision,
             read_image_as_base64,

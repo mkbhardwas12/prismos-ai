@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-const GENERATE_TIMEOUT: Duration = Duration::from_secs(120);
+const GENERATE_TIMEOUT: Duration = Duration::from_secs(300); // 5 min — large models (deepseek-r1) on doc analysis need time
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 
 // ─── Request / Response Types ──────────────────────────────────────────────────

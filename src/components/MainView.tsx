@@ -350,7 +350,7 @@ export default function MainView({
     try {
       // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
       if (documentText) {
-        // Fast pre-check: is Ollama reachable? (3s timeout instead of 120s)
+        // Fast pre-check: is Ollama reachable? (3s timeout instead of 300s hang)
         setProcessingPhase("Checking Ollama connection…");
         const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
         if (!ollamaOk) {
@@ -376,116 +376,31 @@ export default function MainView({
           ? `The following are the most relevant sections from "${sourceName}" (${ragResult.chunks_used}/${ragResult.total_chunks} sections retrieved via RAG):\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`
           : `Here is a document for analysis:\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`;
 
-        setProcessingPhase(`Analyzing document (${ragResult.rag_used ? ragResult.chunks_used + " chunks" : "full doc"})…`);
+        const modelName = settings.defaultModel || "llama3.2";
+        setProcessingPhase(`Analyzing with ${modelName} (${ragResult.rag_used ? ragResult.chunks_used + " chunks" : "full doc"})…`);
 
-        // Use streaming so user sees tokens appear in real-time (avoids blank wait on large models)
+        // Use blocking call — simpler & more reliable than streaming for document analysis
+        const docResponse = await invoke<string>("query_ollama", {
+          prompt: docPrompt,
+          model: modelName,
+          ollamaUrl: settings.ollamaUrl || null,
+          maxTokens: settings.maxTokens || 4096,
+        });
+
         const ragBadge = ragResult.rag_used
           ? `RAG: ${ragResult.chunks_used}/${ragResult.total_chunks} chunks`
           : "Full document";
-        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · 100% local`;
+        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · ${modelName} · 100% local`;
 
-        const streamMsgId = crypto.randomUUID();
-
-        // Try streaming first, fall back to blocking if streaming fails
-        let docResponse = "";
-        let streamWorked = false;
-
-        try {
-          // Insert empty AI bubble and start streaming tokens into it
-          setMessages((prev) => [...prev, {
-            id: streamMsgId,
-            role: "ai" as const,
-            content: "",
-            timestamp: new Date(),
-            agent: "Document Analyst",
-          }]);
-          setIsProcessing(false); // Hide spinner — tokens are now streaming
-
-          const { listen: listenEvent } = await import("@tauri-apps/api/event");
-          const unlistenStream = await listenEvent<{ token: string; done: boolean }>(
-            "ollama-stream",
-            (event) => {
-              const { token, done } = event.payload;
-              if (token) {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === streamMsgId
-                      ? { ...m, content: m.content + token }
-                      : m
-                  )
-                );
-              }
-              if (done) {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === streamMsgId
-                      ? { ...m, content: m.content + metaLine }
-                      : m
-                  )
-                );
-              }
-            }
-          );
-
-          try {
-            const fullText = await invoke<string>("query_ollama_stream", {
-              prompt: docPrompt,
-              model: settings.defaultModel || "mistral",
-              ollamaUrl: settings.ollamaUrl || null,
-              maxTokens: settings.maxTokens || 4096,
-            });
-            docResponse = fullText;
-            streamWorked = true;
-          } finally {
-            unlistenStream();
-          }
-
-          // Safety net: if stream events didn't fire but we got a full response back,
-          // populate the bubble with the complete text
-          if (streamWorked && docResponse) {
-            setMessages((prev) => {
-              const existing = prev.find((m) => m.id === streamMsgId);
-              if (existing && !existing.content) {
-                // Events never fired — use full response
-                return prev.map((m) =>
-                  m.id === streamMsgId
-                    ? { ...m, content: docResponse + metaLine }
-                    : m
-                );
-              } else if (existing && !existing.content.includes("───")) {
-                // Events fired but done event missed — append footer
-                return prev.map((m) =>
-                  m.id === streamMsgId
-                    ? { ...m, content: m.content + metaLine }
-                    : m
-                );
-              }
-              return prev;
-            });
-          }
-        } catch (streamErr) {
-          // Streaming failed — remove empty bubble and fall back to blocking call
-          console.warn("Streaming failed, falling back to blocking:", streamErr);
-          setMessages((prev) => prev.filter((m) => m.id !== streamMsgId));
-          setIsProcessing(true);
-          setProcessingPhase(`Analyzing document (fallback)…`);
-
-          docResponse = await invoke<string>("query_ollama", {
-            prompt: docPrompt,
-            model: settings.defaultModel || "mistral",
-            ollamaUrl: settings.ollamaUrl || null,
-            maxTokens: settings.maxTokens || 4096,
-          });
-
-          const aiMsg: Message = {
-            id: streamMsgId,
-            role: "ai",
-            content: docResponse + metaLine,
-            timestamp: new Date(),
-            agent: "Document Analyst",
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-        }
+        const docMsgId = crypto.randomUUID();
+        const aiMsg: Message = {
+          id: docMsgId,
+          role: "ai",
+          content: docResponse + metaLine,
+          timestamp: new Date(),
+          agent: "Document Analyst",
+        };
+        setMessages((prev) => [...prev, aiMsg]);
 
         // Silently index chunks into Spectrum Graph (non-blocking)
         invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
@@ -497,11 +412,11 @@ export default function MainView({
           const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
           const enriched = generateFollowUpSuggestions(input, sug);
           setProactiveSuggestions(enriched);
-          setMessageSuggestions(prev => ({ ...prev, [streamMsgId]: enriched.slice(0, 3) }));
+          setMessageSuggestions(prev => ({ ...prev, [docMsgId]: enriched.slice(0, 3) }));
         } catch {
           const fallback = generateFollowUpSuggestions(input, []);
           setProactiveSuggestions(fallback);
-          setMessageSuggestions(prev => ({ ...prev, [streamMsgId]: fallback.slice(0, 3) }));
+          setMessageSuggestions(prev => ({ ...prev, [docMsgId]: fallback.slice(0, 3) }));
         }
       } else if (imageData) {
         // ── Vision path: Smart Model Routing (Phase 6) — auto-swap to vision model ──

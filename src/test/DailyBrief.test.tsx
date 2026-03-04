@@ -67,12 +67,11 @@ describe("DailyBrief", () => {
     vi.clearAllMocks();
     // Pin getHours() to 9 AM so component always renders morning layout
     const MockDate = class extends RealDate {
-      constructor(...args: ConstructorParameters<typeof RealDate>) {
+      constructor(...args: unknown[]) {
         if (args.length === 0) {
           super(2026, 2, 4, 9, 0, 0); // March 4, 2026 09:00
         } else {
-          // @ts-expect-error spread into Date constructor
-          super(...args);
+          super(...(args as [number, number, ...number[]]));
         }
       }
       static now() { return new RealDate(2026, 2, 4, 9, 0, 0).getTime(); }

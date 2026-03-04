@@ -990,7 +990,7 @@ export default function SettingsPanel({
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
               <span className="settings-version-name">PrismOS-AI</span>
-              <span className="settings-version-number">v0.5.2</span>
+              <span className="settings-version-number">v0.5.1</span>
             </div>
             <div className="settings-version-badges">
               <span className="settings-badge-patent">Patent Pending</span>

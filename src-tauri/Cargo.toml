@@ -1,6 +1,6 @@
 [package]
 name = "prismos"
-version = "0.5.2"
+version = "0.5.1"
 description = "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)"
 authors = ["PrismOS-AI Contributors"]
 edition = "2021"

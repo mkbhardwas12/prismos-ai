@@ -1,12 +1,12 @@
 <div align="center">
 
-# 🔷 PrismOS-AI v0.5.2
+# 🔷 PrismOS-AI v0.5.1
 
 ### The Local-First AI Operating System
 
 **Your AI. Your Data. Your Machine. Period.**
 
-[![Release](https://img.shields.io/badge/Release-v0.5.2-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
+[![Release](https://img.shields.io/badge/Release-v0.5.1-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
 [![Patent](https://img.shields.io/badge/Patent-Pending-10b981?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
 [![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
@@ -19,7 +19,7 @@
 
 ## 🎯 What Is This Release?
 
-PrismOS-AI v0.5.2 is a feature release of the patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+PrismOS-AI v0.5.1 is a feature release of the patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
 
 > **In one sentence:** A Tauri 2.0 desktop app with 8 AI agents, a physics-inspired knowledge graph, WASM sandboxing, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Local Vision, Document Analysis, frameless window, system tray, auto-updater, and a modern glassmorphism UI — all running 100% offline.
 
@@ -34,7 +34,7 @@ PrismOS-AI v0.5.2 is a feature release of the patent-pending AI operating system
 
 ---
 
-## ✨ What's New in v0.5.2
+## ✨ What's New in v0.5.1
 
 ### 🏠 Daily Dashboard
 > Your unified morning-brief command center.
@@ -148,7 +148,7 @@ Frameless Window    No                  Yes         (NEW)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│              PrismOS-AI Desktop App (v0.5.2)             │
+│              PrismOS-AI Desktop App (v0.5.1)             │
 ├──────────────────────────────────────────────────────────┤
 │  React 18 + TypeScript 5.5            (Frontend)         │
 │  ├── Daily Dashboard      Morning brief + proactive cards │

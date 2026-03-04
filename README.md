@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.5.2-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
+[![Version](https://img.shields.io/badge/version-0.5.1-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 [![Patent](https://img.shields.io/badge/Patent-Pending-10b981)](.)
@@ -12,7 +12,7 @@
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 7 adds the **Daily Dashboard**, **ProactivePanel** sidebar, and three specialized **Keeper agents** (Email, Calendar, Finance) — giving you a unified morning-brief experience with proactive cards, entirely offline.
+PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Features include **Local Vision**, **Document RAG**, **Background Omnipresence** (Alt+Space), **Proactive Suggestions**, **WASM Sandbox Prisms**, and a modern glassmorphism UI — all running entirely offline.
 
 <p align="center">
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to eight AI agents at once" />
@@ -30,17 +30,15 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 |:-:|:-:|
 | <img src="docs/screenshots/Sandbox-Prisms.png" width="400" alt="Sandbox Prisms — WASM-isolated execution" /> | <img src="docs/screenshots/Spectral-Timeline.png" width="400" alt="Spectral Timeline — knowledge evolution over time" /> |
 
-<!-- 🔜 Add voice-input.png and security-audit.png here for 7 total screenshots:
 | Voice Input | Security Audit Log |
 |:-:|:-:|
-| <img src="docs/screenshots/voice-input.png" width="400" alt="Voice Input — speak your intents" /> | <img src="docs/screenshots/security-audit.png" width="400" alt="Security Audit Log — tamper-proof action trail" /> |
--->
+| *Screenshot coming soon — speak your intents via local voice engine* | *Screenshot coming soon — tamper-proof SHA-256 hash chain audit trail* |
 
 </details>
 
 ---
 
-## ✨ Core Features (v0.5.2)
+## ✨ Core Features (v0.5.1)
 
 | Feature | Description |
 |---------|-------------|
@@ -87,11 +85,48 @@ Everything runs offline. All inference via local [Ollama](https://ollama.com) mo
 
 ## 🏗️ Architecture
 
-<p align="center">
-  <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS-AI Architecture Diagram" />
-</p>
+```
+┌──────────────────────────────────────────────────────────────┐
+│                PrismOS-AI Desktop App (v0.5.1)               │
+├──────────────────────────────────────────────────────────────┤
+│  React 18 + TypeScript 5.5 + Vite 5.4      (Frontend)       │
+│  ├── Intent Console        NL chat + vision + documents      │
+│  ├── Spectrum Graph        7D force-directed visualization   │
+│  ├── Sandbox Prisms        WASM-isolated code execution      │
+│  ├── Spectral Timeline     Time-series knowledge history     │
+│  ├── Daily Dashboard       Morning brief + proactive cards   │
+│  ├── ProactivePanel        Live sidebar feeds                │
+│  └── Settings & Security   Config + audit + security status  │
+├───────────────── 76 Tauri IPC Commands ──────────────────────┤
+│  Rust 1.82+ Backend                     (20 Modules)        │
+│  ├── refractive_core.rs   Intent decomposition pipeline      │
+│  ├── spectrum_graph.rs    SQLite 7D knowledge store          │
+│  ├── ollama_bridge.rs     LLM + vision inference             │
+│  ├── sandbox_prism.rs     wasmtime WASM runtime              │
+│  ├── agents/              8 AI agents with consensus voting  │
+│  ├── smart_router.rs      Auto vision/text model switching   │
+│  ├── doc_chunker.rs       TF-IDF document RAG               │
+│  ├── you_port.rs          Encrypted AES-256-GCM sync        │
+│  ├── audit_log.rs         SHA-256 tamper-proof hash chain    │
+│  ├── file_indexer.rs      Local RAG file watcher             │
+│  └── screen_awareness.rs  Opt-in contextual screen capture   │
+├──────────────────────────────────────────────────────────────┤
+│  Ollama (localhost:11434)   Local LLM — llama3.2 / llava     │
+└──────────────────────────────────────────────────────────────┘
+        ↓  Everything runs locally. Nothing phones home.  ↓
+```
 
-See [docs/architecture.svg](docs/architecture.svg) and the [docs/diagrams/](docs/diagrams/) folder for detailed visual diagrams.
+See [docs/diagrams/](docs/diagrams/) for detailed SVG architecture diagrams (data flow, security model, refractive pipeline, spectral dimensions, and more).
+
+---
+
+## 🎬 Demo Video
+
+> *30-second walkthrough — from first launch to proactive suggestions*
+
+[![PrismOS-AI Demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube)](https://youtube.com)
+
+<!-- Replace the link above with your unlisted YouTube URL when the demo is recorded -->
 
 ---
 
@@ -174,9 +209,44 @@ CI runs automatically on every push and PR via [GitHub Actions](.github/workflow
 
 ## 📁 Project Structure
 
-<p align="center">
-  <img src="docs/diagrams/project-structure.svg" width="750" alt="PrismOS-AI Project Structure" />
-</p>
+```
+prismos-ai/
+├── src/                          # React 18 + TypeScript frontend
+│   ├── components/               # 15+ UI components
+│   │   ├── IntentConsole.tsx      # Main chat interface with vision + document upload
+│   │   ├── SpectrumGraphView.tsx  # Force-directed 7D knowledge graph
+│   │   ├── SandboxView.tsx        # WASM sandbox prisms dashboard
+│   │   ├── TimelineView.tsx       # Spectral timeline (knowledge history)
+│   │   ├── DailyDashboard.tsx     # Morning brief + proactive cards
+│   │   ├── ProactivePanel.tsx     # Collapsible sidebar with live feeds
+│   │   ├── SettingsPanel.tsx      # App configuration + security status
+│   │   ├── TitleBar.tsx           # Custom frameless window controls
+│   │   ├── Sidebar.tsx            # Navigation + version badge
+│   │   └── OnboardingWizard.tsx   # First-run setup experience
+│   ├── lib/                      # Core logic + agent framework
+│   │   ├── agents/               # 8 AI agents (orchestrator → keepers)
+│   │   ├── spectrumGraph.ts      # Graph CRUD + spectral dimensions
+│   │   ├── ollamaClient.ts       # Streaming LLM client
+│   │   └── config.ts             # Centralized configuration
+│   └── test/                     # 97 frontend tests (Vitest)
+├── src-tauri/                    # Rust backend (Tauri 2.0)
+│   └── src/
+│       ├── lib.rs                # 76 IPC commands + app bootstrap
+│       ├── spectrum_graph.rs     # SQLite knowledge store
+│       ├── refractive_core.rs    # Intent → agent pipeline
+│       ├── sandbox_prism.rs      # WASM runtime (wasmtime 27)
+│       ├── ollama_bridge.rs      # LLM + vision streaming
+│       ├── smart_router.rs       # Auto model switching
+│       ├── doc_chunker.rs        # Document RAG + TF-IDF
+│       ├── you_port.rs           # AES-256-GCM encrypted export
+│       ├── audit_log.rs          # SHA-256 hash chain
+│       ├── agents/               # Agent graph + LangGraph DAG
+│       └── 65 backend tests      # cargo test
+├── docs/                         # Architecture diagrams + screenshots
+├── .github/workflows/            # CI + Release Build (cross-platform)
+├── package.json                  # v0.5.1
+└── README.md                     # ← You are here
+```
 
 ---
 
@@ -227,8 +297,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
 | **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
 | **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
-| **v0.5.1** | ✅ Done | Smart Model Routing, Document RAG, Background Omnipresence (Alt+Space), Tiered Model Catalog |
-| **v0.5.2** | ✅ Current | Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Startup View Setting, 162 tests |
+| **v0.5.1** | ✅ Current | Smart Model Routing, Document RAG, Background Omnipresence (Alt+Space), Tiered Model Catalog, 162 tests |
+| **v0.5.2** | ✅ Done | Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Startup View Setting |
 | **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
@@ -250,7 +320,7 @@ PrismOS-AI and its core architectures (Spectrum Graph™, Refractive Core™, Sa
 ---
 
 <p align="center">
-  <strong>PrismOS-AI v0.5.2</strong> — Your mind, your machine, your OS.<br />
+  <strong>PrismOS-AI v0.5.1</strong> — Your mind, your machine, your OS.<br />
   Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
 </p>

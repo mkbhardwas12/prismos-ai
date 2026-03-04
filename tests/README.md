@@ -47,7 +47,7 @@ Use this checklist to verify all features before a release:
 - [ ] Loading screen transitions smoothly to main view
 - [ ] You-Port auto-restore toast appears if previous session exists
 - [ ] Sidebar shows all 7 navigation items (Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings)
-- [ ] Version badge shows v0.5.2
+- [ ] Version badge shows v0.5.1
 
 #### Daily Dashboard
 - [ ] Dashboard view loads with hero greeting (time-of-day)
@@ -128,7 +128,7 @@ Use this checklist to verify all features before a release:
   - [ ] Apply Merge runs merge with selected strategy
   - [ ] Strategy selector (Latest/Theirs/Ours) works
 - [ ] Patent notice visible
-- [ ] Version banner shows v0.5.2
+- [ ] Version banner shows v0.5.1
 
 #### Frameless Window & System Tray
 - [ ] Frameless window renders with custom titlebar

@@ -17,6 +17,8 @@ Place screenshots here for the README and GitHub Release page.
 | `sandbox-prisms.png` | Sandbox Prisms dashboard |
 | `spectral-timeline.png` | Spectral Timeline view |
 | `settings-sync.png` | Settings + Multi-Device Sync |
+| `daily-dashboard.png` | Daily Dashboard view |
+| `proactive-panel.png` | ProactivePanel in sidebar |
 | `agent-debate.png` | Agent debate panel |
 | `light-theme.png` | Light theme view |
 | `loading-screen.png` | Startup loading screen |

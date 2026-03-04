@@ -1,7 +1,7 @@
 {
   "name": "prismos",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.2",
   "description": "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)",
   "type": "module",
   "scripts": {

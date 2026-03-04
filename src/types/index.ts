@@ -227,6 +227,10 @@ export interface AppSettings {
   maxTokens: number;
   voiceInputEnabled: boolean;
   voiceOutputEnabled: boolean;
+  emailSummaryEnabled: boolean;
+  calendarEnabled: boolean;
+  financeEnabled: boolean;
+  defaultView: string;
 }
 
 export interface Prism {

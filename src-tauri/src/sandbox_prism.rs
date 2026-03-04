@@ -35,6 +35,9 @@ pub enum AllowedOperation {
     GraphRead,
     MemoryQuery,
     StatusCheck,
+    EmailRead,
+    CalendarRead,
+    FinanceRead,
     // Tier 2 — moderate, logged and checkpointed
     GraphWrite,
     ConversationStore,
@@ -51,7 +54,7 @@ impl AllowedOperation {
     /// Risk tier: 1 = safe, 2 = moderate, 3 = restricted
     pub fn risk_tier(&self) -> u8 {
         match self {
-            Self::GraphRead | Self::MemoryQuery | Self::StatusCheck => 1,
+            Self::GraphRead | Self::MemoryQuery | Self::StatusCheck | Self::EmailRead | Self::CalendarRead | Self::FinanceRead => 1,
             Self::GraphWrite | Self::ConversationStore
             | Self::EdgeReinforce | Self::NodeCreate => 2,
             Self::LlmInference | Self::ExternalNetwork
@@ -65,6 +68,9 @@ impl AllowedOperation {
             Self::GraphRead => "Read from Spectrum Graph",
             Self::MemoryQuery => "Query memory",
             Self::StatusCheck => "Check system status",
+            Self::EmailRead => "Read email envelopes (read-only)",
+            Self::CalendarRead => "Read local calendar events (read-only)",
+            Self::FinanceRead => "Fetch public market data (read-only)",
             Self::GraphWrite => "Write to Spectrum Graph",
             Self::ConversationStore => "Store conversation",
             Self::EdgeReinforce => "Reinforce graph edge",
@@ -95,6 +101,15 @@ impl AllowedOperation {
         }
         if lower.contains("status") || lower.contains("health") || lower.contains("check") {
             return Some(Self::StatusCheck);
+        }
+        if lower.contains("email") && (lower.contains("read") || lower.contains("fetch") || lower.contains("summary") || lower.contains("unread")) {
+            return Some(Self::EmailRead);
+        }
+        if lower.contains("calendar") && (lower.contains("read") || lower.contains("events") || lower.contains("today") || lower.contains("schedule")) {
+            return Some(Self::CalendarRead);
+        }
+        if lower.contains("finance") || lower.contains("stock") || lower.contains("ticker") || lower.contains("portfolio") || lower.contains("market") {
+            return Some(Self::FinanceRead);
         }
 
         // Tier 2
@@ -188,6 +203,24 @@ pub fn agent_allow_list(agent_id: &str) -> Vec<AllowedOperation> {
             AllowedOperation::EdgeReinforce,
             AllowedOperation::NodeCreate,
             AllowedOperation::LlmInference,
+        ],
+        "email_keeper" => vec![
+            AllowedOperation::GraphRead,
+            AllowedOperation::MemoryQuery,
+            AllowedOperation::StatusCheck,
+            AllowedOperation::EmailRead,
+        ],
+        "calendar_keeper" => vec![
+            AllowedOperation::GraphRead,
+            AllowedOperation::MemoryQuery,
+            AllowedOperation::StatusCheck,
+            AllowedOperation::CalendarRead,
+        ],
+        "finance_keeper" => vec![
+            AllowedOperation::GraphRead,
+            AllowedOperation::MemoryQuery,
+            AllowedOperation::StatusCheck,
+            AllowedOperation::FinanceRead,
         ],
         // Unknown agents get read-only access
         _ => vec![
@@ -796,6 +829,9 @@ fn operation_to_index(op: &AllowedOperation) -> i32 {
         AllowedOperation::ExternalNetwork => 8,
         AllowedOperation::ToolExecution => 9,
         AllowedOperation::FileAccess => 10,
+        AllowedOperation::EmailRead => 11,
+        AllowedOperation::CalendarRead => 12,
+        AllowedOperation::FinanceRead => 13,
     }
 }
 
@@ -813,6 +849,9 @@ fn index_to_operation(idx: i32) -> Option<AllowedOperation> {
         8 => Some(AllowedOperation::ExternalNetwork),
         9 => Some(AllowedOperation::ToolExecution),
         10 => Some(AllowedOperation::FileAccess),
+        11 => Some(AllowedOperation::EmailRead),
+        12 => Some(AllowedOperation::CalendarRead),
+        13 => Some(AllowedOperation::FinanceRead),
         _ => None,
     }
 }
@@ -1061,6 +1100,30 @@ fn native_sandbox_execute(
             vec![SideEffect {
                 effect_type: "file_access".to_string(),
                 description: "File access scoped to PrismOS-AI app data directory only (WASM isolated)".to_string(),
+                reversible: true,
+            }],
+        ),
+        AllowedOperation::EmailRead => (
+            format!("✅ [WASM Sandbox] Email read approved for agent '{}': {}", agent_id, action),
+            vec![SideEffect {
+                effect_type: "email_read".to_string(),
+                description: "Read-only IMAP envelope fetch — no email modified or deleted (WASM isolated)".to_string(),
+                reversible: true,
+            }],
+        ),
+        AllowedOperation::CalendarRead => (
+            format!("✅ [WASM Sandbox] Calendar read approved for agent '{}': {}", agent_id, action),
+            vec![SideEffect {
+                effect_type: "calendar_read".to_string(),
+                description: "Read-only .ics calendar parse — no files modified (WASM isolated)".to_string(),
+                reversible: true,
+            }],
+        ),
+        AllowedOperation::FinanceRead => (
+            format!("✅ [WASM Sandbox] Finance read approved for agent '{}': {}", agent_id, action),
+            vec![SideEffect {
+                effect_type: "finance_read".to_string(),
+                description: "Read-only public market data fetch — no trades executed (WASM isolated)".to_string(),
                 reversible: true,
             }],
         ),

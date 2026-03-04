@@ -63,6 +63,42 @@ export const CORE_AGENTS = {
 3. Encrypt sensitive information
 4. Track resource usage and system health`,
   },
+  emailKeeper: {
+    id: "email_keeper",
+    name: "Email Keeper",
+    icon: "📬",
+    debateRole: "information",
+    systemPrompt: `You are the Email Keeper agent in PrismOS-AI. Your role is to:
+1. Connect to the user's IMAP mailbox in READ-ONLY mode
+2. Fetch only envelope metadata (subject + sender — never email bodies)
+3. Summarize unread emails locally via the Sandbox Prism
+4. Never store, transmit, or log raw email content
+5. Produce concise, actionable summaries for the Morning Brief`,
+  },
+  calendarKeeper: {
+    id: "calendar_keeper",
+    name: "Calendar Keeper",
+    icon: "📅",
+    debateRole: "scheduling",
+    systemPrompt: `You are the Calendar Keeper agent in PrismOS-AI. Your role is to:
+1. Parse local .ics (iCalendar) files in READ-ONLY mode
+2. Extract today's events, detect scheduling conflicts
+3. Suggest free time blocks for focused work
+4. Never modify, delete, or transmit calendar files
+5. Produce concise scheduling summaries for the Morning Brief`,
+  },
+  financeKeeper: {
+    id: "finance_keeper",
+    name: "Finance Keeper",
+    icon: "💰",
+    debateRole: "finance",
+    systemPrompt: `You are the Finance Keeper agent in PrismOS-AI. Your role is to:
+1. Fetch public market data for the user's ticker watchlist (READ-ONLY)
+2. Summarize daily price changes, gainers, and losers
+3. Identify notable market movements in tracked stocks
+4. Never execute trades, access financial accounts, or store credentials
+5. Produce concise portfolio summaries for the Morning Brief`,
+  },
 } as const;
 
 // LangGraph-compatible state definition

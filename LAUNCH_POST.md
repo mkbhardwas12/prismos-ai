@@ -37,7 +37,7 @@ HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 has
 **The numbers:**
 → 76 Tauri IPC commands
 → 20 Rust backend modules
-→ 5 autonomous AI agents with consensus voting
+→ 8 autonomous AI agents with consensus voting
 → Local Vision + Document Analysis (PDF/DOCX/PPTX/XLSX)
 → Smart Model Routing + Document RAG
 → Patent pending
@@ -101,7 +101,7 @@ Then I built the Refractive Core.
 
 Your input enters a "prism" — broken across 7 spectral dimensions.
 
-5 AI agents debate your intent:
+8 AI agents debate your intent:
 Orchestrator. Reasoner. ToolSmith. MemoryKeeper. Sentinel.
 
 They vote. They challenge each other. They reach consensus.
@@ -198,7 +198,7 @@ PrismOS-AI is a patent-pending AI operating system that runs entirely on your de
 
 Unlike cloud AI tools, PrismOS-AI keeps everything local — your conversations, your knowledge graph, your data. Nothing ever leaves your machine.
 
-What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), an AI processing engine modeled on light refraction (the Refractive Core), 5 AI agents that debate and reach consensus, WASM sandboxed execution, and 9 layers of security including a tamper-evident audit log and hardware enclave integration.
+What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), an AI processing engine modeled on light refraction (the Refractive Core), 8 AI agents that debate and reach consensus, WASM sandboxed execution, and 9 layers of security including a tamper-evident audit log and hardware enclave integration.
 
 Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 76 IPC commands across 20 Rust modules. Fully open source under MIT.
 ```
@@ -229,7 +229,7 @@ that runs 100% on the user's device. No cloud, no telemetry, no data leaves the 
 Three things make it different from anything I've seen:
 
 1. A knowledge graph where every node has 7 spectral dimensions (not just vectors)
-2. An AI engine modeled on light refraction — 5 agents debate before answering
+2. An AI engine modeled on light refraction — 8 agents debate before answering
 3. 9 security layers including WASM sandboxing and a tamper-evident SHA-256 audit log
 
 It's 20 Rust backend modules + a React TypeScript frontend, fully open source under MIT,

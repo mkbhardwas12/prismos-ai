@@ -17,7 +17,9 @@ The frontend provides the user interface and communicates with the Rust backend 
 | Component | Purpose |
 |-----------|---------|
 | `MainView` | Intent Console — natural language input, conversation, model management |
-| `Sidebar` | Navigation, graph stats, active agent indicators |
+| `Sidebar` | Navigation (7 items), graph stats, active agent indicators, ProactivePanel |
+| `DailyDashboard` | Unified morning-brief view — stats, calendar, email, finance, highlights, quick links |
+| `ProactivePanel` | Permanent collapsible sidebar panel — live calendar, email, finance, graph feeds |
 | `SpectrumGraphView` | Force-directed 2D visualization of the knowledge graph |
 | `SpectrumExplorer` | Browse, search, and manage individual nodes |
 | `ActiveAgents` | Live agent activity, Sandbox Prism badges, LangGraph trace |
@@ -25,6 +27,7 @@ The frontend provides the user interface and communicates with the Rust backend 
 | `IntentInput` | Text + voice + image + document input with auto-resize |
 | `SandboxPanel` | WASM sandbox inspection and rollback controls |
 | `SpectralTimeline` | Time-series view of knowledge evolution |
+| `SettingsPanel` | Configuration — model, theme, startup view, export/import, sync |
 
 **Shared Libraries:**
 

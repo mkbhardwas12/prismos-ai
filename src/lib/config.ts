@@ -19,4 +19,8 @@ export const DEFAULT_SETTINGS = {
   maxTokens: 2048,
   voiceInputEnabled: false,
   voiceOutputEnabled: false,
+  emailSummaryEnabled: false,
+  calendarEnabled: false,
+  financeEnabled: false,
+  defaultView: "chat",
 };

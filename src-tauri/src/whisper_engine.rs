@@ -46,6 +46,7 @@ impl WhisperModelSize {
         )
     }
 
+    #[allow(dead_code)]
     pub fn label(&self) -> &str {
         match self {
             WhisperModelSize::Tiny => "Tiny (75 MB) — Fastest",

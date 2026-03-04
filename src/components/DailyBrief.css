@@ -525,3 +525,444 @@
 [data-theme="light"] .daily-summary-panel-close:hover {
   background: rgba(0, 0, 0, 0.05);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Morning Brief — warm sunrise gradient (amber / gold tones)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.daily-brief--morning {
+  background: linear-gradient(135deg,
+    rgba(251, 191, 36, 0.08) 0%,
+    rgba(245, 158, 11, 0.05) 40%,
+    rgba(14, 165, 233, 0.04) 100%);
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.daily-brief--morning .brief-stat-value {
+  color: #f59e0b;
+}
+
+.daily-brief--morning .brief-streak {
+  color: #f59e0b;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Evening Recap — sunset gradient (purple / indigo tones)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.daily-brief--evening {
+  background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.08) 0%,
+    rgba(99, 102, 241, 0.06) 40%,
+    rgba(79, 70, 229, 0.04) 100%);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.daily-brief--evening .brief-stat-value {
+  color: #a78bfa;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Shared Brief Sections — used by morning & evening modes
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.brief-section {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.brief-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.brief-section-title {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brief-section-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.brief-mini-stat {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+}
+
+/* ── Action Items (Priorities / Pending / Tomorrow) ── */
+
+.brief-action-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brief-action-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(14, 165, 233, 0.04);
+  border: 1px solid rgba(14, 165, 233, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
+.brief-action-item:hover {
+  background: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.25);
+  color: var(--text-primary);
+  transform: translateX(3px);
+}
+
+.brief-action-item:active {
+  transform: translateX(1px);
+}
+
+.brief-action-item--pending {
+  background: rgba(251, 191, 36, 0.04);
+  border-color: rgba(251, 191, 36, 0.1);
+}
+
+.brief-action-item--pending:hover {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.brief-action-item--tomorrow {
+  background: rgba(139, 92, 246, 0.04);
+  border-color: rgba(139, 92, 246, 0.1);
+}
+
+.brief-action-item--tomorrow:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.brief-action-item-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.brief-action-item-label {
+  flex: 1;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-action-item-cta {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent-primary, #0ea5e9);
+  opacity: 0.5;
+  transition: opacity 0.2s, transform 0.2s;
+  white-space: nowrap;
+}
+
+.brief-action-item:hover .brief-action-item-cta {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+/* ── Quick Actions Grid ── */
+
+.brief-quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.brief-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 550;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.brief-quick-btn:hover {
+  background: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.2);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(14, 165, 233, 0.08);
+}
+
+.brief-quick-btn:active {
+  transform: translateY(0);
+}
+
+/* ── Evening: Lessons & Growth ── */
+
+.brief-lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.brief-lesson-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.brief-lesson-icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.brief-lesson-act {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  border-radius: 10px;
+  color: #a78bfa;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  width: 100%;
+}
+
+.brief-lesson-act:hover {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateX(3px);
+}
+
+/* ── Email Summary Section ── */
+
+.brief-section--email {
+  border-left: 3px solid rgba(59, 130, 246, 0.3);
+  padding-left: 12px;
+}
+
+.brief-email-summary {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.brief-action-item--email {
+  background: rgba(59, 130, 246, 0.04);
+  border-color: rgba(59, 130, 246, 0.1);
+}
+
+.brief-action-item--email:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+/* ── Calendar Summary Section ── */
+
+.brief-section--calendar {
+  border-left: 3px solid rgba(34, 197, 94, 0.3);
+  padding-left: 12px;
+}
+
+.brief-calendar-summary {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.brief-action-item--calendar {
+  background: rgba(34, 197, 94, 0.04);
+  border-color: rgba(34, 197, 94, 0.1);
+}
+
+.brief-action-item--calendar:hover {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.brief-action-item--conflict {
+  background: rgba(239, 68, 68, 0.04);
+  border-color: rgba(239, 68, 68, 0.12);
+}
+
+.brief-action-item--conflict:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.brief-mini-stat--warning {
+  color: rgba(239, 68, 68, 0.85);
+}
+
+/* ── Finance Summary Section ── */
+
+.brief-section--finance {
+  border-left: 3px solid rgba(234, 179, 8, 0.3);
+  padding-left: 12px;
+}
+
+.brief-finance-summary {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.brief-action-item--finance {
+  background: rgba(234, 179, 8, 0.04);
+  border-color: rgba(234, 179, 8, 0.1);
+}
+
+.brief-action-item--finance:hover {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.25);
+}
+
+.brief-action-item--gain {
+  border-left: 2px solid rgba(34, 197, 94, 0.4);
+}
+
+.brief-action-item--loss {
+  border-left: 2px solid rgba(239, 68, 68, 0.4);
+}
+
+.brief-mini-stat--gain {
+  color: rgba(34, 197, 94, 0.85);
+}
+
+.brief-mini-stat--loss {
+  color: rgba(239, 68, 68, 0.85);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Light theme — Morning & Evening & Shared
+   ═══════════════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] .daily-brief--morning {
+  background: linear-gradient(135deg,
+    rgba(251, 191, 36, 0.06) 0%,
+    rgba(245, 158, 11, 0.03) 40%,
+    rgba(14, 165, 233, 0.02) 100%);
+  border-color: rgba(251, 191, 36, 0.18);
+}
+
+[data-theme="light"] .daily-brief--morning .brief-stat-value {
+  color: #d97706;
+}
+
+[data-theme="light"] .daily-brief--evening {
+  background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.05) 0%,
+    rgba(99, 102, 241, 0.03) 40%,
+    rgba(79, 70, 229, 0.02) 100%);
+  border-color: rgba(139, 92, 246, 0.15);
+}
+
+[data-theme="light"] .daily-brief--evening .brief-stat-value {
+  color: #7c3aed;
+}
+
+[data-theme="light"] .brief-section {
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .brief-mini-stat {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .brief-action-item {
+  background: rgba(14, 165, 233, 0.03);
+  border-color: rgba(14, 165, 233, 0.1);
+}
+
+[data-theme="light"] .brief-action-item:hover {
+  background: rgba(14, 165, 233, 0.07);
+}
+
+[data-theme="light"] .brief-action-item--pending {
+  background: rgba(251, 191, 36, 0.03);
+  border-color: rgba(251, 191, 36, 0.1);
+}
+
+[data-theme="light"] .brief-action-item--pending:hover {
+  background: rgba(251, 191, 36, 0.07);
+}
+
+[data-theme="light"] .brief-action-item--tomorrow {
+  background: rgba(139, 92, 246, 0.03);
+  border-color: rgba(139, 92, 246, 0.1);
+}
+
+[data-theme="light"] .brief-action-item--tomorrow:hover {
+  background: rgba(139, 92, 246, 0.07);
+}
+
+[data-theme="light"] .brief-action-item-cta {
+  color: #0284c7;
+}
+
+[data-theme="light"] .brief-quick-btn {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .brief-quick-btn:hover {
+  background: rgba(14, 165, 233, 0.06);
+  box-shadow: 0 3px 10px rgba(14, 165, 233, 0.05);
+}
+
+[data-theme="light"] .brief-lesson-item {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .brief-lesson-act {
+  background: rgba(139, 92, 246, 0.04);
+  border-color: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+}
+
+[data-theme="light"] .brief-lesson-act:hover {
+  background: rgba(139, 92, 246, 0.08);
+}

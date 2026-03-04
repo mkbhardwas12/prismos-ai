@@ -6,10 +6,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import DailySuggestions from "./DailySuggestions";
+import ProactivePanel from "./ProactivePanel";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./Sidebar.css";
 
-type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard";
 
 interface SidebarProps {
   currentView: string;
@@ -61,6 +62,7 @@ export default function Sidebar({
           "4": "sandbox",
           "5": "timeline",
           "6": "settings",
+          "7": "dashboard",
         };
         const view = viewMap[e.key];
         if (view) {
@@ -106,6 +108,16 @@ export default function Sidebar({
           {/* Navigation */}
           <div className="sidebar-section">
             <div className="sidebar-section-title">Navigation</div>
+            <button
+              className={`sidebar-item ${currentView === "dashboard" ? "active" : ""}`}
+              onClick={() => handleNavigate("dashboard")}
+              aria-current={currentView === "dashboard" ? "page" : undefined}
+              title="Your daily command center — Morning Brief, live feeds, and quick actions"
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">🏠</span>
+              Daily Dashboard
+              <span className="kbd" aria-hidden="true">⌃7</span>
+            </button>
             <button
               className={`sidebar-item ${currentView === "chat" ? "active" : ""}`}
               onClick={() => handleNavigate("chat")}
@@ -194,6 +206,18 @@ export default function Sidebar({
             </button>
           </div>
 
+          {/* ── Proactive Panel (most visible section) ── */}
+          <div className="sidebar-section sidebar-section--proactive">
+            <ProactivePanel
+              nodes={nodes}
+              dailyGreeting={dailyGreeting}
+              onSuggestionSelect={(intent) => {
+                handleNavigate("chat");
+                window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: intent }));
+              }}
+            />
+          </div>
+
           {/* Spectrum Graph Mini Summary */}
           <div className="sidebar-section">
             <div className="sidebar-section-title">
@@ -244,19 +268,6 @@ export default function Sidebar({
                 );
               })()}
             </div>
-          </div>
-
-          {/* Permanent Daily Suggestions Section (always visible, graph-aware) */}
-          <div className="sidebar-section">
-            <DailySuggestions
-              nodes={nodes}
-              dailyGreeting={dailyGreeting}
-              onSuggestionSelect={(intent) => {
-                handleNavigate("chat");
-                // Auto-fill the intent box (not auto-execute) so user can review
-                window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: intent }));
-              }}
-            />
           </div>
 
           {/* Active Agents */}

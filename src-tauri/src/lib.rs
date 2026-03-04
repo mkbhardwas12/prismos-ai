@@ -2311,7 +2311,7 @@ pub fn run() {
             );
 
             println!("╔══════════════════════════════════════════════╗");
-            println!("║  ◈ PrismOS-AI v0.5.0 — Local-First AI OS       ║");
+            println!("║  ◈ PrismOS-AI v0.5.2 — Local-First AI OS       ║");
             println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  Whisper Voice Engine: READY                 ║");

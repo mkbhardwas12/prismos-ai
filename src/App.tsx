@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AnimatePresence, motion } from "framer-motion";
 import TitleBar from "./components/TitleBar";
 import Sidebar from "./components/Sidebar";
@@ -13,6 +14,7 @@ import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
+import DailyDashboard from "./components/DailyDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import OnboardingWizard from "./components/OnboardingWizard";
 import SpotlightOverlay from "./components/SpotlightOverlay";
@@ -20,7 +22,7 @@ import { DEFAULT_SETTINGS } from "./lib/config";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
 
-type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline";
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard";
 
 /** Time-aware daily greeting based on hour of day */
 function getDailyGreeting(): string {
@@ -39,8 +41,18 @@ function App() {
   // ─── Multi-window: detect route hash to open a specific view ──
   const initialView = (() => {
     const hash = window.location.hash.replace("#", "");
-    const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline"];
+    const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline", "dashboard"];
     if (validViews.includes(hash as View)) return hash as View;
+    // Check for defaultView from settings
+    try {
+      const saved = localStorage.getItem("prismos-settings");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.defaultView && validViews.includes(parsed.defaultView)) {
+          return parsed.defaultView as View;
+        }
+      }
+    } catch { /* ignore */ }
     return "chat" as View;
   })();
 
@@ -76,6 +88,10 @@ function App() {
           maxTokens: parsed.maxTokens ?? DEFAULT_SETTINGS.maxTokens,
           voiceInputEnabled: parsed.voiceInputEnabled ?? DEFAULT_SETTINGS.voiceInputEnabled,
           voiceOutputEnabled: parsed.voiceOutputEnabled ?? DEFAULT_SETTINGS.voiceOutputEnabled,
+          emailSummaryEnabled: parsed.emailSummaryEnabled ?? DEFAULT_SETTINGS.emailSummaryEnabled,
+          calendarEnabled: parsed.calendarEnabled ?? DEFAULT_SETTINGS.calendarEnabled,
+          financeEnabled: parsed.financeEnabled ?? DEFAULT_SETTINGS.financeEnabled,
+          defaultView: parsed.defaultView ?? DEFAULT_SETTINGS.defaultView,
         };
         // Apply saved theme immediately
         document.documentElement.setAttribute("data-theme", merged.theme);
@@ -276,7 +292,6 @@ function App() {
     (async () => {
       try {
         const { register, unregister } = await import("@tauri-apps/plugin-global-shortcut");
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
 
         const bringToFront = async () => {
           const win = getCurrentWindow();
@@ -323,7 +338,7 @@ function App() {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
-      const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline"];
+      const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline", "dashboard"];
       if (validViews.includes(detail as View)) {
         setView(detail as View);
       }
@@ -381,6 +396,21 @@ function App() {
         );
       case "timeline":
         return <SpectralTimeline refreshKey={graphRefreshKey} />;
+      case "dashboard":
+        return (
+          <DailyDashboard
+            nodes={nodes}
+            graphStats={graphStats}
+            dailyGreeting={dailyGreeting}
+            onNavigate={(v) => setView(v as View)}
+            onSuggestionClick={(intent) => {
+              setView("chat");
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent("prismos:fill-intent", { detail: intent }));
+              }, 100);
+            }}
+          />
+        );
     }
   }
 

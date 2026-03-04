@@ -203,6 +203,31 @@
   margin-top: 6px;
 }
 
+/* ── Select dropdown ── */
+.settings-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: auto;
+}
+
+.settings-select:hover {
+  border-color: var(--color-primary);
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 /* ── Theme Toggle ── */
 .settings-theme-toggle {
   display: flex;

@@ -24,11 +24,17 @@ const TIME_SUGGESTIONS: Record<TimeBucket, ProactiveSuggestion[]> = {
   early_morning: [
     { id: "def-em-1", text: "Plan your day before it starts?", action_intent: "Help me plan today — suggest a prioritized schedule based on my recent activity", icon: "📝", category: "habits", confidence: 0.82 },
     { id: "def-em-2", text: "Review overnight insights from your graph", action_intent: "What patterns or insights have emerged in my knowledge graph since yesterday?", icon: "🌙", category: "patterns", confidence: 0.75 },
+    { id: "def-em-email", text: "Any overnight emails worth noting?", action_intent: "Fetch and summarize any unread emails that arrived overnight — flag anything urgent", icon: "📬", category: "habits", confidence: 0.73 },
+    { id: "def-em-calendar", text: "What's on your schedule today?", action_intent: "Show me today's calendar events, flag any conflicts, and suggest time blocks for focused work", icon: "📅", category: "habits", confidence: 0.76 },
+    { id: "def-em-finance", text: "How are your stocks doing?", action_intent: "Fetch my portfolio watchlist and summarize today's price changes — flag any big movers", icon: "💰", category: "habits", confidence: 0.71 },
     { id: "def-em-3", text: "Set focus time for deep work", action_intent: "Block 2 hours of focused deep work time for this morning and suggest what to work on", icon: "🎯", category: "momentum", confidence: 0.7 },
   ],
   morning: [
     { id: "def-m-1", text: "Shall I block focus time this morning?", action_intent: "Block 2 hours of focused deep work time for this morning and suggest what to work on", icon: "🎯", category: "habits", confidence: 0.85 },
     { id: "def-m-2", text: "Summarize what you were working on yesterday", action_intent: "Summarize what I worked on yesterday and suggest what to continue today", icon: "📋", category: "momentum", confidence: 0.8 },
+    { id: "def-m-email", text: "Check your unread emails", action_intent: "Fetch and summarize my unread emails — highlight anything urgent or time-sensitive", icon: "📬", category: "habits", confidence: 0.78 },
+    { id: "def-m-calendar", text: "Review today's schedule", action_intent: "Show me today's calendar events, detect any scheduling conflicts, and suggest free time blocks for deep work", icon: "📅", category: "habits", confidence: 0.80 },
+    { id: "def-m-finance", text: "Check your portfolio", action_intent: "Fetch my stock watchlist and summarize today's market movements — highlight gainers and losers", icon: "💰", category: "habits", confidence: 0.74 },
     { id: "def-m-3", text: "Check your knowledge graph growth", action_intent: "Show me how my knowledge graph has grown this week — any new connections?", icon: "🌱", category: "connections", confidence: 0.72 },
   ],
   afternoon: [

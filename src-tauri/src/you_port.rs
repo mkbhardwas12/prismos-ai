@@ -496,8 +496,8 @@ pub fn load_state(
 
     for edge in &state.graph_snapshot.edges {
         match graph.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation) {
-            Ok(_) => edges_restored += 1,
-            Err(_) => {}
+            Ok((_, true)) => edges_restored += 1,
+            _ => {}
         }
     }
 

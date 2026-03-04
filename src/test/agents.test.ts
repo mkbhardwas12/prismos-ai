@@ -9,8 +9,8 @@ import { CORE_AGENTS, createInitialState } from "../lib/agents";
 describe("CORE_AGENTS", () => {
   const agentKeys = Object.keys(CORE_AGENTS) as Array<keyof typeof CORE_AGENTS>;
 
-  it("defines exactly 5 agents", () => {
-    expect(agentKeys).toHaveLength(5);
+  it("defines exactly 8 agents", () => {
+    expect(agentKeys).toHaveLength(8);
   });
 
   it("includes all required agents", () => {
@@ -20,6 +20,9 @@ describe("CORE_AGENTS", () => {
     expect(ids).toContain("reasoner");
     expect(ids).toContain("tool_smith");
     expect(ids).toContain("sentinel");
+    expect(ids).toContain("email_keeper");
+    expect(ids).toContain("calendar_keeper");
+    expect(ids).toContain("finance_keeper");
   });
 
   it.each(agentKeys)("agent '%s' has required fields", (key) => {

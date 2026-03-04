@@ -587,12 +587,13 @@ impl SpectrumGraph {
     }
 
     /// Get or create an edge between two nodes (upsert pattern)
+    /// Returns `(edge, was_created)` — `was_created` is true only when a new edge was inserted.
     pub fn get_or_create_edge(
         &self,
         source_id: &str,
         target_id: &str,
         relation: &str,
-    ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(SpectrumEdge, bool), Box<dyn std::error::Error + Send + Sync>> {
         // Check if edge already exists
         let mut stmt = self.conn.prepare(
             "SELECT id, source_id, target_id, relation, weight,
@@ -618,8 +619,8 @@ impl SpectrumGraph {
         })?;
 
         match rows.next() {
-            Some(edge) => Ok(edge?),
-            None => self.add_edge(source_id, target_id, relation, 1.0),
+            Some(edge) => Ok((edge?, false)),
+            None => Ok((self.add_edge(source_id, target_id, relation, 1.0)?, true)),
         }
     }
 
@@ -1946,10 +1947,72 @@ impl SpectrumGraph {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         ).ok();
 
+        // ── Yesterday's activity (for Morning Brief context) ──
+        let yesterday_intents: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM intent_log WHERE created_at BETWEEN datetime('now', '-2 days') AND datetime('now', '-1 day')",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        let yesterday_nodes: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE created_at BETWEEN datetime('now', '-2 days') AND datetime('now', '-1 day')",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        // ── Pending topics: accessed recently but low engagement — good "continue" candidates ──
+        let mut pending_stmt = self.conn.prepare(
+            "SELECT label, node_type FROM nodes
+             WHERE last_accessed > datetime('now', '-2 days')
+               AND access_count <= 3
+             ORDER BY last_accessed DESC LIMIT 4"
+        )?;
+        let pending_topics: Vec<serde_json::Value> = pending_stmt.query_map([], |row| {
+            Ok(serde_json::json!({
+                "label": row.get::<_, String>(0)?,
+                "node_type": row.get::<_, String>(1)?,
+            }))
+        })?.filter_map(|r| r.ok()).collect();
+
+        // ── Tomorrow priorities: highest-weight recently-active nodes ──
+        let mut priority_stmt = self.conn.prepare(
+            "SELECT n.label, n.node_type, SUM(e.weight) as total_weight FROM nodes n
+             LEFT JOIN edges e ON n.id = e.source_id OR n.id = e.target_id
+             WHERE n.last_accessed > datetime('now', '-3 days')
+             GROUP BY n.id ORDER BY total_weight DESC LIMIT 4"
+        )?;
+        let tomorrow_priorities: Vec<serde_json::Value> = priority_stmt.query_map([], |row| {
+            Ok(serde_json::json!({
+                "label": row.get::<_, String>(0)?,
+                "node_type": row.get::<_, String>(1)?,
+                "weight": row.get::<_, f64>(2).unwrap_or(0.0),
+            }))
+        })?.filter_map(|r| r.ok()).collect();
+
+        // ── New connections discovered today ──
+        let new_connections_today: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM edges WHERE created_at > datetime('now', '-1 day')",
+            [], |row| row.get(0)
+        ).unwrap_or(0);
+
+        // ── Graph growth streak: consecutive days with new nodes (max 30 lookback) ──
+        let mut streak: usize = 0;
+        for day_offset in 0..30 {
+            let day_from = format!("-{} days", day_offset + 1);
+            let day_to = format!("-{} days", day_offset);
+            let count: usize = self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM nodes WHERE created_at BETWEEN datetime('now', '{}') AND datetime('now', '{}')",
+                    day_from, day_to
+                ),
+                [], |row| row.get(0)
+            ).unwrap_or(0);
+            if count > 0 { streak += 1; } else { break; }
+        }
+
         // Determine time of day for greeting context
         let hour = chrono::Local::now().hour();
         let time_period = if hour < 12 { "morning" } else if hour < 17 { "afternoon" } else { "evening" };
         let is_morning = hour < 12;
+        let is_evening = hour >= 18;
 
         // Build highlights list
         let mut highlights: Vec<serde_json::Value> = Vec::new();
@@ -1991,6 +2054,7 @@ impl SpectrumGraph {
         Ok(serde_json::json!({
             "time_period": time_period,
             "is_morning": is_morning,
+            "is_evening": is_evening,
             "intents_today": intents_today,
             "nodes_created": nodes_created_today,
             "nodes_updated": nodes_updated_today,
@@ -2000,6 +2064,12 @@ impl SpectrumGraph {
             "top_facets": facet_map,
             "intent_types": intent_type_map,
             "highlights": highlights,
+            "yesterday_intents": yesterday_intents,
+            "yesterday_nodes": yesterday_nodes,
+            "pending_topics": pending_topics,
+            "tomorrow_priorities": tomorrow_priorities,
+            "new_connections_today": new_connections_today,
+            "growth_streak": streak,
         }))
     }
 }

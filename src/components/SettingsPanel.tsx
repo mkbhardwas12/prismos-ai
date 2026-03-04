@@ -780,6 +780,21 @@ export default function SettingsPanel({
               </button>
             </div>
           </div>
+          <div className="settings-item">
+            <label>Startup View</label>
+            <select
+              className="settings-select"
+              value={settings.defaultView || "chat"}
+              onChange={(e) => update("defaultView", e.target.value)}
+            >
+              <option value="chat">💬 Intent Console</option>
+              <option value="dashboard">🏠 Daily Dashboard</option>
+              <option value="graph">🕸️ Spectrum Graph</option>
+              <option value="spectrum">🌈 Spectrum Explorer</option>
+              <option value="timeline">📅 Spectral Timeline</option>
+            </select>
+            <div className="settings-hint">Choose which view PrismOS opens to on startup.</div>
+          </div>
         </div>
 
         {/* ── Voice I/O (Patent Pending) ── */}
@@ -810,6 +825,71 @@ export default function SettingsPanel({
           <div className="settings-hint">
             Voice uses Web Speech API — all processing stays in your browser.
             No audio is sent to any server. Patent Pending.
+          </div>
+        </div>
+
+        {/* ── Email Summary (Patent Pending) ── */}
+        <div className="settings-group">
+          <h3>📬 Email Summary</h3>
+          <div className="settings-item">
+            <label>Allow Email Summary</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.emailSummaryEnabled ? "active" : ""}`}
+                onClick={() => update("emailSummaryEnabled", !settings.emailSummaryEnabled)}
+              >
+                {settings.emailSummaryEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            When enabled, PrismOS connects to your IMAP mailbox in <strong>read-only</strong> mode
+            to summarize unread email subject lines. No email content is ever stored, sent to the cloud,
+            or leaves the Sandbox Prism. Credentials stay in memory only. Configure your IMAP
+            server details below after enabling. Patent Pending.
+          </div>
+        </div>
+
+        {/* ── Calendar Integration (Patent Pending) ── */}
+        <div className="settings-group">
+          <h3>📅 Calendar Integration</h3>
+          <div className="settings-item">
+            <label>Allow Calendar Summary</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.calendarEnabled ? "active" : ""}`}
+                onClick={() => update("calendarEnabled", !settings.calendarEnabled)}
+              >
+                {settings.calendarEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            When enabled, PrismOS reads local <strong>.ics</strong> calendar files in <strong>read-only</strong> mode
+            to show today's events, detect conflicts, and suggest free time blocks.
+            No calendar data is ever modified, sent to the cloud, or leaves the Sandbox Prism.
+            Point this to your exported .ics file or calendar directory. Patent Pending.
+          </div>
+        </div>
+
+        {/* ── Finance Keeper (Patent Pending) ── */}
+        <div className="settings-group">
+          <h3>💰 Finance Keeper</h3>
+          <div className="settings-item">
+            <label>Allow Portfolio Tracking</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.financeEnabled ? "active" : ""}`}
+                onClick={() => update("financeEnabled", !settings.financeEnabled)}
+              >
+                {settings.financeEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            When enabled, PrismOS fetches <strong>public market data</strong> for your ticker watchlist.
+            No trades are executed, no financial accounts are accessed, and no API keys are required.
+            Add your ticker symbols (e.g. AAPL, GOOG, TSLA) below after enabling. Patent Pending.
           </div>
         </div>
 

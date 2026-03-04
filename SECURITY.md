@@ -15,8 +15,9 @@ If you discover a security vulnerability in PrismOS-AI, please email **via GitHu
 
 | Version | Status | Support Until |
 |---------|--------|-----------------|
-| 0.2.x   | ✅ Active | Current |
-| 0.1.x   | ⚠️ Limited | 2026-06-30 |
+| 0.5.x   | ✅ Active | Current |
+| 0.4.x   | ⚠️ Limited | 2026-09-30 |
+| 0.3.x   | ⚠️ Limited | 2026-06-30 |
 
 Security updates will be released as patch versions (e.g., 0.2.1).
 

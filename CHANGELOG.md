@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] — 2026-03-03
+
+### 🎯 Highlights
+
+PrismOS-AI v0.5.2 — **Phase 7: Unified Dashboard & Keeper Agents** release. Adds the Daily Dashboard view combining morning brief, proactive cards, and quick links into a single unified landing page. Introduces the ProactivePanel — a permanent collapsible sidebar panel with live calendar, email, finance, and graph feeds. Three new Keeper agents (Email, Calendar, Finance) join the agent roster, bringing the total to 8 AI agents. Startup View setting lets users choose their default view.
+
+### Added
+
+- **Daily Dashboard** — New unified view (`DailyDashboard.tsx`, 442 lines) with:
+  - Hero greeting with time-of-day awareness (morning/afternoon/evening/night)
+  - Stats strip: total nodes, today's additions, active agents, health score
+  - Six content cards: Calendar Events, Email Summary, Finance Overview, Today's Highlights, Pending Topics, Daily Suggestions
+  - Quick links grid for one-click navigation to all views
+  - Auto-refresh every 10 minutes with manual refresh button
+  - Full glassmorphism styling with responsive grid layout
+  - Spectrum theming: `[data-spectrum="dashboard"]` purple/cyan accent
+  - Keyboard shortcut: `Ctrl+7`
+- **ProactivePanel** — Permanent collapsible sidebar panel (`ProactivePanel.tsx`, 276 lines) with:
+  - Live calendar, email, finance, and daily suggestions feeds
+  - Graph insight card showing top Spectrum Graph node
+  - Collapsible with smooth animation; state persists across sessions
+  - Color-coded sections with glassmorphism cards
+- **Email Keeper Agent** — AI agent for email monitoring, inbox summaries, and smart notifications
+- **Calendar Keeper Agent** — AI agent for calendar awareness, upcoming events, and scheduling reminders
+- **Finance Keeper Agent** — AI agent for portfolio tracking, market alerts, and financial insights
+- **Startup View Setting** — New "Startup View" dropdown in Settings → Appearance; choose default view on launch (Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings); `defaultView` field in `AppSettings` with `localStorage` persistence
+
+### Changed
+
+- `Sidebar.tsx`: Added 🏠 Daily Dashboard as first nav item (Ctrl+7); integrated ProactivePanel below navigation
+- `App.tsx`: Added `"dashboard"` to View type; `renderView()` handles dashboard case; Spotlight commands include Dashboard; startup reads `defaultView` from localStorage
+- `App.css`: Added `[data-spectrum="dashboard"]` accent theming
+- `types/index.ts`: Added `defaultView: string` to `AppSettings` interface
+- `lib/config.ts`: Added `defaultView: "chat"` to `DEFAULT_SETTINGS`
+- `SettingsPanel.tsx`: Added Startup View dropdown in Appearance section
+- `SettingsPanel.css`: Added `.settings-select` dropdown styling
+- Agent count increased from 5 to **8** across all documentation and UI references
+- Total test count: **162** (97 frontend Vitest + 65 backend cargo test)
+
+### Tests
+
+- `DailyDashboard.test.tsx` — 8 tests: region, greeting, date, refresh, quick links (6), navigation, empty state
+- `ProactivePanel.test.tsx` — 9 tests: header, accessibility, greeting, collapse/expand, graph insight, refresh, interaction
+- Total frontend tests: **97** (was 80)
+- Total backend tests: **65** (unchanged)
+
+---
+
 ## [0.5.1] — 2026-03-03
 
 ### 🎯 Highlights
@@ -287,6 +335,7 @@ and full release polish with accessibility improvements.
 
 ---
 
+[0.5.2]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mkbhardwas12/prismos-ai/compare/v0.3.0...v0.4.0

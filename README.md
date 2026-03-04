@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.5.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
+[![Version](https://img.shields.io/badge/version-0.5.2-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 [![Patent](https://img.shields.io/badge/Patent-Pending-10b981)](.)
@@ -12,10 +12,10 @@
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Five collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 5 adds frameless window, system tray, drag-and-drop file ingest, auto-updater, **Local Vision** (llava/llama3.2-vision), and **Document Analysis** — upload PDF/DOCX/PPTX/XLSX for AI-powered summaries, entirely offline.
+PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Phase 7 adds the **Daily Dashboard**, **ProactivePanel** sidebar, and three specialized **Keeper agents** (Email, Calendar, Finance) — giving you a unified morning-brief experience with proactive cards, entirely offline.
 
 <p align="center">
-  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to five AI agents at once" />
+  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to eight AI agents at once" />
 </p>
 
 <details>
@@ -40,17 +40,23 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 
 ---
 
-## ✨ Core Features (v0.5.0)
+## ✨ Core Features (v0.5.2)
 
 | Feature | Description |
 |---------|-------------|
-| **Refractive Core™** | Intent → 5-agent pipeline → Spectrum Graph → response |
+| **Refractive Core™** | Intent processing pipeline |
 | **Spectrum Graph™** | Persistent multi-dimensional knowledge graph |
-| **5 AI Agents** | Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel |
+| **8 AI Agents** | Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper |
 | **LangGraph Debates** | Multi-agent debate with formal consensus voting |
 | **Sandbox Prism™** | WASM-isolated execution environment |
+| **Daily Dashboard** | Unified morning-brief view with stats, calendar, email, finance cards, quick links *(Phase 7)* |
+| **ProactivePanel** | Permanent collapsible sidebar panel with live calendar, email, finance, graph feeds *(Phase 7)* |
 | **Proactive Suggestions** | Context-aware cards that auto-process on click |
 | **Morning Brief / Evening Recap** | Daily summary of your knowledge graph activity |
+| **Email Keeper** | AI agent for email monitoring, summaries, and smart notifications *(Phase 7)* |
+| **Calendar Keeper** | AI agent for calendar awareness, scheduling, and reminders *(Phase 7)* |
+| **Finance Keeper** | AI agent for portfolio tracking, market alerts, and financial insights *(Phase 7)* |
+| **Startup View Setting** | Choose default view on launch (Dashboard, Chat, Graph, etc.) in Settings *(Phase 7)* |
 | **You-Port™** | Encrypted state migration |
 | **Voice I/O** | Hybrid local voice engine (cpal audio capture + Web Speech API fallback) |
 | **Spectral Timeline** | Time-series view of knowledge evolution |
@@ -221,7 +227,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
 | **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
 | **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
-| **v0.5.1** | ✅ Current | Smart Model Routing, Document RAG, Background Omnipresence (Alt+Space), Tiered Model Catalog |
+| **v0.5.1** | ✅ Done | Smart Model Routing, Document RAG, Background Omnipresence (Alt+Space), Tiered Model Catalog |
+| **v0.5.2** | ✅ Current | Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Startup View Setting, 162 tests |
 | **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
@@ -229,8 +236,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📊 Project Stats
 
-- **20 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (5), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, LangGraph Workflow, Agent Graph, Smart Router, Doc Chunker
-- **99 tests passing** — 65 frontend (Vitest) + 34 backend (cargo test)
+- **20 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (8), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, LangGraph Workflow, Agent Graph, Smart Router, Doc Chunker
+- **162 tests passing** — 97 frontend (Vitest) + 65 backend (cargo test)
 - **76 Tauri IPC commands** — full frontend↔backend communication
 - **Zero cloud dependencies** — everything runs on your machine
 
@@ -243,7 +250,7 @@ PrismOS-AI and its core architectures (Spectrum Graph™, Refractive Core™, Sa
 ---
 
 <p align="center">
-  <strong>PrismOS-AI v0.5.0</strong> — Your mind, your machine, your OS.<br />
+  <strong>PrismOS-AI v0.5.2</strong> — Your mind, your machine, your OS.<br />
   Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
 </p>

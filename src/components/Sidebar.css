@@ -97,6 +97,11 @@
   margin-bottom: 2px;
 }
 
+/* Proactive panel gets extra emphasis — slightly more breathing room */
+.sidebar-section--proactive {
+  margin: 4px 10px 6px;
+}
+
 .sidebar-section-title {
   font-size: 10px;
   font-weight: 600;

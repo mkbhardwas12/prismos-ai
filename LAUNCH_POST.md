@@ -35,10 +35,11 @@ When you ask PrismOS-AI something, your intent passes through the "Refractive Co
 HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 hash chains. Hardware TPM integration. LLM model verification. If one layer fails, eight others hold. AI safety shouldn't be a checkbox — it should be the architecture.
 
 **The numbers:**
-→ 71 Tauri IPC commands
-→ 18 Rust backend modules
+→ 76 Tauri IPC commands
+→ 20 Rust backend modules
 → 5 autonomous AI agents with consensus voting
 → Local Vision + Document Analysis (PDF/DOCX/PPTX/XLSX)
+→ Smart Model Routing + Document RAG
 → Patent pending
 
 I built every line of this. Frontend. Backend. Security. Agents. Graph engine. UI. All of it.
@@ -132,7 +133,7 @@ The stack:
 • wasmtime for WASM isolation
 • LangGraph for agent workflows
 
-71 IPC commands. 18 Rust modules.
+76 IPC commands. 20 Rust modules.
 
 All hand-written. All local. All open source. ⚡
 ```
@@ -171,7 +172,7 @@ The core ideas:
 
 3. Security as architecture — 9 distinct layers: HMAC-SHA256 action signing, behavioral allow-lists, wasmtime WASM sandboxing with fuel metering, statistical anomaly detection, auto-rollback checkpoints, XOR stream cipher + HMAC encryption at rest, SHA-256 hash chain audit log (tamper one entry and the chain breaks), LLM model fingerprinting against a known-good registry, and hardware TPM/Secure Enclave key derivation with software fallback.
 
-Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persistence. 71 IPC commands across 18 Rust modules.
+Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persistence. 76 IPC commands across 20 Rust modules.
 
 The guided setup wizard walks you through installing Ollama on first launch. Supports Mistral, Llama 3.x, Phi-3, Gemma 2, DeepSeek, and others.
 
@@ -199,7 +200,7 @@ Unlike cloud AI tools, PrismOS-AI keeps everything local — your conversations,
 
 What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), an AI processing engine modeled on light refraction (the Refractive Core), 5 AI agents that debate and reach consensus, WASM sandboxed execution, and 9 layers of security including a tamper-evident audit log and hardware enclave integration.
 
-Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 71 IPC commands across 18 Rust modules. Fully open source under MIT.
+Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 76 IPC commands across 20 Rust modules. Fully open source under MIT.
 ```
 
 ---
@@ -209,7 +210,7 @@ Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 71 IPC commands across
 ```
 Manish Kumar — Inventor of PrismOS-AI, a patent-pending local-first AI operating system
 (Patent Pending). Designed and built a 7-dimensional spectral knowledge graph, a multi-agent
-AI reasoning engine, and a layered security architecture — 18 Rust modules + TypeScript frontend,
+AI reasoning engine, and a layered security architecture — 20 Rust modules + TypeScript frontend,
 running 100% offline. github.com/mkbhardwas12/prismos-ai
 ```
 
@@ -231,7 +232,7 @@ Three things make it different from anything I've seen:
 2. An AI engine modeled on light refraction — 5 agents debate before answering
 3. 9 security layers including WASM sandboxing and a tamper-evident SHA-256 audit log
 
-It's 18 Rust backend modules + a React TypeScript frontend, fully open source under MIT,
+It's 20 Rust backend modules + a React TypeScript frontend, fully open source under MIT,
 and patent-pending (US Provisional Patent Pending).
 
 GitHub: https://github.com/mkbhardwas12/prismos-ai

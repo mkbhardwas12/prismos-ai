@@ -7,7 +7,7 @@
 **Your AI. Your Data. Your Machine. Period.**
 
 [![Release](https://img.shields.io/badge/Release-v0.5.0-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
-[![Patent](https://img.shields.io/badge/Patent_Pending-US_63%2F993%2C589-10b981?style=for-the-badge)](.)
+[![Patent](https://img.shields.io/badge/Patent-Pending-10b981?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
 [![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
 
@@ -27,10 +27,10 @@ PrismOS-AI v0.5.0 is a major feature release of the patent-pending AI operating 
 
 | | |
 |:--|:--|
-| 🔌 **71** Tauri IPC commands | 🤖 **5** autonomous AI agents |
-| 🦀 **18** Rust backend modules | ⚛️ **26** core features |
+| 🔌 **76** Tauri IPC commands | 🤖 **5** autonomous AI agents |
+| 🦀 **20** Rust backend modules | ⚛️ **30** core features |
 | 🔒 **7** security layers | 🌈 **7** spectral dimensions |
-| ✅ **65** automated tests | 📄 **4** document formats supported |
+| ✅ **99** automated tests | 📄 **4** document formats supported |
 
 ---
 
@@ -114,8 +114,8 @@ Frameless Window    No                  Yes         (NEW)
 │  ├── Sandbox Prisms       WASM execution sandbox         │
 │  ├── Spectral Timeline    Time-based graph history       │
 │  └── Settings & Security  Config + security status       │
-├─────────────────── 71 Tauri IPC Commands ──────────────────┤
-│  Rust 1.82+ Backend                (18 Modules)          │
+├─────────────────── 76 Tauri IPC Commands ──────────────────┤
+│  Rust 1.82+ Backend                (20 Modules)          │
 │  ├── spectrum_graph.rs    SQLite knowledge store          │
 │  ├── ollama_bridge.rs     LLM + vision inference         │
 │  ├── sandbox_prism.rs     wasmtime WASM runtime          │

@@ -340,26 +340,40 @@ export default function MainView({
     clearLiveSteps(); // Phase 2: clear previous live steps
 
     try {
-      // ── Document analysis path: document text attached ──
+      // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
       if (documentText) {
-        // Truncate document text if extremely long (keep first ~12000 chars for model context)
-        const maxDocLen = 12000;
-        const truncatedDoc = documentText.length > maxDocLen
-          ? documentText.slice(0, maxDocLen) + `\n\n[... truncated ${documentText.length - maxDocLen} chars ...]`
-          : documentText;
+        // Extract source name from document metadata
+        const sourceMatch = documentText.match(/\[Document:\s*(.*?)\]/);
+        const fileMatch = documentText.match(/\[File:\s*(.*?)\]/);
+        const sourceName = sourceMatch?.[1] || fileMatch?.[1] || "document";
 
-        // Build a rich prompt with the document content as context
-        const docPrompt = `Here is a document for analysis:\n\n---\n${truncatedDoc}\n---\n\nUser request: ${input}`;
+        // Use Rust RAG engine: chunks document → retrieves relevant sections → builds context
+        const ragJson = await invoke<string>("rag_query", {
+          documentText,
+          query: input,
+          source: sourceName,
+        });
+        const ragResult: { context: string; chunks_used: number; total_chunks: number; source: string; rag_used: boolean } = JSON.parse(ragJson);
 
-        // Use the standard Ollama query with the enriched prompt
+        // Build prompt with RAG context (only relevant chunks, not the whole doc)
+        const docPrompt = ragResult.rag_used
+          ? `The following are the most relevant sections from "${sourceName}" (${ragResult.chunks_used}/${ragResult.total_chunks} sections retrieved via RAG):\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`
+          : `Here is a document for analysis:\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`;
+
         const response = await invoke<string>("query_ollama", {
           prompt: docPrompt,
           model: settings.defaultModel || "mistral",
           ollamaUrl: settings.ollamaUrl || null,
+          maxTokens: settings.maxTokens || 4096,
         });
 
-        const docMeta = documentText.match(/\[Document:.*?\]/) || documentText.match(/\[File:.*?\]/);
-        const metaLine = docMeta ? `\n\n───\n📄 Document Analysis · ${docMeta[0]} · 100% local` : "\n\n───\n📄 Document Analysis · 100% local";
+        // Silently index chunks into Spectrum Graph (non-blocking)
+        invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
+
+        const ragBadge = ragResult.rag_used
+          ? `RAG: ${ragResult.chunks_used}/${ragResult.total_chunks} chunks`
+          : "Full document";
+        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · 100% local`;
 
         const aiMsg: Message = {
           id: crypto.randomUUID(),
@@ -384,20 +398,30 @@ export default function MainView({
           setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
         }
       } else if (imageData) {
-        const visionModel = settings.defaultModel?.includes("llava") || settings.defaultModel?.includes("vision")
-          ? settings.defaultModel
-          : "llava";  // Default to llava for vision tasks
+        // ── Vision path: Smart Model Routing (Phase 6) — auto-swap to vision model ──
+        const routeJson = await invoke<string>("smart_route_model", {
+          userModel: settings.defaultModel || "mistral",
+          hasImage: true,
+          hasDocument: false,
+          ollamaUrl: settings.ollamaUrl || null,
+        });
+        const route: { model: string; auto_swapped: boolean; original_model: string; reason: string; is_vision: boolean } = JSON.parse(routeJson);
+
         const response = await invoke<string>("query_ollama_vision", {
           prompt: input,
           imageData,
-          model: visionModel,
+          model: route.model,
           ollamaUrl: settings.ollamaUrl || null,
         });
+
+        const routeBadge = route.auto_swapped
+          ? `🔄 Auto-routed: ${route.original_model} → ${route.model}`
+          : `Model: ${route.model}`;
 
         const aiMsg: Message = {
           id: crypto.randomUUID(),
           role: "ai",
-          content: response + "\n\n───\n👁️ Vision · Model: " + visionModel + " · 100% local",
+          content: response + `\n\n───\n👁️ Vision · ${routeBadge} · 100% local`,
           timestamp: new Date(),
           agent: "Vision",
         };
@@ -525,6 +549,21 @@ export default function MainView({
           }
         }
       } // end if/else documentText/imageData
+    } catch (err) {
+      const errorStr = String(err);
+      const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout");
+      const isModelError = errorStr.includes("model") || errorStr.includes("not found");
+      const errorMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: isOllamaError
+          ? `âš ï¸ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`
+          : isModelError
+          ? `âš ï¸ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`
+          : `âš ï¸ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  â€¢ Check that Ollama is running: ollama serve\n  â€¢ Verify your model is downloaded: ollama list\n  â€¢ Check Settings for the correct Ollama URL\n  â€¢ Try a simpler intent to test the connection`,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsProcessing(false);
     }

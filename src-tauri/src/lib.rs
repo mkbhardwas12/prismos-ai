@@ -180,7 +180,7 @@ async fn capture_screen() -> Result<String, String> {
     let monitors = Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {}", e))?;
     let monitor = monitors
         .into_iter()
-        .find(|m| m.is_primary())
+        .find(|m| m.is_primary().unwrap_or(false))
         .or_else(|| {
             // Fallback: just take the first monitor
             Monitor::all().ok().and_then(|m| m.into_iter().next())

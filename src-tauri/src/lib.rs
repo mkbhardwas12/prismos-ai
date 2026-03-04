@@ -29,6 +29,10 @@ use tauri::tray::TrayIconBuilder;
 /// Wrapped in Mutex because rusqlite::Connection is not Sync.
 pub struct DbState(pub Mutex<spectrum_graph::SpectrumGraph>);
 
+/// Zip-bomb safety limits for document extraction
+const MAX_ZIP_ENTRIES: usize = 10_000;
+const MAX_DECOMPRESSED_ENTRY: u64 = 100 * 1024 * 1024; // 100 MB per entry
+
 /// Shared file indexer state
 pub struct IndexerState(pub Mutex<file_indexer::FileIndexer>);
 
@@ -1436,11 +1440,20 @@ fn extract_docx_text(path: &std::path::Path, file_name: &str) -> Result<String, 
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("Failed to read DOCX archive: {}", e))?;
 
+    // Zip-bomb safety: limit total entries
+    if archive.len() > MAX_ZIP_ENTRIES {
+        return Err(format!("DOCX has too many entries ({}) — possible zip bomb", archive.len()));
+    }
+
     // DOCX stores content in word/document.xml
     let mut text_parts: Vec<String> = Vec::new();
 
     // Try to read word/document.xml
     if let Ok(mut doc_xml) = archive.by_name("word/document.xml") {
+        // Zip-bomb safety: limit decompressed size per entry
+        if doc_xml.size() > MAX_DECOMPRESSED_ENTRY {
+            return Err(format!("DOCX entry too large ({} bytes uncompressed) — possible zip bomb", doc_xml.size()));
+        }
         let mut xml_content = String::new();
         std::io::Read::read_to_string(&mut doc_xml, &mut xml_content)
             .map_err(|e| format!("Failed to read document.xml: {}", e))?;
@@ -1562,12 +1575,22 @@ fn extract_pptx_text(path: &std::path::Path, file_name: &str) -> Result<String, 
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("Failed to read PPTX archive: {}", e))?;
 
+    // Zip-bomb safety: limit total entries
+    if archive.len() > MAX_ZIP_ENTRIES {
+        return Err(format!("PPTX has too many entries ({}) — possible zip bomb", archive.len()));
+    }
+
     let mut slides: Vec<(usize, String)> = Vec::new();
 
     // PPTX stores slides in ppt/slides/slide1.xml, slide2.xml, etc.
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)
             .map_err(|e| format!("Failed to read PPTX entry: {}", e))?;
+
+        // Zip-bomb safety: limit decompressed size per entry
+        if entry.size() > MAX_DECOMPRESSED_ENTRY {
+            return Err(format!("PPTX entry too large ({} bytes uncompressed) — possible zip bomb", entry.size()));
+        }
 
         let entry_name = entry.name().to_string();
 
@@ -1757,9 +1780,18 @@ fn extract_docx_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, Stri
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| format!("Failed to read DOCX archive: {}", e))?;
 
+    // Zip-bomb safety: limit total entries
+    if archive.len() > MAX_ZIP_ENTRIES {
+        return Err(format!("DOCX has too many entries ({}) — possible zip bomb", archive.len()));
+    }
+
     let mut text_parts: Vec<String> = Vec::new();
 
     if let Ok(mut doc_xml) = archive.by_name("word/document.xml") {
+        // Zip-bomb safety: limit decompressed size per entry
+        if doc_xml.size() > MAX_DECOMPRESSED_ENTRY {
+            return Err(format!("DOCX entry too large ({} bytes uncompressed) — possible zip bomb", doc_xml.size()));
+        }
         let mut xml_content = String::new();
         std::io::Read::read_to_string(&mut doc_xml, &mut xml_content)
             .map_err(|e| format!("Failed to read document.xml: {}", e))?;
@@ -1828,11 +1860,22 @@ fn extract_pptx_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, Stri
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| format!("Failed to read PPTX archive: {}", e))?;
 
+    // Zip-bomb safety: limit total entries
+    if archive.len() > MAX_ZIP_ENTRIES {
+        return Err(format!("PPTX has too many entries ({}) — possible zip bomb", archive.len()));
+    }
+
     let mut slides: Vec<(usize, String)> = Vec::new();
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)
             .map_err(|e| format!("Failed to read PPTX entry: {}", e))?;
+
+        // Zip-bomb safety: limit decompressed size per entry
+        if entry.size() > MAX_DECOMPRESSED_ENTRY {
+            return Err(format!("PPTX entry too large ({} bytes uncompressed) — possible zip bomb", entry.size()));
+        }
+
         let entry_name = entry.name().to_string();
 
         if entry_name.starts_with("ppt/slides/slide") && entry_name.ends_with(".xml") {
@@ -2045,6 +2088,23 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // ── Global Shortcut: Ctrl+Space to summon PrismOS from anywhere (OS-wide) ──
+            {
+                use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+                let summon = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
+                match app.global_shortcut().on_shortcut(summon, |app_handle, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                }) {
+                    Ok(()) => println!("  ⌨️  Global shortcut Ctrl+Space registered — summon PrismOS from any app"),
+                    Err(e) => eprintln!("  ⚠️  Global shortcut registration failed (non-critical): {}", e),
+                }
+            }
 
             Ok(())
         })

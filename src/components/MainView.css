@@ -131,6 +131,18 @@
   font-family: var(--font-sans);
 }
 
+.model-dropdown-tier {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
 .model-dropdown-empty {
   padding: 16px 12px;
   font-size: 12px;

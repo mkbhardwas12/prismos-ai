@@ -1,9 +1,8 @@
 // Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Main View — Intent Console + Conversation
+// Refactored: logic extracted into useOllama, useChat, useSuggestions hooks
 
-import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { useState, Fragment } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { motion, AnimatePresence } from "framer-motion";
 import prismosLogo from "../assets/prismos-logo.svg";
@@ -13,8 +12,10 @@ import DailyBrief from "./DailyBrief";
 import UserGuide from "./UserGuide";
 import SuggestionCard from "./SuggestionCard";
 import { useVoice } from "../hooks/useVoice";
-import { generateFollowUpSuggestions } from "../lib/suggestions";
-import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary, OllamaModel, AgentActivity, ProactiveSuggestion } from "../types";
+import { useOllama, RECOMMENDED_MODELS } from "../hooks/useOllama";
+import { useChat } from "../hooks/useChat";
+import { useSuggestions } from "../hooks/useSuggestions";
+import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "../types";
 import "./MainView.css";
 
 interface MainViewProps {
@@ -28,8 +29,6 @@ interface MainViewProps {
   dailyGreeting: string;
 }
 
-type SetupStep = "install" | "start" | "model" | "ready";
-
 export default function MainView({
   ollamaConnected,
   settings,
@@ -40,602 +39,65 @@ export default function MainView({
   startupSuggestions,
   dailyGreeting,
 }: MainViewProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingPhase, setProcessingPhase] = useState<string>("");
-  const [pendingIntent, setPendingIntent] = useState("");
-  const [proactiveSuggestions, setProactiveSuggestions] = useState<ProactiveSuggestion[]>([]);
-  const [messageSuggestions, setMessageSuggestions] = useState<Record<string, ProactiveSuggestion[]>>({});
-  const conversationRef = useRef<HTMLDivElement>(null);
-
-  // P1: Seed proactive suggestions from startup (before user's first intent)
-  useEffect(() => {
-    if (startupSuggestions.length > 0 && proactiveSuggestions.length === 0 && messages.length === 0) {
-      setProactiveSuggestions(startupSuggestions);
-    }
-  }, [startupSuggestions]);
-
-  // Listen for sidebar proactive clicks — auto-fill intent box
-  useEffect(() => {
-    const fillHandler = (e: Event) => {
-      const intent = (e as CustomEvent<string>).detail;
-      if (intent) setPendingIntent(intent);
-    };
-    const processHandler = (e: Event) => {
-      const intent = (e as CustomEvent<string>).detail;
-      if (intent) handleIntent(intent);
-    };
-    window.addEventListener("prismos:fill-intent", fillHandler);
-    window.addEventListener("prismos:process-intent", processHandler);
-    return () => {
-      window.removeEventListener("prismos:fill-intent", fillHandler);
-      window.removeEventListener("prismos:process-intent", processHandler);
-    };
-  }, []);
-
-  // ── Inline model selector state ──
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const [availableModels, setAvailableModels] = useState<OllamaModel[]>([]);
-  const [pullingModel, setPullingModel] = useState<string | null>(null);
-  const [pullProgress, setPullProgress] = useState<string | null>(null);
-  const [pullPercent, setPullPercent] = useState<number>(0);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [showGuide, setShowGuide] = useState(false);
 
-  // Recommended models catalog — tiered by purpose, shown in dropdown for easy install
-  const RECOMMENDED_MODELS = useMemo(() => [
-    // ── Text & Reasoning (High Context, High Quality) ──
-    { name: "llama3.2", label: "Llama 3.2 3B", desc: "🏆 Default Text — 128k context, fast", size: "2.0 GB", tier: "text" },
-    { name: "llama3.1", label: "Llama 3.1 8B", desc: "128k context, best local quality", size: "4.7 GB", tier: "text" },
-    { name: "mistral", label: "Mistral 7B", desc: "Great all-rounder", size: "4.1 GB", tier: "text" },
-    { name: "mistral-nemo", label: "Mistral Nemo 12B", desc: "⚡ Fast + structured output", size: "7.1 GB", tier: "text" },
-    { name: "deepseek-r1", label: "DeepSeek R1 8B", desc: "Chain-of-thought reasoning", size: "4.7 GB", tier: "text" },
-    // ── Vision & Image Analysis (Camera & Uploads) ──
-    { name: "llama3.2-vision", label: "Llama 3.2 Vision 11B", desc: "🏆 Default Vision — best OCR & image", size: "7.9 GB", tier: "vision" },
-    { name: "llava", label: "LLaVA 13B", desc: "Battle-tested vision model", size: "8.0 GB", tier: "vision" },
-    { name: "qwen2-vl", label: "Qwen2 VL", desc: "Charts, receipts & dense docs", size: "5.5 GB", tier: "vision" },
-    { name: "moondream", label: "Moondream 1.8B", desc: "Ultra-light vision", size: "1.7 GB", tier: "vision" },
-    // ── Power User & Coding ──
-    { name: "qwen2.5", label: "Qwen 2.5 7B", desc: "Multilingual + deep coding", size: "4.7 GB", tier: "power" },
-    { name: "codellama", label: "Code Llama 7B", desc: "Code specialist", size: "3.8 GB", tier: "power" },
-    { name: "gemma2:2b", label: "Gemma 2 2B", desc: "Ultra-light for low RAM", size: "1.6 GB", tier: "power" },
-  ], []);
-
-  // Ollama setup wizard state
-  const [isLaunching, setIsLaunching] = useState(false);
-  const [launchStatus, setLaunchStatus] = useState<string | null>(null);
-  const [isPulling, setIsPulling] = useState(false);
-  const [pullStatus, setPullStatus] = useState<string | null>(null);
-  const [hasModels, setHasModels] = useState<boolean | null>(null);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [wizardExpanded, setWizardExpanded] = useState(false);
-
-  // First-time setup wizard modal (shows only on first launch)
-  const [showFirstTimeWizard, setShowFirstTimeWizard] = useState(
-    () => !localStorage.getItem("prismos-setup-done")
-  );
-
-  const dismissFirstTimeWizard = useCallback(() => {
-    localStorage.setItem("prismos-setup-done", "1");
-    setShowFirstTimeWizard(false);
-  }, []);
-
-  // Determine which setup step the user is on
-  const getSetupStep = useCallback((): SetupStep => {
-    if (ollamaConnected && hasModels) return "ready";
-    if (ollamaConnected && hasModels === false) return "model";
-    if (ollamaConnected) return "model"; // Connected but haven't checked models yet
-    return "start"; // Ollama not connected
-  }, [ollamaConnected, hasModels]);
-
-  // Check if Ollama has models when it connects
-  useEffect(() => {
-    if (ollamaConnected) {
-      (async () => {
-        try {
-          const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-          const models = JSON.parse(result);
-          setHasModels(Array.isArray(models) && models.length > 0);
-        } catch {
-          setHasModels(false);
-        }
-      })();
-    } else {
-      setHasModels(null);
-    }
-  }, [ollamaConnected]);
-
-  // Voice output (TTS) — speaks AI responses aloud when enabled
+  // Voice output (TTS)
   const voiceOutput = useVoice(() => {}, settings.voiceOutputEnabled ?? false);
 
-  // Load conversation history from Spectrum Graph on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await invoke<string>("search_spectrum_nodes", {
-          query: "conversation",
-        });
-        const nodes = JSON.parse(result) as Array<{
-          id: string;
-          label: string;
-          content: string;
-          created_at: string;
-        }>;
+  // ── Custom Hooks ──
+  const ollama = useOllama({ ollamaConnected, settings, onSettingsChange });
 
-        // Reconstruct messages from saved conversations (most recent 20)
-        const restored: Message[] = [];
-        for (const node of nodes.slice(0, 20).reverse()) {
-          const parts = node.content.split("\n\nA: ");
-          if (parts.length === 2) {
-            const question = parts[0].replace(/^Q: /, "");
-            restored.push({
-              id: `hist-user-${node.id}`,
-              role: "user",
-              content: question,
-              timestamp: new Date(node.created_at),
-            });
-            restored.push({
-              id: `hist-ai-${node.id}`,
-              role: "ai",
-              content: parts[1],
-              timestamp: new Date(node.created_at),
-            });
-          }
-        }
-        if (restored.length > 0) {
-          setMessages(restored);
-        }
-      } catch {
-        // No history — that's fine
-      }
-    })();
-  }, []);
+  const suggestions = useSuggestions({
+    startupSuggestions,
+    hasMessages: false, // seed check is internal to the hook
+  });
 
-  useEffect(() => {
-    if (conversationRef.current) {
-      conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const clearConversation = useCallback(() => {
-    setMessages([]);
-  }, []);
-
-  // ── Ollama Setup Actions ──
-  const handleStartOllama = useCallback(async () => {
-    setIsLaunching(true);
-    setLaunchStatus(null);
-    try {
-      const result = await invoke<string>("launch_ollama");
-      setLaunchStatus(result);
-      // Poll for connection a few times
-      for (let i = 0; i < 5; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        try {
-          const connected = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
-          if (connected) {
-            setLaunchStatus("✅ Ollama is running!");
-            break;
-          }
-        } catch { /* keep trying */ }
-      }
-    } catch (e) {
-      setLaunchStatus(`❌ ${String(e)}`);
-    } finally {
-      setIsLaunching(false);
-    }
-  }, []);
-
-  // ── Fetch available models when connected & dropdown opens ──
-  useEffect(() => {
-    if (!ollamaConnected || !modelDropdownOpen) return;
-    (async () => {
-      try {
-        const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-        setAvailableModels(JSON.parse(result));
-      } catch {
-        setAvailableModels([]);
-      }
-    })();
-  }, [ollamaConnected, modelDropdownOpen, settings.ollamaUrl]);
-
-  // ── Close dropdown on outside click ──
-  useEffect(() => {
-    if (!modelDropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setModelDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [modelDropdownOpen]);
-
-  const selectModel = useCallback((name: string) => {
-    onSettingsChange({ ...settings, defaultModel: name });
-    setModelDropdownOpen(false);
-  }, [settings, onSettingsChange]);
-
-  const pullModelFromDropdown = useCallback(async (modelName: string) => {
-    setPullingModel(modelName);
-    setPullProgress("Starting download…");
-    setPullPercent(0);
-
-    // Listen for streaming progress events from the Rust backend
-    const unlisten = await listen<{ model: string; status: string; completed: number; total: number; percent: number }>(
-      "pull-progress",
-      (event) => {
-        const { status, completed, total, percent } = event.payload;
-        if (total > 0) {
-          const mb = (completed / 1_000_000).toFixed(0);
-          const totalMb = (total / 1_000_000).toFixed(0);
-          setPullProgress(`${status} — ${mb} / ${totalMb} MB (${percent}%)`);
-          setPullPercent(percent);
-        } else if (status) {
-          setPullProgress(status);
-        }
-      }
-    );
-
-    try {
-      const result = await invoke<string>("pull_ollama_model", { model: modelName, ollamaUrl: settings.ollamaUrl });
-      setPullProgress(`✅ ${result}`);
-      setPullPercent(100);
-      // Refresh model list
-      const listResult = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-      setAvailableModels(JSON.parse(listResult));
-      // Auto-select the newly pulled model
-      onSettingsChange({ ...settings, defaultModel: modelName });
-      setTimeout(() => { setPullingModel(null); setPullProgress(null); setPullPercent(0); }, 2000);
-    } catch (e) {
-      setPullProgress(`❌ ${String(e)}`);
-      setTimeout(() => { setPullingModel(null); setPullProgress(null); setPullPercent(0); }, 4000);
-    } finally {
-      unlisten();
-    }
-  }, [settings, onSettingsChange]);
-
-  const handleRetryConnection = useCallback(async () => {
-    setIsRetrying(true);
-    try {
-      await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
-    } catch { /* ignore */ }
-    // Parent checkOllama interval will pick up the change
-    setTimeout(() => setIsRetrying(false), 2000);
-  }, []);
-
-  const handlePullModel = useCallback(async () => {
-    const model = settings.defaultModel || "llama3.2";
-    setIsPulling(true);
-    setPullStatus(`Pulling ${model}... this may take a few minutes`);
-    try {
-      const result = await invoke<string>("pull_ollama_model", { model, ollamaUrl: settings.ollamaUrl });
-      setPullStatus(`✅ ${result}`);
-      setHasModels(true);
-    } catch (e) {
-      setPullStatus(`❌ ${String(e)}`);
-    } finally {
-      setIsPulling(false);
-    }
-  }, [settings.defaultModel]);
-
-  // P3: Retry wrapper for API calls (up to 2 retries with exponential backoff)
-  async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        return await fn();
-      } catch (e) {
-        if (attempt === retries) throw e;
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-      }
-    }
-    throw new Error("Unreachable");
-  }
-
-  async function handleIntent(input: string, imageData?: string, documentText?: string) {
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: documentText
-        ? `📄 [Document attached]\n${input}`
-        : imageData
-          ? `🖼️ [Image attached]\n${input}`
-          : input,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsProcessing(true);
-    clearLiveSteps(); // Phase 2: clear previous live steps
-
-    try {
-      // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
-      if (documentText) {
-        // Fast pre-check: is Ollama reachable? (3s timeout instead of 300s hang)
-        setProcessingPhase("Checking Ollama connection…");
-        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
-        if (!ollamaOk) {
-          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
-        }
-
-        // Extract source name from document metadata
-        const sourceMatch = documentText.match(/\[Document:\s*(.*?)\]/);
-        const fileMatch = documentText.match(/\[File:\s*(.*?)\]/);
-        const sourceName = sourceMatch?.[1] || fileMatch?.[1] || "document";
-
-        // Use Rust RAG engine: chunks document → retrieves relevant sections → builds context
-        setProcessingPhase(`Chunking & indexing "${sourceName}"…`);
-        const ragJson = await invoke<string>("rag_query", {
-          documentText,
-          query: input,
-          source: sourceName,
-        });
-        const ragResult: { context: string; chunks_used: number; total_chunks: number; source: string; rag_used: boolean } = JSON.parse(ragJson);
-
-        // Build prompt with RAG context (only relevant chunks, not the whole doc)
-        const docPrompt = ragResult.rag_used
-          ? `The following are the most relevant sections from "${sourceName}" (${ragResult.chunks_used}/${ragResult.total_chunks} sections retrieved via RAG):\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`
-          : `Here is a document for analysis:\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`;
-
-        const modelName = settings.defaultModel || "llama3.2";
-        setProcessingPhase(`Analyzing with ${modelName} (${ragResult.rag_used ? ragResult.chunks_used + " chunks" : "full doc"})…`);
-
-        // Use blocking call — simpler & more reliable than streaming for document analysis
-        const docResponse = await invoke<string>("query_ollama", {
-          prompt: docPrompt,
-          model: modelName,
-          ollamaUrl: settings.ollamaUrl || null,
-          maxTokens: settings.maxTokens || 4096,
-        });
-
-        const ragBadge = ragResult.rag_used
-          ? `RAG: ${ragResult.chunks_used}/${ragResult.total_chunks} chunks`
-          : "Full document";
-        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · ${modelName} · 100% local`;
-
-        const docMsgId = crypto.randomUUID();
-        const aiMsg: Message = {
-          id: docMsgId,
-          role: "ai",
-          content: docResponse + metaLine,
-          timestamp: new Date(),
-          agent: "Document Analyst",
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-
-        // Silently index chunks into Spectrum Graph (non-blocking)
-        invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
-        onIntentProcessed("Document Analyst");
-
-        // Generate follow-up suggestions
-        try {
-          const sugJson = await invoke<string>("get_proactive_suggestions");
-          const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-          const enriched = generateFollowUpSuggestions(input, sug);
-          setProactiveSuggestions(enriched);
-          setMessageSuggestions(prev => ({ ...prev, [docMsgId]: enriched.slice(0, 3) }));
-        } catch {
-          const fallback = generateFollowUpSuggestions(input, []);
-          setProactiveSuggestions(fallback);
-          setMessageSuggestions(prev => ({ ...prev, [docMsgId]: fallback.slice(0, 3) }));
-        }
-      } else if (imageData) {
-        // ── Vision path: Smart Model Routing (Phase 6) — auto-swap to vision model ──
-        setProcessingPhase("Checking Ollama connection…");
-        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
-        if (!ollamaOk) {
-          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
-        }
-
-        setProcessingPhase("Routing to vision model…");
-        const routeJson = await invoke<string>("smart_route_model", {
-          userModel: settings.defaultModel || "mistral",
-          hasImage: true,
-          hasDocument: false,
-          ollamaUrl: settings.ollamaUrl || null,
-        });
-        const route: { model: string; auto_swapped: boolean; original_model: string; reason: string; is_vision: boolean } = JSON.parse(routeJson);
-
-        setProcessingPhase(`Analyzing image with ${route.model}…`);
-        const response = await invoke<string>("query_ollama_vision", {
-          prompt: input,
-          imageData,
-          model: route.model,
-          ollamaUrl: settings.ollamaUrl || null,
-        });
-
-        const routeBadge = route.auto_swapped
-          ? `🔄 Auto-routed: ${route.original_model} → ${route.model}`
-          : `Model: ${route.model}`;
-
-        const aiMsg: Message = {
-          id: crypto.randomUUID(),
-          role: "ai",
-          content: response + `\n\n───\n👁️ Vision · ${routeBadge} · 100% local`,
-          timestamp: new Date(),
-          agent: "Vision",
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-        onIntentProcessed("Vision");
-
-        // Generate follow-up suggestions
-        try {
-          const sugJson = await invoke<string>("get_proactive_suggestions");
-          const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-          const enriched = generateFollowUpSuggestions(input, sug);
-          setProactiveSuggestions(enriched);
-          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
-        } catch {
-          const fallback = generateFollowUpSuggestions(input, []);
-          setProactiveSuggestions(fallback);
-          setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
-        }
-      } else {
-        // ── Standard text path (existing Refractive Core pipeline) ──
-        try {
-          // Use full Refractive Core pipeline (Patent Pending) — with retry
-          const resultJson = await withRetry(() => invoke<string>("refract_intent", { input }));
-          const result: RefractiveResult = JSON.parse(resultJson);
-
-          // Build metadata footer
-          const metaParts: string[] = [];
-          if (result.agent_used) metaParts.push(`Agent: ${result.agent_used}`);
-          if (result.processing_time_ms) metaParts.push(`${result.processing_time_ms}ms`);
-          if (result.npu_accelerated) metaParts.push("NPU⚡");
-          if (result.context_nodes?.length) metaParts.push(`${result.context_nodes.length} ctx nodes`);
-          if (result.edges_reinforced?.length) metaParts.push(`${result.edges_reinforced.length} edges reinforced`);
-
-          // Collaboration trace
-          if (result.collaboration) {
-            const c = result.collaboration;
-            metaParts.push(`🔗 ${c.approve_count}/${c.vote_count} consensus`);
-            metaParts.push(`💬 ${c.message_count} agent msgs`);
-          }
-
-          const metaLine = metaParts.length > 0 ? `\n\n───\n📡 ${metaParts.join(" · ")}` : "";
-
-          // Collaboration consensus line
-          const collabLine = result.collaboration
-            ? `\n${result.collaboration.consensus_approved ? '✅' : '🛡️'} ${result.collaboration.consensus_summary}`
-            : "";
-
-          // Build anticipation hint
-          const hintLine = result.anticipations?.length
-            ? `\n🔮 ${result.anticipations[0]}`
-            : "";
-
-          const aiContent = result.response + metaLine + collabLine + hintLine;
-          const aiMsg: Message = {
-            id: crypto.randomUUID(),
-            role: "ai",
-            content: aiContent,
-            timestamp: new Date(),
-            agent: result.agent_used,
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-
-          // Voice output — speak the AI response
-          if (settings.voiceOutputEnabled) {
-            voiceOutput.speak(result.response);
-          }
-
-          onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null);
-
-          // Phase 1 — Alive Graph: auto-strengthen related edges + fetch proactive suggestions
-          try {
-            const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
-            if (keywords.length > 0) {
-              await invoke("strengthen_related_edges", { keywords });
-            }
-            const sugJson = await invoke<string>("get_proactive_suggestions");
-            const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-            const enriched = generateFollowUpSuggestions(input, sug);
-            setProactiveSuggestions(enriched);
-            setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
-          } catch {
-            const fallback = generateFollowUpSuggestions(input, []);
-            setProactiveSuggestions(fallback);
-            setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
-          }
-        } catch (e) {
-          // Fallback to legacy process_intent if refract_intent fails
-          try {
-            const response = await invoke<string>("process_intent", { input });
-            const aiMsg: Message = {
-              id: crypto.randomUUID(),
-              role: "ai",
-              content: response,
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, aiMsg]);
-            onIntentProcessed();
-
-            try {
-              const sugJson = await invoke<string>("get_proactive_suggestions");
-              const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
-              const enriched = generateFollowUpSuggestions(input, sug);
-              setProactiveSuggestions(enriched);
-              setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: enriched.slice(0, 3) }));
-            } catch {
-              const fallback = generateFollowUpSuggestions(input, []);
-              setProactiveSuggestions(fallback);
-              setMessageSuggestions(prev => ({ ...prev, [aiMsg.id]: fallback.slice(0, 3) }));
-            }
-          } catch (fallbackErr) {
-            const errorStr = String(fallbackErr);
-            const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
-            const isModelError = errorStr.includes("model") || errorStr.includes("not found");
-            const errorMsg: Message = {
-              id: crypto.randomUUID(),
-              role: "system",
-              content: isOllamaError
-                ? `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`
-                : isModelError
-                ? `⚠️ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`
-                : `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify your model is downloaded: ollama list\n  • Check Settings for the correct Ollama URL\n  • Try a simpler intent to test the connection`,
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, errorMsg]);
-          }
-        }
-      } // end if/else documentText/imageData
-    } catch (err) {
-      const errorStr = String(err);
-      const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
-      const isModelError = errorStr.includes("model") || errorStr.includes("not found");
-      const errorMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "system",
-        content: isOllamaError
-          ? `âš ï¸ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`
-          : isModelError
-          ? `âš ï¸ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`
-          : `âš ï¸ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  â€¢ Check that Ollama is running: ollama serve\n  â€¢ Verify your model is downloaded: ollama list\n  â€¢ Check Settings for the correct Ollama URL\n  â€¢ Try a simpler intent to test the connection`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsProcessing(false);
-      setProcessingPhase("");
-    }
-  }
+  const chat = useChat({
+    settings,
+    onIntentProcessed,
+    clearLiveSteps,
+    voiceEnabled: settings.voiceOutputEnabled ?? false,
+    voiceSpeak: voiceOutput.speak,
+    refreshSuggestions: suggestions.refreshSuggestions,
+  });
 
   return (
     <>
       <div className="main-header">
         <h2><img src={prismosIcon} alt="" className="header-icon" /> Intent Console</h2>
         <div className="header-actions">
-          {messages.length > 0 && (
+          {chat.messages.length > 0 && (
             <button
               className="toolbar-btn"
-              onClick={clearConversation}
+              onClick={chat.clearConversation}
               title="Clear conversation"
             >
               🗑️ Clear
             </button>
           )}
-          <div className="ollama-status" ref={modelDropdownRef}>
+          <div className="ollama-status" ref={ollama.modelDropdownRef}>
             <button
               className="model-selector-btn"
-              onClick={() => ollamaConnected && setModelDropdownOpen(v => !v)}
+              onClick={() => ollamaConnected && ollama.setModelDropdownOpen(v => !v)}
               title={ollamaConnected ? "Click to change model" : "Ollama is offline"}
             >
               <span className={`status-dot ${ollamaConnected ? "connected" : ""}`} />
               {ollamaConnected
-                ? <><span className="model-selector-label">Ollama ·</span> <strong>{settings.defaultModel}</strong> <span className="model-selector-caret">{modelDropdownOpen ? "▲" : "▼"}</span></>
+                ? <><span className="model-selector-label">Ollama ·</span> <strong>{settings.defaultModel}</strong> <span className="model-selector-caret">{ollama.modelDropdownOpen ? "▲" : "▼"}</span></>
                 : "Ollama Offline"}
             </button>
-            {modelDropdownOpen && (
+            {ollama.modelDropdownOpen && (
               <div className="model-dropdown">
                 {/* ── Installed Models ── */}
                 <div className="model-dropdown-header">Installed Models</div>
-                {availableModels.length === 0 ? (
+                {ollama.availableModels.length === 0 ? (
                   <div className="model-dropdown-empty">Loading…</div>
                 ) : (
-                  availableModels.map(m => (
+                  ollama.availableModels.map(m => (
                     <button
                       key={m.name}
                       className={`model-dropdown-item ${settings.defaultModel === m.name ? "active" : ""}`}
-                      onClick={() => selectModel(m.name)}
+                      onClick={() => ollama.selectModel(m.name)}
                     >
                       <span className="model-dropdown-name">{m.name}</span>
                       {m.size && <span className="model-dropdown-size">{(m.size / 1e9).toFixed(1)}GB</span>}
@@ -647,16 +109,16 @@ export default function MainView({
                 {/* ── Get More Models ── */}
                 <div className="model-dropdown-divider" />
                 <div className="model-dropdown-header">Get More Models</div>
-                {pullingModel && (
+                {ollama.pullingModel && (
                   <div className="model-pull-status">
                     <div className="model-pull-text">
-                      <span className="model-pull-spinner">⏳</span> {pullProgress}
+                      <span className="model-pull-spinner">⏳</span> {ollama.pullProgress}
                     </div>
-                    {pullPercent > 0 && (
+                    {ollama.pullPercent > 0 && (
                       <div className="progress-bar">
                         <div
                           className="progress-bar-fill"
-                          style={{ width: `${pullPercent}%` }}
+                          style={{ width: `${ollama.pullPercent}%` }}
                         />
                       </div>
                     )}
@@ -665,7 +127,7 @@ export default function MainView({
                 {/* Tiered model sections */}
                 {(["text", "vision", "power"] as const).map(tier => {
                   const tierModels = RECOMMENDED_MODELS
-                    .filter(r => r.tier === tier && !availableModels.some(m => m.name.startsWith(r.name)));
+                    .filter(r => r.tier === tier && !ollama.availableModels.some(m => m.name.startsWith(r.name)));
                   if (tierModels.length === 0) return null;
                   return (
                     <div key={tier}>
@@ -676,21 +138,21 @@ export default function MainView({
                         <button
                           key={r.name}
                           className="model-dropdown-item model-download-item"
-                          onClick={() => pullModelFromDropdown(r.name)}
-                          disabled={pullingModel !== null}
+                          onClick={() => ollama.pullModelFromDropdown(r.name)}
+                          disabled={ollama.pullingModel !== null}
                         >
                           <div className="model-download-info">
                             <span className="model-dropdown-name">{r.label}</span>
                             <span className="model-download-desc">{r.desc}</span>
                           </div>
                           <span className="model-dropdown-size">{r.size}</span>
-                          <span className="model-download-btn">{pullingModel === r.name ? "⏳" : "⬇"}</span>
+                          <span className="model-download-btn">{ollama.pullingModel === r.name ? "⏳" : "⬇"}</span>
                         </button>
                       ))}
                     </div>
                   );
                 })}
-                {RECOMMENDED_MODELS.filter(r => !availableModels.some(m => m.name.startsWith(r.name))).length === 0 && (
+                {RECOMMENDED_MODELS.filter(r => !ollama.availableModels.some(m => m.name.startsWith(r.name))).length === 0 && (
                   <div className="model-dropdown-empty">All recommended models installed ✓</div>
                 )}
 
@@ -728,11 +190,11 @@ export default function MainView({
         </div>
       </div>
 
-      <div className="conversation-area" ref={conversationRef} role="log" aria-label="Conversation history" aria-live="polite">
+      <div className="conversation-area" ref={chat.conversationRef} role="log" aria-label="Conversation history" aria-live="polite">
         {/* ── Morning Brief / Evening Recap ── */}
-        <DailyBrief onSuggestionClick={handleIntent} />
+        <DailyBrief onSuggestionClick={chat.handleIntent} />
 
-        {messages.length === 0 ? (
+        {chat.messages.length === 0 ? (
           <div className="welcome-message">
             <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS-AI" className="welcome-logo-img" /></div>
             <h1>Welcome to PrismOS-AI</h1>
@@ -742,23 +204,23 @@ export default function MainView({
             </p>
 
             {/* ── Ollama Setup Wizard ── */}
-            {getSetupStep() !== "ready" && (
-              <div className={`ollama-setup-wizard ${wizardExpanded ? "wizard-expanded" : "wizard-collapsed"}`} role="alert">
-                <div className="setup-wizard-header" onClick={() => setWizardExpanded(v => !v)} style={{ cursor: "pointer" }}>
+            {ollama.getSetupStep() !== "ready" && (
+              <div className={`ollama-setup-wizard ${ollama.wizardExpanded ? "wizard-expanded" : "wizard-collapsed"}`} role="alert">
+                <div className="setup-wizard-header" onClick={() => ollama.setWizardExpanded(v => !v)} style={{ cursor: "pointer" }}>
                   <span className="setup-wizard-icon">🚀</span>
                   <div style={{ flex: 1 }}>
                     <strong className="setup-wizard-title">Quick Setup</strong>
                     <span className="setup-wizard-subtitle">
-                      {wizardExpanded
+                      {ollama.wizardExpanded
                         ? "Get PrismOS-AI running in 3 steps"
-                        : `Step ${getSetupStep() === "start" ? "2" : "3"} — ${getSetupStep() === "start" ? "Start Ollama to continue" : "Pull a model to get started"}`
+                        : `Step ${ollama.getSetupStep() === "start" ? "2" : "3"} — ${ollama.getSetupStep() === "start" ? "Start Ollama to continue" : "Pull a model to get started"}`
                       }
                     </span>
                   </div>
-                  <span className="wizard-toggle-icon">{wizardExpanded ? "▲" : "▼"}</span>
+                  <span className="wizard-toggle-icon">{ollama.wizardExpanded ? "▲" : "▼"}</span>
                 </div>
 
-                {wizardExpanded && (
+                {ollama.wizardExpanded && (
                 <div className="setup-steps">
                   {/* Step 1: Install Ollama */}
                   <div className={`setup-step ${ollamaConnected ? "step-done" : "step-active"}`}>
@@ -784,7 +246,7 @@ export default function MainView({
                   </div>
 
                   {/* Step 2: Start Ollama */}
-                  <div className={`setup-step ${ollamaConnected ? "step-done" : getSetupStep() === "start" ? "step-active" : "step-pending"}`}>
+                  <div className={`setup-step ${ollamaConnected ? "step-done" : ollama.getSetupStep() === "start" ? "step-active" : "step-pending"}`}>
                     <div className="step-indicator">
                       {ollamaConnected ? (
                         <span className="step-check">✓</span>
@@ -803,10 +265,10 @@ export default function MainView({
                         <div className="step-actions">
                           <button
                             className="step-action-btn step-action-primary"
-                            onClick={handleStartOllama}
-                            disabled={isLaunching}
+                            onClick={ollama.handleStartOllama}
+                            disabled={ollama.isLaunching}
                           >
-                            {isLaunching ? (
+                            {ollama.isLaunching ? (
                               <><span className="btn-spinner" /> Starting…</>
                             ) : (
                               "▶️ Start Ollama"
@@ -814,19 +276,19 @@ export default function MainView({
                           </button>
                           <button
                             className="step-action-btn step-action-secondary"
-                            onClick={handleRetryConnection}
-                            disabled={isRetrying}
+                            onClick={ollama.handleRetryConnection}
+                            disabled={ollama.isRetrying}
                           >
-                            {isRetrying ? "Checking…" : "🔄 Retry Connection"}
+                            {ollama.isRetrying ? "Checking…" : "🔄 Retry Connection"}
                           </button>
                         </div>
                       )}
-                      {launchStatus && (
-                        <div className={`step-status ${launchStatus.startsWith("✅") ? "step-status-ok" : launchStatus.startsWith("❌") ? "step-status-err" : "step-status-info"}`}>
-                          {launchStatus}
+                      {ollama.launchStatus && (
+                        <div className={`step-status ${ollama.launchStatus.startsWith("✅") ? "step-status-ok" : ollama.launchStatus.startsWith("❌") ? "step-status-err" : "step-status-info"}`}>
+                          {ollama.launchStatus}
                         </div>
                       )}
-                      {!ollamaConnected && !isLaunching && (
+                      {!ollamaConnected && !ollama.isLaunching && (
                         <div className="step-hint">
                           Or run <code>ollama serve</code> in your terminal
                         </div>
@@ -835,9 +297,9 @@ export default function MainView({
                   </div>
 
                   {/* Step 3: Pull a model */}
-                  <div className={`setup-step ${hasModels ? "step-done" : ollamaConnected ? "step-active" : "step-pending"}`}>
+                  <div className={`setup-step ${ollama.hasModels ? "step-done" : ollamaConnected ? "step-active" : "step-pending"}`}>
                     <div className="step-indicator">
-                      {hasModels ? (
+                      {ollama.hasModels ? (
                         <span className="step-check">✓</span>
                       ) : (
                         <span className="step-number">3</span>
@@ -846,18 +308,18 @@ export default function MainView({
                     <div className="step-content">
                       <div className="step-label">Pull a Model</div>
                       <div className="step-desc">
-                        {hasModels
+                        {ollama.hasModels
                           ? `Model ready — ${settings.defaultModel}`
                           : `Download an AI model to use locally`}
                       </div>
-                      {ollamaConnected && !hasModels && (
+                      {ollamaConnected && !ollama.hasModels && (
                         <div className="step-actions">
                           <button
                             className="step-action-btn step-action-primary"
-                            onClick={handlePullModel}
-                            disabled={isPulling}
+                            onClick={ollama.handlePullModel}
+                            disabled={ollama.isPulling}
                           >
-                            {isPulling ? (
+                            {ollama.isPulling ? (
                               <><span className="btn-spinner" /> Pulling…</>
                             ) : (
                               `📦 Pull ${settings.defaultModel || "llama3.2"}`
@@ -865,9 +327,9 @@ export default function MainView({
                           </button>
                         </div>
                       )}
-                      {pullStatus && (
-                        <div className={`step-status ${pullStatus.startsWith("✅") ? "step-status-ok" : pullStatus.startsWith("❌") ? "step-status-err" : "step-status-info"}`}>
-                          {pullStatus}
+                      {ollama.pullStatus && (
+                        <div className={`step-status ${ollama.pullStatus.startsWith("✅") ? "step-status-ok" : ollama.pullStatus.startsWith("❌") ? "step-status-err" : "step-status-info"}`}>
+                          {ollama.pullStatus}
                         </div>
                       )}
                       {!ollamaConnected && (
@@ -881,96 +343,60 @@ export default function MainView({
             )}
 
             {/* All set — ready indicator */}
-            {getSetupStep() === "ready" && (
+            {ollama.getSetupStep() === "ready" && (
               <div className="ollama-ready-banner">
                 <span className="ready-icon">✅</span>
                 <span className="ready-text">Ollama connected · <strong>{settings.defaultModel}</strong> ready — start typing below!</span>
               </div>
             )}
 
-            {/* Quick-start example intents — auto-fill input box */}
+            {/* Quick-start example intents */}
             <div className="welcome-examples">
               <div className="welcome-examples-label">Quick-start templates — click to try</div>
               <div className="welcome-example-chips">
-                {/* Productivity */}
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Summarize what I worked on this week and suggest priorities for tomorrow")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Summarize what I worked on this week and suggest priorities for tomorrow")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">📋</span>
                   <span className="example-chip-text">Summarize my week &amp; suggest priorities</span>
                   <span className="example-chip-badge">Productivity</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Create a structured daily plan with time blocks for deep work, meetings, and breaks")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Create a structured daily plan with time blocks for deep work, meetings, and breaks")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">📅</span>
                   <span className="example-chip-text">Build a time-blocked daily plan</span>
                   <span className="example-chip-badge">Productivity</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                {/* Creative */}
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Draft a short professional bio based on my recent projects")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Draft a short professional bio based on my recent projects")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">✍️</span>
                   <span className="example-chip-text">Draft a professional bio for me</span>
                   <span className="example-chip-badge">Creative</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Brainstorm 5 creative side-project ideas that combine AI with everyday problems")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Brainstorm 5 creative side-project ideas that combine AI with everyday problems")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">💡</span>
                   <span className="example-chip-text">Brainstorm creative side-project ideas</span>
                   <span className="example-chip-badge">Creative</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                {/* Knowledge */}
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("What connections exist in my knowledge graph and what patterns do you see?")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("What connections exist in my knowledge graph and what patterns do you see?")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">🔮</span>
                   <span className="example-chip-text">Analyze my knowledge graph patterns</span>
                   <span className="example-chip-badge">Knowledge</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Explain the key concepts of retrieval-augmented generation (RAG) and how it improves AI accuracy")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Explain the key concepts of retrieval-augmented generation (RAG) and how it improves AI accuracy")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">🧠</span>
                   <span className="example-chip-text">Explain RAG and how it improves AI</span>
                   <span className="example-chip-badge">Knowledge</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                {/* Planning */}
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Help me create a 30-day learning roadmap for Rust programming with milestones")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Help me create a 30-day learning roadmap for Rust programming with milestones")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">🗺️</span>
                   <span className="example-chip-text">Create a 30-day learning roadmap</span>
                   <span className="example-chip-badge">Planning</span>
                   <span className="example-chip-arrow" aria-hidden="true">→</span>
                 </button>
-                <button
-                  className="example-chip"
-                  onClick={() => setPendingIntent("Review my recent work and suggest areas where I can improve my workflow efficiency")}
-                  disabled={isProcessing}
-                >
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Review my recent work and suggest areas where I can improve my workflow efficiency")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">📊</span>
                   <span className="example-chip-text">Review &amp; improve my workflow efficiency</span>
                   <span className="example-chip-badge">Planning</span>
@@ -983,30 +409,22 @@ export default function MainView({
               <div className="feature-card">
                 <div className="feature-card-icon">🧠</div>
                 <h3>Refractive Core</h3>
-                <p>
-                  Multi-agent orchestration with 5 specialized AI agents working
-                  in concert
-                </p>
+                <p>Multi-agent orchestration with 5 specialized AI agents working in concert</p>
               </div>
               <div className="feature-card">
                 <div className="feature-card-icon">🌈</div>
                 <h3>Spectrum Graph</h3>
-                <p>
-                  Persistent knowledge graph with SQLite + vector layers for
-                  memory
-                </p>
+                <p>Persistent knowledge graph with SQLite + vector layers for memory</p>
               </div>
               <div className="feature-card">
                 <div className="feature-card-icon">🔒</div>
                 <h3>Sandbox Prisms</h3>
-                <p>
-                  WASM-based sandboxed execution with cryptographic auto-rollback
-                </p>
+                <p>WASM-based sandboxed execution with cryptographic auto-rollback</p>
               </div>
             </div>
           </div>
         ) : (
-          messages.map((msg) => (
+          chat.messages.map((msg) => (
             <Fragment key={msg.id}>
               <div className={`message message-${msg.role}`}>
                 <div className="message-bubble">
@@ -1022,34 +440,20 @@ export default function MainView({
                   {msg.timestamp.toLocaleTimeString()}
                 </div>
               </div>
-              {msg.role === "ai" && messageSuggestions[msg.id]?.length > 0 && (
+              {msg.role === "ai" && suggestions.messageSuggestions[msg.id]?.length > 0 && (
                 <div className="inline-suggestions">
                   <div className="inline-suggestions__label">💡 Suggested next steps</div>
                   <div className="inline-suggestions__cards">
                     <AnimatePresence>
-                      {messageSuggestions[msg.id].map((sug, i) => (
+                      {suggestions.messageSuggestions[msg.id].map((sug, i) => (
                         <SuggestionCard
                           key={sug.id}
                           suggestion={sug}
                           variant="inline"
                           index={i}
-                          onSelect={(s) => {
-                            // Auto-fill intent box (not auto-execute) so user can review
-                            setPendingIntent(s.action_intent);
-                          }}
-                          onDismiss={(id) => {
-                            setMessageSuggestions(prev => {
-                              const current = prev[msg.id] ?? [];
-                              const filtered = current.filter(s => s.id !== id);
-                              if (filtered.length === 0) {
-                                const next = { ...prev };
-                                delete next[msg.id];
-                                return next;
-                              }
-                              return { ...prev, [msg.id]: filtered };
-                            });
-                          }}
-                      />
+                          onSelect={(s) => chat.setPendingIntent(s.action_intent)}
+                          onDismiss={(id) => suggestions.dismissSuggestion(msg.id, id)}
+                        />
                       ))}
                     </AnimatePresence>
                   </div>
@@ -1058,7 +462,7 @@ export default function MainView({
             </Fragment>
           ))
         )}
-        {isProcessing && (
+        {chat.isProcessing && (
           <div className="message message-ai" role="status" aria-label="Processing your intent">
             <div className="message-bubble processing-bubble">
               <div className="processing-indicator">
@@ -1066,16 +470,16 @@ export default function MainView({
                   <span /><span /><span />
                 </div>
                 <div className="processing-text">
-                  <span className="processing-label">{processingPhase || "Refracting your intent…"}</span>
+                  <span className="processing-label">{chat.processingPhase || "Refracting your intent…"}</span>
                   <span className="processing-detail">
                     {liveAgentSteps.length > 0
                       ? liveAgentSteps[liveAgentSteps.length - 1].action
-                      : processingPhase ? "Processing locally · 100% private" : "Agents collaborating · Graph context loading"}
+                      : chat.processingPhase ? "Processing locally · 100% private" : "Agents collaborating · Graph context loading"}
                   </span>
                 </div>
               </div>
 
-              {/* ── Phase 2: Live Agent Debate Log ── */}
+              {/* Phase 2: Live Agent Debate Log */}
               {liveAgentSteps.length > 0 && (
                 <div className="live-debate-log" role="log" aria-label="Agent collaboration log">
                   <AnimatePresence>
@@ -1104,14 +508,14 @@ export default function MainView({
         )}
       </div>
 
-      {/* ── Proactive Daily Assistance — Greeting Card + Clickable Suggestions ── */}
-      {proactiveSuggestions.length > 0 && !isProcessing && (
+      {/* ── Proactive Daily Assistance ── */}
+      {suggestions.proactiveSuggestions.length > 0 && !chat.isProcessing && (
         <div className="proactive-suggestions">
           <div className="proactive-header">
-            <span className="proactive-label">🧠 {messages.length === 0 ? `${dailyGreeting} — here's what your graph noticed` : 'Graph Insights'}</span>
+            <span className="proactive-label">🧠 {chat.messages.length === 0 ? `${dailyGreeting} — here's what your graph noticed` : 'Graph Insights'}</span>
             <button
               className="proactive-dismiss-all"
-              onClick={() => setProactiveSuggestions([])}
+              onClick={() => suggestions.setProactiveSuggestions([])}
               title="Dismiss all suggestions"
             >
               ✕
@@ -1119,14 +523,14 @@ export default function MainView({
           </div>
           <div className="proactive-cards">
             <AnimatePresence>
-              {proactiveSuggestions.slice(0, 3).map((sug, i) => (
+              {suggestions.proactiveSuggestions.slice(0, 3).map((sug, i) => (
                 <SuggestionCard
                   key={sug.id}
                   suggestion={sug}
                   variant="inline"
                   index={i}
-                  onSelect={(s) => setPendingIntent(s.action_intent)}
-                  onDismiss={(id) => setProactiveSuggestions(prev => prev.filter(s => s.id !== id))}
+                  onSelect={(s) => chat.setPendingIntent(s.action_intent)}
+                  onDismiss={(id) => suggestions.setProactiveSuggestions(prev => prev.filter(s => s.id !== id))}
                 />
               ))}
             </AnimatePresence>
@@ -1139,34 +543,29 @@ export default function MainView({
         <div className="voice-speaking-bar">
           <span className="voice-speaking-icon">🔊</span>
           <span className="voice-speaking-text">Speaking response...</span>
-          <button
-            className="voice-stop-btn"
-            onClick={voiceOutput.stopSpeaking}
-            title="Stop speaking"
-          >
+          <button className="voice-stop-btn" onClick={voiceOutput.stopSpeaking} title="Stop speaking">
             ⏹ Stop
           </button>
         </div>
       )}
 
       <IntentInput
-        onSubmit={handleIntent}
-        isProcessing={isProcessing}
+        onSubmit={chat.handleIntent}
+        isProcessing={chat.isProcessing}
         voiceEnabled={settings.voiceInputEnabled ?? false}
-        pendingIntent={pendingIntent}
-        onPendingConsumed={() => setPendingIntent("")}
+        pendingIntent={chat.pendingIntent}
+        onPendingConsumed={() => chat.setPendingIntent("")}
       />
 
-      {/* ── First-Time Setup Wizard Modal (shows once) ── */}
-      {showFirstTimeWizard && (
-        <div className="ftw-overlay" onClick={dismissFirstTimeWizard}>
+      {/* ── First-Time Setup Wizard Modal ── */}
+      {ollama.showFirstTimeWizard && (
+        <div className="ftw-overlay" onClick={ollama.dismissFirstTimeWizard}>
           <div className="ftw-modal" onClick={(e) => e.stopPropagation()}>
             <div className="ftw-header">
               <img src={prismosLogo} alt="PrismOS-AI" className="ftw-logo" />
               <h2 className="ftw-title">Welcome to PrismOS-AI!</h2>
               <p className="ftw-subtitle">Your local-first AI assistant. Let's get you set up in under 2 minutes.</p>
             </div>
-
             <div className="ftw-steps">
               <div className="ftw-step">
                 <div className="ftw-step-number">1</div>
@@ -1193,12 +592,11 @@ export default function MainView({
                 </div>
               </div>
             </div>
-
             <div className="ftw-footer">
               <div className="ftw-privacy-note">
                 🔒 Everything runs locally. Your data never leaves your device.
               </div>
-              <button className="ftw-dismiss-btn" onClick={dismissFirstTimeWizard}>
+              <button className="ftw-dismiss-btn" onClick={ollama.dismissFirstTimeWizard}>
                 Got it, let's go! →
               </button>
             </div>

@@ -46,7 +46,7 @@ export default function TitleBar() {
       <div className="titlebar-brand" data-tauri-drag-region>
         <img src={prismosIcon} alt="" className="titlebar-icon" />
         <span className="titlebar-title" data-tauri-drag-region>PrismOS-AI</span>
-        <span className="titlebar-version">v0.5.0</span>
+        <span className="titlebar-version">v0.5.2</span>
       </div>
 
       {/* Spacer — entire bar is draggable */}

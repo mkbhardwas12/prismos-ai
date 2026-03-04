@@ -85,38 +85,13 @@ Everything runs offline. All inference via local [Ollama](https://ollama.com) mo
 
 ## 🏗️ Architecture
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                PrismOS-AI Desktop App (v0.5.1)               │
-├──────────────────────────────────────────────────────────────┤
-│  React 18 + TypeScript 5.5 + Vite 5.4      (Frontend)       │
-│  ├── Intent Console        NL chat + vision + documents      │
-│  ├── Spectrum Graph        7D force-directed visualization   │
-│  ├── Sandbox Prisms        WASM-isolated code execution      │
-│  ├── Spectral Timeline     Time-series knowledge history     │
-│  ├── Daily Dashboard       Morning brief + proactive cards   │
-│  ├── ProactivePanel        Live sidebar feeds                │
-│  └── Settings & Security   Config + audit + security status  │
-├───────────────── 76 Tauri IPC Commands ──────────────────────┤
-│  Rust 1.82+ Backend                     (20 Modules)        │
-│  ├── refractive_core.rs   Intent decomposition pipeline      │
-│  ├── spectrum_graph.rs    SQLite 7D knowledge store          │
-│  ├── ollama_bridge.rs     LLM + vision inference             │
-│  ├── sandbox_prism.rs     wasmtime WASM runtime              │
-│  ├── agents/              8 AI agents with consensus voting  │
-│  ├── smart_router.rs      Auto vision/text model switching   │
-│  ├── doc_chunker.rs       TF-IDF document RAG               │
-│  ├── you_port.rs          Encrypted AES-256-GCM sync        │
-│  ├── audit_log.rs         SHA-256 tamper-proof hash chain    │
-│  ├── file_indexer.rs      Local RAG file watcher             │
-│  └── screen_awareness.rs  Opt-in contextual screen capture   │
-├──────────────────────────────────────────────────────────────┤
-│  Ollama (localhost:11434)   Local LLM — llama3.2 / llava     │
-└──────────────────────────────────────────────────────────────┘
-        ↓  Everything runs locally. Nothing phones home.  ↓
-```
+<p align="center">
+  <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS-AI System Architecture — v0.5.1" />
+</p>
 
-See [docs/diagrams/](docs/diagrams/) for detailed SVG architecture diagrams (data flow, security model, refractive pipeline, spectral dimensions, and more).
+> **4 Layers** — React Frontend → 76 Tauri IPC Commands → Rust Backend (8 AI Agents, 20 Modules) → SQLite + Local Ollama LLM
+
+See [docs/diagrams/](docs/diagrams/) for more SVG diagrams (data flow, security model, refractive pipeline, spectral dimensions, and more).
 
 ---
 

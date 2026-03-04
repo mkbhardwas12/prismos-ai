@@ -35,7 +35,7 @@ When you ask PrismOS-AI something, your intent passes through the "Refractive Co
 HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 hash chains. Hardware TPM integration. LLM model verification. If one layer fails, eight others hold. AI safety shouldn't be a checkbox — it should be the architecture.
 
 **The numbers:**
-→ 76 Tauri IPC commands
+→ 83 Tauri IPC commands
 → 20 Rust backend modules
 → 8 autonomous AI agents with consensus voting
 → Local Vision + Document Analysis (PDF/DOCX/PPTX/XLSX)
@@ -133,7 +133,7 @@ The stack:
 • wasmtime for WASM isolation
 • LangGraph for agent workflows
 
-76 IPC commands. 20 Rust modules.
+83 IPC commands. 17 Rust modules.
 
 All hand-written. All local. All open source. ⚡
 ```
@@ -172,7 +172,7 @@ The core ideas:
 
 3. Security as architecture — 9 distinct layers: HMAC-SHA256 action signing, behavioral allow-lists, wasmtime WASM sandboxing with fuel metering, statistical anomaly detection, auto-rollback checkpoints, XOR stream cipher + HMAC encryption at rest, SHA-256 hash chain audit log (tamper one entry and the chain breaks), LLM model fingerprinting against a known-good registry, and hardware TPM/Secure Enclave key derivation with software fallback.
 
-Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persistence. 76 IPC commands across 20 Rust modules.
+Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persistence. 83 IPC commands across 17 Rust modules.
 
 The guided setup wizard walks you through installing Ollama on first launch. Supports Mistral, Llama 3.x, Phi-3, Gemma 2, DeepSeek, and others.
 
@@ -200,5 +200,5 @@ Unlike cloud AI tools, PrismOS-AI keeps everything local — your conversations,
 
 What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), an AI processing engine modeled on light refraction (the Refractive Core), 8 AI agents that debate and reach consensus, WASM sandboxed execution, and 9 layers of security including a tamper-evident audit log and hardware enclave integration.
 
-Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 76 IPC commands across 20 Rust modules. Fully open source under MIT.
+Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 83 IPC commands across 17 Rust modules. Fully open source under MIT.
 ```

@@ -18,6 +18,24 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to eight AI agents at once" />
 </p>
 
+---
+
+## 📑 Table of Contents
+
+- [Core Features](#-core-features-v051)
+- [Architecture](#%EF%B8%8F-architecture)
+- [Demo Video](#-demo-video)
+- [Quick Start](#-quick-start)
+- [Configuration](#-configuration)
+- [Testing](#-testing)
+- [Project Structure](#-project-structure)
+- [Security Model](#-security-model)
+- [Contributing](#-contributing)
+- [Tech Stack](#%EF%B8%8F-tech-stack)
+- [Roadmap](#%EF%B8%8F-roadmap)
+- [Project Stats](#-project-stats)
+- [Patent Notice](#-patent-notice)
+
 <details>
 <summary><strong>📸 More Screenshots</strong> (click to expand)</summary>
 <br />
@@ -89,7 +107,7 @@ Everything runs offline. All inference via local [Ollama](https://ollama.com) mo
   <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS-AI System Architecture — v0.5.1" />
 </p>
 
-> **4 Layers** — React Frontend → 76 Tauri IPC Commands → Rust Backend (8 AI Agents, 20 Modules) → SQLite + Local Ollama LLM
+> **4 Layers** — React Frontend (18 components) → 83 Tauri IPC Commands → Rust Backend (8 AI Agents, 17 Modules) → SQLite + Local Ollama LLM
 
 See [docs/diagrams/](docs/diagrams/) for more SVG diagrams (data flow, security model, refractive pipeline, spectral dimensions, and more).
 
@@ -187,35 +205,61 @@ CI runs automatically on every push and PR via [GitHub Actions](.github/workflow
 ```
 prismos-ai/
 ├── src/                          # React 18 + TypeScript frontend
-│   ├── components/               # 15+ UI components
-│   │   ├── IntentConsole.tsx      # Main chat interface with vision + document upload
+│   ├── components/               # 18 UI components
+│   │   ├── MainView.tsx           # Primary view container with IntentInput + chat
+│   │   ├── IntentInput.tsx        # NL chat input with vision + document upload
 │   │   ├── SpectrumGraphView.tsx  # Force-directed 7D knowledge graph
-│   │   ├── SandboxView.tsx        # WASM sandbox prisms dashboard
-│   │   ├── TimelineView.tsx       # Spectral timeline (knowledge history)
+│   │   ├── SpectrumExplorer.tsx   # Browse and search graph nodes
+│   │   ├── SandboxPanel.tsx       # WASM sandbox prisms dashboard
+│   │   ├── SpectralTimeline.tsx   # Time-series knowledge history
 │   │   ├── DailyDashboard.tsx     # Morning brief + proactive cards
+│   │   ├── DailyBrief.tsx         # Morning brief data card
 │   │   ├── ProactivePanel.tsx     # Collapsible sidebar with live feeds
 │   │   ├── SettingsPanel.tsx      # App configuration + security status
 │   │   ├── TitleBar.tsx           # Custom frameless window controls
 │   │   ├── Sidebar.tsx            # Navigation + version badge
-│   │   └── OnboardingWizard.tsx   # First-run setup experience
-│   ├── lib/                      # Core logic + agent framework
-│   │   ├── agents/               # 8 AI agents (orchestrator → keepers)
-│   │   ├── spectrumGraph.ts      # Graph CRUD + spectral dimensions
-│   │   ├── ollamaClient.ts       # Streaming LLM client
+│   │   ├── OnboardingWizard.tsx   # First-run setup experience
+│   │   ├── SpotlightOverlay.tsx   # Alt+Space command palette overlay
+│   │   ├── ActiveAgents.tsx       # Agent status display
+│   │   ├── DailySuggestions.tsx   # Context-aware suggestion cards
+│   │   ├── SuggestionCard.tsx     # Individual suggestion card widget
+│   │   └── ErrorBoundary.tsx      # React error boundary wrapper
+│   ├── lib/                      # Core logic
+│   │   ├── agents.ts             # Agent framework definitions
+│   │   ├── ollama.ts             # Streaming LLM client
+│   │   ├── suggestions.ts        # Proactive suggestions engine
 │   │   └── config.ts             # Centralized configuration
+│   ├── hooks/                    # React hooks
+│   │   ├── useChat.ts            # Chat state management
+│   │   ├── useOllama.ts          # Ollama connection hook
+│   │   ├── useSuggestions.ts     # Suggestion lifecycle hook
+│   │   └── useVoice.ts           # Voice input hook
 │   └── test/                     # 97 frontend tests (Vitest)
 ├── src-tauri/                    # Rust backend (Tauri 2.0)
 │   └── src/
-│       ├── lib.rs                # 76 IPC commands + app bootstrap
-│       ├── spectrum_graph.rs     # SQLite knowledge store
+│       ├── lib.rs                # 83 IPC commands + app bootstrap
+│       ├── spectrum_graph.rs     # SQLite 7D knowledge store
 │       ├── refractive_core.rs    # Intent → agent pipeline
 │       ├── sandbox_prism.rs      # WASM runtime (wasmtime 27)
 │       ├── ollama_bridge.rs      # LLM + vision streaming
 │       ├── smart_router.rs       # Auto model switching
 │       ├── doc_chunker.rs        # Document RAG + TF-IDF
 │       ├── you_port.rs           # AES-256-GCM encrypted export
-│       ├── audit_log.rs          # SHA-256 hash chain
-│       ├── agents/               # Agent graph + LangGraph DAG
+│       ├── audit_log.rs          # SHA-256 tamper-evident hash chain
+│       ├── secure_enclave.rs     # Platform-specific key derivation
+│       ├── intent_lens.rs        # Intent parsing
+│       ├── model_verify.rs       # Model integrity verification
+│       ├── whisper_engine.rs     # Local voice engine
+│       ├── file_indexer.rs       # Local RAG file watcher
+│       ├── email_keeper.rs       # Read-only IMAP email summaries
+│       ├── calendar_keeper.rs    # Local .ics calendar integration
+│       ├── finance_keeper.rs     # Portfolio tracking
+│       ├── agents/               # LangGraph multi-agent DAG
+│       │   ├── mod.rs            # DAG: Orchestrator→[Reasoner,ToolSmith,MemKeeper]→Sentinel→Consensus
+│       │   ├── graph.rs          # Agent graph execution engine
+│       │   ├── langgraph_workflow.rs  # Workflow orchestration
+│       │   ├── messages.rs       # Inter-agent message protocol
+│       │   └── nodes.rs          # Individual agent node implementations
 │       └── 65 backend tests      # cargo test
 ├── docs/                         # Architecture diagrams + screenshots
 ├── .github/workflows/            # CI + Release Build (cross-platform)
@@ -229,12 +273,13 @@ prismos-ai/
 
 PrismOS-AI implements defense-in-depth with patent-pending security:
 
-1. **Sandbox Prism** — Every agent action runs inside an isolated WASM container
-2. **HMAC-SHA256 Signing** — All actions are cryptographically signed
-3. **Allow-List Enforcement** — Only pre-approved operations execute
-4. **Auto-Rollback** — Anomalous actions are automatically reverted
-5. **Audit Trail** — Tamper-proof chain of all operations
-6. **Zero Ambient Authority** — Agents have no default permissions
+1. **WASM Sandbox Isolation** — Every agent action runs inside a wasmtime container with memory limits (1–16 MB) and CPU fuel metering
+2. **HMAC-SHA256 Signing** — All actions are cryptographically signed with per-prism salt via Secure Enclave
+3. **3-Tier Allow-List** — Operations classified as Safe / Moderate / Restricted with per-agent permission sets
+4. **Anomaly Detection** — Detects injection attempts, abuse loops, and tier escalation attacks in real-time
+5. **Auto-Rollback** — Anomalous actions are automatically reverted with plain-English explanation
+6. **Tamper-Evident Audit Chain** — SHA-256 hash chain with genesis entry and O(1) verification
+7. **Secure Enclave** — Platform-specific key derivation (TPM 2.0 on Windows, Secure Enclave on macOS, TPM device on Linux)
 
 See [docs/diagrams/security-model.svg](docs/diagrams/security-model.svg) for the full security flow.
 
@@ -281,9 +326,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📊 Project Stats
 
-- **20 Rust modules** — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Agents (8), Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, LangGraph Workflow, Agent Graph, Smart Router, Doc Chunker
+- **17 Rust modules** (+4 agent sub-modules) — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, Smart Router, Doc Chunker, Email Keeper, Calendar Keeper, Finance Keeper, Agents (graph · langgraph_workflow · messages · nodes)
 - **162 tests passing** — 97 frontend (Vitest) + 65 backend (cargo test)
-- **76 Tauri IPC commands** — full frontend↔backend communication
+- **83 Tauri IPC commands** — full frontend↔backend communication
+- **18 React components** — MainView, IntentInput, SpectrumGraphView, SpectrumExplorer, SandboxPanel, SpectralTimeline, DailyDashboard, DailyBrief, ProactivePanel, SettingsPanel, TitleBar, Sidebar, OnboardingWizard, SpotlightOverlay, ActiveAgents, DailySuggestions, SuggestionCard, ErrorBoundary
 - **Zero cloud dependencies** — everything runs on your machine
 
 ---

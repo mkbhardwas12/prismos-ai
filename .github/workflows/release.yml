@@ -65,6 +65,7 @@ jobs:
             libpipewire-0.3-dev \
             libwayland-dev \
             libegl-dev \
+            libgbm-dev \
             clang
 
       - name: Setup Node.js
@@ -98,8 +99,8 @@ jobs:
 
             **Patent Pending** — US Provisional Patent filed February 2026
 
-            ### What's New in v0.5.2
-            - 🧠 8-Agent Collaborative AI System (Orchestrator, MemoryKeeper, Reasoner, ToolSmith, Sentinel, EmailKeeper, CalendarKeeper, FinanceKeeper)
+            ### What's New in v0.5.1
+            - 🧠 8-Agent Collaborative AI System (Orchestrator, MemoryKeeper, Reasoner, ToolSmith, Sentinel + Email/Calendar/Finance Keepers)
             - 🌈 7D Alive Spectrum Graph — persistent knowledge memory, visualized and growing
             - 📊 Daily Dashboard — Morning Brief & Evening Recap with proactive insights
             - 📧 Email / Calendar / Finance Keeper agents for local-first productivity
@@ -111,7 +112,7 @@ jobs:
             - 🎤 Local Voice Engine + Spotlight Overlay + File Indexer
             - 🏖️ WASM Sandbox for safe code execution with cryptographic signing
             - 🔒 Fully local: your data never leaves your machine — no cloud, no telemetry
-            - ✅ 162 tests (97 frontend + 65 Rust)
+            - ✅ 162 tests (97 frontend + 65 Rust) · 83 IPC commands · 17 Rust modules
 
             ### Installation
             - **Windows**: Download `.msi` (recommended) or `.exe` installer

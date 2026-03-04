@@ -16,6 +16,9 @@ mod whisper_engine;
 mod file_indexer;
 mod smart_router;
 mod doc_chunker;
+mod email_keeper;
+mod calendar_keeper;
+mod finance_keeper;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -188,6 +191,23 @@ async fn capture_screen() -> Result<String, String> {
     let img = monitor
         .capture_image()
         .map_err(|e| format!("Screen capture failed: {}", e))?;
+
+    // Downscale for performance — multimodal vision models (e.g. llama3.2-vision)
+    // physically cap input at ~1120×1120 anyway. Shrinking a 4K capture from ~25MB
+    // to ~900KB makes screen-reading feel instantaneous on local hardware.
+    const MAX_CAPTURE_WIDTH: u32 = 1920;
+    let img = if img.width() > MAX_CAPTURE_WIDTH {
+        let scale = MAX_CAPTURE_WIDTH as f64 / img.width() as f64;
+        let new_height = (img.height() as f64 * scale).round() as u32;
+        image::imageops::resize(
+            &img,
+            MAX_CAPTURE_WIDTH,
+            new_height,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        img
+    };
 
     // Encode to PNG bytes in memory
     let mut png_bytes: Vec<u8> = Vec::new();
@@ -369,6 +389,143 @@ async fn add_spectrum_node(
 async fn get_active_agents(active_agent: Option<String>) -> Result<String, String> {
     let agents = refractive_core::get_agents_with_active(active_agent.as_deref());
     serde_json::to_string(&agents).map_err(|e| e.to_string())
+}
+
+// ─── Email Keeper Commands (Patent Pending — Read-Only IMAP Summary) ──────────
+
+/// Fetch unread email summary via read-only IMAP.
+/// All processing happens locally through the Sandbox Prism.
+/// Raw email content never leaves the sandbox boundary.
+#[tauri::command]
+async fn fetch_email_summary(
+    imap_server: String,
+    imap_port: u16,
+    username: String,
+    password: String,
+    use_tls: Option<bool>,
+    ollama_url: Option<String>,
+) -> Result<String, String> {
+    // Validate through Sandbox Prism first
+    let _sandbox_check = sandbox_prism::sandbox_execute("email read fetch unread summary", "email_keeper");
+
+    let config = email_keeper::EmailConfig {
+        imap_server,
+        imap_port,
+        username,
+        password,
+        use_tls: use_tls.unwrap_or(true),
+    };
+
+    // Fetch envelopes (read-only, envelope metadata only)
+    let mut summary = email_keeper::fetch_unread_envelopes(&config)?;
+
+    // Attempt LLM summarization if there are unread emails
+    if summary.unread_count > 0 && summary.success {
+        let prompt = email_keeper::build_summary_prompt(&summary);
+        let base_url = ollama_url.unwrap_or_else(|| "http://localhost:11434".into());
+        match ollama_bridge::generate("llama3.2", &prompt, Some(&base_url), Some(150), None).await {
+            Ok(ai_text) => summary.ai_summary = Some(ai_text),
+            Err(_) => summary.ai_summary = Some(email_keeper::fallback_summary(&summary)),
+        }
+    }
+
+    serde_json::to_string(&summary).map_err(|e| e.to_string())
+}
+
+/// Test IMAP connection without fetching emails — validates credentials.
+#[tauri::command]
+async fn test_email_connection(
+    imap_server: String,
+    imap_port: u16,
+    username: String,
+    password: String,
+    use_tls: Option<bool>,
+) -> Result<String, String> {
+    let config = email_keeper::EmailConfig {
+        imap_server,
+        imap_port,
+        username,
+        password,
+        use_tls: use_tls.unwrap_or(true),
+    };
+    if !config.is_valid() {
+        return Err("Email configuration is incomplete.".into());
+    }
+    // Just try to connect and immediately logout
+    let tls = native_tls::TlsConnector::builder()
+        .build()
+        .map_err(|e| format!("TLS error: {}", e))?;
+    let client = imap::connect(
+        (config.imap_server.as_str(), config.imap_port),
+        &config.imap_server,
+        &tls,
+    )
+    .map_err(|e| format!("Connection failed: {}", e))?;
+    let mut session = client
+        .login(&config.username, &config.password)
+        .map_err(|e| format!("Login failed: {}", e.0))?;
+    let _ = session.logout();
+    Ok("✅ Connection successful — IMAP credentials verified.".into())
+}
+
+/// Calendar Keeper — Fetch today's events from local .ics files (Patent Pending)
+#[tauri::command]
+async fn fetch_calendar_summary(
+    calendar_path: String,
+    ollama_url: Option<String>,
+) -> Result<String, String> {
+    // Validate through Sandbox Prism first
+    let _sandbox_check = sandbox_prism::sandbox_execute("calendar read events today schedule", "calendar_keeper");
+
+    let config = calendar_keeper::CalendarConfig {
+        calendar_path,
+    };
+
+    // Parse .ics files for today's events (read-only)
+    let mut summary = calendar_keeper::get_todays_events(&config)?;
+
+    // Attempt LLM summarization if there are events
+    if summary.event_count > 0 && summary.success {
+        let prompt = calendar_keeper::build_summary_prompt(&summary);
+        let base_url = ollama_url.unwrap_or_else(|| "http://localhost:11434".into());
+        match ollama_bridge::generate("llama3.2", &prompt, Some(&base_url), Some(200), None).await {
+            Ok(ai_text) => summary.ai_summary = Some(ai_text),
+            Err(_) => summary.ai_summary = Some(calendar_keeper::fallback_summary(&summary)),
+        }
+    } else if summary.event_count == 0 && summary.success {
+        summary.ai_summary = Some(calendar_keeper::fallback_summary(&summary));
+    }
+
+    serde_json::to_string(&summary).map_err(|e| e.to_string())
+}
+
+/// Finance Keeper — Fetch portfolio summary for ticker watchlist (Patent Pending)
+#[tauri::command]
+async fn fetch_finance_summary(
+    tickers: Vec<String>,
+    ollama_url: Option<String>,
+) -> Result<String, String> {
+    // Validate through Sandbox Prism first
+    let _sandbox_check = sandbox_prism::sandbox_execute("finance stock ticker portfolio market", "finance_keeper");
+
+    let config = finance_keeper::FinanceConfig { tickers };
+
+    // Fetch public market data (read-only)
+    let mut summary = finance_keeper::fetch_portfolio_summary(&config).await;
+
+    // Attempt LLM summarization if there are quotes
+    if summary.ticker_count > 0 && summary.success {
+        let prompt = finance_keeper::build_summary_prompt(&summary);
+        let base_url = ollama_url.unwrap_or_else(|| "http://localhost:11434".into());
+        match ollama_bridge::generate("llama3.2", &prompt, Some(&base_url), Some(200), None).await {
+            Ok(ai_text) => summary.ai_summary = Some(ai_text),
+            Err(_) => summary.ai_summary = Some(finance_keeper::fallback_summary(&summary)),
+        }
+    } else if summary.ticker_count == 0 {
+        summary.ai_summary = Some(finance_keeper::fallback_summary(&summary));
+    }
+
+    serde_json::to_string(&summary).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -871,8 +1028,9 @@ async fn import_graph(app: tauri::AppHandle, db_state: tauri::State<'_, DbState>
 
     for node in &snapshot.nodes {
         match graph.get_node(&node.id) {
-            Ok(_) => {} // Skip existing
-            Err(_) => {
+            Ok(Some(_)) => {} // Node truly exists — skip
+            _ => {
+                // Ok(None) = node not found, Err = lookup failed — try to import either way
                 if graph.add_node_with_layer(&node.label, &node.content, &node.node_type, &node.layer).is_ok() {
                     nodes_imported += 1;
                 }
@@ -881,7 +1039,7 @@ async fn import_graph(app: tauri::AppHandle, db_state: tauri::State<'_, DbState>
     }
 
     for edge in &snapshot.edges {
-        if graph.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation).is_ok() {
+        if let Ok((_, true)) = graph.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation) {
             edges_imported += 1;
         }
     }
@@ -2227,6 +2385,16 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // Intercept window close → hide to tray (keeps Ctrl+Space hotkey alive)
+            // Users can fully quit via tray menu → "Quit" or by closing from tray.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Core pipeline (Patent Pending)
             process_intent,
@@ -2320,6 +2488,13 @@ pub fn run() {
             // Phase 7 — Contextual Screen Awareness (local screen capture)
             capture_screen,
             read_screen,
+            // Email Keeper — Read-only IMAP summary (Patent Pending)
+            fetch_email_summary,
+            test_email_connection,
+            // Calendar Keeper — Local .ics calendar integration (Patent Pending)
+            fetch_calendar_summary,
+            // Finance Keeper — Stock/portfolio tracking (Patent Pending)
+            fetch_finance_summary,
             // Phase 6 — Smart Model Router + Document RAG
             smart_route_model,
             classify_installed_models,

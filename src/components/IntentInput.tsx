@@ -52,6 +52,7 @@ interface IntentInputProps {
   voiceEnabled?: boolean;
   pendingIntent?: string;
   onPendingConsumed?: () => void;
+  onScreenRead?: (prompt?: string) => Promise<void>;
 }
 
 export default function IntentInput({
@@ -60,6 +61,7 @@ export default function IntentInput({
   voiceEnabled = true,
   pendingIntent,
   onPendingConsumed,
+  onScreenRead,
 }: IntentInputProps) {
   const [input, setInput] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
@@ -74,6 +76,8 @@ export default function IntentInput({
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [documentMeta, setDocumentMeta] = useState<string | null>(null); // e.g. "PDF | 5 pages"
   const [isExtractingDoc, setIsExtractingDoc] = useState(false);
+  // ── Screen reading state (Phase 7) ──
+  const [isReadingScreen, setIsReadingScreen] = useState(false);
   // ── Attach menu state ──
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
@@ -601,6 +605,28 @@ export default function IntentInput({
 
           {attachMenuOpen && (
             <div className="intent-attach-menu" role="menu" aria-label="Attachment options">
+              {onScreenRead && (
+                <button
+                  className="attach-menu-item attach-menu-screen"
+                  role="menuitem"
+                  onClick={async () => {
+                    setAttachMenuOpen(false);
+                    setIsReadingScreen(true);
+                    try {
+                      await onScreenRead(input.trim() || undefined);
+                    } finally {
+                      setIsReadingScreen(false);
+                    }
+                  }}
+                  disabled={isProcessing || isReadingScreen}
+                >
+                  <span className="attach-menu-icon">🖥️</span>
+                  <div className="attach-menu-label">
+                    <span className="attach-menu-title">Read Screen</span>
+                    <span className="attach-menu-hint">AI sees what you see — 100% local</span>
+                  </div>
+                </button>
+              )}
               <button
                 className="attach-menu-item"
                 role="menuitem"
@@ -650,6 +676,14 @@ export default function IntentInput({
           ▶
         </button>
       </div>
+
+      {/* Screen reading indicator */}
+      {isReadingScreen && (
+        <div className="screen-reading-bar" role="status" aria-live="polite">
+          <span className="screen-reading-pulse">🖥️</span>
+          <span className="screen-reading-text">Reading your screen... analyzing with local vision model</span>
+        </div>
+      )}
 
       {/* Voice listening indicator */}
       {voice.isListening && (

@@ -165,6 +165,109 @@ async fn read_image_as_base64(path: String) -> Result<String, String> {
     Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
 }
 
+// ─── Contextual Screen Awareness (Phase 7) — Opt-in Local Screen Reading ──────
+
+/// Capture the primary monitor and return the screenshot as a base64-encoded PNG.
+/// Uses `xcap` for cross-platform screen capture — everything stays local.
+#[tauri::command]
+async fn capture_screen() -> Result<String, String> {
+    use xcap::Monitor;
+
+    // Get the primary monitor (first in the list)
+    let monitors = Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {}", e))?;
+    let monitor = monitors
+        .into_iter()
+        .find(|m| m.is_primary())
+        .or_else(|| {
+            // Fallback: just take the first monitor
+            Monitor::all().ok().and_then(|m| m.into_iter().next())
+        })
+        .ok_or_else(|| "No monitor found for screen capture".to_string())?;
+
+    // Capture the screen as an image::RgbaImage
+    let img = monitor
+        .capture_image()
+        .map_err(|e| format!("Screen capture failed: {}", e))?;
+
+    // Encode to PNG bytes in memory
+    let mut png_bytes: Vec<u8> = Vec::new();
+    {
+        use image::ImageEncoder;
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+            &mut png_bytes,
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::Adaptive,
+        );
+        encoder
+            .write_image(
+                img.as_raw(),
+                img.width(),
+                img.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| format!("PNG encoding failed: {}", e))?;
+    }
+
+    // Return base64-encoded screenshot
+    Ok(base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        &png_bytes,
+    ))
+}
+
+/// Capture the screen and immediately analyze it with a local vision model.
+/// This is the "Read Screen" one-shot command — capture → vision model → context text.
+/// The user's prompt is sent alongside the screenshot for focused analysis.
+#[tauri::command]
+async fn read_screen(
+    prompt: Option<String>,
+    ollama_url: Option<String>,
+) -> Result<String, String> {
+    // Step 1: Capture the screen
+    let screenshot_b64 = capture_screen().await?;
+
+    // Step 2: Auto-route to the best available vision model
+    let models = ollama_bridge::list_models(ollama_url.as_deref())
+        .await
+        .unwrap_or_default();
+    let model_names: Vec<String> = models.iter().map(|m| m.name.clone()).collect();
+
+    let route = smart_router::route_model(
+        "llama3.2-vision", // preferred default for screen reading
+        true,              // has_image = true
+        false,
+        false,
+        &model_names,
+    );
+
+    let vision_model = route.model;
+
+    // Step 3: Build a contextual prompt
+    let analysis_prompt = prompt.unwrap_or_else(|| {
+        "Extract and describe the text, UI elements, and context of what the user is currently looking at on their screen. \
+         Be thorough but concise. Include any visible URLs, document titles, code snippets, or important content.".to_string()
+    });
+
+    // Step 4: Send screenshot to vision model
+    let images = vec![screenshot_b64];
+    let response = ollama_bridge::generate(
+        &vision_model,
+        &analysis_prompt,
+        ollama_url.as_deref(),
+        Some(2048), // enough tokens for detailed screen reading
+        Some(images),
+    )
+    .await
+    .map_err(|e| format!("Vision analysis failed: {}", e))?;
+
+    Ok(serde_json::json!({
+        "context": response,
+        "model": vision_model,
+        "auto_routed": route.auto_swapped,
+    })
+    .to_string())
+}
+
 // ─── Smart Model Router (Phase 6) — Auto-swap to vision model when image attached ──
 
 /// Route to the best model based on payload type.
@@ -2047,6 +2150,7 @@ pub fn run() {
             println!("║  Drag & Drop File Ingest: READY              ║");
             println!("║  Local Vision Engine: READY                  ║");
             println!("║  Document Ingest Engine: READY                ║");
+            println!("║  Contextual Screen Awareness: READY           ║");
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
@@ -2198,6 +2302,9 @@ pub fn run() {
             // Local Vision — Multimodal (Phase 5.5)
             query_ollama_vision,
             read_image_as_base64,
+            // Phase 7 — Contextual Screen Awareness (local screen capture)
+            capture_screen,
+            read_screen,
             // Phase 6 — Smart Model Router + Document RAG
             smart_route_model,
             classify_installed_models,

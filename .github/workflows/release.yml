@@ -89,14 +89,22 @@ jobs:
           releaseBody: |
             ## PrismOS-AI — Local-First Agentic Personal AI Operating System
 
-            ### What's New
-            - 🧠 5-Agent Collaborative AI System (Mnemonic, Sentinel, Oracle, Artisan, Nexus)
-            - 🌈 7D Alive Spectrum Graph — your knowledge, visualized and growing
-            - 🔒 Fully local: your data never leaves your machine
-            - ⚡ Proactive suggestions that auto-process with one click
-            - 📊 Morning Brief & Evening Recap
-            - 🔄 You-Port: Export/import your entire knowledge graph
-            - 🏖️ WASM Sandbox for safe code execution
+            **Patent Pending** — US Provisional Patent filed February 2026
+
+            ### What's New in v0.5.2
+            - 🧠 8-Agent Collaborative AI System (Orchestrator, MemoryKeeper, Reasoner, ToolSmith, Sentinel, EmailKeeper, CalendarKeeper, FinanceKeeper)
+            - 🌈 7D Alive Spectrum Graph — persistent knowledge memory, visualized and growing
+            - 📊 Daily Dashboard — Morning Brief & Evening Recap with proactive insights
+            - 📧 Email / Calendar / Finance Keeper agents for local-first productivity
+            - 🎨 Animated SVG logo with live prism light refraction
+            - 🖥️ Frameless window with system tray, drag-drop file ingest, auto-updater
+            - 🔍 Smart Model Routing + Document RAG + Background Omnipresence (Alt+Space)
+            - 👁️ Local Vision Engine — multimodal image analysis via llava/llama3.2-vision
+            - 📄 Document Analysis Engine — PDF, DOCX, PPTX, XLSX upload & AI analysis
+            - 🎤 Local Voice Engine + Spotlight Overlay + File Indexer
+            - 🏖️ WASM Sandbox for safe code execution with cryptographic signing
+            - 🔒 Fully local: your data never leaves your machine — no cloud, no telemetry
+            - ✅ 162 tests (97 frontend + 65 Rust)
 
             ### Installation
             - **Windows**: Download `.msi` (recommended) or `.exe` installer
@@ -104,8 +112,8 @@ jobs:
             - **Linux**: Download `.deb` or `.AppImage`
 
             ### Requirements
-            - [Ollama](https://ollama.com) installed locally with at least one model (`ollama pull mistral`)
-          releaseDraft: true
+            - [Ollama](https://ollama.com) installed locally with at least one model (`ollama pull llama3.2`)
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 

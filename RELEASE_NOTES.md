@@ -158,8 +158,8 @@ Frameless Window    No                  Yes         (NEW)
 │  ├── Sandbox Prisms       WASM execution sandbox         │
 │  ├── Spectral Timeline    Time-based graph history       │
 │  └── Settings & Security  Config + security status       │
-├─────────────────── 76 Tauri IPC Commands ──────────────────┤
-│  Rust 1.82+ Backend                (20 Modules)          │
+├─────────────────── 83 Tauri IPC Commands ──────────────────┤
+│  Rust 1.82+ Backend                (17 Modules)          │
 │  ├── spectrum_graph.rs    SQLite knowledge store          │
 │  ├── ollama_bridge.rs     LLM + vision inference         │
 │  ├── sandbox_prism.rs     wasmtime WASM runtime          │

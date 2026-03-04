@@ -163,19 +163,44 @@ export default function IntentInput({
     }
   }
 
-  /** Attach a document from a File object (browser fallback — reads as text) */
+  /** Attach a document from a File object — sends binary files to Rust for proper extraction */
   async function attachDocumentFromFile(file: File) {
     setIsExtractingDoc(true);
     setDocumentName(file.name);
-    setDocumentMeta("Reading...");
+    setDocumentMeta("Extracting...");
     try {
-      const text = await file.text();
-      const prefixed = `[File: ${file.name}]\n${text}`;
-      setAttachedDocument(prefixed);
-      setDocumentMeta(`${file.name.split('.').pop()?.toUpperCase()} | ${Math.round(text.length / 1024)}KB`);
+      const ext = file.name.split('.').pop()?.toLowerCase() || "";
+      const binaryFormats = ["pdf", "docx", "pptx", "xlsx", "xls"];
+
+      if (binaryFormats.includes(ext)) {
+        // Binary formats (PDF/DOCX/PPTX/XLSX): read as ArrayBuffer → base64 → send to Rust
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        // Convert to base64 in chunks to avoid call stack overflow on large files
+        let binary = "";
+        const chunkSize = 32768;
+        for (let i = 0; i < uint8.length; i += chunkSize) {
+          binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+        }
+        const base64 = btoa(binary);
+        const text: string = await invoke("extract_document_from_bytes", {
+          data: base64,
+          fileName: file.name,
+        });
+        setAttachedDocument(text);
+        const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
+        setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${ext.toUpperCase()} document`);
+      } else {
+        // Text formats: read as UTF-8 text directly
+        const text = await file.text();
+        const prefixed = `[File: ${file.name}]\n${text}`;
+        setAttachedDocument(prefixed);
+        setDocumentMeta(`${ext.toUpperCase()} | ${Math.round(text.length / 1024)}KB`);
+      }
     } catch (err) {
-      console.error("File read error:", err);
+      console.error("Document extraction error:", err);
       clearAttachedDocument();
+      setInput((prev) => prev + `\n⚠️ Could not extract text from ${file.name}: ${err}`);
     } finally {
       setIsExtractingDoc(false);
     }

@@ -480,26 +480,44 @@ impl RefractiveEngine {
         }
     }
 
-    /// Build a context summary from query results for prompt injection
+    /// Build a context summary from query results for prompt injection.
+    /// Filters out conversation echo nodes (previous Q&A) that don't add value —
+    /// only includes nodes with real domain content.
     fn build_context_summary(
         &self,
         results: &[crate::spectrum_graph::IntentQueryResult],
     ) -> String {
         if results.is_empty() {
-            return "No relevant context found in Spectrum Graph.".to_string();
+            return String::new();
         }
 
         let mut summary = String::new();
-        for (i, r) in results.iter().take(5).enumerate() {
+        let mut count = 0;
+        for r in results.iter().take(8) {
+            // Skip conversation echo nodes — they just repeat previous Q&A
+            if r.node.node_type == "conversation" {
+                continue;
+            }
+            // Skip suggestion nodes
+            if r.node.node_type == "suggestion" {
+                continue;
+            }
+            // Skip nodes with very little content
+            if r.node.content.len() < 20 {
+                continue;
+            }
+            count += 1;
+            if count > 5 {
+                break;
+            }
             summary.push_str(&format!(
-                "{}. [{}] {} (relevance: {:.2})\n   {}\n",
-                i + 1,
-                r.node.node_type,
+                "- {} ({}): {}\n",
                 r.node.label,
-                r.relevance_score,
+                r.node.node_type,
                 r.node.content.chars().take(200).collect::<String>()
             ));
         }
+
         summary
     }
 }

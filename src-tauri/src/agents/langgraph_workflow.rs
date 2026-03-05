@@ -699,6 +699,7 @@ impl WorkflowEngine {
         npu_accelerated: bool,
         app_dir: &Path,
         app_handle: tauri::AppHandle,
+        model: &str,
     ) -> Result<
         (crate::refractive_core::RefractiveResult, WorkflowState),
         Box<dyn std::error::Error + Send + Sync>,
@@ -781,6 +782,7 @@ impl WorkflowEngine {
         let intent_for_ts = intent.clone();
         let intent_for_mk = intent.clone();
         let ctx_len = context_node_ids.len();
+        let model_name = model.to_string();
 
         // ── Run all three specialists concurrently via tokio::join! ──
         // Reasoner awaits the LLM network call while Tool Smith and Memory
@@ -789,26 +791,28 @@ impl WorkflowEngine {
             // 2a: Reasoner — async LLM inference (I/O-bound, yields at .await)
             async {
                 if let Some(ref work) = reasoner_work {
-                    let llm_action = "llm_inference:generate:model=mistral:agent=reasoner";
+                    let llm_action = format!("llm_inference:generate:model={}:agent=reasoner", model_name);
                     let prism_name = format!("wf_reasoner_{}", wf_id_prefix);
                     let mut prism =
                         crate::sandbox_prism::create_prism_for_agent(&prism_name, "reasoner");
                     let sandbox_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
                         &mut prism,
-                        llm_action,
+                        &llm_action,
                         "reasoner",
                     );
                     if sandbox_result.success {
                         let prompt = ReasonerNode::build_prompt(work, &intent);
-                        match crate::ollama_bridge::generate("mistral", &prompt, None, None, None).await {
+                        match crate::ollama_bridge::generate(&model_name, &prompt, None, None, None).await {
                             Ok(r) => r,
                             Err(e) => {
                                 eprintln!("[LangGraph-WF] Ollama unavailable: {}", e);
                                 format!(
-                                    "⚡ [Offline Mode — Multi-Agent Workflow] Processed locally.\n\n\
-                                     Intent: {} | Type: {} | Context: {} nodes\n\n\
-                                     💡 Start Ollama for full AI: `ollama serve`",
-                                    intent.raw, intent.intent_type, ctx_len
+                                    "I'm currently unable to reach the AI model. \
+                                     Please make sure Ollama is running:\n\n\
+                                     1. Open a terminal\n\
+                                     2. Run `ollama serve`\n\
+                                     3. Try your question again\n\n\
+                                     Your data is safe — everything stays local."
                                 )
                             }
                         }
@@ -1096,13 +1100,10 @@ impl WorkflowEngine {
                 }
             }
         } else {
-            final_response = format!(
-                "🛡️ Multi-agent consensus was not reached for this request.\n\n\
-                 {}\n\n\
-                 Debate result: {}\n\n\
-                 Your data remains safe. The Sandbox Prism prevented any unverified action.",
-                consensus.summary, debate_result.summary
-            );
+            final_response = "I wasn't able to confidently answer this request — \
+                my safety checks flagged it for review. Could you try rephrasing \
+                your question? Your data remains safe and nothing was changed."
+                .to_string();
             agent_used = "orchestrator".to_string();
         }
 

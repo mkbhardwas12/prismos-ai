@@ -329,6 +329,7 @@ impl RefractiveEngine {
         intent: ParsedIntent,
         app_dir: &Path,
         app_handle: tauri::AppHandle,
+        model: &str,
     ) -> Result<RefractiveResult, Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
 
@@ -374,6 +375,7 @@ impl RefractiveEngine {
             self.scorer.accelerated,
             app_dir,
             app_handle,
+            model,
         )
         .await?;
 
@@ -516,7 +518,7 @@ pub async fn process_intent_full(
     let parsed = lens.parse(raw_input);
 
     let engine = RefractiveEngine::new();
-    engine.refract(parsed, app_dir, app_handle).await
+    engine.refract(parsed, app_dir, app_handle, "mistral").await
 }
 
 /// Get the full Spectrum Graph snapshot for frontend visualization.
@@ -562,8 +564,8 @@ pub async fn route_intent(
     };
 
     let prompt = format!(
-        "{}\n\nUser intent: {}\nEntities detected: {:?}\nConfidence: {:.0}%\n\nRespond helpfully and concisely:",
-        system_prompt, intent.raw, intent.entities, intent.confidence * 100.0
+        "{}\n\n{}\n\nRespond helpfully and concisely:",
+        system_prompt, intent.raw
     );
 
     let response = crate::ollama_bridge::generate("mistral", &prompt, None, None, None).await?;

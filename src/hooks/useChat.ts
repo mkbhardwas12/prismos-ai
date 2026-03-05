@@ -227,7 +227,7 @@ export function useChat({
       } else {
         // ── Standard text path (Refractive Core pipeline) ──
         try {
-          const resultJson = await withRetry(() => invoke<string>("refract_intent", { input }));
+          const resultJson = await withRetry(() => invoke<string>("refract_intent", { input, model: settings.defaultModel || "mistral" }));
           const result: RefractiveResult = JSON.parse(resultJson);
 
           const metaParts: string[] = [];

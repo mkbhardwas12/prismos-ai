@@ -230,28 +230,16 @@ export function useChat({
           const resultJson = await withRetry(() => invoke<string>("refract_intent", { input, model: settings.defaultModel || "mistral" }));
           const result: RefractiveResult = JSON.parse(resultJson);
 
-          const metaParts: string[] = [];
-          if (result.agent_used) metaParts.push(`Agent: ${result.agent_used}`);
-          if (result.processing_time_ms) metaParts.push(`${result.processing_time_ms}ms`);
-          if (result.npu_accelerated) metaParts.push("NPU⚡");
-          if (result.context_nodes?.length) metaParts.push(`${result.context_nodes.length} ctx nodes`);
-          if (result.edges_reinforced?.length) metaParts.push(`${result.edges_reinforced.length} edges reinforced`);
-
-          if (result.collaboration) {
-            const c = result.collaboration;
-            metaParts.push(`🔗 ${c.approve_count}/${c.vote_count} consensus`);
-            metaParts.push(`💬 ${c.message_count} agent msgs`);
-          }
-
-          const metaLine = metaParts.length > 0 ? `\n\n───\n📡 ${metaParts.join(" · ")}` : "";
-          const collabLine = result.collaboration
-            ? `\n${result.collaboration.consensus_approved ? '✅' : '🛡️'} ${result.collaboration.consensus_summary}`
+          // Build a clean, minimal footer — no internal debug info
+          const timeSec = result.processing_time_ms
+            ? `${(result.processing_time_ms / 1000).toFixed(1)}s`
             : "";
-          const hintLine = result.anticipations?.length
-            ? `\n🔮 ${result.anticipations[0]}`
+          const consensusIcon = result.collaboration?.consensus_approved ? "✅" : "🛡️";
+          const metaLine = timeSec
+            ? `\n\n───\n${consensusIcon} ${timeSec} · ${settings.defaultModel || "local"} · 100% private`
             : "";
 
-          const aiContent = result.response + metaLine + collabLine + hintLine;
+          const aiContent = result.response + metaLine;
           const aiMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",

@@ -5,6 +5,7 @@
 import { useState, Fragment } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
@@ -428,12 +429,16 @@ export default function MainView({
             <Fragment key={msg.id}>
               <div className={`message message-${msg.role}`}>
                 <div className="message-bubble">
-                  {msg.content.split("\n").map((line, i) => (
-                    <span key={i}>
-                      {line}
-                      {i < msg.content.split("\n").length - 1 && <br />}
-                    </span>
-                  ))}
+                  {msg.role === "ai" ? (
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  ) : (
+                    msg.content.split("\n").map((line, i) => (
+                      <span key={i}>
+                        {line}
+                        {i < msg.content.split("\n").length - 1 && <br />}
+                      </span>
+                    ))
+                  )}
                 </div>
                 <div className="message-meta">
                   {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}

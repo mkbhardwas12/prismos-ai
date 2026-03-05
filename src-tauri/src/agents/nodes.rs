@@ -26,16 +26,18 @@ impl OrchestratorNode {
         let mut messages = vec![];
 
         // ── Work unit for Reasoner: analyze the intent ──
-        let reasoner_task = format!(
-            "Analyze this user intent and provide a thorough response.\n\
-             Intent: {}\nType: {}\nEntities: {:?}\nConfidence: {:.0}%\n\n\
-             Context from Spectrum Graph:\n{}",
-            intent.raw,
-            intent.intent_type,
-            intent.entities,
-            intent.confidence * 100.0,
-            context_summary
-        );
+        // Only pass the user's actual question + relevant context — no internal
+        // metadata (type, entities, confidence) that the LLM would parrot back.
+        let reasoner_task = if context_summary.is_empty()
+            || context_summary.starts_with("No relevant context")
+        {
+            format!("User question: {}", intent.raw)
+        } else {
+            format!(
+                "User question: {}\n\nRelevant context:\n{}",
+                intent.raw, context_summary
+            )
+        };
         messages.push(
             AgentMessage::new(
                 AgentRole::Orchestrator,

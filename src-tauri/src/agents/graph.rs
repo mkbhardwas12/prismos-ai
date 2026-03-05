@@ -37,6 +37,7 @@ pub async fn execute_collaboration(
     npu_accelerated: bool,
     app_dir: &Path,
     app_handle: tauri::AppHandle,
+    model: &str,
 ) -> Result<
     (RefractiveResult, CollaborationSession, Option<super::langgraph_workflow::WorkflowState>),
     Box<dyn std::error::Error + Send + Sync>,
@@ -52,6 +53,7 @@ pub async fn execute_collaboration(
         npu_accelerated,
         app_dir,
         app_handle,
+        model,
     )
     .await?;
 
@@ -97,6 +99,32 @@ pub async fn execute_collaboration(
             session.add_vote(vote.clone());
         }
     }
+
+    // Reconstruct message count from workflow state:
+    // proposals + debate arguments + consensus messages give the real count
+    let proposal_count = workflow_state.proposals.len();
+    let debate_count = workflow_state.debate.as_ref().map(|d| d.arguments.len()).unwrap_or(0);
+    let vote_count = session.votes.len();
+    // Add synthetic messages so the frontend shows the correct count
+    for prop in &workflow_state.proposals {
+        session.add_message(prop.clone());
+    }
+    // Add debate arguments as messages
+    if let Some(ref debate) = workflow_state.debate {
+        for arg in &debate.arguments {
+            session.add_message(AgentMessage::new(
+                arg.from.clone(),
+                MessageTarget::Broadcast,
+                MessageType::Proposal,
+                arg.content.clone(),
+            ));
+        }
+    }
+
+    eprintln!(
+        "[LangGraph] Session messages reconstructed: {} proposals + {} debate args + {} votes",
+        proposal_count, debate_count, vote_count
+    );
 
     session.current_phase = if workflow_state.status == super::langgraph_workflow::WorkflowStatus::Approved {
         CollaborationPhase::Completed

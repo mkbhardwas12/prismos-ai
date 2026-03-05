@@ -1797,9 +1797,9 @@ impl SpectrumGraph {
             Some(bytes) if !bytes.is_empty() => {
                 let floats: Vec<f64> = bytes
                     .chunks_exact(8)
-                    .map(|chunk| {
-                        let arr: [u8; 8] = chunk.try_into().unwrap();
-                        f64::from_le_bytes(arr)
+                    .filter_map(|chunk| {
+                        let arr: [u8; 8] = chunk.try_into().ok()?;
+                        Some(f64::from_le_bytes(arr))
                     })
                     .collect();
                 Ok(Some(floats))
@@ -1831,7 +1831,10 @@ impl SpectrumGraph {
                 if bytes.is_empty() { return None; }
                 let embedding: Vec<f64> = bytes
                     .chunks_exact(8)
-                    .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+                    .filter_map(|c| {
+                        let arr: [u8; 8] = c.try_into().ok()?;
+                        Some(f64::from_le_bytes(arr))
+                    })
                     .collect();
                 let sim = cosine_similarity(query_embedding, &embedding);
                 Some((id, sim))

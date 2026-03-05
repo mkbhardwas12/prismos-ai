@@ -73,14 +73,15 @@ async fn process_intent_full(app: tauri::AppHandle, input: String) -> Result<Str
 
 /// Full Refractive Core pipeline: intent → Spectrum Graph context → agent → feedback → result
 #[tauri::command]
-async fn refract_intent(app: tauri::AppHandle, input: String) -> Result<String, String> {
+async fn refract_intent(app: tauri::AppHandle, input: String, model: Option<String>) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let lens = intent_lens::IntentLens::new();
     let parsed = lens.parse(&input);
+    let model_name = model.unwrap_or_else(|| "mistral".to_string());
 
     let engine = refractive_core::RefractiveEngine::new();
     let result = engine
-        .refract(parsed, &app_dir, app.clone())
+        .refract(parsed, &app_dir, app.clone(), &model_name)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1099,7 +1100,7 @@ async fn run_collaboration(app: tauri::AppHandle, input: String) -> Result<Strin
 
     let engine = refractive_core::RefractiveEngine::new();
     let result = engine
-        .refract(parsed, &app_dir, app.clone())
+        .refract(parsed, &app_dir, app.clone(), "mistral")
         .await
         .map_err(|e| e.to_string())?;
 

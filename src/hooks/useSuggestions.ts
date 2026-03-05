@@ -28,11 +28,13 @@ export function useSuggestions({ startupSuggestions, hasMessages }: UseSuggestio
       const sugJson = await invoke<string>("get_proactive_suggestions");
       const sug: ProactiveSuggestion[] = JSON.parse(sugJson);
       const enriched = generateFollowUpSuggestions(input, sug);
-      setProactiveSuggestions(enriched);
+      // Clear the bottom "Graph Insights" panel once conversation starts —
+      // inline suggestions under each message are the primary UX now.
+      setProactiveSuggestions([]);
       setMessageSuggestions(prev => ({ ...prev, [msgId]: enriched.slice(0, 3) }));
     } catch {
       const fallback = generateFollowUpSuggestions(input, []);
-      setProactiveSuggestions(fallback);
+      setProactiveSuggestions([]);
       setMessageSuggestions(prev => ({ ...prev, [msgId]: fallback.slice(0, 3) }));
     }
   }, []);

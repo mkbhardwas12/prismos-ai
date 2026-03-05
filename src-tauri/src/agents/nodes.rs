@@ -28,13 +28,12 @@ impl OrchestratorNode {
         // ── Work unit for Reasoner: analyze the intent ──
         // Only pass the user's actual question + relevant context — no internal
         // metadata (type, entities, confidence) that the LLM would parrot back.
-        let reasoner_task = if context_summary.is_empty()
-            || context_summary.starts_with("No relevant context")
-        {
-            format!("User question: {}", intent.raw)
+        // Filter: if context is empty, just send the question cleanly.
+        let reasoner_task = if context_summary.is_empty() {
+            intent.raw.clone()
         } else {
             format!(
-                "User question: {}\n\nRelevant context:\n{}",
+                "{}\n\nContext from your knowledge graph:\n{}",
                 intent.raw, context_summary
             )
         };
@@ -105,19 +104,37 @@ impl ReasonerNode {
     /// Build the system prompt for Reasoner's LLM call
     pub fn build_prompt(work_unit: &AgentMessage, intent: &ParsedIntent) -> String {
         let role_prompt = match intent.intent_type {
-            IntentType::Query | IntentType::Analyze => {
-                "You are PrismOS-AI Reasoner, a local-first AI assistant with deep analytical \
-                 capabilities. You are part of a multi-agent team. Provide thorough, \
-                 well-reasoned analysis grounded in the user's Spectrum Graph context."
+            IntentType::Query => {
+                "You are a helpful, knowledgeable AI assistant. \
+                 Answer the user's question directly and clearly. \
+                 If you have relevant context from their knowledge graph, use it \
+                 to personalize your answer — but don't talk about the graph itself."
             }
-            _ => {
-                "You are PrismOS-AI Reasoner, a local-first AI assistant. You work with \
-                 other agents to provide the best possible response. Be clear and concise."
+            IntentType::Analyze => {
+                "You are a helpful AI assistant skilled at deep analysis. \
+                 Analyze what the user asks thoroughly with structured reasoning. \
+                 Use any provided context to ground your analysis in their data, \
+                 but focus on delivering insights — not describing the data sources."
+            }
+            IntentType::Create => {
+                "You are a helpful AI assistant skilled at creating content. \
+                 Generate exactly what the user asks for — drafts, plans, code, etc. \
+                 Use any provided context about their work to personalize the output. \
+                 Deliver the actual content directly, not a description of what you could do."
+            }
+            IntentType::Connect => {
+                "You are a helpful AI assistant skilled at finding patterns and connections. \
+                 Help the user discover relationships between their ideas and topics. \
+                 Use the provided context to identify meaningful connections."
+            }
+            IntentType::System => {
+                "You are PrismOS-AI, a local-first AI assistant. \
+                 Answer system questions concisely. All data stays on the user's device."
             }
         };
 
         format!(
-            "{}\n\n{}\n\nRespond helpfully and concisely:",
+            "{}\n\n{}\n\nRespond directly and helpfully:",
             role_prompt, work_unit.content
         )
     }

@@ -30,6 +30,13 @@ Desktop.ini
 # Private / legal (do not sync)
 EB1A_EVIDENCE.md
 
+# Patent evidence & benchmarks (confidential — do not publish)
+patent/
+patent_benchmark_report.json
+src-tauri/patent_benchmark_report.json
+src-tauri/src/bin/patent_benchmarks.rs
+.github/workflows/patent-benchmarks-macos.yml
+
 # Python
 __pycache__/
 *.pyc

@@ -91,6 +91,7 @@ pub struct CalendarSummary {
 }
 
 impl CalendarSummary {
+    #[allow(dead_code)]
     pub fn error(msg: &str) -> Self {
         Self {
             event_count: 0,

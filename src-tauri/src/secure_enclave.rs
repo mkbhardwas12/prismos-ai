@@ -274,6 +274,7 @@ impl SecureEnclave {
     }
 
     /// Get the derived enclave key (256-bit)
+    #[allow(dead_code)]
     pub fn get_key(&self) -> &[u8; KEY_SIZE] {
         &self.key
     }
@@ -311,6 +312,7 @@ impl SecureEnclave {
     }
 
     /// Sign arbitrary data using the enclave key (HMAC-SHA256)
+    #[allow(dead_code)]
     pub fn sign(&self, data: &[u8]) -> Vec<u8> {
         let mut mac = HmacSha256::new_from_slice(&self.key)
             .expect("HMAC key length is valid");
@@ -319,6 +321,7 @@ impl SecureEnclave {
     }
 
     /// Verify a signature against the enclave key
+    #[allow(dead_code)]
     pub fn verify(&self, data: &[u8], signature: &[u8]) -> bool {
         let mut mac = HmacSha256::new_from_slice(&self.key)
             .expect("HMAC key length is valid");

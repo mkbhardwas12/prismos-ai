@@ -16,7 +16,7 @@ import { useVoice } from "../hooks/useVoice";
 import { useOllama, RECOMMENDED_MODELS } from "../hooks/useOllama";
 import { useChat } from "../hooks/useChat";
 import { useSuggestions } from "../hooks/useSuggestions";
-import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "../types";
+import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative } from "../types";
 import "./MainView.css";
 
 interface MainViewProps {
@@ -41,6 +41,7 @@ export default function MainView({
   dailyGreeting,
 }: MainViewProps) {
   const [showGuide, setShowGuide] = useState(false);
+  const [expandedRefractions, setExpandedRefractions] = useState<Set<string>>(new Set());
 
   // Voice output (TTS)
   const voiceOutput = useVoice(() => {}, settings.voiceOutputEnabled ?? false);
@@ -443,8 +444,85 @@ export default function MainView({
                 <div className="message-meta">
                   {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
                   {msg.timestamp.toLocaleTimeString()}
+                  {msg.role === "ai" && (
+                    <span className="feedback-buttons">
+                      <button
+                        className={`feedback-btn${msg.feedback === "good" ? " feedback-active" : ""}`}
+                        onClick={() => chat.submitFeedback(msg.id, "good")}
+                        disabled={!!msg.feedback}
+                        title="Good response"
+                        aria-label="Thumbs up"
+                      >
+                        👍
+                      </button>
+                      <button
+                        className={`feedback-btn${msg.feedback === "bad" ? " feedback-active" : ""}`}
+                        onClick={() => chat.submitFeedback(msg.id, "bad")}
+                        disabled={!!msg.feedback}
+                        title="Poor response"
+                        aria-label="Thumbs down"
+                      >
+                        👎
+                      </button>
+                      {msg.feedback && (
+                        <span className="feedback-thanks">
+                          {msg.feedback === "good" ? "Thanks!" : "I'll improve"}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </div>
               </div>
+              {/* ── Prism Refraction: alternative perspective ── */}
+              {msg.role === "ai" && msg.refractionAlternative && (
+                <div className="refraction-section">
+                  <button
+                    className={`refraction-toggle${expandedRefractions.has(msg.id) ? " refraction-toggle--open" : ""}`}
+                    onClick={() => {
+                      setExpandedRefractions((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(msg.id)) next.delete(msg.id);
+                        else next.add(msg.id);
+                        return next;
+                      });
+                    }}
+                    aria-expanded={expandedRefractions.has(msg.id)}
+                  >
+                    <span className="refraction-toggle__icon">🔮</span>
+                    <span className="refraction-toggle__label">
+                      See another perspective — {msg.refractionAlternative.band_emoji} {msg.refractionAlternative.band_label}
+                    </span>
+                    <span className={`refraction-toggle__chevron${expandedRefractions.has(msg.id) ? " refraction-toggle__chevron--open" : ""}`}>▸</span>
+                  </button>
+                  <AnimatePresence>
+                    {expandedRefractions.has(msg.id) && (
+                      <motion.div
+                        className="refraction-content"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                      >
+                        <div className="refraction-content__header">
+                          <span className="refraction-content__band">
+                            {msg.refractionAlternative.band_emoji} {msg.refractionAlternative.band_label} Perspective
+                          </span>
+                          <button
+                            className="refraction-prefer-btn"
+                            onClick={() => chat.selectRefractionPreference(msg.refractionAlternative!.band)}
+                            title="Prefer this reasoning style for future responses"
+                          >
+                            ✨ Prefer this style
+                          </button>
+                        </div>
+                        <div className="refraction-content__body">
+                          <ReactMarkdown>{msg.refractionAlternative.response}</ReactMarkdown>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
               {msg.role === "ai" && suggestions.messageSuggestions[msg.id]?.length > 0 && (
                 <div className="inline-suggestions">
                   <div className="inline-suggestions__label">💡 Suggested next steps</div>

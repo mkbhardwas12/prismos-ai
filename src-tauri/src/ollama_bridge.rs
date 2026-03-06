@@ -32,6 +32,53 @@ struct GenerateOptions {
     num_predict: Option<u32>,
 }
 
+// ─── Chat API Types (proper role-based messaging) ──────────────────────────────
+
+#[derive(Debug, Serialize)]
+struct ChatRequest {
+    model: String,
+    messages: Vec<ChatMessage>,
+    stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<ChatOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChatOptions {
+    /// Lower = more focused/deterministic, higher = more creative
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f64>,
+    /// Context window size in tokens (default 2048 is too small for RAG)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_ctx: Option<u32>,
+    /// Max tokens to generate
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_predict: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatResponse {
+    message: ChatResponseMessage,
+    #[serde(default)]
+    #[allow(dead_code)]
+    done: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatResponseMessage {
+    #[allow(dead_code)]
+    role: String,
+    content: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct GenerateResponse {
     response: String,
@@ -106,6 +153,86 @@ pub async fn generate(
 
     let gen_response: GenerateResponse = response.json().await?;
     Ok(gen_response.response)
+}
+
+/// Chat completion using Ollama's /api/chat endpoint with proper role separation.
+/// This gives the model structured system/user/assistant message roles,
+/// which dramatically improves instruction-following compared to raw prompt injection.
+/// `few_shot_examples` — optional (question, answer) pairs from highly-rated past responses
+/// that are injected as user→assistant message pairs before the actual question,
+/// grounding the model on the style and quality of good past answers.
+pub async fn chat(
+    model: &str,
+    system_prompt: &str,
+    user_content: &str,
+    base_url: Option<&str>,
+    images: Option<Vec<String>>,
+    few_shot_examples: Option<Vec<(String, String)>>,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
+    let client = reqwest::Client::new();
+
+    let mut messages = vec![];
+
+    // System message — model treats this as persistent instructions
+    if !system_prompt.is_empty() {
+        messages.push(ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+            images: None,
+        });
+    }
+
+    // Few-shot examples from thumbs-up rated past responses
+    // These ground the model on what "good" answers look like
+    if let Some(examples) = few_shot_examples {
+        for (q, a) in examples {
+            messages.push(ChatMessage {
+                role: "user".to_string(),
+                content: q,
+                images: None,
+            });
+            messages.push(ChatMessage {
+                role: "assistant".to_string(),
+                content: a,
+                images: None,
+            });
+        }
+    }
+
+    // User message — the actual question with context
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: user_content.to_string(),
+        images,
+    });
+
+    let request = ChatRequest {
+        model: model.to_string(),
+        messages,
+        stream: false,
+        options: Some(ChatOptions {
+            temperature: Some(0.7),  // Balanced: focused but not robotic
+            num_ctx: Some(8192),     // 4x default — room for RAG context
+            num_predict: Some(1024), // Up to 1K tokens response
+        }),
+    };
+
+    let response = client
+        .post(format!("{}/api/chat", url))
+        .json(&request)
+        .timeout(GENERATE_TIMEOUT)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Ollama error ({}): {}", status, body).into());
+    }
+
+    let chat_response: ChatResponse = response.json().await?;
+    Ok(chat_response.message.content)
 }
 
 /// List all locally available models

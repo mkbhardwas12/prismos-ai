@@ -359,18 +359,9 @@ function App() {
   function renderView() {
     switch (view) {
       case "chat":
-        return (
-          <MainView
-            ollamaConnected={ollamaConnected}
-            settings={settings}
-            onSettingsChange={handleSettingsChange}
-            onIntentProcessed={onIntentProcessed}
-            liveAgentSteps={liveAgentSteps}
-            clearLiveSteps={clearLiveSteps}
-            startupSuggestions={startupSuggestions}
-            dailyGreeting={dailyGreeting}
-          />
-        );
+        // MainView is always mounted (rendered below, outside AnimatePresence)
+        // to prevent tab switches from killing in-flight AI processing.
+        return null;
       case "graph":
         return <SpectrumGraphView refreshKey={graphRefreshKey} />;
       case "spectrum":
@@ -454,18 +445,34 @@ function App() {
           </div>
         )}
         <ErrorBoundary fallbackView={view}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={view}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              style={{ display: "contents" }}
-            >
-              {renderView()}
-            </motion.div>
-          </AnimatePresence>
+          {/* MainView is always mounted so AI processing survives tab switches.
+              Hidden via CSS when another view is active — no unmount, no lost state. */}
+          <div style={{ display: view === "chat" ? "contents" : "none" }}>
+            <MainView
+              ollamaConnected={ollamaConnected}
+              settings={settings}
+              onSettingsChange={handleSettingsChange}
+              onIntentProcessed={onIntentProcessed}
+              liveAgentSteps={liveAgentSteps}
+              clearLiveSteps={clearLiveSteps}
+              startupSuggestions={startupSuggestions}
+              dailyGreeting={dailyGreeting}
+            />
+          </div>
+          {view !== "chat" && (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={view}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                style={{ display: "contents" }}
+              >
+                {renderView()}
+              </motion.div>
+            </AnimatePresence>
+          )}
         </ErrorBoundary>
       </main>
 

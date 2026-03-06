@@ -19,6 +19,7 @@ mod doc_chunker;
 mod email_keeper;
 mod calendar_keeper;
 mod finance_keeper;
+mod cognitive_profile;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -869,6 +870,129 @@ async fn get_feedback_count(db: tauri::State<'_, DbState>) -> Result<String, Str
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let count = graph.get_feedback_count().map_err(|e| e.to_string())?;
     Ok(format!("{{\"feedback_count\": {}}}", count))
+}
+
+/// Submit user feedback on an AI response (thumbs up/down).
+/// Adjusts Spectrum Graph edge weights so the system learns from quality signals.
+#[tauri::command]
+async fn submit_response_feedback(
+    db: tauri::State<'_, DbState>,
+    conversation_id: String,
+    question: String,
+    response: String,
+    rating: i32,
+    context_nodes: Vec<String>,
+    model: String,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    graph
+        .submit_response_feedback(
+            &conversation_id,
+            &question,
+            &response,
+            rating,
+            &context_nodes,
+            &model,
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Also update cognitive profile from the primary response's feedback signal.
+    // 👍 on the primary response reinforces the user's current primary band.
+    // 👎 weakens it slightly, encouraging the system to try other approaches.
+    if let Ok(mut profile) = graph.get_cognitive_profile() {
+        let band = profile.primary_band();
+        profile.learn(band, rating > 0);
+        let _ = graph.save_cognitive_profile(&profile);
+    }
+
+    Ok(format!(
+        "{{\"status\":\"ok\",\"rating\":{}}}",
+        rating
+    ))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  COGNITIVE IMPRINT — Adaptive Response Personality (Patent Pending)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Get the user's cognitive profile (creates default if none exists)
+#[tauri::command]
+async fn get_cognitive_profile(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let profile = graph.get_cognitive_profile().map_err(|e| e.to_string())?;
+    serde_json::to_string(&profile).map_err(|e| e.to_string())
+}
+
+/// Generate a refraction alternative — a different reasoning perspective on the
+/// same question. Runs in the background after the primary response.
+#[tauri::command]
+async fn generate_refraction_alternative(
+    app: tauri::AppHandle,
+    question: String,
+    model: Option<String>,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let graph = spectrum_graph::SpectrumGraph::new(&app_dir).map_err(|e| e.to_string())?;
+
+    // Load cognitive profile to determine alternative band (context-aware)
+    let profile = graph.get_cognitive_profile().map_err(|e| e.to_string())?;
+    let alt_band = profile.alternative_band_for_query(&question);
+    let model_name = model.unwrap_or_else(|| "mistral".to_string());
+
+    // Build system prompt with the alternative band's directive
+    let system_prompt = format!(
+        "You are a helpful AI assistant. {}\n\nUse Markdown formatting when helpful.",
+        alt_band.system_directive()
+    );
+
+    // Generate alternative response
+    let response = ollama_bridge::chat(
+        &model_name,
+        &system_prompt,
+        &question,
+        None,
+        None,
+        None,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let result = serde_json::json!({
+        "band": format!("{:?}", alt_band),
+        "band_label": alt_band.label(),
+        "band_emoji": alt_band.emoji(),
+        "response": response,
+    });
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// User selected a refraction alternative — update cognitive profile
+#[tauri::command]
+async fn select_refraction_preference(
+    db: tauri::State<'_, DbState>,
+    band: String,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let mut profile = graph.get_cognitive_profile().map_err(|e| e.to_string())?;
+
+    let refraction_band = match band.as_str() {
+        "Direct" => cognitive_profile::RefractionBand::Direct,
+        "Analytical" => cognitive_profile::RefractionBand::Analytical,
+        "Creative" => cognitive_profile::RefractionBand::Creative,
+        "Exploratory" => cognitive_profile::RefractionBand::Exploratory,
+        _ => return Err("Invalid refraction band".to_string()),
+    };
+
+    profile.learn(refraction_band, true);
+    graph.save_cognitive_profile(&profile).map_err(|e| e.to_string())?;
+
+    eprintln!(
+        "[CognitiveImprint] Preference updated: {} → depth={:.2} creativity={:.2} tech={:.2} (interactions={})",
+        band, profile.depth, profile.creativity, profile.technical_level, profile.interaction_count
+    );
+
+    serde_json::to_string(&profile).map_err(|e| e.to_string())
 }
 
 /// Get recent intent log entries
@@ -2426,8 +2550,13 @@ pub fn run() {
             persist_graph,
             load_graph,
             get_feedback_count,
+            submit_response_feedback,
             get_recent_intents,
             get_daily_brief,
+            // Cognitive Imprint (Patent Pending — Adaptive Response Personality)
+            get_cognitive_profile,
+            generate_refraction_alternative,
+            select_refraction_preference,
             // Agents
             get_active_agents,
             // LangGraph Workflow (Patent Pending — Multi-Agent Collaboration)

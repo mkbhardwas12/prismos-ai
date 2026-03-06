@@ -1428,6 +1428,59 @@
   margin-top: 4px;
   padding: 0 6px;
   font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* ── Response Feedback Buttons (👍 👎) ── */
+.feedback-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.feedback-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+  opacity: 0.5;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s, transform 0.15s;
+  line-height: 1;
+}
+
+.feedback-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.15);
+}
+
+.feedback-btn:disabled {
+  cursor: default;
+}
+
+.feedback-btn.feedback-active {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.feedback-thanks {
+  font-size: 10px;
+  color: var(--accent-primary, #60a5fa);
+  opacity: 0.8;
+  margin-left: 4px;
+  animation: feedback-fade-in 0.3s ease;
+}
+
+@keyframes feedback-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 0.8; transform: translateY(0); }
 }
 
 /* ── YOU-PORT Session Restore Toast ── */
@@ -1600,4 +1653,195 @@
 [data-theme="light"] .step-hint code {
   background: #f1f5f9;
   color: #0e7490;
+}
+
+/* ═════════════════════════════════════════════════════════
+   Prism Refraction — Alternative Perspective UI
+   ═════════════════════════════════════════════════════════ */
+
+.refraction-section {
+  margin-top: 6px;
+  margin-left: 12px;
+  margin-right: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.refraction-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.refraction-toggle:hover {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.refraction-toggle--open {
+  border-radius: 10px 10px 0 0;
+  border-bottom-color: transparent;
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.refraction-toggle__icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.refraction-toggle__label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.refraction-toggle__chevron {
+  font-size: 0.85rem;
+  transition: transform 0.25s ease;
+  opacity: 0.5;
+}
+
+.refraction-toggle__chevron--open {
+  transform: rotate(90deg);
+}
+
+.refraction-content {
+  overflow: hidden;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: rgba(139, 92, 246, 0.04);
+}
+
+.refraction-content__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 6px;
+  gap: 12px;
+}
+
+.refraction-content__band {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(167, 139, 250, 0.9);
+  letter-spacing: 0.02em;
+}
+
+.refraction-prefer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.1);
+  color: rgba(167, 139, 250, 0.9);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.refraction-prefer-btn:hover {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+  transform: translateY(-1px);
+}
+
+.refraction-content__body {
+  padding: 4px 14px 14px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.refraction-content__body p {
+  margin: 0 0 8px;
+}
+
+.refraction-content__body p:last-child {
+  margin-bottom: 0;
+}
+
+.refraction-content__body code {
+  background: rgba(139, 92, 246, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.84em;
+}
+
+.refraction-content__body pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.refraction-content__body pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Light theme overrides for Refraction */
+[data-theme="light"] .refraction-toggle {
+  border-color: rgba(109, 40, 217, 0.15);
+  background: rgba(109, 40, 217, 0.04);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="light"] .refraction-toggle:hover {
+  background: rgba(109, 40, 217, 0.08);
+  border-color: rgba(109, 40, 217, 0.25);
+  color: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="light"] .refraction-toggle--open {
+  background: rgba(109, 40, 217, 0.06);
+}
+
+[data-theme="light"] .refraction-content {
+  border-color: rgba(109, 40, 217, 0.15);
+  background: rgba(109, 40, 217, 0.02);
+}
+
+[data-theme="light"] .refraction-content__band {
+  color: #7c3aed;
+}
+
+[data-theme="light"] .refraction-prefer-btn {
+  border-color: rgba(109, 40, 217, 0.2);
+  background: rgba(109, 40, 217, 0.06);
+  color: #7c3aed;
+}
+
+[data-theme="light"] .refraction-prefer-btn:hover {
+  background: rgba(109, 40, 217, 0.15);
+  border-color: rgba(109, 40, 217, 0.35);
+  color: #6d28d9;
+}
+
+[data-theme="light"] .refraction-content__body {
+  color: rgba(0, 0, 0, 0.75);
+}
+
+[data-theme="light"] .refraction-content__body code {
+  background: rgba(109, 40, 217, 0.08);
+}
+
+[data-theme="light"] .refraction-content__body pre {
+  background: rgba(0, 0, 0, 0.04);
 }

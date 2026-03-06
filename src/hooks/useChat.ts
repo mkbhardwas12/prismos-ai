@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, Message, RefractiveResult, CollaborationSummary, DebateSummary } from "../types";
+import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary } from "../types";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -246,6 +246,9 @@ export function useChat({
             content: aiContent,
             timestamp: new Date(),
             agent: result.agent_used,
+            contextNodes: result.context_nodes,
+            conversationId: result.conversation_id,
+            userQuestion: input,
           };
           setMessages((prev) => [...prev, aiMsg]);
 
@@ -264,6 +267,11 @@ export function useChat({
           } catch { /* non-critical */ }
 
           await refreshSuggestions(input, aiMsg.id);
+
+          // ── Prism Refraction: generate alternative perspective in background ──
+          // Non-blocking — fires after the primary response is already displayed.
+          // The alternative appears as an expandable "See another perspective" option.
+          generateRefractionAlternative(input, aiMsg.id);
 
         } catch (e) {
           // Fallback to legacy process_intent if refract_intent fails
@@ -348,6 +356,64 @@ export function useChat({
     }
   }
 
+  // ── Prism Refraction — background alternative perspective generation ──
+  // After the primary response is shown, this fires a background request
+  // to generate an alternative from a contrasting cognitive band.
+  async function generateRefractionAlternative(question: string, messageId: string) {
+    try {
+      const resultJson = await invoke<string>("generate_refraction_alternative", {
+        question,
+        model: settings.defaultModel || "mistral",
+      });
+      const alt: RefractionAlternative = JSON.parse(resultJson);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, refractionAlternative: alt } : m))
+      );
+    } catch (e) {
+      // Non-critical — if refraction fails, the primary response is still there.
+      console.warn("[Refraction] Alternative generation failed:", e);
+    }
+  }
+
+  // ── Prism Refraction — user selects preferred cognitive band ──
+  // When the user clicks "Prefer this style", we signal the backend
+  // to reinforce that band in the cognitive profile.
+  async function selectRefractionPreference(band: string) {
+    try {
+      await invoke("select_refraction_preference", { band });
+    } catch (e) {
+      console.warn("[Refraction] Preference signal failed:", e);
+    }
+  }
+
+  // ── Response Feedback — closed-loop learning ──
+  // When a user clicks 👍 or 👎, this sends the signal to the Spectrum Graph
+  // so edge weights are adjusted and good answers become few-shot examples.
+  async function submitFeedback(messageId: string, rating: "good" | "bad") {
+    const msg = messages.find((m) => m.id === messageId);
+    if (!msg || msg.role !== "ai") return;
+
+    const ratingValue = rating === "good" ? 1 : -1;
+
+    try {
+      await invoke("submit_response_feedback", {
+        conversationId: msg.conversationId || "",
+        question: msg.userQuestion || "",
+        response: msg.content,
+        rating: ratingValue,
+        contextNodes: msg.contextNodes || [],
+        model: settings.defaultModel || "mistral",
+      });
+
+      // Update local message state with feedback
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, feedback: rating } : m))
+      );
+    } catch (e) {
+      console.error("[Feedback] Failed to submit:", e);
+    }
+  }
+
   return {
     messages,
     isProcessing,
@@ -358,6 +424,8 @@ export function useChat({
     handleIntent,
     handleScreenRead,
     clearConversation,
+    submitFeedback,
+    selectRefractionPreference,
   };
 }
 

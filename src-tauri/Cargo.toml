@@ -9,6 +9,10 @@ edition = "2021"
 name = "prismos_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "patent_benchmarks"
+path = "src/bin/patent_benchmarks.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

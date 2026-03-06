@@ -185,6 +185,30 @@ impl SpectrumGraph {
                 created_at      TEXT NOT NULL,
                 FOREIGN KEY (edge_id) REFERENCES edges(id) ON DELETE CASCADE
             );
+
+            -- Layer 5: Response-level user feedback for learning
+            CREATE TABLE IF NOT EXISTS response_feedback (
+                id              TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                question        TEXT NOT NULL,
+                response        TEXT NOT NULL,
+                rating          INTEGER NOT NULL,
+                context_nodes   TEXT NOT NULL DEFAULT '[]',
+                model           TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL
+            );
+
+            -- Layer 6: Cognitive Imprint — adaptive response personality
+            CREATE TABLE IF NOT EXISTS cognitive_profile (
+                id                  TEXT PRIMARY KEY DEFAULT 'default',
+                depth               REAL NOT NULL DEFAULT 0.5,
+                creativity          REAL NOT NULL DEFAULT 0.3,
+                formality           REAL NOT NULL DEFAULT 0.5,
+                technical_level     REAL NOT NULL DEFAULT 0.5,
+                example_preference  REAL NOT NULL DEFAULT 0.5,
+                interaction_count   INTEGER NOT NULL DEFAULT 0,
+                last_updated        TEXT NOT NULL DEFAULT ''
+            );
             ",
         )?;
 
@@ -217,6 +241,8 @@ impl SpectrumGraph {
             CREATE INDEX IF NOT EXISTS idx_intent_log_type    ON intent_log(intent_type);
             CREATE INDEX IF NOT EXISTS idx_intent_log_time    ON intent_log(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_feedback_edge      ON feedback(edge_id);
+            CREATE INDEX IF NOT EXISTS idx_response_fb_conv   ON response_feedback(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_response_fb_rating ON response_feedback(rating DESC);
             ",
         )?;
 
@@ -788,9 +814,29 @@ impl SpectrumGraph {
 
         // Build search terms from entities and raw input words
         let mut search_terms: Vec<String> = entities.to_vec();
+        // Filter: only words ≥ 4 chars and not in stop list (avoids noisy matches)
+        let stop_words: &[&str] = &[
+            "what", "when", "where", "which", "whom", "whose", "that", "this",
+            "these", "those", "there", "their", "about", "after", "again",
+            "been", "before", "being", "between", "both", "could", "does",
+            "doing", "down", "each", "from", "have", "here", "just", "know",
+            "like", "make", "many", "more", "most", "much", "must", "need",
+            "only", "other", "over", "same", "should", "some", "such", "take",
+            "tell", "than", "them", "then", "they", "very", "want", "well",
+            "were", "will", "with", "would", "your", "also", "been", "came",
+            "come", "even", "ever", "every", "give", "goes", "going", "gone",
+            "good", "great", "help", "into", "keep", "last", "long", "look",
+            "made", "might", "move", "next", "once", "open", "part", "play",
+            "please", "point", "right", "show", "still", "think", "thought",
+            "time", "turn", "under", "upon", "used", "using", "went", "work",
+        ];
         for word in raw_input.split_whitespace() {
             let lower = word.to_lowercase();
-            if lower.len() > 3 && !search_terms.contains(&lower) {
+            // Require minimum 4 chars AND not a stop word
+            if lower.len() >= 4
+                && !stop_words.contains(&lower.as_str())
+                && !search_terms.contains(&lower)
+            {
                 search_terms.push(lower);
             }
         }
@@ -1667,6 +1713,22 @@ impl SpectrumGraph {
         Ok(updated)
     }
 
+    /// Promote frequently-accessed ephemeral nodes to the context layer.
+    /// Nodes that have been accessed 3+ times have proven their value —
+    /// they graduate from ephemeral to permanent knowledge.
+    pub fn promote_active_nodes(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+        let promoted = self.conn.execute(
+            "UPDATE nodes SET layer = 'context', updated_at = ?1
+             WHERE layer = 'ephemeral' AND access_count >= 3",
+            params![now],
+        )?;
+        if promoted > 0 {
+            eprintln!("[SpectrumGraph] Promoted {} ephemeral nodes to context layer", promoted);
+        }
+        Ok(promoted as u32)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  PERSIST / LOAD — Explicit Graph Serialization (Patent Pending)
     // ═══════════════════════════════════════════════════════════════════════
@@ -1852,6 +1914,173 @@ impl SpectrumGraph {
             "SELECT COUNT(*) FROM feedback", [], |row| row.get(0)
         )?;
         Ok(count)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  RESPONSE FEEDBACK — User-driven closed-loop learning
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Store user feedback on a response (👍 = 1, 👎 = -1).
+    /// Also adjusts edge weights for context nodes that were used:
+    ///   - 👍 → reinforce edges between context nodes (good retrieval path)
+    ///   - 👎 → weaken edges between context nodes (misleading retrieval path)
+    pub fn submit_response_feedback(
+        &self,
+        conversation_id: &str,
+        question: &str,
+        response: &str,
+        rating: i32,
+        context_node_ids: &[String],
+        model: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+        let fb_id = Uuid::new_v4().to_string();
+        let ctx_json = serde_json::to_string(context_node_ids).unwrap_or_default();
+
+        // Store the feedback record
+        self.conn.execute(
+            "INSERT INTO response_feedback (id, conversation_id, question, response, rating, context_nodes, model, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![fb_id, conversation_id, question, response, rating, ctx_json, model, now],
+        )?;
+
+        // Adjust edge weights between context nodes based on feedback
+        // 👍 (+1) → positive feedback signal (reinforce these paths)
+        // 👎 (-1) → negative feedback signal (weaken these paths)
+        let signal = rating as f64 * 0.3; // Scale: +0.3 or -0.3
+        let context_count = context_node_ids.len().min(5);
+        for i in 0..context_count {
+            for j in (i + 1)..context_count {
+                // Find existing edge between these nodes
+                let edge = self.conn.query_row(
+                    "SELECT id FROM edges WHERE (source_id = ?1 AND target_id = ?2) OR (source_id = ?2 AND target_id = ?1) LIMIT 1",
+                    params![context_node_ids[i], context_node_ids[j]],
+                    |row| row.get::<_, String>(0),
+                );
+                if let Ok(edge_id) = edge {
+                    let _ = self.update_edge_weight(&edge_id, signal);
+                }
+            }
+        }
+
+        eprintln!(
+            "[SpectrumGraph] Response feedback: {} (conv={}, {} context nodes, signal={})",
+            if rating > 0 { "👍" } else { "👎" },
+            &conversation_id[..8.min(conversation_id.len())],
+            context_node_ids.len(),
+            signal
+        );
+
+        Ok(())
+    }
+
+    /// Get highly-rated past Q&A pairs that are similar to a query.
+    /// Used as few-shot examples to improve future responses.
+    /// Returns up to `limit` entries as (question, response) tuples.
+    pub fn get_good_examples(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+        // Extract significant words from query for LIKE matching
+        let words: Vec<String> = query.split_whitespace()
+            .filter(|w| w.len() >= 4)
+            .take(3)
+            .map(|w| w.to_lowercase())
+            .collect();
+
+        if words.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Build a query that finds thumbs-up responses with overlapping words
+        let mut results: Vec<(String, String)> = Vec::new();
+        for word in &words {
+            let pattern = format!("%{}%", word);
+            let mut stmt = self.conn.prepare(
+                "SELECT question, response FROM response_feedback
+                 WHERE rating > 0 AND question LIKE ?1
+                 ORDER BY created_at DESC LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![pattern, limit as u32], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            for row in rows {
+                if let Ok(pair) = row {
+                    // Avoid duplicates
+                    if !results.iter().any(|(q, _)| q == &pair.0) {
+                        results.push(pair);
+                    }
+                }
+            }
+            if results.len() >= limit {
+                break;
+            }
+        }
+
+        results.truncate(limit);
+        Ok(results)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  COGNITIVE IMPRINT — Adaptive Response Personality (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Load the user's cognitive profile (creates default if none exists)
+    pub fn get_cognitive_profile(
+        &self,
+    ) -> Result<crate::cognitive_profile::CognitiveProfile, Box<dyn std::error::Error + Send + Sync>> {
+        let result = self.conn.query_row(
+            "SELECT depth, creativity, formality, technical_level, example_preference, \
+                    interaction_count, last_updated \
+             FROM cognitive_profile WHERE id = 'default'",
+            [],
+            |row| {
+                Ok(crate::cognitive_profile::CognitiveProfile {
+                    depth: row.get(0)?,
+                    creativity: row.get(1)?,
+                    formality: row.get(2)?,
+                    technical_level: row.get(3)?,
+                    example_preference: row.get(4)?,
+                    interaction_count: row.get(5)?,
+                    last_updated: row.get(6)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(profile) => Ok(profile),
+            Err(_) => {
+                // No profile yet — create default
+                let profile = crate::cognitive_profile::CognitiveProfile::default();
+                self.save_cognitive_profile(&profile)?;
+                Ok(profile)
+            }
+        }
+    }
+
+    /// Persist the cognitive profile to SQLite
+    pub fn save_cognitive_profile(
+        &self,
+        profile: &crate::cognitive_profile::CognitiveProfile,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO cognitive_profile \
+             (id, depth, creativity, formality, technical_level, example_preference, \
+              interaction_count, last_updated) \
+             VALUES ('default', ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                profile.depth,
+                profile.creativity,
+                profile.formality,
+                profile.technical_level,
+                profile.example_preference,
+                profile.interaction_count,
+                now,
+            ],
+        )?;
+        Ok(())
     }
 
     /// Get intent log entries for the last N days

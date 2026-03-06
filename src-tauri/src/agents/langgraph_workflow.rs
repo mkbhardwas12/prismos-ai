@@ -313,11 +313,13 @@ impl StateGraph {
     }
 
     /// Get outgoing edges from a node
+    #[allow(dead_code)]
     pub fn outgoing_edges(&self, node_id: &str) -> Vec<&GraphEdge> {
         self.edges.iter().filter(|e| e.from == node_id).collect()
     }
 
     /// Get a node by ID
+    #[allow(dead_code)]
     pub fn get_node(&self, id: &str) -> Option<&GraphNode> {
         self.nodes.iter().find(|n| n.id == id)
     }
@@ -636,6 +638,7 @@ pub struct WorkflowCheckpoint {
 }
 
 /// Extended collaboration summary for frontend (includes debate)
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowSummary {
     pub workflow_id: String,
@@ -654,6 +657,7 @@ pub struct WorkflowSummary {
 }
 
 /// Compact transition info for frontend
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransitionSummary {
     pub from: String,
@@ -663,6 +667,7 @@ pub struct TransitionSummary {
 }
 
 /// Compact debate info for frontend
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebateSummary {
     pub rounds: usize,
@@ -677,6 +682,7 @@ pub struct DebateSummary {
 }
 
 /// A single argument for frontend display
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArgumentSummary {
     pub agent: String,
@@ -801,8 +807,27 @@ impl WorkflowEngine {
                         "reasoner",
                     );
                     if sandbox_result.success {
-                        let prompt = ReasonerNode::build_prompt(work, &intent);
-                        match crate::ollama_bridge::generate(&model_name, &prompt, None, None, None).await {
+                        let (mut system_prompt, user_content) = ReasonerNode::build_prompt(work, &intent);
+
+                        // Apply Cognitive Imprint — context-aware band selection
+                        // Uses the Query-Type × Cognitive-Profile Matrix to pick the
+                        // optimal reasoning style for this specific question + user combo.
+                        if let Ok(g) = crate::spectrum_graph::SpectrumGraph::new(app_dir) {
+                            if let Ok(profile) = g.get_cognitive_profile() {
+                                let mods = profile.prompt_modifiers_for_query(&intent.raw);
+                                if !mods.is_empty() {
+                                    system_prompt.push_str(&mods);
+                                }
+                            }
+                        }
+
+                        // Retrieve few-shot examples from highly-rated past responses
+                        let few_shots = crate::spectrum_graph::SpectrumGraph::new(app_dir)
+                            .ok()
+                            .and_then(|g| g.get_good_examples(&intent.raw, 2).ok())
+                            .filter(|v| !v.is_empty());
+
+                        match crate::ollama_bridge::chat(&model_name, &system_prompt, &user_content, None, None, few_shots).await {
                             Ok(r) => r,
                             Err(e) => {
                                 eprintln!("[LangGraph-WF] Ollama unavailable: {}", e);
@@ -1080,6 +1105,7 @@ impl WorkflowEngine {
 
         let final_response;
         let mut edges_reinforced = vec![];
+        let mut conversation_id: Option<String> = None;
         let agent_used;
 
         if consensus.approved {
@@ -1092,8 +1118,9 @@ impl WorkflowEngine {
                 scored_context,
                 app_dir,
             ) {
-                Ok((edges, _conv_id)) => {
+                Ok((edges, conv_id)) => {
                     edges_reinforced = edges;
+                    conversation_id = Some(conv_id);
                 }
                 Err(e) => {
                     eprintln!("[LangGraph-WF] Memory Keeper graph update failed: {}", e);
@@ -1159,12 +1186,14 @@ impl WorkflowEngine {
             processing_time_ms: elapsed,
             npu_accelerated,
             collaboration: None, // Filled by caller with WorkflowSummary conversion
+            conversation_id,
         };
 
         Ok((result, state))
     }
 
     /// Convert a WorkflowState into a compact WorkflowSummary for the frontend
+    #[allow(dead_code)]
     pub fn summarize(state: &WorkflowState, session: &CollaborationSession) -> WorkflowSummary {
         let debate_summary = state.debate.as_ref().map(|d| DebateSummary {
             rounds: d.rounds_completed,

@@ -109,6 +109,7 @@ export interface RefractiveResult {
   processing_time_ms: number;
   npu_accelerated: boolean;
   collaboration?: CollaborationSummary;
+  conversation_id?: string;
 }
 
 // ─── LangGraph Multi-Agent Collaboration Types ─────────────────────────────────
@@ -218,6 +219,35 @@ export interface Message {
   content: string;
   timestamp: Date;
   agent?: string;
+  /** User feedback: 'good' (👍) or 'bad' (👎) */
+  feedback?: "good" | "bad";
+  /** Context node IDs used for this response (for feedback linkage) */
+  contextNodes?: string[];
+  /** Conversation ID from Spectrum Graph (for feedback linkage) */
+  conversationId?: string;
+  /** Original user question that triggered this response */
+  userQuestion?: string;
+  /** Refraction alternative — a different perspective on the same question */
+  refractionAlternative?: RefractionAlternative;
+}
+
+/** A refraction alternative — a different reasoning perspective on the same question */
+export interface RefractionAlternative {
+  band: string;
+  band_label: string;
+  band_emoji: string;
+  response: string;
+}
+
+/** Cognitive profile — how the AI adapts to your thinking style */
+export interface CognitiveProfile {
+  depth: number;
+  creativity: number;
+  formality: number;
+  technical_level: number;
+  example_preference: number;
+  interaction_count: number;
+  last_updated: string;
 }
 
 export interface AppSettings {

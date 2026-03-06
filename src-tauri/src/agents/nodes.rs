@@ -101,31 +101,36 @@ impl OrchestratorNode {
 pub struct ReasonerNode;
 
 impl ReasonerNode {
-    /// Build the system prompt for Reasoner's LLM call
-    pub fn build_prompt(work_unit: &AgentMessage, intent: &ParsedIntent) -> String {
-        let role_prompt = match intent.intent_type {
+    /// Build the system prompt for Reasoner's LLM call.
+    /// Returns (system_prompt, user_content) for proper /api/chat role separation.
+    pub fn build_prompt(work_unit: &AgentMessage, intent: &ParsedIntent) -> (String, String) {
+        let system_prompt = match intent.intent_type {
             IntentType::Query => {
                 "You are a helpful, knowledgeable AI assistant. \
                  Answer the user's question directly and clearly. \
                  If you have relevant context from their knowledge graph, use it \
-                 to personalize your answer — but don't talk about the graph itself."
+                 to personalize your answer — but don't talk about the graph itself. \
+                 Use Markdown formatting for structure when helpful (headers, lists, bold)."
             }
             IntentType::Analyze => {
                 "You are a helpful AI assistant skilled at deep analysis. \
                  Analyze what the user asks thoroughly with structured reasoning. \
                  Use any provided context to ground your analysis in their data, \
-                 but focus on delivering insights — not describing the data sources."
+                 but focus on delivering insights — not describing the data sources. \
+                 Use Markdown formatting: headers for sections, bullet lists for key points."
             }
             IntentType::Create => {
                 "You are a helpful AI assistant skilled at creating content. \
                  Generate exactly what the user asks for — drafts, plans, code, etc. \
                  Use any provided context about their work to personalize the output. \
-                 Deliver the actual content directly, not a description of what you could do."
+                 Deliver the actual content directly, not a description of what you could do. \
+                 Use Markdown formatting appropriate to the content type."
             }
             IntentType::Connect => {
                 "You are a helpful AI assistant skilled at finding patterns and connections. \
                  Help the user discover relationships between their ideas and topics. \
-                 Use the provided context to identify meaningful connections."
+                 Use the provided context to identify meaningful connections. \
+                 Present connections as a clear, structured list."
             }
             IntentType::System => {
                 "You are PrismOS-AI, a local-first AI assistant. \
@@ -133,10 +138,7 @@ impl ReasonerNode {
             }
         };
 
-        format!(
-            "{}\n\n{}\n\nRespond directly and helpfully:",
-            role_prompt, work_unit.content
-        )
+        (system_prompt.to_string(), work_unit.content.clone())
     }
 
     /// Create a proposal message from the LLM response
@@ -355,6 +357,74 @@ impl MemoryKeeperNode {
             }
         }
 
+        // ── Extract and store entities as first-class knowledge nodes ──
+        // This is what makes "the more you use PrismOS, the smarter it gets"
+        // — every conversation plants concept seeds in the knowledge graph.
+        let entity_action = format!("add_node:entity_extract:agent={}", agent_id);
+        let entity_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
+            &mut prism, &entity_action, agent_id,
+        );
+
+        let mut entity_node_ids: Vec<String> = Vec::new();
+        if entity_result.success && !intent.entities.is_empty() {
+            // Deduplicate and normalize entities
+            let mut seen = std::collections::HashSet::new();
+            let entities: Vec<String> = intent.entities.iter()
+                .map(|e| e.to_lowercase())
+                .filter(|e| e.len() >= 3 && seen.insert(e.clone()))
+                .take(6) // Max 6 entity nodes per conversation
+                .collect();
+
+            for entity in &entities {
+                // Create (or merge into existing) entity node
+                // add_node_with_layer deduplicates by label+type automatically
+                let entity_content = format!(
+                    "Concept extracted from conversation: \"{}\"\nRelated response: {}",
+                    intent.raw,
+                    &response.chars().take(200).collect::<String>()
+                );
+                let node = graph.add_node_with_layer(
+                    entity,
+                    &entity_content,
+                    "entity",
+                    "context",
+                )?;
+                entity_node_ids.push(node.id);
+            }
+
+            // Create edges between co-occurring entities
+            // If a user mentions "machine learning" and "neural networks" together,
+            // they become connected in the graph
+            for i in 0..entity_node_ids.len() {
+                for j in (i + 1)..entity_node_ids.len() {
+                    let (edge, _created) = graph.get_or_create_edge(
+                        &entity_node_ids[i],
+                        &entity_node_ids[j],
+                        "co_occurs",
+                    )?;
+                    graph.update_edge_weight(&edge.id, 0.4)?;
+                }
+            }
+
+            // Link entities to scored context nodes (cross-pollination)
+            // This is how "neural networks" eventually links to an older
+            // "machine learning" entity when they appear in the same context
+            for entity_id in &entity_node_ids {
+                for (ctx_id, score) in scored_context.iter().take(3) {
+                    if entity_id != ctx_id {
+                        let (edge, _) = graph.get_or_create_edge(entity_id, ctx_id, "related_to")?;
+                        graph.update_edge_weight(&edge.id, score * 0.3)?;
+                    }
+                }
+            }
+
+            eprintln!(
+                "[MemoryKeeper] Extracted {} entity nodes: {:?}",
+                entity_node_ids.len(),
+                entities
+            );
+        }
+
         // ── Store conversation node through sandbox ──
         let store_action = format!("conversation:store_chat:agent={}", agent_id);
         let store_result = crate::sandbox_prism::execute_in_sandbox_for_agent(
@@ -374,6 +444,12 @@ impl MemoryKeeperNode {
                 "ephemeral",
             )?;
             conv_node_id = conv_node.id.clone();
+
+            // Link conversation to its entity nodes
+            for entity_id in &entity_node_ids {
+                let (edge, _) = graph.get_or_create_edge(&conv_node.id, entity_id, "mentions")?;
+                graph.update_edge_weight(&edge.id, 0.5)?;
+            }
 
             // Link to context nodes
             let link_action = format!("add_node:node_create:derived_from:agent={}", agent_id);

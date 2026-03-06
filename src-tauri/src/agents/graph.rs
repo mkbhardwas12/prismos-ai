@@ -16,7 +16,7 @@
 
 use super::langgraph_workflow::WorkflowEngine;
 use super::messages::*;
-use crate::refractive_core::{IntentType, ParsedIntent, RefractiveResult};
+use crate::refractive_core::{ParsedIntent, RefractiveResult};
 use std::path::Path;
 use std::time::Instant;
 
@@ -144,14 +144,4 @@ pub async fn execute_collaboration(
     );
 
     Ok((result, session, Some(workflow_state)))
-}
-
-/// Determine the primary agent based on intent type
-fn determine_primary_agent(intent: &ParsedIntent) -> String {
-    match intent.intent_type {
-        IntentType::Query | IntentType::Analyze => "reasoner".to_string(),
-        IntentType::Create => "tool_smith".to_string(),
-        IntentType::Connect => "memory_keeper".to_string(),
-        IntentType::System => "sentinel".to_string(),
-    }
 }

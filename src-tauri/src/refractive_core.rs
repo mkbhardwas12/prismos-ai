@@ -82,6 +82,7 @@ pub struct RefractiveResult {
     pub processing_time_ms: u64,
     pub npu_accelerated: bool,
     pub collaboration: Option<CollaborationSummary>,  // LangGraph multi-agent trace
+    pub conversation_id: Option<String>, // links response to feedback system
 }
 
 /// Compact summary of multi-agent collaboration for frontend display
@@ -432,6 +433,12 @@ impl RefractiveEngine {
         // Override processing time to include full collaboration
         result.processing_time_ms = start.elapsed().as_millis() as u64;
 
+        // ── Graph maintenance: promote frequently-accessed ephemeral nodes ──
+        // Runs after every conversation — lightweight (single UPDATE query)
+        if let Ok(g) = crate::spectrum_graph::SpectrumGraph::new(app_dir) {
+            let _ = g.promote_active_nodes();
+        }
+
         eprintln!(
             "[RefractiveCore] LangGraph collaboration complete in {}ms — {} messages, {} votes",
             result.processing_time_ms,
@@ -491,13 +498,10 @@ impl RefractiveEngine {
             return String::new();
         }
 
-        let mut summary = String::new();
-        let mut count = 0;
-        for r in results.iter().take(8) {
-            // Skip conversation echo nodes — they just repeat previous Q&A
-            if r.node.node_type == "conversation" {
-                continue;
-            }
+        let mut entries: Vec<String> = Vec::new();
+        let mut conversation_count = 0u32;
+
+        for r in results.iter().take(12) {
             // Skip suggestion nodes
             if r.node.node_type == "suggestion" {
                 continue;
@@ -506,19 +510,31 @@ impl RefractiveEngine {
             if r.node.content.len() < 20 {
                 continue;
             }
-            count += 1;
-            if count > 5 {
+            // Allow up to 2 highly-relevant conversation nodes (recent Q&A memory)
+            if r.node.node_type == "conversation" {
+                if conversation_count >= 2 || r.relevance_score < 0.4 {
+                    continue;
+                }
+                conversation_count += 1;
+            }
+            if entries.len() >= 8 {
                 break;
             }
-            summary.push_str(&format!(
-                "- {} ({}): {}\n",
+            // Include more content per node (400 chars) for better grounding
+            let content: String = r.node.content.chars().take(400).collect();
+            entries.push(format!(
+                "**{}** ({}): {}",
                 r.node.label,
                 r.node.node_type,
-                r.node.content.chars().take(200).collect::<String>()
+                content.trim()
             ));
         }
 
-        summary
+        if entries.is_empty() {
+            return String::new();
+        }
+
+        entries.join("\n\n")
     }
 }
 

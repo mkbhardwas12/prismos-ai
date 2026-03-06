@@ -305,6 +305,7 @@ pub struct PrismResult {
 }
 
 /// Result from the sandbox execution pipeline
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxVerdict {
     pub allowed: bool,
@@ -380,6 +381,7 @@ fn sign_action(prism_id: &str, agent_id: &str, action: &str) -> String {
 }
 
 /// Verify an HMAC-SHA256 signature
+#[allow(dead_code)]
 fn verify_signature(prism_id: &str, agent_id: &str, action: &str, signature: &str) -> bool {
     let expected = sign_action(prism_id, agent_id, action);
     expected == signature
@@ -558,6 +560,7 @@ pub fn rollback_with_reason(prism: &mut Prism, reason: &str) -> Option<Checkpoin
 ///
 /// If any step fails, the Prism auto-rolls back and returns a
 /// plain-English explanation of why the action was blocked.
+#[allow(dead_code)]
 pub fn execute_in_sandbox(prism: &mut Prism, action: &str) -> PrismResult {
     execute_in_sandbox_for_agent(prism, action, &prism.agent_id.clone())
 }
@@ -793,6 +796,7 @@ const SANDBOX_WAT: &str = r#"
 /// WASM Store state — holds execution context for host callbacks
 struct SandboxStoreState {
     operation_index: i32,
+    #[allow(dead_code)]
     risk_tier: i32,
     action: String,
     agent_id: String,
@@ -1141,6 +1145,7 @@ pub fn sandbox_execute(action: &str, agent_id: &str) -> PrismResult {
 }
 
 /// Verify the signature of a previously executed action
+#[allow(dead_code)]
 pub fn verify_action_signature(
     prism_id: &str,
     agent_id: &str,
@@ -1151,6 +1156,7 @@ pub fn verify_action_signature(
 }
 
 /// Get a human-readable sandbox status summary
+#[allow(dead_code)]
 pub fn sandbox_status_summary(prism: &Prism) -> String {
     let approved = prism.action_log.iter().filter(|a| a.verdict == ActionVerdict::Approved).count();
     let denied = prism.action_log.iter().filter(|a| a.verdict == ActionVerdict::Denied).count();

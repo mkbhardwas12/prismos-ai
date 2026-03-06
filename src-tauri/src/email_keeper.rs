@@ -67,6 +67,7 @@ pub struct EmailSummary {
 }
 
 impl EmailSummary {
+    #[allow(dead_code)]
     pub fn error(msg: &str) -> Self {
         Self {
             unread_count: 0,

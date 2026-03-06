@@ -31,6 +31,13 @@ Desktop.ini
 *_EVIDENCE.md
 *_evidence*.md
 
+# Patent evidence & benchmarks (confidential — do not publish)
+patent/
+patent_benchmark_report.json
+src-tauri/patent_benchmark_report.json
+src-tauri/src/bin/patent_benchmarks.rs
+.github/workflows/patent-benchmarks-macos.yml
+
 # Python
 __pycache__/
 *.pyc

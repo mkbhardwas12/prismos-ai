@@ -37,6 +37,11 @@ patent_benchmark_report.json
 src-tauri/patent_benchmark_report.json
 src-tauri/src/bin/patent_benchmarks.rs
 .github/workflows/patent-benchmarks-macos.yml
+**/PrismOS_Declaration*
+**/declaration_37cfr1132*
+**/strengthened_claims*
+**/*37CFR*
+**/*patent_benchmark*
 
 # Python
 __pycache__/

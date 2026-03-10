@@ -12,7 +12,7 @@
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
-PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Features include **Local Vision**, **Document RAG**, **Background Omnipresence** (Alt+Space), **Proactive Suggestions**, **WASM Sandbox Prisms**, and a modern glassmorphism UI — all running entirely offline.
+PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you. Features include **Cognitive Imprint™** (an adaptive personality engine that learns HOW you think), **Prism Refraction™** (multiple reasoning perspectives per response), **Local Vision**, **Document RAG**, **Background Omnipresence** (Alt+Space), **Proactive Suggestions**, **WASM Sandbox Prisms**, and a modern glassmorphism UI — all running entirely offline.
 
 <p align="center">
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to eight AI agents at once" />
@@ -65,6 +65,7 @@ PrismOS-AI is a **local-first agentic personal AI operating system** built with 
 | **8 AI Agents** | Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper |
 | **LangGraph Debates** | Multi-agent debate with formal consensus voting |
 | **Sandbox Prism™** | WASM-isolated execution environment |
+| **Cognitive Imprint™** | Adaptive response personality engine | |
 | **Daily Dashboard** | Unified morning-brief view with stats, calendar, email, finance cards, quick links *(Phase 7)* |
 | **ProactivePanel** | Permanent collapsible sidebar panel with live calendar, email, finance, graph feeds *(Phase 7)* |
 | **Proactive Suggestions** | Context-aware cards that auto-process on click |
@@ -243,6 +244,7 @@ prismos-ai/
 │       ├── sandbox_prism.rs      # WASM runtime (wasmtime 27)
 │       ├── ollama_bridge.rs      # LLM + vision streaming
 │       ├── smart_router.rs       # Auto model switching
+│       ├── cognitive_profile.rs   # Cognitive Imprint™ — adaptive 5-axis personality engine
 │       ├── doc_chunker.rs        # Document RAG + TF-IDF
 │       ├── you_port.rs           # AES-256-GCM encrypted export
 │       ├── audit_log.rs          # SHA-256 tamper-evident hash chain
@@ -319,6 +321,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
 | **v0.5.1** | ✅ Current | Smart Model Routing, Document RAG, Background Omnipresence (Alt+Space), Tiered Model Catalog, 162 tests |
 | **v0.5.2** | ✅ Done | Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Startup View Setting |
+| **v0.5.3** | ✅ Current | Cognitive Imprint™, Prism Refraction™, Query×Profile Matrix™, closed-loop feedback learning, 186 tests |
 | **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, Settings UI for voice/indexer |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
@@ -326,9 +329,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📊 Project Stats
 
-- **17 Rust modules** (+4 agent sub-modules) — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, Smart Router, Doc Chunker, Email Keeper, Calendar Keeper, Finance Keeper, Agents (graph · langgraph_workflow · messages · nodes)
-- **162 tests passing** — 97 frontend (Vitest) + 65 backend (cargo test)
-- **83 Tauri IPC commands** — full frontend↔backend communication
+- **18 Rust modules** (+4 agent sub-modules) — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, Smart Router, Doc Chunker, Cognitive Profile, Email Keeper, Calendar Keeper, Finance Keeper, Agents (graph · langgraph_workflow · messages · nodes)
+- **186 tests passing** — 97 frontend (Vitest) + 89 backend (cargo test)
+- **86 Tauri IPC commands** — full frontend↔backend communication
 - **18 React components** — MainView, IntentInput, SpectrumGraphView, SpectrumExplorer, SandboxPanel, SpectralTimeline, DailyDashboard, DailyBrief, ProactivePanel, SettingsPanel, TitleBar, Sidebar, OnboardingWizard, SpotlightOverlay, ActiveAgents, DailySuggestions, SuggestionCard, ErrorBoundary
 - **Zero cloud dependencies** — everything runs on your machine
 
@@ -336,7 +339,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ## 📜 Patent Notice
 
-PrismOS-AI and its core architectures (Spectrum Graph™, Refractive Core™, Sandbox Prism™, You-Port™) are protected by a US Provisional Patent filed February 2026. This open-source release is for personal and educational use.
+PrismOS-AI and its core architectures are protected by a US Provisional Patent filed February 2026. Patent-pending inventions include:
+
+- **Spectrum Graph™**
+- **Refractive Core™**
+- **Sandbox Prism™**
+- **Cognitive Imprint™**
+- **Prism Refraction™**
+- **Query×Profile Matrix™**
+- **You-Port™**
+
+This open-source release is made available for personal, educational, and non-commercial use. The patented methods and architectures may not be used commercially without a license.
 
 ---
 

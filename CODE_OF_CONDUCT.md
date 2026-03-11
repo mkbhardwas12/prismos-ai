@@ -25,7 +25,7 @@ Examples of unacceptable behavior include:
 
 ## Enforcement
 
-Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior. Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project team at **via GitHub Issues**.
+Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior. Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project team via [GitHub Issues](https://github.com/mkbhardwas12/prismos-ai/issues).
 
 All complaints will be reviewed and investigated promptly and fairly.
 

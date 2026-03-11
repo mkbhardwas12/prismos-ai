@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability in PrismOS-AI, please email **via GitHub Issues** with:
+If you discover a security vulnerability in PrismOS-AI, please report it privately via [GitHub Security Advisories](https://github.com/mkbhardwas12/prismos-ai/security/advisories/new) with:
 
 1. **Description** — What is the vulnerability?
 2. **Steps to Reproduce** — How can it be triggered?

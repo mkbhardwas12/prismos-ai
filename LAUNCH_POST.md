@@ -202,3 +202,5 @@ What makes it different: a 7-dimensional knowledge graph (the Spectrum Graph), a
 
 Built with Tauri 2.0, React 18, TypeScript 5.5, and Rust. 83 IPC commands across 17 Rust modules. Fully open source under MIT.
 ```
+
+

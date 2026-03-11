@@ -747,7 +747,7 @@ mod tests {
     // Validates all aspects of the adaptive band-selection algorithm.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // ── Query Classification Exhaustiveness ─────────────────────────────────────────────────────────────────────
+    // ── Query Classification Exhaustiveness ───────────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_claim_a_classify_troubleshooting_all_signals() {
@@ -877,7 +877,7 @@ mod tests {
         assert_eq!(QueryType::classify("EXPLAIN quantum computing"), QueryType::Explanation);
     }
 
-    // ── Natural Band Mapping ───────────────────────────────────────────────────────────────────────────────────
+    // ── Natural Band Mapping ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_claim_b_natural_band_troubleshooting_is_direct() {
@@ -914,7 +914,7 @@ mod tests {
         assert_eq!(QueryType::General.natural_band(), None);
     }
 
-    // ── Override Strength Values ─────────────────────────────────────────────────────────────────────────────────────
+    // ── Override Strength Values ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_claim_b_override_strengths_match_spec() {
@@ -938,7 +938,7 @@ mod tests {
         assert!((QueryType::Explanation.override_strength() - QueryType::General.override_strength()).abs() < f64::EPSILON);
     }
 
-    // ── Preference Strength Computation ──────────────────────────────────────────────────────────────────────────────
+    // ── Preference Strength Computation ──────────────────────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_claim_c_default_profile_has_zero_preference_strength() {
@@ -1107,7 +1107,7 @@ mod tests {
         );
     }
 
-    // ── New Users Get Smart Defaults ─────────────────────────────────────────────────────────────────────────────────
+    // ── New Users Get Smart Defaults ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_claim_e_new_user_all_query_types_get_natural_bands() {
@@ -1141,7 +1141,7 @@ mod tests {
         );
     }
 
-    // ── Experienced Users ──────────────────────────────────────────────────────────────────────────────────────
+    // ── Experienced Users ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_claim_f_experienced_user_moderate_overrides_yield_to_preference() {

@@ -20,18 +20,46 @@ const VISION_MODEL_PATTERNS: &[&str] = &[
     "minicpm-v",
     "cogvlm",
     "qwen2-vl",
+    "gemma3",
+    "internvl",
+    "phi3.5-vision",
 ];
 
 /// Priority order for auto-selecting a vision model when none is specified
 const VISION_MODEL_PRIORITY: &[&str] = &[
     "llama3.2-vision",
-    "llava",
+    "gemma3",
     "qwen2-vl",
+    "llava",
+    "internvl",
     "llava-llama3",
     "bakllava",
     "moondream",
+    "phi3.5-vision",
     "llava-phi3",
     "minicpm-v",
+];
+
+/// Known code-specialized model name fragments (case-insensitive matching)
+const CODE_MODEL_PATTERNS: &[&str] = &[
+    "codellama",
+    "deepseek-coder",
+    "starcoder",
+    "codegemma",
+    "qwen2.5-coder",
+    "starcoder2",
+    "codestral",
+];
+
+/// Priority order for auto-selecting a code model
+const CODE_MODEL_PRIORITY: &[&str] = &[
+    "qwen2.5-coder",
+    "deepseek-coder",
+    "codellama",
+    "codegemma",
+    "starcoder2",
+    "codestral",
+    "starcoder",
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -56,6 +84,11 @@ pub struct ModelCapabilities {
     pub is_vision: bool,
     pub is_code: bool,
     pub is_reasoning: bool,
+    pub is_multilingual: bool,
+    pub is_math: bool,
+    pub is_agentic: bool,
+    /// Context window tier: "small" (4K), "medium" (8-16K), "large" (32K+)
+    pub context_tier: String,
 }
 
 // ─── Core Routing Logic ────────────────────────────────────────────────────────
@@ -71,20 +104,48 @@ pub fn is_vision_model(model_name: &str) -> bool {
 /// Check if a model name indicates code specialization
 pub fn is_code_model(model_name: &str) -> bool {
     let lower = model_name.to_lowercase();
-    lower.contains("codellama")
-        || lower.contains("deepseek-coder")
-        || lower.contains("starcoder")
-        || lower.contains("codegemma")
-        || lower.contains("qwen2.5-coder")
+    CODE_MODEL_PATTERNS
+        .iter()
+        .any(|pattern| lower.contains(pattern))
 }
 
 /// Detect capabilities for a model based on its name
 pub fn detect_capabilities(model_name: &str) -> ModelCapabilities {
+    let lower = model_name.to_lowercase();
+    let is_multilingual = lower.contains("qwen")
+        || lower.contains("gemma")
+        || lower.contains("aya")
+        || lower.contains("bloom");
+    let is_math = lower.contains("mathstral")
+        || lower.contains("deepseek-r1")
+        || lower.contains("qwen3");
+    let is_agentic = lower.contains("qwen3")
+        || lower.contains("deepseek-r1")
+        || lower.contains("llama3.1")
+        || lower.contains("llama3.2");
+    let context_tier = if lower.contains("32b")
+        || lower.contains("70b")
+        || lower.contains("deepseek-v3")
+    {
+        "large".to_string()
+    } else if lower.contains("14b")
+        || lower.contains("13b")
+        || lower.contains("8b")
+        || lower.contains("7b")
+    {
+        "medium".to_string()
+    } else {
+        "small".to_string()
+    };
     ModelCapabilities {
         name: model_name.to_string(),
         is_vision: is_vision_model(model_name),
         is_code: is_code_model(model_name),
-        is_reasoning: model_name.to_lowercase().contains("deepseek-r1"),
+        is_reasoning: lower.contains("deepseek-r1"),
+        is_multilingual,
+        is_math,
+        is_agentic,
+        context_tier,
     }
 }
 
@@ -93,6 +154,20 @@ pub fn detect_capabilities(model_name: &str) -> ModelCapabilities {
 pub fn find_best_vision_model(available_models: &[String]) -> Option<String> {
     // Try models in priority order
     for preferred in VISION_MODEL_PRIORITY {
+        for available in available_models {
+            let lower = available.to_lowercase();
+            if lower.contains(preferred) {
+                return Some(available.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Find the best available code model from a list of installed models.
+/// Returns None if no code-specialized model is installed.
+pub fn find_best_code_model(available_models: &[String]) -> Option<String> {
+    for preferred in CODE_MODEL_PRIORITY {
         for available in available_models {
             let lower = available.to_lowercase();
             if lower.contains(preferred) {
@@ -116,7 +191,7 @@ pub fn route_model(
     user_model: &str,
     has_image: bool,
     has_document: bool,
-    _has_code_request: bool,
+    has_code_request: bool,
     available_models: &[String],
 ) -> RoutingDecision {
     let original = user_model.to_string();
@@ -167,6 +242,22 @@ pub fn route_model(
             reason: "Document analysis using current model".to_string(),
             is_vision: false,
         };
+    }
+
+    // ── Priority 3: Code routing (auto-swap to code model if available) ──
+    if has_code_request && !is_code_model(user_model) {
+        if let Some(code_model) = find_best_code_model(available_models) {
+            return RoutingDecision {
+                model: code_model.clone(),
+                auto_swapped: true,
+                original_model: original,
+                reason: format!(
+                    "Auto-swapped to {} for code task (will revert to {} after)",
+                    code_model, user_model
+                ),
+                is_vision: false,
+            };
+        }
     }
 
     // ── Default: Use user's selected model ──
@@ -312,5 +403,45 @@ mod tests {
         assert!(!caps[0].is_vision);
         assert!(caps[1].is_vision);
         assert!(caps[2].is_code);
+    }
+
+    #[test]
+    fn test_find_best_code_model() {
+        let models = vec![
+            "mistral:latest".to_string(),
+            "qwen2.5-coder:7b".to_string(),
+            "llama3.1:8b".to_string(),
+        ];
+        assert_eq!(
+            find_best_code_model(&models),
+            Some("qwen2.5-coder:7b".to_string())
+        );
+    }
+
+    #[test]
+    fn test_code_routing_activates() {
+        let models = vec![
+            "mistral:latest".to_string(),
+            "qwen2.5-coder:7b".to_string(),
+        ];
+        let decision = route_model("mistral", false, false, true, &models);
+        assert!(decision.auto_swapped);
+        assert_eq!(decision.model, "qwen2.5-coder:7b");
+    }
+
+    #[test]
+    fn test_code_routing_no_swap_if_already_code() {
+        let models = vec!["qwen2.5-coder:7b".to_string()];
+        let decision = route_model("qwen2.5-coder:7b", false, false, true, &models);
+        assert!(!decision.auto_swapped);
+    }
+
+    #[test]
+    fn test_detect_capabilities_extended() {
+        let caps = detect_capabilities("qwen3:8b");
+        assert!(caps.is_multilingual);
+        assert!(caps.is_math);
+        assert!(caps.is_agentic);
+        assert_eq!(caps.context_tier, "medium");
     }
 }

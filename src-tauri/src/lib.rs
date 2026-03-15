@@ -20,6 +20,9 @@ mod email_keeper;
 mod calendar_keeper;
 mod finance_keeper;
 mod cognitive_profile;
+mod thought_currents;
+mod domain_detector;
+mod model_tracker;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -299,6 +302,7 @@ async fn smart_route_model(
     user_model: String,
     has_image: bool,
     has_document: bool,
+    has_code: Option<bool>,
     ollama_url: Option<String>,
 ) -> Result<String, String> {
     // Fetch available models from Ollama
@@ -311,7 +315,7 @@ async fn smart_route_model(
         &user_model,
         has_image,
         has_document,
-        false,
+        has_code.unwrap_or(false),
         &model_names,
     );
 
@@ -939,6 +943,22 @@ async fn generate_refraction_alternative(
     let alt_band = profile.alternative_band_for_query(&question);
     let model_name = model.unwrap_or_else(|| "mistral".to_string());
 
+    // Log the refraction band decision
+    let query_type = cognitive_profile::QueryType::classify(&question);
+    let natural_band_str = query_type
+        .natural_band()
+        .map(|b| format!("{:?}", b))
+        .unwrap_or_else(|| "None".to_string());
+    let applied_band_str = format!("{:?}", alt_band);
+    let log_id = graph
+        .log_refraction(
+            &question,
+            &format!("{:?}", query_type),
+            &natural_band_str,
+            &applied_band_str,
+        )
+        .ok();
+
     // Build system prompt with the alternative band's directive
     let system_prompt = format!(
         "You are a helpful AI assistant. {}\n\nUse Markdown formatting when helpful.",
@@ -962,6 +982,7 @@ async fn generate_refraction_alternative(
         "band_label": alt_band.label(),
         "band_emoji": alt_band.emoji(),
         "response": response,
+        "log_id": log_id,
     });
 
     serde_json::to_string(&result).map_err(|e| e.to_string())
@@ -1009,6 +1030,125 @@ async fn get_daily_brief(db: tauri::State<'_, DbState>) -> Result<String, String
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let brief = graph.get_daily_brief().map_err(|e| e.to_string())?;
     serde_json::to_string(&brief).map_err(|e| e.to_string())
+}
+
+// ─── Cognitive Drift & Thought Currents (Patent Pending) ────────────────────
+
+/// Get cognitive drift — compare current profile against weekly historical snapshots
+#[tauri::command]
+async fn get_cognitive_drift(
+    db: tauri::State<'_, DbState>,
+    weeks: Option<u32>,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let drift = graph
+        .get_cognitive_drift(weeks.unwrap_or(12))
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&drift).map_err(|e| e.to_string())
+}
+
+/// Get thought currents — temporal patterns in user intent history
+#[tauri::command]
+async fn get_thought_currents(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let currents = graph.get_thought_currents().map_err(|e| e.to_string())?;
+    serde_json::to_string(&currents).map_err(|e| e.to_string())
+}
+
+// ─── Edge Prophecy (Patent Pending) ─────────────────────────────────────────
+
+/// Predict potential edges between unconnected nodes
+#[tauri::command]
+async fn predict_edges(
+    db: tauri::State<'_, DbState>,
+    limit: Option<usize>,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let predictions = graph
+        .predict_edges(limit.unwrap_or(10))
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&predictions).map_err(|e| e.to_string())
+}
+
+/// Confirm a predicted edge — creates a real edge in the graph
+#[tauri::command]
+async fn confirm_predicted_edge(
+    db: tauri::State<'_, DbState>,
+    source_id: String,
+    target_id: String,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let edge = graph
+        .confirm_predicted_edge(&source_id, &target_id)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&edge).map_err(|e| e.to_string())
+}
+
+/// Dismiss a predicted edge — won't be suggested again
+#[tauri::command]
+async fn dismiss_predicted_edge(
+    db: tauri::State<'_, DbState>,
+    source_id: String,
+    target_id: String,
+) -> Result<(), String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    graph
+        .dismiss_predicted_edge(&source_id, &target_id)
+        .map_err(|e| e.to_string())
+}
+
+// ─── Refraction Journal (Patent Pending) ────────────────────────────────────
+
+/// Get refraction insights — aggregated band usage statistics
+#[tauri::command]
+async fn get_refraction_insights(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let insights = graph.get_refraction_insights().map_err(|e| e.to_string())?;
+    serde_json::to_string(&insights).map_err(|e| e.to_string())
+}
+
+// ─── Domain Detection (Patent Pending) ──────────────────────────────────────
+
+/// Get the user's learned domain profile
+#[tauri::command]
+async fn get_domain_profile(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let profile = graph.get_domain_profile().map_err(|e| e.to_string())?;
+    serde_json::to_string(&profile).map_err(|e| e.to_string())
+}
+
+// ─── Model Performance (Patent Pending) ─────────────────────────────────────
+
+/// Get model recommendations based on historical performance data
+#[tauri::command]
+async fn get_model_recommendations(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let recs = graph
+        .get_model_recommendations()
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&recs).map_err(|e| e.to_string())
+}
+
+/// Get system hardware info for model recommendations
+#[tauri::command]
+async fn get_system_info() -> Result<String, String> {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+
+    let total_ram_gb = sys.total_memory() as f64 / 1_073_741_824.0;
+    let available_ram_gb = sys.available_memory() as f64 / 1_073_741_824.0;
+
+    let info = serde_json::json!({
+        "total_ram_gb": (total_ram_gb * 10.0).round() / 10.0,
+        "available_ram_gb": (available_ram_gb * 10.0).round() / 10.0,
+        "cpu_count": std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(1),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    });
+
+    serde_json::to_string(&info).map_err(|e| e.to_string())
 }
 
 /// Update a node's label and content
@@ -2557,6 +2697,20 @@ pub fn run() {
             get_cognitive_profile,
             generate_refraction_alternative,
             select_refraction_preference,
+            // Cognitive Drift & Thought Currents (Patent Pending)
+            get_cognitive_drift,
+            get_thought_currents,
+            // Edge Prophecy (Patent Pending)
+            predict_edges,
+            confirm_predicted_edge,
+            dismiss_predicted_edge,
+            // Refraction Journal (Patent Pending)
+            get_refraction_insights,
+            // Domain Detection (Patent Pending)
+            get_domain_profile,
+            // Model Performance (Patent Pending)
+            get_model_recommendations,
+            get_system_info,
             // Agents
             get_active_agents,
             // LangGraph Workflow (Patent Pending — Multi-Agent Collaboration)

@@ -364,6 +364,31 @@
   color: var(--text-secondary, #94a3b8);
 }
 
+/* ── Model capability badges ── */
+.model-chip-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.model-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.model-badge--chat { background: rgba(37, 99, 235, 0.15); color: #3b82f6; }
+.model-badge--code { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.model-badge--vision { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+.model-badge--reasoning { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.model-badge--agentic { background: rgba(251, 191, 36, 0.15); color: #f59e0b; }
+.model-badge--multilingual { background: rgba(20, 184, 166, 0.15); color: #14b8a6; }
+.model-badge--math { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   .onboarding-card {

@@ -9,7 +9,7 @@
 export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 
 /** Default AI model to use if none is configured in settings. */
-export const DEFAULT_MODEL = "llama3.2";
+export const DEFAULT_MODEL = "qwen3:4b";
 
 /** Default settings for a fresh PrismOS-AI install. */
 export const DEFAULT_SETTINGS = {

@@ -330,6 +330,14 @@
   gap: 8px;
 }
 
+/* ── Cognitive Insights Section ── */
+.dd-cognitive-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
 /* ── Quick Links ── */
 .dd-quicklinks {
   margin-top: 8px;

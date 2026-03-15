@@ -11,6 +11,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, OllamaModel } from "../types";
+import { MODEL_REGISTRY, getDefaultModel } from "../lib/modelRegistry";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./OnboardingWizard.css";
 
@@ -20,17 +21,15 @@ interface OnboardingWizardProps {
   onComplete: () => void;
 }
 
-const POPULAR_MODELS = [
-  // Text & Reasoning
-  { name: "llama3.2", desc: "🏆 Recommended — 128k context, fast & capable", size: "~2.0 GB" },
-  { name: "mistral", desc: "Mistral 7B — great all-rounder", size: "~4.1 GB" },
-  { name: "deepseek-r1:1.5b", desc: "DeepSeek R1 — chain-of-thought reasoning", size: "~1.1 GB" },
-  // Vision
-  { name: "llama3.2-vision", desc: "🏆 Vision — best OCR & image understanding", size: "~7.9 GB" },
-  { name: "llava", desc: "LLaVA — classic vision model", size: "~8.0 GB" },
-  // Lightweight
-  { name: "gemma2:2b", desc: "Google Gemma 2 — ultra-light for low RAM", size: "~1.6 GB" },
-];
+// Build POPULAR_MODELS from the registry — show essential + recommended tiers
+const POPULAR_MODELS = MODEL_REGISTRY
+  .filter((m) => m.tier === "essential" || m.tier === "recommended")
+  .map((m) => ({
+    name: m.name,
+    desc: `${m.isDefault ? "🏆 Recommended — " : ""}${m.description}`,
+    size: m.sizeLabel,
+    capabilities: m.capabilities,
+  }));
 
 export default function OnboardingWizard({
   settings,
@@ -41,7 +40,7 @@ export default function OnboardingWizard({
   const [ollamaOk, setOllamaOk] = useState(false);
   const [checking, setChecking] = useState(false);
   const [models, setModels] = useState<OllamaModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState(settings.defaultModel || "llama3.2");
+  const [selectedModel, setSelectedModel] = useState(settings.defaultModel || getDefaultModel().name);
   const [pulling, setPulling] = useState(false);
   const [pullProgress, setPullProgress] = useState("");
   const [sampleIntent, setSampleIntent] = useState("");
@@ -192,7 +191,7 @@ export default function OnboardingWizard({
             )}
 
             <div className="onboarding-popular">
-              <div className="onboarding-section-label">Popular Models</div>
+              <div className="onboarding-section-label">Recommended Models</div>
               <div className="onboarding-model-grid">
                 {POPULAR_MODELS.map((m) => (
                   <button
@@ -203,6 +202,13 @@ export default function OnboardingWizard({
                     <span className="model-chip-name">{m.name}</span>
                     <span className="model-chip-desc">{m.desc}</span>
                     <span className="model-chip-size">{m.size}</span>
+                    {m.capabilities && m.capabilities.length > 0 && (
+                      <span className="model-chip-badges">
+                        {m.capabilities.map((cap) => (
+                          <span key={cap} className={`model-badge model-badge--${cap}`}>{cap}</span>
+                        ))}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

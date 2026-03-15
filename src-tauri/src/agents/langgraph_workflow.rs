@@ -1187,6 +1187,10 @@ impl WorkflowEngine {
             npu_accelerated,
             collaboration: None, // Filled by caller with WorkflowSummary conversion
             conversation_id,
+            query_type: None,    // Filled by refractive_core::refract()
+            natural_band: None,  // Filled by refractive_core::refract()
+            applied_band: None,  // Filled by refractive_core::refract()
+            domain_detected: None, // Filled by refractive_core::refract()
         };
 
         Ok((result, state))

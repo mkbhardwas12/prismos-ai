@@ -212,6 +212,75 @@ impl SpectrumGraph {
             ",
         )?;
 
+        // ── New layers for Cognitive Drift, Edge Prophecy, Refraction Journal, etc. ──
+        conn.execute_batch(
+            "
+            -- Layer 7: Cognitive Timeline — weekly snapshots for drift detection
+            CREATE TABLE IF NOT EXISTS cognitive_timeline (
+                id                  TEXT PRIMARY KEY,
+                iso_week            TEXT NOT NULL,
+                depth               REAL NOT NULL,
+                creativity          REAL NOT NULL,
+                formality           REAL NOT NULL,
+                technical_level     REAL NOT NULL,
+                example_preference  REAL NOT NULL,
+                interaction_count   INTEGER NOT NULL,
+                snapshot_at         TEXT NOT NULL
+            );
+
+            -- Layer 8: Dismissed Edge Predictions
+            CREATE TABLE IF NOT EXISTS dismissed_predictions (
+                id              TEXT PRIMARY KEY,
+                source_id       TEXT NOT NULL,
+                target_id       TEXT NOT NULL,
+                dismissed_at    TEXT NOT NULL
+            );
+
+            -- Layer 9: Refraction Log — tracks refraction band choices
+            CREATE TABLE IF NOT EXISTS refraction_log (
+                id              TEXT PRIMARY KEY,
+                query           TEXT NOT NULL,
+                query_type      TEXT NOT NULL,
+                natural_band    TEXT NOT NULL,
+                applied_band    TEXT NOT NULL,
+                user_override   TEXT,
+                created_at      TEXT NOT NULL
+            );
+
+            -- Layer 10: Agent Memory — per-agent key-value memory
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id              TEXT PRIMARY KEY,
+                agent_name      TEXT NOT NULL,
+                memory_key      TEXT NOT NULL,
+                memory_value    TEXT NOT NULL,
+                content_hash    TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            );
+
+            -- Layer 11: Domain Profile — learned user domain expertise
+            CREATE TABLE IF NOT EXISTS domain_profile (
+                id              TEXT PRIMARY KEY DEFAULT 'default',
+                domain_counts   TEXT NOT NULL DEFAULT '{}',
+                total_queries   INTEGER NOT NULL DEFAULT 0,
+                primary_domain  TEXT NOT NULL DEFAULT 'General',
+                confidence      REAL NOT NULL DEFAULT 0.0,
+                last_updated    TEXT NOT NULL DEFAULT ''
+            );
+
+            -- Layer 12: Model Performance — per-model performance tracking
+            CREATE TABLE IF NOT EXISTS model_performance (
+                id              TEXT PRIMARY KEY,
+                model_name      TEXT NOT NULL,
+                domain          TEXT NOT NULL DEFAULT 'General',
+                latency_ms      REAL NOT NULL,
+                satisfaction    REAL NOT NULL DEFAULT 0.0,
+                query_type      TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL
+            );
+            ",
+        )?;
+
         // ── Step 2: Migrate existing tables — add new columns if missing ──
         // Each ALTER is its own statement so one failure doesn't block the rest.
         // Errors are expected on fresh installs (columns already exist) — ignored.
@@ -243,6 +312,18 @@ impl SpectrumGraph {
             CREATE INDEX IF NOT EXISTS idx_feedback_edge      ON feedback(edge_id);
             CREATE INDEX IF NOT EXISTS idx_response_fb_conv   ON response_feedback(conversation_id);
             CREATE INDEX IF NOT EXISTS idx_response_fb_rating ON response_feedback(rating DESC);
+            ",
+        )?;
+
+        // ── Step 3b: Indexes for new layers ──
+        conn.execute_batch(
+            "
+            CREATE INDEX IF NOT EXISTS idx_cognitive_timeline_week ON cognitive_timeline(iso_week);
+            CREATE INDEX IF NOT EXISTS idx_refraction_log_time     ON refraction_log(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_agent_memory_agent      ON agent_memory(agent_name);
+            CREATE INDEX IF NOT EXISTS idx_agent_memory_hash       ON agent_memory(content_hash);
+            CREATE INDEX IF NOT EXISTS idx_model_performance_model ON model_performance(model_name);
+            CREATE INDEX IF NOT EXISTS idx_domain_profile_domain   ON domain_profile(primary_domain);
             ",
         )?;
 
@@ -2080,6 +2161,8 @@ impl SpectrumGraph {
                 now,
             ],
         )?;
+        // Also save a weekly snapshot for drift tracking
+        let _ = self.save_cognitive_snapshot(profile);
         Ok(())
     }
 
@@ -2303,6 +2386,581 @@ impl SpectrumGraph {
             "new_connections_today": new_connections_today,
             "growth_streak": streak,
         }))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  COGNITIVE DRIFT — Weekly Snapshot & Drift Detection (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Save a weekly cognitive profile snapshot for drift tracking
+    pub fn save_cognitive_snapshot(
+        &self,
+        profile: &crate::cognitive_profile::CognitiveProfile,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now();
+        let iso_week = now.format("%G-W%V").to_string();
+        let id = format!("snapshot-{}", iso_week);
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO cognitive_timeline \
+             (id, iso_week, depth, creativity, formality, technical_level, \
+              example_preference, interaction_count, snapshot_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                id,
+                iso_week,
+                profile.depth,
+                profile.creativity,
+                profile.formality,
+                profile.technical_level,
+                profile.example_preference,
+                profile.interaction_count,
+                now.to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Get cognitive drift: compare current profile against historical snapshots
+    pub fn get_cognitive_drift(
+        &self,
+        weeks: u32,
+    ) -> Result<crate::cognitive_profile::CognitiveDrift, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let current = self.get_cognitive_profile()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT iso_week, depth, creativity, formality, technical_level, \
+                    example_preference, interaction_count, snapshot_at \
+             FROM cognitive_timeline \
+             ORDER BY snapshot_at DESC LIMIT ?1",
+        )?;
+
+        let snapshots: Vec<(String, f64, f64, f64, f64, f64, i64, String)> = stmt
+            .query_map(rusqlite::params![weeks], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut weekly_deltas = Vec::new();
+        for (_week, depth, creativity, formality, tech, example, _count, _at) in &snapshots {
+            weekly_deltas.push(crate::cognitive_profile::CognitiveDeltaSet {
+                depth: current.depth - depth,
+                creativity: current.creativity - creativity,
+                formality: current.formality - formality,
+                technical_level: current.technical_level - tech,
+                example_preference: current.example_preference - example,
+            });
+        }
+
+        let trend = if weekly_deltas.len() >= 2 {
+            let recent = &weekly_deltas[0];
+            let older = &weekly_deltas[weekly_deltas.len() - 1];
+            let total_change = (recent.depth - older.depth).abs()
+                + (recent.creativity - older.creativity).abs()
+                + (recent.formality - older.formality).abs()
+                + (recent.technical_level - older.technical_level).abs();
+            if total_change > 0.3 {
+                "evolving".to_string()
+            } else if total_change > 0.1 {
+                "shifting".to_string()
+            } else {
+                "stable".to_string()
+            }
+        } else {
+            "insufficient_data".to_string()
+        };
+
+        // Build a previous profile from the latest snapshot for comparison
+        let previous = if !snapshots.is_empty() {
+            let (_, d, c, f, t, e, count, at) = &snapshots[0];
+            Some(crate::cognitive_profile::CognitiveProfile {
+                depth: *d,
+                creativity: *c,
+                formality: *f,
+                technical_level: *t,
+                example_preference: *e,
+                interaction_count: *count as u32,
+                last_updated: at.clone(),
+            })
+        } else {
+            None
+        };
+
+        let summary = trend.clone();
+
+        Ok(crate::cognitive_profile::CognitiveDrift {
+            current,
+            previous,
+            deltas: if weekly_deltas.is_empty() {
+                crate::cognitive_profile::CognitiveDeltaSet {
+                    depth: 0.0,
+                    creativity: 0.0,
+                    formality: 0.0,
+                    technical_level: 0.0,
+                    example_preference: 0.0,
+                }
+            } else {
+                weekly_deltas[0].clone()
+            },
+            summary,
+            weeks_compared: snapshots.len() as u32,
+        })
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  THOUGHT CURRENTS — Temporal Pattern Mining (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Analyze thought currents from intent history
+    pub fn get_thought_currents(
+        &self,
+    ) -> Result<Vec<crate::thought_currents::ThoughtCurrent>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let mut stmt = self.conn.prepare(
+            "SELECT intent_type, raw_input, created_at FROM intent_log \
+             WHERE created_at > datetime('now', '-90 days') \
+             ORDER BY created_at DESC LIMIT 500",
+        )?;
+
+        let entries: Vec<(String, String, String)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1).unwrap_or_default(),
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(crate::thought_currents::analyze_thought_currents(&entries))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  EDGE PROPHECY — Predictive Edge Suggestions (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Predict potential edges between unconnected nodes
+    pub fn predict_edges(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<crate::cognitive_profile::PredictedEdge>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let mut node_stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type FROM nodes \
+             ORDER BY access_count DESC LIMIT 100",
+        )?;
+
+        let nodes: Vec<(String, String, String, String)> = node_stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let existing_edges: std::collections::HashSet<(String, String)> = {
+            let mut stmt = self.conn.prepare("SELECT source_id, target_id FROM edges")?;
+            let results: Vec<(String, String)> = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+            results.into_iter().collect()
+        };
+
+        let dismissed: std::collections::HashSet<(String, String)> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT source_id, target_id FROM dismissed_predictions")?;
+            let results: Vec<(String, String)> = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+            results.into_iter().collect()
+        };
+
+        let mut predictions: Vec<crate::cognitive_profile::PredictedEdge> = Vec::new();
+
+        for i in 0..nodes.len() {
+            for j in (i + 1)..nodes.len() {
+                let (id_a, label_a, content_a, type_a) = &nodes[i];
+                let (id_b, label_b, content_b, type_b) = &nodes[j];
+
+                if existing_edges.contains(&(id_a.clone(), id_b.clone()))
+                    || existing_edges.contains(&(id_b.clone(), id_a.clone()))
+                    || dismissed.contains(&(id_a.clone(), id_b.clone()))
+                    || dismissed.contains(&(id_b.clone(), id_a.clone()))
+                {
+                    continue;
+                }
+
+                let words_a: std::collections::HashSet<&str> = content_a
+                    .split_whitespace()
+                    .filter(|w| w.len() >= 4)
+                    .collect();
+                let words_b: std::collections::HashSet<&str> = content_b
+                    .split_whitespace()
+                    .filter(|w| w.len() >= 4)
+                    .collect();
+
+                let overlap = words_a.intersection(&words_b).count();
+                let union_size = words_a.union(&words_b).count().max(1);
+                let jaccard = overlap as f64 / union_size as f64;
+                let type_bonus = if type_a == type_b { 0.15 } else { 0.0 };
+                let confidence = (jaccard * 0.7 + type_bonus).min(1.0);
+
+                if confidence >= 0.15 {
+                    let reason = if overlap > 0 {
+                        format!(
+                            "{} shared keywords between \"{}\" and \"{}\"",
+                            overlap, label_a, label_b
+                        )
+                    } else {
+                        format!(
+                            "Same domain ({}) — \"{}\" and \"{}\" may be related",
+                            type_a, label_a, label_b
+                        )
+                    };
+
+                    predictions.push(crate::cognitive_profile::PredictedEdge {
+                        source_id: id_a.clone(),
+                        target_id: id_b.clone(),
+                        source_label: label_a.clone(),
+                        target_label: label_b.clone(),
+                        probability: confidence,
+                        reason,
+                        evidence_type: if overlap > 0 { "keyword_overlap".to_string() } else { "same_domain".to_string() },
+                    });
+                }
+            }
+        }
+
+        predictions.sort_by(|a, b| {
+            b.probability
+                .partial_cmp(&a.probability)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        predictions.truncate(limit);
+        Ok(predictions)
+    }
+
+    /// Confirm a predicted edge — actually create it in the graph
+    pub fn confirm_predicted_edge(
+        &self,
+        source_id: &str,
+        target_id: &str,
+    ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
+        self.add_edge(source_id, target_id, "predicted_confirmed", 0.7)
+    }
+
+    /// Dismiss a predicted edge — mark it so it won't be suggested again
+    pub fn dismiss_predicted_edge(
+        &self,
+        source_id: &str,
+        target_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO dismissed_predictions (id, source_id, target_id, dismissed_at) \
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![Uuid::new_v4().to_string(), source_id, target_id, now],
+        )?;
+        Ok(())
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  REFRACTION JOURNAL — Band Choice Logging (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Log a refraction band decision
+    pub fn log_refraction(
+        &self,
+        query: &str,
+        query_type: &str,
+        natural_band: &str,
+        applied_band: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let id = Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO refraction_log (id, query, query_type, natural_band, applied_band, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![id, query, query_type, natural_band, applied_band, now],
+        )?;
+        Ok(id)
+    }
+
+    /// Update a refraction log entry with the user's override choice
+    pub fn update_refraction_choice(
+        &self,
+        log_id: &str,
+        user_choice: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.conn.execute(
+            "UPDATE refraction_log SET user_override = ?1 WHERE id = ?2",
+            rusqlite::params![user_choice, log_id],
+        )?;
+        Ok(())
+    }
+
+    /// Get refraction insights — aggregated band usage statistics
+    pub fn get_refraction_insights(
+        &self,
+    ) -> Result<crate::cognitive_profile::RefractionInsights, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let mut band_stmt = self.conn.prepare(
+            "SELECT applied_band, COUNT(*) FROM refraction_log \
+             GROUP BY applied_band ORDER BY COUNT(*) DESC",
+        )?;
+        let band_counts: std::collections::HashMap<String, u32> = band_stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let override_count: u32 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM refraction_log WHERE user_override IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let total_count: u32 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM refraction_log", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let most_common_shift: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "SELECT natural_band, applied_band FROM refraction_log \
+                 WHERE natural_band != applied_band \
+                 GROUP BY natural_band, applied_band \
+                 ORDER BY COUNT(*) DESC LIMIT 1",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .ok();
+
+        let override_rate = if total_count > 0 {
+            override_count as f64 / total_count as f64
+        } else {
+            0.0
+        };
+
+        Ok(crate::cognitive_profile::RefractionInsights {
+            total_refractions: total_count,
+            band_distribution: band_counts.iter().map(|(k, v)| (k.clone(), *v as f64)).collect(),
+            band_by_query_type: std::collections::HashMap::new(),
+            blind_spots: Vec::new(),
+            growth_score: override_rate,
+            insights: {
+                let mut ins = Vec::new();
+                if let Some((from, to)) = &most_common_shift {
+                    ins.push(format!("Most common shift: {} → {}", from, to));
+                }
+                if override_rate > 0.3 {
+                    ins.push(format!("High override rate ({:.0}%) — you often refine band choices", override_rate * 100.0));
+                }
+                ins
+            },
+        })
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  AGENT MEMORY — Per-Agent Key-Value Store (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Store a memory entry for an agent
+    pub fn store_agent_memory(
+        &self,
+        agent_name: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let id = format!("{}-{}", agent_name, key);
+
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(value.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO agent_memory \
+             (id, agent_name, memory_key, memory_value, content_hash, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, \
+              COALESCE((SELECT created_at FROM agent_memory WHERE id = ?1), ?6), ?6)",
+            rusqlite::params![id, agent_name, key, value, hash, now],
+        )?;
+        Ok(())
+    }
+
+    /// Recall memory entries for an agent
+    pub fn recall_agent_memory(
+        &self,
+        agent_name: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::cognitive_profile::AgentMemoryEntry>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let mut stmt = self.conn.prepare(
+            "SELECT agent_name, memory_key, memory_value, created_at, updated_at \
+             FROM agent_memory WHERE agent_name = ?1 \
+             ORDER BY updated_at DESC LIMIT ?2",
+        )?;
+
+        let entries = stmt
+            .query_map(rusqlite::params![agent_name, limit as u32], |row| {
+                let agent: String = row.get(0)?;
+                let key: String = row.get(1)?;
+                let value: String = row.get(2)?;
+                let created: String = row.get(3)?;
+                Ok(crate::cognitive_profile::AgentMemoryEntry {
+                    id: format!("{}-{}", agent, key),
+                    agent_name: agent,
+                    query_summary: key,
+                    decision: value,
+                    band_used: String::new(),
+                    feedback_rating: None,
+                    created_at: created,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(entries)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  DOMAIN PROFILE — Persistence Layer (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Get the stored domain profile
+    pub fn get_domain_profile(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let result = self.conn.query_row(
+            "SELECT domain_counts, total_queries, primary_domain, confidence, last_updated \
+             FROM domain_profile WHERE id = 'default'",
+            [],
+            |row| {
+                Ok(serde_json::json!({
+                    "domain_counts": serde_json::from_str::<serde_json::Value>(
+                        &row.get::<_, String>(0)?
+                    ).unwrap_or(serde_json::json!({})),
+                    "total_queries": row.get::<_, i64>(1)?,
+                    "primary_domain": row.get::<_, String>(2)?,
+                    "confidence": row.get::<_, f64>(3)?,
+                    "last_updated": row.get::<_, String>(4)?,
+                }))
+            },
+        );
+
+        match result {
+            Ok(profile) => Ok(profile),
+            Err(_) => Ok(serde_json::json!({
+                "domain_counts": {},
+                "total_queries": 0,
+                "primary_domain": "General",
+                "confidence": 0.0,
+                "last_updated": "",
+            })),
+        }
+    }
+
+    /// Save the domain profile to SQLite
+    pub fn save_domain_profile(
+        &self,
+        domain_counts: &str,
+        total_queries: i64,
+        primary_domain: &str,
+        confidence: f64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO domain_profile \
+             (id, domain_counts, total_queries, primary_domain, confidence, last_updated) \
+             VALUES ('default', ?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![domain_counts, total_queries, primary_domain, confidence, now],
+        )?;
+        Ok(())
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  MODEL PERFORMANCE — Per-Model Tracking (Patent Pending)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Store a model performance data point
+    pub fn store_model_performance(
+        &self,
+        model_name: &str,
+        domain: &str,
+        latency_ms: f64,
+        satisfaction: f64,
+        query_type: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let id = Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO model_performance \
+             (id, model_name, domain, latency_ms, satisfaction, query_type, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![id, model_name, domain, latency_ms, satisfaction, query_type, now],
+        )?;
+        Ok(())
+    }
+
+    /// Get model recommendations based on historical performance
+    pub fn get_model_recommendations(
+        &self,
+    ) -> Result<Vec<crate::model_tracker::ModelRecommendation>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let mut stmt = self.conn.prepare(
+            "SELECT model_name, domain, latency_ms, satisfaction \
+             FROM model_performance \
+             WHERE created_at > datetime('now', '-30 days') \
+             ORDER BY created_at DESC LIMIT 500",
+        )?;
+
+        let records: Vec<crate::model_tracker::ModelPerformance> = stmt
+            .query_map([], |row| {
+                Ok(crate::model_tracker::ModelPerformance {
+                    model: row.get(0)?,
+                    domain: row.get(1)?,
+                    query_type: String::new(),
+                    latency_ms: row.get::<_, f64>(2)? as u64,
+                    tokens_generated: None,
+                    user_feedback: {
+                        let sat: f64 = row.get(3)?;
+                        if sat > 0.5 { Some(true) } else if sat < -0.5 { Some(false) } else { None }
+                    },
+                    timestamp: String::new(),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(crate::model_tracker::generate_recommendations(&records))
     }
 }
 

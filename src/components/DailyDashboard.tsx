@@ -9,6 +9,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { generateGraphSuggestions } from "../lib/suggestions";
 import SuggestionCard from "./SuggestionCard";
+import CognitiveDriftCard from "./CognitiveDriftCard";
+import ThoughtCurrentsCard from "./ThoughtCurrentsCard";
+import RefractionJournal from "./RefractionJournal";
 import type { ProactiveSuggestion, SpectrumNode, GraphStats } from "../types";
 import "./DailyDashboard.css";
 
@@ -410,6 +413,13 @@ export default function DailyDashboard({
           </section>
         )}
       </div>
+
+      {/* ═══ Cognitive Insights Section ═══ */}
+      <section className="dd-cognitive-insights" aria-label="Cognitive Insights">
+        <CognitiveDriftCard />
+        <ThoughtCurrentsCard />
+        <RefractionJournal />
+      </section>
 
       {/* ═══ Quick Links ═══ */}
       <section className="dd-quicklinks" aria-label="Quick Links">

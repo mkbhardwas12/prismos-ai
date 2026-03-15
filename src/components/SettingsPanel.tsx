@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
+import DomainInsights from "./DomainInsights";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./SettingsPanel.css";
 
@@ -537,6 +538,37 @@ export default function SettingsPanel({
             Models are downloaded from the Ollama registry. Typical sizes: 1-8 GB.
             <button className="settings-btn settings-btn-sm" onClick={loadModels} style={{ marginLeft: "0.5rem" }}>
               ↻ Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* ── Domain Insights + Recommend Best Model ── */}
+        <div className="settings-group">
+          <h3>🧭 Domain Intelligence</h3>
+          <DomainInsights />
+          <div style={{ marginTop: "0.75rem" }}>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={async () => {
+                try {
+                  const infoRaw = await invoke<string>("get_system_info");
+                  const info = JSON.parse(infoRaw);
+                  const recRaw = await invoke<string>("get_model_recommendations");
+                  const recs = JSON.parse(recRaw);
+                  if (recs.length > 0) {
+                    showToast?.(`Recommended: ${recs[0].recommended_model} — ${recs[0].comparison || `Best for ${recs[0].domain}`}`);
+                  } else {
+                    // Fallback: recommend based on RAM
+                    const ram = info.total_ram_gb || 8;
+                    const rec = ram >= 32 ? "qwen3:14b" : ram >= 16 ? "qwen3:8b" : "qwen3:4b";
+                    showToast?.(`Based on ${ram.toFixed(0)}GB RAM: try ${rec}`);
+                  }
+                } catch {
+                  showToast?.("Could not generate recommendations yet — keep using PrismOS!");
+                }
+              }}
+            >
+              🎯 Recommend Best Model
             </button>
           </div>
         </div>

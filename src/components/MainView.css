@@ -1845,3 +1845,63 @@
 [data-theme="light"] .refraction-content__body pre {
   background: rgba(0, 0, 0, 0.04);
 }
+
+/* ── Intent Transparency Bar ── */
+.transparency-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 16px;
+  margin: -4px 0 8px 48px;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+
+.transparency-bar:hover {
+  opacity: 1;
+}
+
+.transparency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  white-space: nowrap;
+}
+
+.transparency-chip--domain {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: rgba(16, 185, 129, 0.9);
+}
+
+[data-theme="light"] .transparency-chip {
+  background: rgba(109, 40, 217, 0.06);
+  color: rgba(0, 0, 0, 0.6);
+  border-color: rgba(109, 40, 217, 0.12);
+}
+
+[data-theme="light"] .transparency-chip--domain {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.15);
+  color: rgba(5, 150, 105, 0.85);
+}
+
+/* ── Processing Timer ── */
+.processing-timer {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: rgba(139, 92, 246, 0.8);
+  font-variant-numeric: tabular-nums;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+[data-theme="light"] .processing-timer {
+  color: rgba(109, 40, 217, 0.7);
+}

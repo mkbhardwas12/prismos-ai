@@ -1,0 +1,107 @@
+/* Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026) */
+/* CognitiveDriftCard — Weekly profile drift visualization */
+
+.cognitive-drift-card {
+  background: var(--card-bg, #1a1a2e);
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.cognitive-drift-card h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: var(--text-primary, #e0e0e0);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.drift-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.drift-trend.stable {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.drift-trend.shifting {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.drift-trend.evolving {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.drift-trend.insufficient_data {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+}
+
+.drift-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.drift-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.drift-bar-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9ca3af);
+  min-width: 80px;
+}
+
+.drift-bar-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.drift-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+.drift-bar-value {
+  font-size: 0.7rem;
+  color: var(--text-tertiary, #6b7280);
+  min-width: 36px;
+  text-align: right;
+}
+
+.drift-empty {
+  text-align: center;
+  padding: 1rem;
+  color: var(--text-secondary, #9ca3af);
+  font-size: 0.85rem;
+}
+
+/* Light theme */
+[data-theme="light"] .cognitive-drift-card {
+  background: #ffffff;
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+[data-theme="light"] .drift-bar-track {
+  background: rgba(0, 0, 0, 0.06);
+}

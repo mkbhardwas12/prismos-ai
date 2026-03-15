@@ -164,6 +164,26 @@
   flex-shrink: 0;
 }
 
+/* Item text with optional subtitle */
+.sidebar-item-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.sidebar-item-subtitle {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  opacity: 0.65;
+  margin-top: 1px;
+}
+
+.sidebar-item.active .sidebar-item-subtitle {
+  color: var(--color-primary);
+  opacity: 0.7;
+}
+
 /* Keyboard shortcut badges */
 .kbd {
   font-size: 9px;

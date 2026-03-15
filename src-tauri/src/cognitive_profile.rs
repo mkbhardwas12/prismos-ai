@@ -154,6 +154,11 @@ pub enum QueryType {
     /// Natural fit: Direct ⚡ — conciseness is the entire point
     Summary,
 
+    /// "Solve 2x² + 3x = 0", "Calculate the integral of...",
+    /// "What is 15% of 340", "Prove that..."
+    /// Natural fit: Analytical 🔬 + math-capable model
+    MathScience,
+
     /// Anything that doesn't match above — use profile preference
     General,
 }
@@ -215,6 +220,20 @@ impl QueryType {
             return Self::Opinion;
         }
 
+        // ── Math/Science signals (must be BEFORE Explanation) ──
+        if q.contains("solve") || q.contains("calculate") || q.contains("compute")
+            || q.contains("equation") || q.contains("formula") || q.contains("integral")
+            || q.contains("derivative") || q.contains("proof") || q.contains("prove")
+            || q.contains("theorem") || q.contains("matrix") || q.contains("vector")
+            || q.contains("probability") || q.contains("statistics")
+            || q.contains("²") || q.contains("³") || q.contains("√")
+            || q.contains("π") || q.contains("∑") || q.contains("∫")
+            || (q.contains(" + ") && q.contains(" = "))
+            || q.contains("^2") || q.contains("^3")
+        {
+            return Self::MathScience;
+        }
+
         // ── Explanation signals ──
         if q.starts_with("explain") || q.starts_with("what is")
             || q.starts_with("what are") || q.starts_with("what does")
@@ -231,13 +250,14 @@ impl QueryType {
 
     /// The natural band for this query type — the reasoning style that
     /// objectively fits best, regardless of user preference.
-    fn natural_band(&self) -> Option<RefractionBand> {
+    pub fn natural_band(&self) -> Option<RefractionBand> {
         match self {
             Self::Troubleshooting => Some(RefractionBand::Direct),
             Self::Summary         => Some(RefractionBand::Direct),
             Self::Brainstorming   => Some(RefractionBand::Creative),
             Self::HowTo           => Some(RefractionBand::Analytical),
             Self::Opinion         => Some(RefractionBand::Exploratory),
+            Self::MathScience     => Some(RefractionBand::Analytical),
             // Explanation and General → no override, respect user profile
             Self::Explanation     => None,
             Self::General         => None,
@@ -257,6 +277,7 @@ impl QueryType {
             Self::Brainstorming   => 0.60,  // Moderate — some users want structured brainstorms
             Self::HowTo           => 0.55,  // Moderate — structure helps, but style varies
             Self::Opinion         => 0.50,  // Balanced — exploratory is good but not mandatory
+            Self::MathScience     => 0.75,  // Strong override — math needs structure
             Self::Explanation     => 0.0,   // Never override — respect preference
             Self::General         => 0.0,   // Never override — respect preference
         }
@@ -495,6 +516,76 @@ impl CognitiveProfile {
 
         self.interaction_count += 1;
     }
+}
+
+// ─── New Structs for Cognitive Drift, Edge Prophecy, Refraction Journal ─────
+
+/// Weekly cognitive profile snapshot for drift tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CognitiveDrift {
+    pub current: CognitiveProfile,
+    pub previous: Option<CognitiveProfile>,
+    pub deltas: CognitiveDeltaSet,
+    pub summary: String,
+    pub weeks_compared: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CognitiveDeltaSet {
+    pub depth: f64,
+    pub creativity: f64,
+    pub formality: f64,
+    pub technical_level: f64,
+    pub example_preference: f64,
+}
+
+/// A predicted edge between two unconnected graph nodes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PredictedEdge {
+    pub source_id: String,
+    pub source_label: String,
+    pub target_id: String,
+    pub target_label: String,
+    pub probability: f64,
+    pub reason: String,
+    pub evidence_type: String,
+}
+
+/// Insights about refraction band usage patterns
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefractionInsights {
+    pub total_refractions: u32,
+    pub band_distribution: std::collections::HashMap<String, f64>,
+    pub band_by_query_type: std::collections::HashMap<String, std::collections::HashMap<String, f64>>,
+    pub blind_spots: Vec<String>,
+    pub growth_score: f64,
+    pub insights: Vec<String>,
+}
+
+/// Agent episodic memory entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMemoryEntry {
+    pub id: String,
+    pub agent_name: String,
+    pub query_summary: String,
+    pub decision: String,
+    pub band_used: String,
+    pub feedback_rating: Option<i32>,
+    pub created_at: String,
+}
+
+/// Intent transparency — explains why a response was shaped the way it was
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntentTransparency {
+    pub detected_query_type: String,
+    pub query_type_confidence: f64,
+    pub detected_entities: Vec<String>,
+    pub primary_band: String,
+    pub primary_band_emoji: String,
+    pub band_reason: String,
+    pub agents_involved: Vec<String>,
+    pub context_nodes_used: u32,
+    pub cognitive_profile_influence: String,
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────
@@ -920,6 +1011,7 @@ mod tests {
     fn test_claim_b_override_strengths_match_spec() {
         assert!((QueryType::Troubleshooting.override_strength() - 0.85).abs() < f64::EPSILON);
         assert!((QueryType::Summary.override_strength() - 0.90).abs() < f64::EPSILON);
+        assert!((QueryType::MathScience.override_strength() - 0.75).abs() < f64::EPSILON);
         assert!((QueryType::Brainstorming.override_strength() - 0.60).abs() < f64::EPSILON);
         assert!((QueryType::HowTo.override_strength() - 0.55).abs() < f64::EPSILON);
         assert!((QueryType::Opinion.override_strength() - 0.50).abs() < f64::EPSILON);
@@ -929,9 +1021,10 @@ mod tests {
 
     #[test]
     fn test_claim_b_override_strength_ordering() {
-        // Summary > Troubleshooting > Brainstorming > HowTo > Opinion > Explanation = General
+        // Summary > Troubleshooting > MathScience > Brainstorming > HowTo > Opinion > Explanation = General
         assert!(QueryType::Summary.override_strength() > QueryType::Troubleshooting.override_strength());
-        assert!(QueryType::Troubleshooting.override_strength() > QueryType::Brainstorming.override_strength());
+        assert!(QueryType::Troubleshooting.override_strength() > QueryType::MathScience.override_strength());
+        assert!(QueryType::MathScience.override_strength() > QueryType::Brainstorming.override_strength());
         assert!(QueryType::Brainstorming.override_strength() > QueryType::HowTo.override_strength());
         assert!(QueryType::HowTo.override_strength() > QueryType::Opinion.override_strength());
         assert!(QueryType::Opinion.override_strength() > QueryType::Explanation.override_strength());

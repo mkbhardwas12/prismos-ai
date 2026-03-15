@@ -115,7 +115,7 @@ export default function Sidebar({
               title="Your daily command center — Morning Brief, live feeds, and quick actions"
             >
               <span className="sidebar-item-icon" aria-hidden="true">🏠</span>
-              Daily Dashboard
+              <span className="sidebar-item-text">Daily Dashboard<span className="sidebar-item-subtitle">Morning brief & insights</span></span>
               <span className="kbd" aria-hidden="true">⌃7</span>
             </button>
             <button
@@ -125,7 +125,7 @@ export default function Sidebar({
               title="Chat with your AI agents — send intents and get intelligent responses"
             >
               <span className="sidebar-item-icon" aria-hidden="true">💬</span>
-              Intent Console
+              <span className="sidebar-item-text">Intent Console<span className="sidebar-item-subtitle">Chat with AI agents</span></span>
               <span className="kbd" aria-hidden="true">⌃1</span>
             </button>
 
@@ -138,7 +138,7 @@ export default function Sidebar({
                 title="Interactive force-directed visualization of your knowledge connections"
               >
                 <span className="sidebar-item-icon" aria-hidden="true">🕸️</span>
-                Spectrum Graph
+                <span className="sidebar-item-text">Spectrum Graph<span className="sidebar-item-subtitle">Knowledge connections</span></span>
                 <span className="kbd" aria-hidden="true">⌃2</span>
               </button>
               <button
@@ -158,7 +158,7 @@ export default function Sidebar({
               title="Browse, search, and manage all nodes in your knowledge graph"
             >
               <span className="sidebar-item-icon" aria-hidden="true">🌈</span>
-              Spectrum Explorer
+              <span className="sidebar-item-text">Spectrum Explorer<span className="sidebar-item-subtitle">Browse & manage nodes</span></span>
               <span className="kbd" aria-hidden="true">⌃3</span>
             </button>
             <button
@@ -168,7 +168,7 @@ export default function Sidebar({
               title="Execute AI actions in isolated sandboxes with cryptographic rollback"
             >
               <span className="sidebar-item-icon" aria-hidden="true">🔒</span>
-              Sandbox Prisms
+              <span className="sidebar-item-text">Sandbox Prisms<span className="sidebar-item-subtitle">Isolated AI execution</span></span>
               <span className="kbd" aria-hidden="true">⌃4</span>
             </button>
 
@@ -181,7 +181,7 @@ export default function Sidebar({
                 title="Time-based history of all knowledge graph events and changes"
               >
                 <span className="sidebar-item-icon" aria-hidden="true">📅</span>
-                Spectral Timeline
+                <span className="sidebar-item-text">Spectral Timeline<span className="sidebar-item-subtitle">Activity history</span></span>
                 <span className="kbd" aria-hidden="true">⌃5</span>
               </button>
               <button

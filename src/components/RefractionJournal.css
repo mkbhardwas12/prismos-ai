@@ -1,0 +1,109 @@
+/* Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026) */
+/* RefractionJournal — Band usage statistics and override tracking */
+
+.refraction-journal {
+  background: var(--card-bg, #1a1a2e);
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid rgba(236, 72, 153, 0.15);
+}
+
+.refraction-journal h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: var(--text-primary, #e0e0e0);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.refraction-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.refraction-stat {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 0.6rem;
+  text-align: center;
+}
+
+.refraction-stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.refraction-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 0.15rem;
+}
+
+.refraction-bands {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.refraction-band-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.refraction-band-name {
+  font-size: 0.75rem;
+  min-width: 80px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.refraction-band-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.refraction-band-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.refraction-band-count {
+  font-size: 0.7rem;
+  color: var(--text-tertiary, #6b7280);
+  min-width: 24px;
+  text-align: right;
+}
+
+.refraction-shift {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(236, 72, 153, 0.08);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.refraction-empty {
+  text-align: center;
+  padding: 1rem;
+  color: var(--text-secondary, #9ca3af);
+  font-size: 0.85rem;
+}
+
+/* Light theme */
+[data-theme="light"] .refraction-journal {
+  background: #ffffff;
+  border-color: rgba(236, 72, 153, 0.2);
+}
+
+[data-theme="light"] .refraction-band-bar {
+  background: rgba(0, 0, 0, 0.06);
+}

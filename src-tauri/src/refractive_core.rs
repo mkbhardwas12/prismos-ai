@@ -83,6 +83,11 @@ pub struct RefractiveResult {
     pub npu_accelerated: bool,
     pub collaboration: Option<CollaborationSummary>,  // LangGraph multi-agent trace
     pub conversation_id: Option<String>, // links response to feedback system
+    // ── Intent Transparency fields ──
+    pub query_type: Option<String>,
+    pub natural_band: Option<String>,
+    pub applied_band: Option<String>,
+    pub domain_detected: Option<String>,
 }
 
 /// Compact summary of multi-agent collaboration for frontend display
@@ -347,6 +352,39 @@ impl RefractiveEngine {
         let context_node_ids: Vec<String> =
             context_results.iter().map(|r| r.node.id.clone()).collect();
 
+        // ── Step 1.5: Domain Detection — learn user's professional domain ──
+        let domain_prefix = {
+            let db_data = graph.get_domain_profile()?;
+            let mut dp = crate::domain_detector::DomainProfile::default();
+
+            // Restore counts from DB
+            if let Some(counts) = db_data.get("domain_counts").and_then(|v| v.as_object()) {
+                for (domain_str, count) in counts {
+                    if let Some(c) = count.as_u64() {
+                        dp.domain_counts.insert(domain_str.clone(), c as u32);
+                    }
+                }
+            }
+            dp.total_queries = db_data
+                .get("total_queries")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+
+            // Record current query and save
+            dp.record_query(&intent.raw);
+            let counts_json =
+                serde_json::to_string(&dp.domain_counts).unwrap_or_else(|_| "{}".to_string());
+            let primary_str = format!("{:?}", dp.primary_domain);
+            let _ = graph.save_domain_profile(
+                &counts_json,
+                dp.total_queries as i64,
+                &primary_str,
+                dp.confidence,
+            );
+
+            dp.get_domain_prompt()
+        };
+
         // ── Step 2: NPU-scored context ranking ──
         let intent_weights = self.scorer.intent_to_weights(&intent);
         let mut scored_context: Vec<(String, f64)> = Vec::new();
@@ -360,7 +398,12 @@ impl RefractiveEngine {
         scored_context.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // ── Step 3: Build context-enriched summary ──
-        let context_summary = self.build_context_summary(&context_results);
+        let mut context_summary = self.build_context_summary(&context_results);
+
+        // Inject domain-specific guidance if the user has a detected domain
+        if !domain_prefix.is_empty() {
+            context_summary = format!("{}\n\n{}", domain_prefix, context_summary);
+        }
 
         // ── Step 4: Execute LangGraph multi-agent collaboration ──
         // All 5 agents collaborate: Orchestrator decomposes → Reasoner analyzes →
@@ -429,6 +472,25 @@ impl RefractiveEngine {
             debate: debate_frontend,
         };
         result.collaboration = Some(collab_summary);
+
+        // ── Populate Intent Transparency fields ──
+        result.query_type = Some(format!("{:?}", result.intent.intent_type));
+        result.natural_band = Some(result.agent_used.clone());
+        result.applied_band = Some(result.agent_used.clone());
+        // Domain: extract from the domain_prefix we computed earlier
+        if !domain_prefix.is_empty() {
+            // domain_prefix is like "[Medical context] ..." — extract the domain name
+            let domain_name = domain_prefix
+                .trim_start_matches('[')
+                .split(']')
+                .next()
+                .unwrap_or("General")
+                .replace(" context", "")
+                .replace(" expertise", "");
+            result.domain_detected = Some(domain_name);
+        } else {
+            result.domain_detected = Some("General".to_string());
+        }
 
         // Override processing time to include full collaboration
         result.processing_time_ms = start.elapsed().as_millis() as u64;

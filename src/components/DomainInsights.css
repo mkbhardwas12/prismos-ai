@@ -1,0 +1,119 @@
+/* Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026) */
+/* DomainInsights — User domain expertise visualization */
+
+.domain-insights {
+  background: var(--card-bg, #1a1a2e);
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.domain-insights h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: var(--text-primary, #e0e0e0);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.domain-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(16, 185, 129, 0.08);
+  border-radius: 10px;
+  margin-bottom: 0.75rem;
+}
+
+.domain-primary-icon {
+  font-size: 1.5rem;
+}
+
+.domain-primary-info {
+  flex: 1;
+}
+
+.domain-primary-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.domain-primary-confidence {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.domain-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.domain-dist-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.domain-dist-emoji {
+  width: 20px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.domain-dist-name {
+  font-size: 0.75rem;
+  min-width: 100px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.domain-dist-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.domain-dist-fill {
+  height: 100%;
+  background: #10b981;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.domain-dist-pct {
+  font-size: 0.7rem;
+  color: var(--text-tertiary, #6b7280);
+  min-width: 30px;
+  text-align: right;
+}
+
+.domain-model-rec {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(16, 185, 129, 0.06);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.domain-empty {
+  text-align: center;
+  padding: 1rem;
+  color: var(--text-secondary, #9ca3af);
+  font-size: 0.85rem;
+}
+
+/* Light theme */
+[data-theme="light"] .domain-insights {
+  background: #ffffff;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="light"] .domain-dist-bar {
+  background: rgba(0, 0, 0, 0.06);
+}

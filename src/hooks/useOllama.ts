@@ -5,25 +5,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, OllamaModel } from "../types";
+import { MODEL_REGISTRY, toRecommendedFormat } from "../lib/modelRegistry";
 
-// ── Tiered model catalog — shown in dropdown for easy install ──
-export const RECOMMENDED_MODELS = [
-  // Text & Reasoning (High Context, High Quality)
-  { name: "llama3.2", label: "Llama 3.2 3B", desc: "🏆 Default Text — 128k context, fast", size: "2.0 GB", tier: "text" as const },
-  { name: "llama3.1", label: "Llama 3.1 8B", desc: "128k context, best local quality", size: "4.7 GB", tier: "text" as const },
-  { name: "mistral", label: "Mistral 7B", desc: "Great all-rounder", size: "4.1 GB", tier: "text" as const },
-  { name: "mistral-nemo", label: "Mistral Nemo 12B", desc: "⚡ Fast + structured output", size: "7.1 GB", tier: "text" as const },
-  { name: "deepseek-r1", label: "DeepSeek R1 8B", desc: "Chain-of-thought reasoning", size: "4.7 GB", tier: "text" as const },
-  // Vision & Image Analysis (Camera & Uploads)
-  { name: "llama3.2-vision", label: "Llama 3.2 Vision 11B", desc: "🏆 Default Vision — best OCR & image", size: "7.9 GB", tier: "vision" as const },
-  { name: "llava", label: "LLaVA 13B", desc: "Battle-tested vision model", size: "8.0 GB", tier: "vision" as const },
-  { name: "qwen2-vl", label: "Qwen2 VL", desc: "Charts, receipts & dense docs", size: "5.5 GB", tier: "vision" as const },
-  { name: "moondream", label: "Moondream 1.8B", desc: "Ultra-light vision", size: "1.7 GB", tier: "vision" as const },
-  // Power User & Coding
-  { name: "qwen2.5", label: "Qwen 2.5 7B", desc: "Multilingual + deep coding", size: "4.7 GB", tier: "power" as const },
-  { name: "codellama", label: "Code Llama 7B", desc: "Code specialist", size: "3.8 GB", tier: "power" as const },
-  { name: "gemma2:2b", label: "Gemma 2 2B", desc: "Ultra-light for low RAM", size: "1.6 GB", tier: "power" as const },
-];
+// ── Tiered model catalog — derived from centralized Model Registry ──
+export const RECOMMENDED_MODELS = toRecommendedFormat();
 
 export type SetupStep = "install" | "start" | "model" | "ready";
 

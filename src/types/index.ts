@@ -110,6 +110,11 @@ export interface RefractiveResult {
   npu_accelerated: boolean;
   collaboration?: CollaborationSummary;
   conversation_id?: string;
+  // Intent Transparency
+  query_type?: string;
+  natural_band?: string;
+  applied_band?: string;
+  domain_detected?: string;
 }
 
 // ─── LangGraph Multi-Agent Collaboration Types ─────────────────────────────────
@@ -229,6 +234,8 @@ export interface Message {
   userQuestion?: string;
   /** Refraction alternative — a different perspective on the same question */
   refractionAlternative?: RefractionAlternative;
+  /** Intent transparency — what the system detected about this message */
+  transparency?: IntentTransparency;
 }
 
 /** A refraction alternative — a different reasoning perspective on the same question */
@@ -396,4 +403,90 @@ export interface CrossDeviceMergeResult {
   merge_result: MergeResult;
   source_device: string;
   source_timestamp: string;
+}
+
+// ─── New Feature Types (Patent Pending) ─────────────────────────────────────
+
+/** Intent Transparency — what the system detected about a user message */
+export interface IntentTransparency {
+  query_type: string;
+  natural_band: string;
+  applied_band: string;
+  context_nodes_used: number;
+  model_used: string;
+  domain_detected: string;
+}
+
+/** Cognitive Drift — weekly profile change tracking */
+export interface CognitiveDrift {
+  current: CognitiveProfile;
+  previous: CognitiveProfile | null;
+  deltas: CognitiveDeltaSet;
+  summary: string;
+  weeks_compared: number;
+}
+
+export interface CognitiveDeltaSet {
+  depth: number;
+  creativity: number;
+  formality: number;
+  technical_level: number;
+  example_preference: number;
+}
+
+/** Thought Current — temporal pattern in intent history */
+export interface ThoughtCurrent {
+  pattern_type: string;
+  description: string;
+  confidence: number;
+  related_intents: string[];
+}
+
+/** Predicted Edge — edge prophecy suggestion */
+export interface PredictedEdge {
+  source_id: string;
+  target_id: string;
+  source_label: string;
+  target_label: string;
+  probability: number;
+  reason: string;
+  evidence_type: string;
+}
+
+/** Refraction Insights — aggregated band usage statistics */
+export interface RefractionInsights {
+  total_refractions: number;
+  band_distribution: Record<string, number>;
+  band_by_query_type: Record<string, Record<string, number>>;
+  blind_spots: string[];
+  growth_score: number;
+  insights: string[];
+}
+
+/** Domain Profile — learned user domain expertise */
+export interface DomainProfile {
+  domain_counts: Record<string, number>;
+  total_queries: number;
+  primary_domain: string;
+  confidence: number;
+  last_updated: string;
+}
+
+/** Model Recommendation — based on historical performance */
+export interface ModelRecommendation {
+  domain: string;
+  recommended_model: string;
+  avg_latency_ms: number;
+  satisfaction_rate: number;
+  sample_count: number;
+  comparison: string | null;
+}
+
+/** System hardware info for model recommendations */
+export interface SystemInfo {
+  total_ram_gb: number;
+  available_ram_gb: number;
+  cpu_count: number;
+  os: string;
+  arch: string;
 }

@@ -58,6 +58,9 @@ native-tls = "0.2"
 # Calendar Keeper — Local .ics calendar integration (Patent Pending)
 ical = "0.11"
 
+# System Info — Hardware detection for model recommendations
+sysinfo = "0.30"
+
 # Vendored OpenSSL for Android cross-compilation
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 

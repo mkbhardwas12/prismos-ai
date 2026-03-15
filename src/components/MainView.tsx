@@ -16,6 +16,7 @@ import { useVoice } from "../hooks/useVoice";
 import { useOllama, RECOMMENDED_MODELS } from "../hooks/useOllama";
 import { useChat } from "../hooks/useChat";
 import { useSuggestions } from "../hooks/useSuggestions";
+import { getDefaultModel } from "../lib/modelRegistry";
 import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative } from "../types";
 import "./MainView.css";
 
@@ -473,6 +474,30 @@ export default function MainView({
                   )}
                 </div>
               </div>
+              {/* ── Intent Transparency Bar ── */}
+              {msg.role === "ai" && msg.transparency && (
+                <div className="transparency-bar">
+                  <span className="transparency-chip" title="Query classification">
+                    🏷️ {msg.transparency.query_type}
+                  </span>
+                  <span className="transparency-chip" title="Cognitive band used">
+                    🌈 {msg.transparency.applied_band}
+                  </span>
+                  {msg.transparency.context_nodes_used > 0 && (
+                    <span className="transparency-chip" title="Graph nodes used for context">
+                      🔗 {msg.transparency.context_nodes_used} nodes
+                    </span>
+                  )}
+                  <span className="transparency-chip" title="Model used">
+                    🤖 {msg.transparency.model_used}
+                  </span>
+                  {msg.transparency.domain_detected && msg.transparency.domain_detected !== "General" && (
+                    <span className="transparency-chip transparency-chip--domain" title="Detected professional domain">
+                      🎯 {msg.transparency.domain_detected}
+                    </span>
+                  )}
+                </div>
+              )}
               {/* ── Prism Refraction: alternative perspective ── */}
               {msg.role === "ai" && msg.refractionAlternative && (
                 <div className="refraction-section">
@@ -559,6 +584,9 @@ export default function MainView({
                       ? liveAgentSteps[liveAgentSteps.length - 1].action
                       : chat.processingPhase ? "Processing locally · 100% private" : "Agents collaborating · Graph context loading"}
                   </span>
+                  {chat.processingElapsed > 0 && (
+                    <span className="processing-timer">{chat.processingElapsed}s</span>
+                  )}
                 </div>
               </div>
 
@@ -672,7 +700,7 @@ export default function MainView({
                 <div className="ftw-step-body">
                   <h3>Pull a Model</h3>
                   <p>Download an AI model to use. We recommend starting small — it'll download automatically when you first chat.</p>
-                  <div className="ftw-code-hint">Or run <code>ollama pull llama3.2</code> in a terminal</div>
+                  <div className="ftw-code-hint">Or run <code>ollama pull {getDefaultModel().name}</code> in a terminal</div>
                 </div>
               </div>
             </div>

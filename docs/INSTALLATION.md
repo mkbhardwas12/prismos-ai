@@ -220,8 +220,8 @@ cd prismos-ai
 # 2. Install frontend dependencies
 npm install
 
-# 3. Pull a local LLM model
-ollama pull llama3.2
+# 3. Pull a local LLM model (new default: qwen3:4b)
+ollama pull qwen3:4b
 
 # 4. Start Ollama server (in separate terminal)
 ollama serve
@@ -383,7 +383,8 @@ Ollama runs as a system service automatically after installation.
 
 ```bash
 # Text & Reasoning (choose one)
-ollama pull llama3.2         # Default, best balance
+ollama pull qwen3:4b         # Default — fast, multilingual, great quality
+ollama pull llama3.2         # Proven alternative, 128k context
 ollama pull mistral          # Faster, smaller
 ollama pull deepseek-r1      # Advanced reasoning
 
@@ -391,13 +392,17 @@ ollama pull deepseek-r1      # Advanced reasoning
 ollama pull llama3.2-vision  # Default vision model
 ollama pull llava            # Alternative vision model
 
+# Code (optional, auto-routed when code detected)
+ollama pull qwen2.5-coder    # Best code model
+ollama pull codellama        # Alternative code specialist
+
 # Power User (optional)
-ollama pull codellama        # Code generation
 ollama pull qwen2.5          # Multilingual
 ollama pull gemma2:2b        # Lightweight
 ```
 
 **Model Sizes:**
+- `qwen3:4b`: ~2.6 GB (default)
 - `llama3.2`: ~2 GB
 - `llama3.2-vision`: ~7.9 GB
 - `mistral`: ~4.1 GB

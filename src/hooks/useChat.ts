@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary } from "../types";
+import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency } from "../types";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -38,8 +38,11 @@ export function useChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string>("");
+  const [processingElapsed, setProcessingElapsed] = useState<number>(0);
   const [pendingIntent, setPendingIntent] = useState("");
   const conversationRef = useRef<HTMLDivElement>(null);
+  const processingStartRef = useRef<number>(0);
+  const processingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Stable ref for handleIntent so event listeners don't go stale
   const handleIntentRef = useRef<(input: string, imageData?: string, documentText?: string) => void>(() => {});
@@ -128,6 +131,11 @@ export function useChat({
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsProcessing(true);
+    processingStartRef.current = Date.now();
+    setProcessingElapsed(0);
+    processingTimerRef.current = setInterval(() => {
+      setProcessingElapsed(Math.floor((Date.now() - processingStartRef.current) / 1000));
+    }, 1000);
     clearLiveSteps();
 
     try {
@@ -249,6 +257,14 @@ export function useChat({
             contextNodes: result.context_nodes,
             conversationId: result.conversation_id,
             userQuestion: input,
+            transparency: {
+              query_type: result.query_type || result.intent.intent_type || "Unknown",
+              natural_band: result.natural_band || result.agent_used || "default",
+              applied_band: result.applied_band || result.agent_used || "default",
+              context_nodes_used: result.context_nodes?.length ?? 0,
+              model_used: settings.defaultModel || "local",
+              domain_detected: result.domain_detected || "General",
+            },
           };
           setMessages((prev) => [...prev, aiMsg]);
 
@@ -294,8 +310,13 @@ export function useChat({
     } catch (err) {
       setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
     } finally {
+      if (processingTimerRef.current) {
+        clearInterval(processingTimerRef.current);
+        processingTimerRef.current = null;
+      }
       setIsProcessing(false);
       setProcessingPhase("");
+      setProcessingElapsed(0);
     }
   }
 
@@ -316,6 +337,11 @@ export function useChat({
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsProcessing(true);
+    processingStartRef.current = Date.now();
+    setProcessingElapsed(0);
+    processingTimerRef.current = setInterval(() => {
+      setProcessingElapsed(Math.floor((Date.now() - processingStartRef.current) / 1000));
+    }, 1000);
     clearLiveSteps();
 
     try {
@@ -351,8 +377,13 @@ export function useChat({
     } catch (err) {
       setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
     } finally {
+      if (processingTimerRef.current) {
+        clearInterval(processingTimerRef.current);
+        processingTimerRef.current = null;
+      }
       setIsProcessing(false);
       setProcessingPhase("");
+      setProcessingElapsed(0);
     }
   }
 
@@ -418,6 +449,7 @@ export function useChat({
     messages,
     isProcessing,
     processingPhase,
+    processingElapsed,
     pendingIntent,
     setPendingIntent,
     conversationRef,

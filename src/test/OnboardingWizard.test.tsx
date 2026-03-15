@@ -11,9 +11,14 @@ import { MODEL_REGISTRY, getDefaultModel } from "../lib/modelRegistry";
 const defaultSettings: AppSettings = {
   ollamaUrl: "http://localhost:11434",
   defaultModel: "qwen3:4b",
+  theme: "dark",
   maxTokens: 2048,
-  streamingEnabled: true,
+  voiceInputEnabled: false,
   voiceOutputEnabled: false,
+  emailSummaryEnabled: false,
+  calendarEnabled: false,
+  financeEnabled: false,
+  defaultView: "chat",
 };
 
 describe("OnboardingWizard", () => {

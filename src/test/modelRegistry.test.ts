@@ -91,9 +91,9 @@ describe("getModelsByCapability", () => {
 
 describe("getBestModelFor", () => {
   it("returns a model with the requested capability within RAM constraints", () => {
-    const model = getBestModelFor("chat", 8);
+    const model = getBestModelFor("text", 8);
     if (model) {
-      expect(model.capabilities).toContain("chat");
+      expect(model.capabilities).toContain("text");
       expect(model.ramMin).toBeLessThanOrEqual(8);
     }
   });

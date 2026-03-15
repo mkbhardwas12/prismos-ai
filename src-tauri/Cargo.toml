@@ -64,6 +64,9 @@ sysinfo = "0.30"
 # Vendored OpenSSL for Android cross-compilation
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 default = []
 vendored-ssl = ["openssl"]

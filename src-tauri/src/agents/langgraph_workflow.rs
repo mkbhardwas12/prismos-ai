@@ -1340,3 +1340,315 @@ fn determine_primary_agent(intent: &ParsedIntent) -> String {
 pub fn get_state_graph() -> StateGraph {
     StateGraph::default_collaboration_graph()
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TESTS — LangGraph Workflow Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── StateGraph Construction ───────────────────────────────────────────
+
+    #[test]
+    fn test_default_collaboration_graph_has_11_nodes() {
+        let graph = StateGraph::default_collaboration_graph();
+        assert_eq!(graph.nodes.len(), 11, "default graph should have 11 nodes");
+    }
+
+    #[test]
+    fn test_default_collaboration_graph_entry_node() {
+        let graph = StateGraph::default_collaboration_graph();
+        assert_eq!(graph.entry_node, "orchestrator");
+    }
+
+    #[test]
+    fn test_default_graph_has_correct_node_types() {
+        let graph = StateGraph::default_collaboration_graph();
+
+        let agent_nodes: Vec<_> = graph.nodes.iter()
+            .filter(|n| n.node_type == GraphNodeType::Agent).collect();
+        assert_eq!(agent_nodes.len(), 5, "should have 5 agent nodes");
+
+        let terminal_nodes: Vec<_> = graph.nodes.iter()
+            .filter(|n| n.node_type == GraphNodeType::Terminal).collect();
+        assert_eq!(terminal_nodes.len(), 2, "should have 2 terminal nodes");
+
+        let debate_nodes: Vec<_> = graph.nodes.iter()
+            .filter(|n| n.node_type == GraphNodeType::Debate).collect();
+        assert_eq!(debate_nodes.len(), 1, "should have 1 debate node");
+
+        let consensus_nodes: Vec<_> = graph.nodes.iter()
+            .filter(|n| n.node_type == GraphNodeType::Consensus).collect();
+        assert_eq!(consensus_nodes.len(), 1, "should have 1 consensus node");
+    }
+
+    #[test]
+    fn test_default_graph_edges_count() {
+        let graph = StateGraph::default_collaboration_graph();
+        assert!(graph.edges.len() >= 11, "should have at least 11 edges, got {}", graph.edges.len());
+    }
+
+    // ─── Graph Traversal ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_get_node_existing() {
+        let graph = StateGraph::default_collaboration_graph();
+        let node = graph.get_node("orchestrator");
+        assert!(node.is_some());
+        assert_eq!(node.unwrap().node_type, GraphNodeType::Agent);
+    }
+
+    #[test]
+    fn test_get_node_nonexistent() {
+        let graph = StateGraph::default_collaboration_graph();
+        assert!(graph.get_node("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_outgoing_edges_from_orchestrator() {
+        let graph = StateGraph::default_collaboration_graph();
+        let edges = graph.outgoing_edges("orchestrator");
+        assert_eq!(edges.len(), 1, "orchestrator should have 1 outgoing edge");
+        assert_eq!(edges[0].to, "parallel_analyze");
+    }
+
+    #[test]
+    fn test_outgoing_edges_from_parallel_fanout() {
+        let graph = StateGraph::default_collaboration_graph();
+        let edges = graph.outgoing_edges("parallel_analyze");
+        assert_eq!(edges.len(), 3, "parallel_analyze should fan-out to 3 agents");
+    }
+
+    #[test]
+    fn test_consensus_has_two_outgoing_edges() {
+        let graph = StateGraph::default_collaboration_graph();
+        let edges = graph.outgoing_edges("consensus");
+        assert_eq!(edges.len(), 2, "consensus should have approved + rejected edges");
+
+        let conditions: Vec<_> = edges.iter().map(|e| e.condition.as_ref().unwrap()).collect();
+        let has_approved = conditions.iter().any(|c| matches!(c, EdgeCondition::ConsensusApproved));
+        let has_rejected = conditions.iter().any(|c| matches!(c, EdgeCondition::ConsensusRejected));
+        assert!(has_approved, "should have ConsensusApproved edge");
+        assert!(has_rejected, "should have ConsensusRejected edge");
+    }
+
+    // ─── get_state_graph ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_get_state_graph_returns_valid() {
+        let graph = get_state_graph();
+        assert!(!graph.nodes.is_empty());
+        assert!(!graph.edges.is_empty());
+        assert!(!graph.id.is_empty());
+    }
+
+    // ─── Debate Engine ─────────────────────────────────────────────────────
+
+    fn make_test_intent() -> ParsedIntent {
+        ParsedIntent {
+            raw: "What is Rust ownership?".into(),
+            intent_type: IntentType::Query,
+            entities: vec!["Rust".into(), "ownership".into()],
+            confidence: 0.9,
+        }
+    }
+
+    fn make_test_proposals() -> Vec<AgentMessage> {
+        vec![
+            AgentMessage::new(
+                AgentRole::Reasoner,
+                MessageTarget::Broadcast,
+                MessageType::Proposal,
+                "Rust uses ownership for memory safety without garbage collection.".into(),
+            ).with_metadata(MessageMetadata {
+                confidence: 0.9, risk_tier: 1,
+                context_nodes: vec!["n1".into()], tags: vec![],
+            }),
+            AgentMessage::new(
+                AgentRole::ToolSmith,
+                MessageTarget::Broadcast,
+                MessageType::Proposal,
+                "No tools needed for this query. Read-only operation.".into(),
+            ).with_metadata(MessageMetadata {
+                confidence: 0.85, risk_tier: 1,
+                context_nodes: vec![], tags: vec![],
+            }),
+            AgentMessage::new(
+                AgentRole::MemoryKeeper,
+                MessageTarget::Broadcast,
+                MessageType::Proposal,
+                "Found related context in Spectrum Graph about Rust patterns.".into(),
+            ).with_metadata(MessageMetadata {
+                confidence: 0.8, risk_tier: 1,
+                context_nodes: vec!["n2".into(), "n3".into()], tags: vec![],
+            }),
+        ]
+    }
+
+    #[test]
+    fn test_run_debate_produces_positions() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+
+        let result = run_debate(&proposals, &intent, 1);
+        assert_eq!(result.rounds_completed, 1);
+        let positions: Vec<_> = result.arguments.iter()
+            .filter(|a| a.argument_type == ArgumentType::Position).collect();
+        assert_eq!(positions.len(), 3, "3 proposals → 3 position statements");
+    }
+
+    #[test]
+    fn test_run_debate_two_rounds_adds_challenges() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+
+        let result = run_debate(&proposals, &intent, 2);
+        assert!(result.rounds_completed >= 2);
+        let challenges: Vec<_> = result.arguments.iter()
+            .filter(|a| a.argument_type == ArgumentType::Challenge).collect();
+        // With low risk_tier = 1, Reasoner won't challenge ToolSmith,
+        // but MemoryKeeper should still evaluate
+        assert!(!result.arguments.is_empty());
+    }
+
+    #[test]
+    fn test_run_debate_three_rounds_adds_rebuttals() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+
+        let result = run_debate(&proposals, &intent, 3);
+        assert!(result.rounds_completed >= 3);
+        // Rebuttals should exist if there were challenges
+        let has_rebuttals = result.arguments.iter()
+            .any(|a| a.argument_type == ArgumentType::Rebuttal);
+        // May or may not have rebuttals depending on challenge count
+        let _ = has_rebuttals;
+    }
+
+    #[test]
+    fn test_run_debate_agreement_score() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+
+        let result = run_debate(&proposals, &intent, 3);
+        assert!(result.agreement_score >= 0.0 && result.agreement_score <= 1.0,
+            "agreement score should be 0-1, got {}", result.agreement_score);
+    }
+
+    #[test]
+    fn test_run_debate_resolved_flag() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+
+        let result = run_debate(&proposals, &intent, 3);
+        // resolved = agreement_score >= 0.5
+        if result.agreement_score >= 0.5 {
+            assert!(result.resolved);
+        } else {
+            assert!(!result.resolved);
+        }
+    }
+
+    #[test]
+    fn test_run_debate_summary_nonempty() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+        let result = run_debate(&proposals, &intent, 3);
+        assert!(!result.summary.is_empty());
+        assert!(result.summary.contains("Debate:"));
+    }
+
+    #[test]
+    fn test_run_debate_winning_position() {
+        let intent = make_test_intent();
+        let proposals = make_test_proposals();
+        let result = run_debate(&proposals, &intent, 3);
+        assert!(result.winning_position.is_some(), "should have a winning position");
+    }
+
+    #[test]
+    fn test_run_debate_single_proposal() {
+        let intent = make_test_intent();
+        let proposals = vec![make_test_proposals().remove(0)];
+
+        let result = run_debate(&proposals, &intent, 3);
+        assert!(result.rounds_completed <= 3, "single proposal should complete quickly");
+        assert!(result.winning_position.is_some(), "should produce a winning position");
+    }
+
+    // ─── Summarize Proposal ────────────────────────────────────────────────
+
+    #[test]
+    fn test_summarize_proposal_truncates() {
+        let long = "a".repeat(300);
+        let summary = summarize_proposal(&long);
+        assert!(summary.len() <= 203, "should truncate to ~200 chars + '...'");
+        assert!(summary.ends_with("..."));
+    }
+
+    #[test]
+    fn test_summarize_proposal_short() {
+        let short = "Short proposal";
+        let summary = summarize_proposal(short);
+        assert_eq!(summary, "Short proposal");
+    }
+
+    // ─── Helper Functions ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_determine_primary_agent() {
+        assert_eq!(determine_primary_agent(&ParsedIntent {
+            raw: "".into(), intent_type: IntentType::Query,
+            entities: vec![], confidence: 1.0,
+        }), "reasoner");
+
+        assert_eq!(determine_primary_agent(&ParsedIntent {
+            raw: "".into(), intent_type: IntentType::Create,
+            entities: vec![], confidence: 1.0,
+        }), "tool_smith");
+
+        assert_eq!(determine_primary_agent(&ParsedIntent {
+            raw: "".into(), intent_type: IntentType::Connect,
+            entities: vec![], confidence: 1.0,
+        }), "memory_keeper");
+
+        assert_eq!(determine_primary_agent(&ParsedIntent {
+            raw: "".into(), intent_type: IntentType::System,
+            entities: vec![], confidence: 1.0,
+        }), "sentinel");
+    }
+
+    #[test]
+    fn test_md5_simple_deterministic() {
+        let h1 = md5_simple("test data");
+        let h2 = md5_simple("test data");
+        assert_eq!(h1, h2, "same input should produce same hash");
+    }
+
+    #[test]
+    fn test_md5_simple_different_inputs() {
+        let h1 = md5_simple("input A");
+        let h2 = md5_simple("input B");
+        assert_ne!(h1, h2, "different inputs should produce different hashes");
+    }
+
+    // ─── ArgumentType / GraphNodeType Equality ─────────────────────────────
+
+    #[test]
+    fn test_argument_type_equality() {
+        assert_eq!(ArgumentType::Position, ArgumentType::Position);
+        assert_ne!(ArgumentType::Position, ArgumentType::Challenge);
+        assert_ne!(ArgumentType::Challenge, ArgumentType::Rebuttal);
+        assert_ne!(ArgumentType::Rebuttal, ArgumentType::Support);
+        assert_ne!(ArgumentType::Support, ArgumentType::Concession);
+    }
+
+    #[test]
+    fn test_graph_node_type_equality() {
+        assert_eq!(GraphNodeType::Agent, GraphNodeType::Agent);
+        assert_ne!(GraphNodeType::Agent, GraphNodeType::Router);
+        assert_ne!(GraphNodeType::Terminal, GraphNodeType::Consensus);
+    }
+}

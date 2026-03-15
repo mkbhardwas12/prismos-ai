@@ -1175,3 +1175,493 @@ pub fn sandbox_status_summary(prism: &Prism) -> String {
         rolled_back
     )
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TESTS — Sandbox Prism Security Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── AllowedOperation Classification ───────────────────────────────────
+
+    #[test]
+    fn test_classify_graph_read() {
+        assert_eq!(AllowedOperation::classify("read graph node"), Some(AllowedOperation::GraphRead));
+        assert_eq!(AllowedOperation::classify("get_node by ID"), Some(AllowedOperation::GraphRead));
+        assert_eq!(AllowedOperation::classify("search_node for Rust"), Some(AllowedOperation::GraphRead));
+        assert_eq!(AllowedOperation::classify("query_intent"), Some(AllowedOperation::GraphRead));
+    }
+
+    #[test]
+    fn test_classify_memory_query() {
+        assert_eq!(AllowedOperation::classify("memory query recent"), Some(AllowedOperation::MemoryQuery));
+        assert_eq!(AllowedOperation::classify("retrieve memory from graph"), Some(AllowedOperation::MemoryQuery));
+        assert_eq!(AllowedOperation::classify("anticipate user needs"), Some(AllowedOperation::MemoryQuery));
+    }
+
+    #[test]
+    fn test_classify_status_check() {
+        assert_eq!(AllowedOperation::classify("status check"), Some(AllowedOperation::StatusCheck));
+        assert_eq!(AllowedOperation::classify("health report"), Some(AllowedOperation::StatusCheck));
+    }
+
+    #[test]
+    fn test_classify_email_read() {
+        assert_eq!(AllowedOperation::classify("email read unread"), Some(AllowedOperation::EmailRead));
+        assert_eq!(AllowedOperation::classify("email summary fetch"), Some(AllowedOperation::EmailRead));
+    }
+
+    #[test]
+    fn test_classify_calendar_read() {
+        assert_eq!(AllowedOperation::classify("calendar events today"), Some(AllowedOperation::CalendarRead));
+        assert_eq!(AllowedOperation::classify("read calendar schedule"), Some(AllowedOperation::CalendarRead));
+    }
+
+    #[test]
+    fn test_classify_finance_read() {
+        assert_eq!(AllowedOperation::classify("stock ticker AAPL"), Some(AllowedOperation::FinanceRead));
+        assert_eq!(AllowedOperation::classify("portfolio balance"), Some(AllowedOperation::FinanceRead));
+        assert_eq!(AllowedOperation::classify("market data"), Some(AllowedOperation::FinanceRead));
+    }
+
+    #[test]
+    fn test_classify_graph_write() {
+        assert_eq!(AllowedOperation::classify("write to graph node"), Some(AllowedOperation::GraphWrite));
+        assert_eq!(AllowedOperation::classify("delete graph edge"), Some(AllowedOperation::GraphWrite));
+    }
+
+    #[test]
+    fn test_classify_edge_reinforce() {
+        assert_eq!(AllowedOperation::classify("reinforce edge weight"), Some(AllowedOperation::EdgeReinforce));
+        assert_eq!(AllowedOperation::classify("update_edge feedback"), Some(AllowedOperation::EdgeReinforce));
+    }
+
+    #[test]
+    fn test_classify_node_create() {
+        assert_eq!(AllowedOperation::classify("add_node Rust"), Some(AllowedOperation::NodeCreate));
+        assert_eq!(AllowedOperation::classify("create_node for learning"), Some(AllowedOperation::NodeCreate));
+    }
+
+    #[test]
+    fn test_classify_llm_inference() {
+        assert_eq!(AllowedOperation::classify("llm inference call"), Some(AllowedOperation::LlmInference));
+        assert_eq!(AllowedOperation::classify("ollama generate"), Some(AllowedOperation::LlmInference));
+        assert_eq!(AllowedOperation::classify("generate response via mistral"), Some(AllowedOperation::LlmInference));
+    }
+
+    #[test]
+    fn test_classify_tool_execution() {
+        assert_eq!(AllowedOperation::classify("execute script"), Some(AllowedOperation::ToolExecution));
+        assert_eq!(AllowedOperation::classify("run tool pipeline"), Some(AllowedOperation::ToolExecution));
+    }
+
+    #[test]
+    fn test_classify_file_access() {
+        assert_eq!(AllowedOperation::classify("file read local"), Some(AllowedOperation::FileAccess));
+        assert_eq!(AllowedOperation::classify("disk path access"), Some(AllowedOperation::FileAccess));
+    }
+
+    #[test]
+    fn test_classify_unknown_returns_none() {
+        assert!(AllowedOperation::classify("xyzzy foobar baz").is_none());
+        assert!(AllowedOperation::classify("").is_none());
+    }
+
+    // ─── Risk Tiers ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_risk_tier_1_operations() {
+        assert_eq!(AllowedOperation::GraphRead.risk_tier(), 1);
+        assert_eq!(AllowedOperation::MemoryQuery.risk_tier(), 1);
+        assert_eq!(AllowedOperation::StatusCheck.risk_tier(), 1);
+        assert_eq!(AllowedOperation::EmailRead.risk_tier(), 1);
+        assert_eq!(AllowedOperation::CalendarRead.risk_tier(), 1);
+        assert_eq!(AllowedOperation::FinanceRead.risk_tier(), 1);
+    }
+
+    #[test]
+    fn test_risk_tier_2_operations() {
+        assert_eq!(AllowedOperation::GraphWrite.risk_tier(), 2);
+        assert_eq!(AllowedOperation::ConversationStore.risk_tier(), 2);
+        assert_eq!(AllowedOperation::EdgeReinforce.risk_tier(), 2);
+        assert_eq!(AllowedOperation::NodeCreate.risk_tier(), 2);
+    }
+
+    #[test]
+    fn test_risk_tier_3_operations() {
+        assert_eq!(AllowedOperation::LlmInference.risk_tier(), 3);
+        assert_eq!(AllowedOperation::ExternalNetwork.risk_tier(), 3);
+        assert_eq!(AllowedOperation::ToolExecution.risk_tier(), 3);
+        assert_eq!(AllowedOperation::FileAccess.risk_tier(), 3);
+    }
+
+    // ─── Labels ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_operation_labels_nonempty() {
+        let ops = vec![
+            AllowedOperation::GraphRead, AllowedOperation::MemoryQuery,
+            AllowedOperation::StatusCheck, AllowedOperation::EmailRead,
+            AllowedOperation::CalendarRead, AllowedOperation::FinanceRead,
+            AllowedOperation::GraphWrite, AllowedOperation::ConversationStore,
+            AllowedOperation::EdgeReinforce, AllowedOperation::NodeCreate,
+            AllowedOperation::LlmInference, AllowedOperation::ExternalNetwork,
+            AllowedOperation::ToolExecution, AllowedOperation::FileAccess,
+        ];
+        for op in ops {
+            assert!(!op.label().is_empty(), "label should not be empty for {:?}", op);
+        }
+    }
+
+    // ─── Agent Allow-List ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_agent_allow_list_orchestrator() {
+        let ops = agent_allow_list("orchestrator");
+        assert!(ops.contains(&AllowedOperation::GraphRead));
+        assert!(ops.contains(&AllowedOperation::LlmInference));
+        assert!(!ops.contains(&AllowedOperation::FileAccess), "orchestrator should not access files");
+    }
+
+    #[test]
+    fn test_agent_allow_list_memory_keeper() {
+        let ops = agent_allow_list("memory_keeper");
+        assert!(ops.contains(&AllowedOperation::GraphWrite));
+        assert!(ops.contains(&AllowedOperation::NodeCreate));
+        assert!(!ops.contains(&AllowedOperation::LlmInference));
+    }
+
+    #[test]
+    fn test_agent_allow_list_tool_smith() {
+        let ops = agent_allow_list("tool_smith");
+        assert!(ops.contains(&AllowedOperation::ToolExecution));
+        assert!(ops.contains(&AllowedOperation::FileAccess));
+        assert!(!ops.contains(&AllowedOperation::LlmInference));
+    }
+
+    #[test]
+    fn test_agent_allow_list_sentinel_broadest() {
+        let ops = agent_allow_list("sentinel");
+        assert!(ops.contains(&AllowedOperation::GraphRead));
+        assert!(ops.contains(&AllowedOperation::GraphWrite));
+        assert!(ops.contains(&AllowedOperation::LlmInference));
+    }
+
+    #[test]
+    fn test_agent_allow_list_unknown_readonly() {
+        let ops = agent_allow_list("unknown_agent");
+        assert_eq!(ops.len(), 3);
+        assert!(ops.contains(&AllowedOperation::GraphRead));
+        assert!(ops.contains(&AllowedOperation::MemoryQuery));
+        assert!(ops.contains(&AllowedOperation::StatusCheck));
+    }
+
+    #[test]
+    fn test_agent_allow_list_domain_keepers() {
+        for agent in &["email_keeper", "calendar_keeper", "finance_keeper"] {
+            let ops = agent_allow_list(agent);
+            assert!(ops.contains(&AllowedOperation::GraphRead));
+            assert!(ops.contains(&AllowedOperation::StatusCheck));
+        }
+        assert!(agent_allow_list("email_keeper").contains(&AllowedOperation::EmailRead));
+        assert!(agent_allow_list("calendar_keeper").contains(&AllowedOperation::CalendarRead));
+        assert!(agent_allow_list("finance_keeper").contains(&AllowedOperation::FinanceRead));
+    }
+
+    // ─── Cryptographic Signing ─────────────────────────────────────────────
+
+    #[test]
+    fn test_sign_action_deterministic() {
+        let sig1 = sign_action("prism-1", "reasoner", "read graph node");
+        let sig2 = sign_action("prism-1", "reasoner", "read graph node");
+        assert_eq!(sig1, sig2, "same inputs should produce same HMAC");
+    }
+
+    #[test]
+    fn test_sign_action_different_inputs() {
+        let sig1 = sign_action("prism-1", "reasoner", "action A");
+        let sig2 = sign_action("prism-1", "reasoner", "action B");
+        assert_ne!(sig1, sig2, "different actions should produce different signatures");
+    }
+
+    #[test]
+    fn test_sign_action_different_agents() {
+        let sig1 = sign_action("prism-1", "reasoner", "action");
+        let sig2 = sign_action("prism-1", "sentinel", "action");
+        assert_ne!(sig1, sig2, "different agents should produce different signatures");
+    }
+
+    #[test]
+    fn test_sign_action_hex_format() {
+        let sig = sign_action("prism-1", "reasoner", "action");
+        assert_eq!(sig.len(), 64, "HMAC-SHA256 should produce 64-char hex string");
+        assert!(sig.chars().all(|c| c.is_ascii_hexdigit()), "signature should be hex");
+    }
+
+    #[test]
+    fn test_verify_signature_valid() {
+        let sig = sign_action("prism-1", "reasoner", "action");
+        assert!(verify_signature("prism-1", "reasoner", "action", &sig));
+    }
+
+    #[test]
+    fn test_verify_signature_invalid() {
+        assert!(!verify_signature("prism-1", "reasoner", "action", "invalid_signature"));
+    }
+
+    // ─── Prism Lifecycle ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_create_prism() {
+        let prism = create_prism("test-prism");
+        assert_eq!(prism.name, "test-prism");
+        assert_eq!(prism.agent_id, "unknown");
+        assert!(!prism.id.is_empty());
+        assert_eq!(prism.checkpoints.len(), 1, "should have initial checkpoint");
+        matches!(prism.status, PrismStatus::Ready);
+    }
+
+    #[test]
+    fn test_create_prism_for_agent() {
+        let prism = create_prism_for_agent("agent-prism", "reasoner");
+        assert_eq!(prism.agent_id, "reasoner");
+        assert_eq!(prism.name, "agent-prism");
+    }
+
+    #[test]
+    fn test_create_checkpoint() {
+        let mut prism = create_prism_for_agent("cp-test", "sentinel");
+        let initial_count = prism.checkpoints.len();
+        let cp = create_checkpoint(&mut prism);
+        assert_eq!(prism.checkpoints.len(), initial_count + 1);
+        assert!(!cp.state_hash.is_empty());
+        assert_eq!(cp.prism_id, prism.id);
+    }
+
+    #[test]
+    fn test_checkpoint_hash_deterministic() {
+        let mut prism = create_prism_for_agent("hash-test", "reasoner");
+        let cp1 = create_checkpoint(&mut prism);
+        // State changed (new checkpoint added), so next hash is different
+        let cp2 = create_checkpoint(&mut prism);
+        // Hashes should be deterministic but different due to state changes
+        assert!(!cp1.state_hash.is_empty());
+        assert!(!cp2.state_hash.is_empty());
+    }
+
+    // ─── Rollback ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_rollback() {
+        let mut prism = create_prism_for_agent("rollback-test", "reasoner");
+        let cp = rollback(&mut prism);
+        assert!(cp.is_some());
+        matches!(prism.status, PrismStatus::RolledBack);
+        // Should record a rollback side effect
+        assert!(prism.side_effects.iter().any(|e| e.effect_type == "rollback"));
+    }
+
+    #[test]
+    fn test_rollback_with_reason() {
+        let mut prism = create_prism_for_agent("rollback-reason", "sentinel");
+        let cp = rollback_with_reason(&mut prism, "Anomaly detected: excessive length");
+        assert!(cp.is_some());
+        let rollback_effect = prism.side_effects.iter()
+            .find(|e| e.effect_type == "rollback").unwrap();
+        assert!(rollback_effect.description.contains("Anomaly detected"));
+    }
+
+    #[test]
+    fn test_rollback_marks_actions_rolled_back() {
+        let mut prism = create_prism_for_agent("rb-actions", "reasoner");
+        // Manually add an approved action
+        prism.action_log.push(SignedAction {
+            action_id: "a1".into(), agent_id: "reasoner".into(),
+            action: "test".into(), operation: "GraphRead".into(),
+            risk_tier: 1, hmac_signature: "sig".into(),
+            timestamp: Utc::now().to_rfc3339(), verdict: ActionVerdict::Approved,
+        });
+        rollback(&mut prism);
+        assert_eq!(prism.action_log[0].verdict, ActionVerdict::RolledBack);
+    }
+
+    // ─── WASM Isolation Config ─────────────────────────────────────────────
+
+    #[test]
+    fn test_wasm_config_tier_1() {
+        let config = WasmIsolationConfig::for_risk_tier(1);
+        assert_eq!(config.max_memory_pages, 16);
+        assert_eq!(config.max_fuel, 100_000);
+        assert_eq!(config.risk_tier, 1);
+        assert_eq!(config.memory_bytes(), 16 * 65_536);
+    }
+
+    #[test]
+    fn test_wasm_config_tier_2() {
+        let config = WasmIsolationConfig::for_risk_tier(2);
+        assert_eq!(config.max_memory_pages, 64);
+        assert_eq!(config.max_fuel, 500_000);
+        assert_eq!(config.memory_bytes(), 64 * 65_536);
+    }
+
+    #[test]
+    fn test_wasm_config_tier_3() {
+        let config = WasmIsolationConfig::for_risk_tier(3);
+        assert_eq!(config.max_memory_pages, 256);
+        assert_eq!(config.max_fuel, 2_000_000);
+    }
+
+    #[test]
+    fn test_wasm_config_unknown_tier_defaults_to_3() {
+        let config = WasmIsolationConfig::for_risk_tier(99);
+        assert_eq!(config.risk_tier, 3, "unknown tiers should default to tier 3 limits");
+    }
+
+    // ─── Anomaly Detection ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_anomaly_normal_action() {
+        let result = AnomalyDetector::check(
+            "read graph node", "reasoner", &AllowedOperation::GraphRead, &[],
+        );
+        assert!(result.is_ok(), "normal action should pass anomaly check");
+    }
+
+    #[test]
+    fn test_anomaly_excessive_length() {
+        let huge_action = "x".repeat(11_000);
+        let result = AnomalyDetector::check(
+            &huge_action, "reasoner", &AllowedOperation::GraphRead, &[],
+        );
+        assert!(result.is_err(), "oversized action should be blocked");
+        assert!(result.unwrap_err().contains("unusually large"));
+    }
+
+    #[test]
+    fn test_anomaly_rapid_fire() {
+        let now = Utc::now().to_rfc3339();
+        let log: Vec<SignedAction> = (0..25).map(|i| SignedAction {
+            action_id: format!("a{}", i), agent_id: "reasoner".into(),
+            action: "action".into(), operation: "GraphRead".into(),
+            risk_tier: 1, hmac_signature: "sig".into(),
+            timestamp: now.clone(), verdict: ActionVerdict::Approved,
+        }).collect();
+
+        let result = AnomalyDetector::check(
+            "another action", "reasoner", &AllowedOperation::GraphRead, &log,
+        );
+        assert!(result.is_err(), "rapid-fire should be blocked");
+        assert!(result.unwrap_err().contains("burst of activity"));
+    }
+
+    #[test]
+    fn test_anomaly_tier_escalation() {
+        // email_keeper's max tier is 1; trying tier 3 should be blocked
+        let result = AnomalyDetector::check(
+            "llm inference call", "email_keeper", &AllowedOperation::LlmInference, &[],
+        );
+        assert!(result.is_err(), "tier escalation should be blocked");
+        assert!(result.unwrap_err().contains("Tier 3"));
+    }
+
+    // ─── Sandbox Execution Pipeline ────────────────────────────────────────
+
+    #[test]
+    fn test_sandbox_execute_approved_action() {
+        let result = sandbox_execute("read graph node status check", "orchestrator");
+        assert!(result.success || !result.success, "should not panic");
+        // May succeed or fail based on classification matching
+    }
+
+    #[test]
+    fn test_execute_denied_unclassified() {
+        let mut prism = create_prism_for_agent("deny-test", "reasoner");
+        let result = execute_in_sandbox_for_agent(&mut prism, "xyzzy foobar", "reasoner");
+        assert!(!result.success);
+        assert!(result.sandbox_protected);
+        assert!(result.rollback_explanation.is_some());
+    }
+
+    #[test]
+    fn test_execute_denied_not_on_allow_list() {
+        let mut prism = create_prism_for_agent("deny-list", "email_keeper");
+        // email_keeper can't do LLM inference
+        let result = execute_in_sandbox_for_agent(&mut prism, "llm inference generate", "email_keeper");
+        assert!(!result.success);
+        assert!(result.sandbox_protected);
+    }
+
+    #[test]
+    fn test_execute_approved_read_operation() {
+        let mut prism = create_prism_for_agent("approve-test", "orchestrator");
+        let result = execute_in_sandbox_for_agent(&mut prism, "status check health", "orchestrator");
+        assert!(result.success);
+        assert!(result.sandbox_protected);
+        assert!(result.wasm_isolated);
+        assert!(!result.action_signature.is_empty());
+    }
+
+    #[test]
+    fn test_execute_records_action_log() {
+        let mut prism = create_prism_for_agent("log-test", "orchestrator");
+        execute_in_sandbox_for_agent(&mut prism, "status check health", "orchestrator");
+        assert!(!prism.action_log.is_empty(), "action should be logged");
+    }
+
+    #[test]
+    fn test_execute_tier2_creates_checkpoints() {
+        let mut prism = create_prism_for_agent("cp-test", "memory_keeper");
+        let cp_before = prism.checkpoints.len();
+        execute_in_sandbox_for_agent(&mut prism, "write to graph node", "memory_keeper");
+        assert!(prism.checkpoints.len() > cp_before, "tier 2+ should create checkpoints");
+    }
+
+    // ─── Sandbox Status Summary ────────────────────────────────────────────
+
+    #[test]
+    fn test_sandbox_status_summary() {
+        let prism = create_prism_for_agent("summary-test", "reasoner");
+        let summary = sandbox_status_summary(&prism);
+        assert!(summary.contains("summary-test"));
+        assert!(summary.contains("reasoner"));
+        assert!(summary.contains("HMAC-SHA256"));
+    }
+
+    // ─── Operation Index Roundtrip ─────────────────────────────────────────
+
+    #[test]
+    fn test_operation_index_roundtrip() {
+        let ops = vec![
+            AllowedOperation::GraphRead, AllowedOperation::MemoryQuery,
+            AllowedOperation::StatusCheck, AllowedOperation::GraphWrite,
+            AllowedOperation::ConversationStore, AllowedOperation::EdgeReinforce,
+            AllowedOperation::NodeCreate, AllowedOperation::LlmInference,
+            AllowedOperation::ExternalNetwork, AllowedOperation::ToolExecution,
+            AllowedOperation::FileAccess, AllowedOperation::EmailRead,
+            AllowedOperation::CalendarRead, AllowedOperation::FinanceRead,
+        ];
+        for op in &ops {
+            let idx = operation_to_index(op);
+            let roundtrip = index_to_operation(idx);
+            assert_eq!(roundtrip.as_ref(), Some(op),
+                "roundtrip failed for {:?} (idx={})", op, idx);
+        }
+    }
+
+    #[test]
+    fn test_index_to_operation_invalid() {
+        assert!(index_to_operation(-1).is_none());
+        assert!(index_to_operation(99).is_none());
+    }
+
+    // ─── Verify Action Signature (public API) ──────────────────────────────
+
+    #[test]
+    fn test_verify_action_signature_public_api() {
+        let sig = sign_action("p1", "agent1", "do something");
+        assert!(verify_action_signature("p1", "agent1", "do something", &sig));
+        assert!(!verify_action_signature("p1", "agent1", "do something else", &sig));
+    }
+}

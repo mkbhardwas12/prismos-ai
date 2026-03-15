@@ -3434,3 +3434,724 @@ impl SpectrumGraph {
         serde_json::to_string_pretty(&package).map_err(|e| e.into())
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TESTS — Spectrum Graph Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    /// Create a SpectrumGraph backed by a temp directory (auto-cleaned)
+    fn test_graph() -> (SpectrumGraph, tempfile::TempDir) {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let graph = SpectrumGraph::new(dir.path()).expect("failed to create graph");
+        (graph, dir)
+    }
+
+    // ─── Construction & Schema ─────────────────────────────────────────────
+
+    #[test]
+    fn test_new_creates_empty_graph() {
+        let (g, _dir) = test_graph();
+        let (nodes, edges) = g.stats().unwrap();
+        assert_eq!(nodes, 0);
+        assert_eq!(edges, 0);
+    }
+
+    #[test]
+    fn test_seed_demo_data_populates_graph() {
+        let (g, _dir) = test_graph();
+        assert!(g.seed_demo_data().unwrap()); // returns true on first call
+        let (nodes, edges) = g.stats().unwrap();
+        assert!(nodes >= 10, "expected ≥10 demo nodes, got {}", nodes);
+        assert!(edges >= 8, "expected ≥8 demo edges, got {}", edges);
+        // Second call should skip (graph already has data)
+        assert!(!g.seed_demo_data().unwrap());
+    }
+
+    // ─── Node CRUD ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_add_and_get_node() {
+        let (g, _dir) = test_graph();
+        let node = g.add_node("Test Label", "Some content", "work").unwrap();
+        assert_eq!(node.label, "Test Label");
+        assert_eq!(node.node_type, "work");
+        assert_eq!(node.layer, "context"); // default layer
+
+        let fetched = g.get_node(&node.id).unwrap().unwrap();
+        assert_eq!(fetched.label, "Test Label");
+        assert_eq!(fetched.access_count, 1); // get_node increments
+    }
+
+    #[test]
+    fn test_add_node_with_layer() {
+        let (g, _dir) = test_graph();
+        let node = g.add_node_with_layer("Core Node", "core stuff", "learning", "core").unwrap();
+        assert_eq!(node.layer, "core");
+    }
+
+    #[test]
+    fn test_add_node_deduplicates_same_label_and_type() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("Budget", "v1 content", "finance").unwrap();
+        let n2 = g.add_node("Budget", "v2 content", "finance").unwrap();
+        // Should return same node ID (deduplicated)
+        assert_eq!(n1.id, n2.id);
+        let (count, _) = g.stats().unwrap();
+        assert_eq!(count, 1, "duplicate node was created");
+    }
+
+    #[test]
+    fn test_search_nodes() {
+        let (g, _dir) = test_graph();
+        g.add_node("Rust Async Patterns", "async/await ownership", "learning").unwrap();
+        g.add_node("Cooking Recipes", "pasta pizza bread", "note").unwrap();
+
+        let results = g.search_nodes("Rust").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].label, "Rust Async Patterns");
+    }
+
+    #[test]
+    fn test_delete_node() {
+        let (g, _dir) = test_graph();
+        let node = g.add_node("Temp", "delete me", "note").unwrap();
+        g.delete_node(&node.id).unwrap();
+        assert!(g.get_node(&node.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_update_node() {
+        let (g, _dir) = test_graph();
+        let node = g.add_node("Old Title", "old content", "note").unwrap();
+        g.update_node(&node.id, "New Title", "new content").unwrap();
+        let updated = g.get_node(&node.id).unwrap().unwrap();
+        assert_eq!(updated.label, "New Title");
+        assert_eq!(updated.content, "new content");
+    }
+
+    #[test]
+    fn test_get_all_nodes_populates_connections() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "content a", "work").unwrap();
+        let n2 = g.add_node("B", "content b", "work").unwrap();
+        g.add_edge(&n1.id, &n2.id, "related", 1.0).unwrap();
+
+        let nodes = g.get_all_nodes().unwrap();
+        // At least one node should have connections populated
+        let connected = nodes.iter().any(|n| !n.connections.is_empty());
+        assert!(connected, "connections not populated in get_all_nodes");
+    }
+
+    // ─── Edge Operations ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_add_edge() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        let edge = g.add_edge(&n1.id, &n2.id, "supports", 0.8).unwrap();
+        assert_eq!(edge.relation, "supports");
+        assert!((edge.weight - 0.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_edge_weight_clamped() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        let edge = g.add_edge(&n1.id, &n2.id, "test", 999.0).unwrap();
+        assert!(edge.weight <= MAX_EDGE_WEIGHT, "weight should be clamped to MAX_EDGE_WEIGHT");
+    }
+
+    #[test]
+    fn test_get_or_create_edge_creates_new() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("X", "x", "note").unwrap();
+        let n2 = g.add_node("Y", "y", "note").unwrap();
+        let (edge, created) = g.get_or_create_edge(&n1.id, &n2.id, "linked").unwrap();
+        assert!(created);
+        assert_eq!(edge.relation, "linked");
+    }
+
+    #[test]
+    fn test_get_or_create_edge_returns_existing() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("X", "x", "note").unwrap();
+        let n2 = g.add_node("Y", "y", "note").unwrap();
+        let (e1, created1) = g.get_or_create_edge(&n1.id, &n2.id, "linked").unwrap();
+        let (e2, created2) = g.get_or_create_edge(&n1.id, &n2.id, "linked").unwrap();
+        assert!(created1);
+        assert!(!created2, "second call should return existing edge");
+        assert_eq!(e1.id, e2.id);
+    }
+
+    #[test]
+    fn test_update_edge_weight_reinforces() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        let edge = g.add_edge(&n1.id, &n2.id, "test", 1.0).unwrap();
+        let updated = g.update_edge_weight(&edge.id, 1.0).unwrap();
+        assert!(updated.weight > edge.weight, "positive signal should increase weight");
+        assert_eq!(updated.reinforcements, 1);
+        assert!(updated.momentum > 0.0, "momentum should be positive after positive signal");
+    }
+
+    #[test]
+    fn test_get_connections() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("Hub", "hub node", "work").unwrap();
+        let n2 = g.add_node("Spoke1", "spoke", "work").unwrap();
+        let n3 = g.add_node("Spoke2", "spoke", "work").unwrap();
+        g.add_edge(&n1.id, &n2.id, "connects", 1.0).unwrap();
+        g.add_edge(&n1.id, &n3.id, "connects", 0.5).unwrap();
+
+        let conns = g.get_connections(&n1.id).unwrap();
+        assert_eq!(conns.len(), 2);
+    }
+
+    #[test]
+    fn test_get_all_edges() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        g.add_edge(&n1.id, &n2.id, "e1", 1.0).unwrap();
+        let edges = g.get_all_edges().unwrap();
+        assert_eq!(edges.len(), 1);
+    }
+
+    // ─── Query Intent ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_query_intent_matches_nodes() {
+        let (g, _dir) = test_graph();
+        g.add_node("Rust Ownership", "Understanding Rust borrow checker and lifetimes", "learning").unwrap();
+        g.add_node("Cooking Pasta", "Italian pasta recipe with fresh tomatoes", "note").unwrap();
+
+        let results = g.query_intent("Rust lifetimes borrow", "Query", &[]).unwrap();
+        assert!(!results.is_empty(), "should match at least one node");
+        assert_eq!(results[0].node.label, "Rust Ownership");
+    }
+
+    // ─── Graph Operations ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_clear_graph() {
+        let (g, _dir) = test_graph();
+        g.add_node("A", "a", "work").unwrap();
+        g.add_node("B", "b", "work").unwrap();
+        let (nodes, edges) = g.clear_graph().unwrap();
+        assert_eq!(nodes, 2);
+        let (remaining, _) = g.stats().unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn test_get_full_graph() {
+        let (g, _dir) = test_graph();
+        g.add_node("A", "a", "work").unwrap();
+        let snapshot = g.get_full_graph().unwrap();
+        assert_eq!(snapshot.nodes.len(), 1);
+        assert_eq!(snapshot.stats.node_count, 1);
+    }
+
+    #[test]
+    fn test_get_metrics_on_empty_graph() {
+        let (g, _dir) = test_graph();
+        let metrics = g.get_metrics().unwrap();
+        assert_eq!(metrics.node_count, 0);
+        assert_eq!(metrics.edge_count, 0);
+        assert!((metrics.avg_edge_weight - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_metrics_with_data() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("Work", "daily tasks", "work").unwrap();
+        let n2 = g.add_node("Health", "exercise log", "health").unwrap();
+        g.add_edge(&n1.id, &n2.id, "enables", 2.0).unwrap();
+
+        let metrics = g.get_metrics().unwrap();
+        assert_eq!(metrics.node_count, 2);
+        assert_eq!(metrics.edge_count, 1);
+        assert!((metrics.avg_edge_weight - 2.0).abs() < 1e-9);
+        assert_eq!(metrics.facet_distribution.len(), 2);
+    }
+
+    // ─── Deduplication ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_deduplicate_nodes() {
+        let (g, _dir) = test_graph();
+        // Insert duplicates by bypassing the dedup in add_node
+        let now = Utc::now().to_rfc3339();
+        for i in 0..3 {
+            g.conn.execute(
+                "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                 VALUES (?1, 'Same', 'content', 'note', 'context', ?2, ?3, ?3, ?3)",
+                params![format!("dup-{}", i), i as u32, now],
+            ).unwrap();
+        }
+        let (before, _) = g.stats().unwrap();
+        assert_eq!(before, 3);
+
+        let merged = g.deduplicate_nodes().unwrap();
+        assert_eq!(merged, 2, "should have merged 2 duplicates");
+
+        let (after, _) = g.stats().unwrap();
+        assert_eq!(after, 1);
+    }
+
+    // ─── Temporal Helpers ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_temporal_decay_recent_edge() {
+        let (g, _dir) = test_graph();
+        let now = Utc::now().to_rfc3339();
+        let decay = g.calculate_temporal_decay(&now);
+        // Should be very close to 1.0 for a just-reinforced edge
+        assert!(decay > 0.99, "decay for recent edge should be ~1.0, got {}", decay);
+    }
+
+    #[test]
+    fn test_temporal_decay_empty_timestamp() {
+        let (g, _dir) = test_graph();
+        let decay = g.calculate_temporal_decay("");
+        assert!((decay - 0.9).abs() < 1e-9, "empty timestamp should return 0.9 default");
+    }
+
+    #[test]
+    fn test_temporal_boost_recent_node() {
+        let (g, _dir) = test_graph();
+        let now = Utc::now().to_rfc3339();
+        let boost = g.calculate_temporal_boost(&now);
+        assert!(boost > 0.9, "boost for recently updated node should be high, got {}", boost);
+    }
+
+    // ─── Vector Embeddings ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_set_and_get_embedding() {
+        let (g, _dir) = test_graph();
+        let node = g.add_node("Embed Test", "content", "note").unwrap();
+        let embedding = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        g.set_node_embedding(&node.id, &embedding).unwrap();
+
+        let loaded = g.get_node_embedding(&node.id).unwrap().unwrap();
+        assert_eq!(loaded.len(), 5);
+        assert!((loaded[0] - 0.1).abs() < 1e-9);
+        assert!((loaded[4] - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_vector_search() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "note").unwrap();
+        let n2 = g.add_node("B", "b", "note").unwrap();
+        g.set_node_embedding(&n1.id, &[1.0, 0.0, 0.0]).unwrap();
+        g.set_node_embedding(&n2.id, &[0.0, 1.0, 0.0]).unwrap();
+
+        let results = g.vector_search(&[1.0, 0.0, 0.0], 5).unwrap();
+        assert!(!results.is_empty());
+        // n1 should be the best match (identical vector)
+        assert_eq!(results[0].0, n1.id);
+        assert!((results[0].1 - 1.0).abs() < 1e-9);
+    }
+
+    // ─── Response Feedback ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_submit_and_count_feedback() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        g.add_edge(&n1.id, &n2.id, "link", 1.0).unwrap();
+
+        g.submit_response_feedback(
+            "conv-1", "What is X?", "X is Y", 1,
+            &[n1.id.clone(), n2.id.clone()], "mistral",
+        ).unwrap();
+
+        let count = g.get_feedback_count().unwrap();
+        assert!(count >= 1, "feedback count should be ≥1");
+    }
+
+    #[test]
+    fn test_get_good_examples() {
+        let (g, _dir) = test_graph();
+        g.submit_response_feedback(
+            "conv-1", "Explain Rust ownership", "Rust uses ownership for memory safety", 1,
+            &[], "mistral",
+        ).unwrap();
+
+        let examples = g.get_good_examples("Rust ownership", 5).unwrap();
+        assert!(!examples.is_empty());
+        assert!(examples[0].0.contains("Rust"));
+    }
+
+    // ─── Cognitive Profile ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_cognitive_profile_default() {
+        let (g, _dir) = test_graph();
+        let profile = g.get_cognitive_profile().unwrap();
+        assert!((profile.depth - 0.5).abs() < 1e-9);
+        assert_eq!(profile.interaction_count, 0);
+    }
+
+    #[test]
+    fn test_save_and_load_cognitive_profile() {
+        let (g, _dir) = test_graph();
+        let mut profile = crate::cognitive_profile::CognitiveProfile::default();
+        profile.depth = 0.8;
+        profile.creativity = 0.9;
+        profile.interaction_count = 42;
+        g.save_cognitive_profile(&profile).unwrap();
+
+        let loaded = g.get_cognitive_profile().unwrap();
+        assert!((loaded.depth - 0.8).abs() < 1e-9);
+        assert!((loaded.creativity - 0.9).abs() < 1e-9);
+        assert_eq!(loaded.interaction_count, 42);
+    }
+
+    // ─── Cognitive Drift ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_cognitive_drift_with_no_snapshots() {
+        let (g, _dir) = test_graph();
+        let drift = g.get_cognitive_drift(4).unwrap();
+        assert_eq!(drift.summary, "insufficient_data");
+        assert!(drift.weeks_compared <= 1, "should have minimal weeks with no snapshots");
+    }
+
+    #[test]
+    fn test_cognitive_snapshot_and_drift() {
+        let (g, _dir) = test_graph();
+        let profile = crate::cognitive_profile::CognitiveProfile {
+            depth: 0.6, creativity: 0.4, formality: 0.5,
+            technical_level: 0.7, example_preference: 0.3,
+            interaction_count: 10, last_updated: String::new(),
+        };
+        g.save_cognitive_snapshot(&profile).unwrap();
+
+        let drift = g.get_cognitive_drift(4).unwrap();
+        assert!(drift.weeks_compared >= 1);
+    }
+
+    // ─── Refraction Journal ────────────────────────────────────────────────
+
+    #[test]
+    fn test_log_and_get_refraction_insights() {
+        let (g, _dir) = test_graph();
+        let id = g.log_refraction("test query", "Query", "Direct", "Analytical").unwrap();
+        assert!(!id.is_empty());
+
+        g.update_refraction_choice(&id, "Creative").unwrap();
+
+        let insights = g.get_refraction_insights().unwrap();
+        assert_eq!(insights.total_refractions, 1);
+        assert!(insights.band_distribution.contains_key("Analytical"));
+    }
+
+    // ─── Agent Memory ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_store_and_recall_agent_memory() {
+        let (g, _dir) = test_graph();
+        g.store_agent_memory("reasoner", "last_topic", "Rust async patterns").unwrap();
+        g.store_agent_memory("reasoner", "preference", "verbose explanations").unwrap();
+
+        let memories = g.recall_agent_memory("reasoner", 10).unwrap();
+        assert_eq!(memories.len(), 2);
+    }
+
+    #[test]
+    fn test_agent_memory_upsert() {
+        let (g, _dir) = test_graph();
+        g.store_agent_memory("sentinel", "alert", "v1").unwrap();
+        g.store_agent_memory("sentinel", "alert", "v2").unwrap();
+
+        let memories = g.recall_agent_memory("sentinel", 10).unwrap();
+        assert_eq!(memories.len(), 1, "upsert should not create duplicates");
+        assert_eq!(memories[0].decision, "v2");
+    }
+
+    // ─── Domain Profile ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_domain_profile_default() {
+        let (g, _dir) = test_graph();
+        let profile = g.get_domain_profile().unwrap();
+        assert_eq!(profile["primary_domain"], "General");
+    }
+
+    #[test]
+    fn test_save_and_get_domain_profile() {
+        let (g, _dir) = test_graph();
+        g.save_domain_profile("{\"Medical\":5}", 5, "Medical", 0.85).unwrap();
+
+        let loaded = g.get_domain_profile().unwrap();
+        assert_eq!(loaded["primary_domain"], "Medical");
+        assert_eq!(loaded["total_queries"], 5);
+    }
+
+    // ─── Persist / Load ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_persist_and_load() {
+        let (g, dir) = test_graph();
+        g.add_node("PersistTest", "content to persist", "work").unwrap();
+
+        let export_path = dir.path().join("export.json");
+        let msg = g.persist(&export_path).unwrap();
+        assert!(msg.contains("1 nodes"));
+
+        // Create a fresh graph and load into it
+        let dir2 = tempfile::tempdir().unwrap();
+        let g2 = SpectrumGraph::new(dir2.path()).unwrap();
+        let load_msg = g2.load(&export_path).unwrap();
+        assert!(load_msg.contains("1 new nodes"));
+
+        let (nodes, _) = g2.stats().unwrap();
+        assert_eq!(nodes, 1);
+    }
+
+    // ─── Anticipate Needs ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_anticipate_needs_empty_graph() {
+        let (g, _dir) = test_graph();
+        let needs = g.anticipate_needs().unwrap();
+        assert!(needs.is_empty(), "empty graph should produce no needs");
+    }
+
+    // ─── Proactive Suggestions ─────────────────────────────────────────────
+
+    #[test]
+    fn test_proactive_suggestions_empty_graph() {
+        let (g, _dir) = test_graph();
+        let suggestions = g.generate_proactive_suggestions().unwrap();
+        assert!(suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_store_proactive_suggestion() {
+        let (g, _dir) = test_graph();
+        let suggestion = ProactiveSuggestion {
+            id: "test-sug-1".to_string(),
+            text: "Test suggestion".to_string(),
+            action_intent: "Do something".to_string(),
+            icon: "🎯".to_string(),
+            category: "test".to_string(),
+            confidence: 0.75,
+        };
+        g.store_proactive_suggestion(&suggestion).unwrap();
+
+        let (nodes, _) = g.stats().unwrap();
+        assert_eq!(nodes, 1);
+    }
+
+    // ─── Strengthen Related Edges ──────────────────────────────────────────
+
+    #[test]
+    fn test_strengthen_related_edges() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("Rust Patterns", "ownership", "learning").unwrap();
+        let n2 = g.add_node("Rust Async", "futures", "learning").unwrap();
+        g.add_edge(&n1.id, &n2.id, "related", 1.0).unwrap();
+
+        let count = g.strengthen_related_edges(&["rust".to_string()]).unwrap();
+        assert!(count >= 1, "should strengthen at least 1 edge");
+    }
+
+    #[test]
+    fn test_strengthen_empty_keywords() {
+        let (g, _dir) = test_graph();
+        let count = g.strengthen_related_edges(&[]).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    // ─── Promote Active Nodes ──────────────────────────────────────────────
+
+    #[test]
+    fn test_promote_active_nodes() {
+        let (g, _dir) = test_graph();
+        let now = Utc::now().to_rfc3339();
+        // Insert an ephemeral node with access_count >= 3
+        g.conn.execute(
+            "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+             VALUES ('promo-1', 'Promoted', 'content', 'note', 'ephemeral', 5, ?1, ?1, ?1)",
+            params![now],
+        ).unwrap();
+
+        let promoted = g.promote_active_nodes().unwrap();
+        assert_eq!(promoted, 1);
+
+        let node = g.get_node("promo-1").unwrap().unwrap();
+        assert_eq!(node.layer, "context");
+    }
+
+    // ─── Decay All Edges ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_decay_all_edges_no_change_for_recent() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        g.add_edge(&n1.id, &n2.id, "link", 1.0).unwrap();
+
+        // Recently created edges should have negligible decay
+        let updated = g.decay_all_edges().unwrap();
+        assert_eq!(updated, 0, "recently created edges should not decay");
+    }
+
+    // ─── Edge Prophecy ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_predict_edges_same_domain() {
+        let (g, _dir) = test_graph();
+        g.add_node("React Hooks", "useState useEffect custom hooks", "learning").unwrap();
+        g.add_node("React Context", "useContext provider custom hooks", "learning").unwrap();
+
+        let predictions = g.predict_edges(5).unwrap();
+        // Both are "learning" type with shared words — should predict a link
+        assert!(!predictions.is_empty(), "should predict at least one edge");
+    }
+
+    #[test]
+    fn test_confirm_predicted_edge() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+
+        let edge = g.confirm_predicted_edge(&n1.id, &n2.id).unwrap();
+        assert_eq!(edge.relation, "predicted_confirmed");
+        let (_, edge_count) = g.stats().unwrap();
+        assert_eq!(edge_count, 1);
+    }
+
+    #[test]
+    fn test_dismiss_predicted_edge() {
+        let (g, _dir) = test_graph();
+        let n1 = g.add_node("A", "a", "work").unwrap();
+        let n2 = g.add_node("B", "b", "work").unwrap();
+        g.dismiss_predicted_edge(&n1.id, &n2.id).unwrap();
+
+        // After dismissal, predict_edges should exclude this pair
+        let predictions = g.predict_edges(10).unwrap();
+        let found = predictions.iter().any(|p|
+            (p.source_id == n1.id && p.target_id == n2.id)
+            || (p.source_id == n2.id && p.target_id == n1.id)
+        );
+        assert!(!found, "dismissed prediction should not appear again");
+    }
+
+    // ─── Model Performance ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_store_model_performance() {
+        let (g, _dir) = test_graph();
+        g.store_model_performance("mistral", "General", 150.0, 0.8, "Query").unwrap();
+        g.store_model_performance("llama3", "Medical", 200.0, 0.9, "Analyze").unwrap();
+        // Should not error — just verifies storage works
+    }
+
+    // ─── Daily Brief ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_daily_brief_empty_graph() {
+        let (g, _dir) = test_graph();
+        let brief = g.get_daily_brief().unwrap();
+        assert_eq!(brief["total_nodes"], 0);
+        assert_eq!(brief["total_edges"], 0);
+    }
+
+    // ─── Merge / Diff ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_merge_graph_adds_new_nodes() {
+        let (g, _dir) = test_graph();
+        let now = Utc::now().to_rfc3339();
+
+        let incoming = GraphSnapshot {
+            nodes: vec![SpectrumNode {
+                id: "remote-1".into(), label: "Remote Node".into(),
+                content: "from another device".into(), node_type: "note".into(),
+                layer: "context".into(), access_count: 1,
+                last_accessed: now.clone(), created_at: now.clone(),
+                updated_at: now.clone(), connections: vec![],
+            }],
+            edges: vec![],
+            stats: GraphMetrics {
+                node_count: 1, edge_count: 0, avg_edge_weight: 0.0,
+                strongest_edge_weight: 0.0, facet_distribution: HashMap::new(),
+                most_connected_node: None, graph_density: 0.0,
+            },
+        };
+
+        let result = g.merge_graph(&incoming, &MergeStrategy::Latest).unwrap();
+        assert!(result.success);
+        assert_eq!(result.nodes_added, 1);
+
+        let (count, _) = g.stats().unwrap();
+        assert_eq!(count, 1);
+    }
+
+    // ─── Export Sync Package ───────────────────────────────────────────────
+
+    #[test]
+    fn test_export_sync_package() {
+        let (g, _dir) = test_graph();
+        g.add_node("Sync Test", "content", "note").unwrap();
+        let json = g.export_sync_package().unwrap();
+        assert!(json.contains("prismos-sync-v1"));
+        assert!(json.contains("Sync Test"));
+    }
+
+    // ─── Cosine Similarity ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let a = vec![1.0, 0.0, 0.0];
+        let sim = cosine_similarity(&a, &a);
+        assert!((sim - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(sim.abs() < 1e-9, "orthogonal vectors should have similarity ~0");
+    }
+
+    #[test]
+    fn test_cosine_similarity_empty() {
+        let sim = cosine_similarity(&[], &[]);
+        assert!((sim - 0.0).abs() < 1e-9);
+    }
+
+    // ─── Recent Intents ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_get_recent_intents() {
+        let (g, _dir) = test_graph();
+        g.query_intent("test query", "Query", &[]).unwrap(); // logs an intent
+        let intents = g.get_recent_intents(7).unwrap();
+        assert!(!intents.is_empty());
+    }
+
+    // ─── Thought Currents ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_thought_currents_empty_graph() {
+        let (g, _dir) = test_graph();
+        let currents = g.get_thought_currents().unwrap();
+        assert!(currents.is_empty(), "empty graph should have no thought currents");
+    }
+}

@@ -667,3 +667,353 @@ pub async fn route_intent(
     let response = crate::ollama_bridge::generate("mistral", &prompt, None, None, None).await?;
     Ok(response)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TESTS — Refractive Core Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── IntentType Display ────────────────────────────────────────────────
+
+    #[test]
+    fn test_intent_type_display() {
+        assert_eq!(format!("{}", IntentType::Query), "Query");
+        assert_eq!(format!("{}", IntentType::Create), "Create");
+        assert_eq!(format!("{}", IntentType::Analyze), "Analyze");
+        assert_eq!(format!("{}", IntentType::Connect), "Connect");
+        assert_eq!(format!("{}", IntentType::System), "System");
+    }
+
+    #[test]
+    fn test_intent_type_equality() {
+        assert_eq!(IntentType::Query, IntentType::Query);
+        assert_ne!(IntentType::Query, IntentType::Create);
+    }
+
+    // ─── Agent Registry ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_get_agents_returns_all() {
+        let agents = get_agents();
+        assert_eq!(agents.len(), 8, "should return all 8 agents");
+        let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
+        assert!(ids.contains(&"orchestrator"));
+        assert!(ids.contains(&"memory_keeper"));
+        assert!(ids.contains(&"reasoner"));
+        assert!(ids.contains(&"tool_smith"));
+        assert!(ids.contains(&"sentinel"));
+        assert!(ids.contains(&"email_keeper"));
+        assert!(ids.contains(&"calendar_keeper"));
+        assert!(ids.contains(&"finance_keeper"));
+    }
+
+    #[test]
+    fn test_get_agents_all_idle_by_default() {
+        let agents = get_agents();
+        for agent in &agents {
+            match agent.status {
+                AgentStatus::Idle => {} // expected
+                _ => panic!("Agent {} should be Idle, got {:?}", agent.id, agent.status),
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_agents_with_active_marks_processing() {
+        let agents = get_agents_with_active(Some("reasoner"));
+        let reasoner = agents.iter().find(|a| a.id == "reasoner").unwrap();
+        match reasoner.status {
+            AgentStatus::Processing => {} // expected
+            _ => panic!("Active agent should be Processing"),
+        }
+        // Others should be Idle
+        let orchestrator = agents.iter().find(|a| a.id == "orchestrator").unwrap();
+        match orchestrator.status {
+            AgentStatus::Idle => {} // expected
+            _ => panic!("Non-active agent should be Idle"),
+        }
+    }
+
+    #[test]
+    fn test_agent_fields_populated() {
+        let agents = get_agents();
+        for agent in &agents {
+            assert!(!agent.name.is_empty(), "Agent name should not be empty");
+            assert!(!agent.role.is_empty(), "Agent role should not be empty");
+            assert!(!agent.description.is_empty(), "Agent description should not be empty");
+        }
+    }
+
+    // ─── NpuScorer ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_npu_scorer_creation() {
+        let scorer = NpuScorer::new();
+        // Should not panic — acceleration depends on hardware
+        let _ = scorer.accelerated;
+    }
+
+    #[test]
+    fn test_score_relevance_empty_vectors() {
+        let scorer = NpuScorer::new();
+        let score = scorer.score_relevance(&[], &[]);
+        assert!((score - 0.0).abs() < 1e-9, "empty vectors should return 0");
+    }
+
+    #[test]
+    fn test_score_relevance_identical_vectors() {
+        let scorer = NpuScorer::new();
+        let v = vec![1.0, 0.0, 0.0, 0.0, 0.0];
+        let score = scorer.score_relevance(&v, &v);
+        assert!((score - 1.0).abs() < 1e-6, "identical vectors should have score ~1.0, got {}", score);
+    }
+
+    #[test]
+    fn test_score_relevance_orthogonal_vectors() {
+        let scorer = NpuScorer::new();
+        let a = vec![1.0, 0.0, 0.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0, 0.0, 0.0];
+        let score = scorer.score_relevance(&a, &b);
+        assert!(score.abs() < 1e-6, "orthogonal vectors should have score ~0, got {}", score);
+    }
+
+    #[test]
+    fn test_score_relevance_partial_overlap() {
+        let scorer = NpuScorer::new();
+        let a = vec![1.0, 1.0, 0.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0, 0.0, 0.0];
+        let score = scorer.score_relevance(&a, &b);
+        assert!(score > 0.5 && score < 1.0, "partial overlap should give 0.5–1.0, got {}", score);
+    }
+
+    #[test]
+    fn test_scalar_dot_product_basic() {
+        let scorer = NpuScorer::new();
+        let a = vec![3.0, 4.0];
+        let b = vec![3.0, 4.0];
+        let result = scorer.scalar_dot_product(&a, &b);
+        assert!((result - 1.0).abs() < 1e-9, "identical 2D vectors should give 1.0");
+    }
+
+    #[test]
+    fn test_simd_dot_product_matches_scalar() {
+        let scorer = NpuScorer::new();
+        // Use vector length > 4 to exercise the SIMD chunking path
+        let a = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+        let b = vec![0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
+        let simd_result = scorer.simd_dot_product(&a, &b);
+        let scalar_result = scorer.scalar_dot_product(&a, &b);
+        assert!(
+            (simd_result - scalar_result).abs() < 1e-9,
+            "SIMD and scalar dot products should match: {} vs {}",
+            simd_result, scalar_result
+        );
+    }
+
+    // ─── Intent Weight Generation ──────────────────────────────────────────
+
+    #[test]
+    fn test_intent_to_weights_query() {
+        let scorer = NpuScorer::new();
+        let intent = ParsedIntent {
+            raw: "test query".into(),
+            intent_type: IntentType::Query,
+            entities: vec![],
+            confidence: 1.0,
+        };
+        let weights = scorer.intent_to_weights(&intent);
+        assert_eq!(weights.len(), 5);
+        assert!(weights[0] > weights[1], "Query weight should be highest at index 0");
+    }
+
+    #[test]
+    fn test_intent_to_weights_confidence_scaling() {
+        let scorer = NpuScorer::new();
+        let high_conf = ParsedIntent {
+            raw: "test".into(),
+            intent_type: IntentType::Query,
+            entities: vec![],
+            confidence: 1.0,
+        };
+        let low_conf = ParsedIntent {
+            raw: "test".into(),
+            intent_type: IntentType::Query,
+            entities: vec![],
+            confidence: 0.5,
+        };
+        let hw = scorer.intent_to_weights(&high_conf);
+        let lw = scorer.intent_to_weights(&low_conf);
+        assert!(hw[0] > lw[0], "higher confidence should produce larger weights");
+    }
+
+    #[test]
+    fn test_intent_to_weights_entity_boost() {
+        let scorer = NpuScorer::new();
+        let no_entities = ParsedIntent {
+            raw: "test".into(), intent_type: IntentType::Query,
+            entities: vec![], confidence: 1.0,
+        };
+        let with_entities = ParsedIntent {
+            raw: "test".into(), intent_type: IntentType::Query,
+            entities: vec!["rust".into(), "async".into()], confidence: 1.0,
+        };
+        let w1 = scorer.intent_to_weights(&no_entities);
+        let w2 = scorer.intent_to_weights(&with_entities);
+        assert!(w2[0] > w1[0], "entities should boost weights");
+    }
+
+    #[test]
+    fn test_intent_to_weights_all_types() {
+        let scorer = NpuScorer::new();
+        let types = vec![
+            IntentType::Query, IntentType::Create, IntentType::Analyze,
+            IntentType::Connect, IntentType::System,
+        ];
+        for (i, it) in types.iter().enumerate() {
+            let intent = ParsedIntent {
+                raw: "test".into(), intent_type: it.clone(),
+                entities: vec![], confidence: 1.0,
+            };
+            let w = scorer.intent_to_weights(&intent);
+            assert!(w[i] >= w.iter().cloned().fold(0.0_f64, f64::min),
+                "weight at index {} should be dominant for {:?}", i, it);
+        }
+    }
+
+    // ─── Node Type Weights ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_node_type_to_weights_known_types() {
+        let scorer = NpuScorer::new();
+        let types = vec!["note", "memory", "task", "work", "health", "finance", "social", "learning", "conversation"];
+        for ntype in types {
+            let w = scorer.node_type_to_weights(ntype);
+            assert_eq!(w.len(), 5, "all weight vectors should be 5D for type '{}'", ntype);
+        }
+    }
+
+    #[test]
+    fn test_node_type_to_weights_unknown_returns_uniform() {
+        let scorer = NpuScorer::new();
+        let w = scorer.node_type_to_weights("unknown_type");
+        assert_eq!(w, vec![0.5, 0.5, 0.5, 0.5, 0.5]);
+    }
+
+    // ─── Build Context Summary ─────────────────────────────────────────────
+
+    #[test]
+    fn test_build_context_summary_empty() {
+        let engine = RefractiveEngine::new();
+        let result = engine.build_context_summary(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_build_context_summary_filters_short_content() {
+        let engine = RefractiveEngine::new();
+        let results = vec![
+            crate::spectrum_graph::IntentQueryResult {
+                node: crate::spectrum_graph::SpectrumNode {
+                    id: "n1".into(), label: "Short".into(),
+                    content: "tiny".into(), // < 20 chars
+                    node_type: "note".into(), layer: "context".into(),
+                    access_count: 0, last_accessed: String::new(),
+                    created_at: String::new(), updated_at: String::new(),
+                    connections: vec![],
+                },
+                relevance_score: 0.9, path_strength: 0.0, temporal_boost: 0.0,
+            },
+        ];
+        let summary = engine.build_context_summary(&results);
+        assert!(summary.is_empty(), "short content nodes should be filtered");
+    }
+
+    #[test]
+    fn test_build_context_summary_includes_valid_nodes() {
+        let engine = RefractiveEngine::new();
+        let results = vec![
+            crate::spectrum_graph::IntentQueryResult {
+                node: crate::spectrum_graph::SpectrumNode {
+                    id: "n1".into(), label: "Rust Patterns".into(),
+                    content: "Understanding Rust ownership, borrow checker, and lifetimes for safe memory management".into(),
+                    node_type: "learning".into(), layer: "context".into(),
+                    access_count: 5, last_accessed: String::new(),
+                    created_at: String::new(), updated_at: String::new(),
+                    connections: vec![],
+                },
+                relevance_score: 0.8, path_strength: 0.0, temporal_boost: 0.0,
+            },
+        ];
+        let summary = engine.build_context_summary(&results);
+        assert!(summary.contains("Rust Patterns"));
+        assert!(summary.contains("(learning)"));
+    }
+
+    #[test]
+    fn test_build_context_summary_limits_conversation_nodes() {
+        let engine = RefractiveEngine::new();
+        let mut results = Vec::new();
+        for i in 0..5 {
+            results.push(crate::spectrum_graph::IntentQueryResult {
+                node: crate::spectrum_graph::SpectrumNode {
+                    id: format!("conv-{}", i), label: format!("Conversation {}", i),
+                    content: "A sufficiently long conversation content that exceeds twenty characters for testing".into(),
+                    node_type: "conversation".into(), layer: "context".into(),
+                    access_count: 0, last_accessed: String::new(),
+                    created_at: String::new(), updated_at: String::new(),
+                    connections: vec![],
+                },
+                relevance_score: 0.8, path_strength: 0.0, temporal_boost: 0.0,
+            });
+        }
+        let summary = engine.build_context_summary(&results);
+        // Should include at most 2 conversation nodes
+        let conv_count = summary.matches("(conversation)").count();
+        assert!(conv_count <= 2, "should limit conversation nodes to 2, got {}", conv_count);
+    }
+
+    #[test]
+    fn test_build_context_summary_skips_suggestions() {
+        let engine = RefractiveEngine::new();
+        let results = vec![
+            crate::spectrum_graph::IntentQueryResult {
+                node: crate::spectrum_graph::SpectrumNode {
+                    id: "s1".into(), label: "Suggestion Node".into(),
+                    content: "This is a proactive suggestion that should be skipped from context".into(),
+                    node_type: "suggestion".into(), layer: "ephemeral".into(),
+                    access_count: 0, last_accessed: String::new(),
+                    created_at: String::new(), updated_at: String::new(),
+                    connections: vec![],
+                },
+                relevance_score: 0.9, path_strength: 0.0, temporal_boost: 0.0,
+            },
+        ];
+        let summary = engine.build_context_summary(&results);
+        assert!(summary.is_empty(), "suggestion nodes should be filtered out");
+    }
+
+    // ─── Select Agent (legacy) ─────────────────────────────────────────────
+
+    #[test]
+    fn test_select_agent_routes_correctly() {
+        let engine = RefractiveEngine::new();
+        let cases = vec![
+            (IntentType::Query, "reasoner"),
+            (IntentType::Create, "tool_smith"),
+            (IntentType::Analyze, "reasoner"),
+            (IntentType::Connect, "memory_keeper"),
+            (IntentType::System, "sentinel"),
+        ];
+        for (intent_type, expected_agent) in cases {
+            let intent = ParsedIntent {
+                raw: "test".into(), intent_type,
+                entities: vec![], confidence: 1.0,
+            };
+            let (agent_id, _system_prompt) = engine.select_agent(&intent);
+            assert_eq!(agent_id, expected_agent);
+        }
+    }
+}

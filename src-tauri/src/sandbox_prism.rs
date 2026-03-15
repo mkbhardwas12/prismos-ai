@@ -911,7 +911,7 @@ fn wasm_isolated_execute(
         "validate_action",
         |mut caller: Caller<'_, SandboxStoreState>, op_type: i32, risk_tier: i32, _agent_idx: i32| -> i32 {
             let valid = op_type >= 0
-                && op_type <= 10
+                && op_type <= 13  // 0-13: all AllowedOperation variants including EmailRead(11), CalendarRead(12), FinanceRead(13)
                 && risk_tier >= 1
                 && risk_tier <= 3
                 && index_to_operation(op_type).is_some();

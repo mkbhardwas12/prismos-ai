@@ -105,6 +105,14 @@ async fn refract_intent(app: tauri::AppHandle, input: String, model: Option<Stri
         .await
         .map_err(|e| e.to_string())?;
 
+    // Audit log: record the intent processing
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "refract_intent",
+        "user",
+        &format!("Intent processed via model '{}': {}", model_name, &input.chars().take(100).collect::<String>()),
+    );
+
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
@@ -427,8 +435,12 @@ async fn fetch_email_summary(
     use_tls: Option<bool>,
     ollama_url: Option<String>,
 ) -> Result<String, String> {
-    // Validate through Sandbox Prism first
-    let _sandbox_check = sandbox_prism::sandbox_execute("email read fetch unread summary", "email_keeper");
+    // Validate through Sandbox Prism first — enforce the result
+    let sandbox_check = sandbox_prism::sandbox_execute("email read fetch unread summary", "email_keeper");
+    if !sandbox_check.success {
+        return Err(format!("🛡️ Sandbox Prism blocked email access: {}",
+            sandbox_check.rollback_explanation.unwrap_or_else(|| sandbox_check.output)));
+    }
 
     let config = email_keeper::EmailConfig {
         imap_server,
@@ -496,8 +508,12 @@ async fn fetch_calendar_summary(
     calendar_path: String,
     ollama_url: Option<String>,
 ) -> Result<String, String> {
-    // Validate through Sandbox Prism first
-    let _sandbox_check = sandbox_prism::sandbox_execute("calendar read events today schedule", "calendar_keeper");
+    // Validate through Sandbox Prism first — enforce the result
+    let sandbox_check = sandbox_prism::sandbox_execute("calendar read events today schedule", "calendar_keeper");
+    if !sandbox_check.success {
+        return Err(format!("🛡️ Sandbox Prism blocked calendar access: {}",
+            sandbox_check.rollback_explanation.unwrap_or_else(|| sandbox_check.output)));
+    }
 
     let config = calendar_keeper::CalendarConfig {
         calendar_path,
@@ -527,8 +543,12 @@ async fn fetch_finance_summary(
     tickers: Vec<String>,
     ollama_url: Option<String>,
 ) -> Result<String, String> {
-    // Validate through Sandbox Prism first
-    let _sandbox_check = sandbox_prism::sandbox_execute("finance stock ticker portfolio market", "finance_keeper");
+    // Validate through Sandbox Prism first — enforce the result
+    let sandbox_check = sandbox_prism::sandbox_execute("finance stock ticker portfolio market", "finance_keeper");
+    if !sandbox_check.success {
+        return Err(format!("🛡️ Sandbox Prism blocked finance access: {}",
+            sandbox_check.rollback_explanation.unwrap_or_else(|| sandbox_check.output)));
+    }
 
     let config = finance_keeper::FinanceConfig { tickers };
 
@@ -1188,6 +1208,15 @@ async fn save_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Res
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let result = you_port::save_state(&graph, &app_dir).map_err(|e| e.to_string())?;
+
+    // Audit log: record the state save
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "state_save",
+        "system",
+        &format!("You-Port state saved (encrypted): {} nodes, {} edges", result.nodes_count, result.edges_count),
+    );
+
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
@@ -1198,6 +1227,15 @@ async fn load_state(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Res
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let result = you_port::load_state(&graph, &app_dir).map_err(|e| e.to_string())?;
+
+    // Audit log: record the state restore
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "state_load",
+        "system",
+        &format!("You-Port state restored: {} nodes, {} edges (success: {})", result.nodes_count, result.edges_count, result.success),
+    );
+
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
@@ -1230,6 +1268,14 @@ async fn export_graph(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> R
 
     let ciphertext = you_port::aes_encrypt(&key, plaintext_bytes).map_err(|e| e.to_string())?;
     let encrypted_b64 = you_port::base64_encode(&ciphertext);
+
+    // Audit log: record the graph export
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "graph_export",
+        "user",
+        &format!("Spectrum Graph exported (encrypted): {} nodes, {} edges", snapshot.nodes.len(), snapshot.edges.len()),
+    );
 
     let package = serde_json::json!({
         "format": "prismos-graph-export-v2",
@@ -1334,14 +1380,31 @@ async fn import_graph(app: tauri::AppHandle, db_state: tauri::State<'_, DbState>
         "total_edges": snapshot.edges.len(),
     });
 
+    // Audit log: record the graph import
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "graph_import",
+        "user",
+        &format!("Spectrum Graph imported (encrypted): {} nodes, {} edges added", nodes_imported, edges_imported),
+    );
+
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 /// Clear the entire Spectrum Graph (delete all nodes and edges)
 #[tauri::command]
-async fn clear_graph(db: tauri::State<'_, DbState>) -> Result<String, String> {
+async fn clear_graph(app: tauri::AppHandle, db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let (nodes, edges) = graph.clear_graph().map_err(|e| e.to_string())?;
+
+    // Audit log: record the destructive clear operation
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "graph_clear",
+        "user",
+        &format!("Spectrum Graph cleared: {} nodes, {} edges destroyed", nodes, edges),
+    );
 
     let result = serde_json::json!({
         "success": true,
@@ -1534,6 +1597,15 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
 #[tauri::command]
 async fn export_sync_package(app: tauri::AppHandle, passphrase: String) -> Result<String, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    // Audit log: record the sync export
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "sync_export",
+        "user",
+        "Cross-device sync package exported (passphrase-encrypted)",
+    );
+
     you_port::export_sync_package(&app_dir, &passphrase).map_err(|e| e.to_string())
 }
 
@@ -1550,6 +1622,15 @@ async fn import_sync_package(
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let result = you_port::import_sync_package(&app_dir, &package_json, &passphrase, &strategy)
         .map_err(|e| e.to_string())?;
+
+    // Audit log: record the sync import
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "sync_import",
+        "user",
+        &format!("Cross-device sync package imported: {} (success: {})", result.message, result.success),
+    );
+
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 

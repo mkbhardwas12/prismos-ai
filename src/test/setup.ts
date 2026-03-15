@@ -28,11 +28,32 @@ vi.mock("@tauri-apps/api/path", () => ({
   appDataDir: vi.fn().mockResolvedValue("/mock/app/data"),
 }));
 
+// Mock Tauri event API (listen / emit)
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+  emit: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock Tauri shell plugin
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  open: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock window.__TAURI_INTERNALS__ for Tauri v2
 Object.defineProperty(window, "__TAURI_INTERNALS__", {
   value: {
     invoke: vi.fn().mockResolvedValue("{}"),
+    transformCallback: vi.fn(() => 0),
     metadata: { currentWebview: { label: "main" } },
   },
   writable: true,
 });
+
+// Mock ResizeObserver (not available in jsdom)
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as any;
+}

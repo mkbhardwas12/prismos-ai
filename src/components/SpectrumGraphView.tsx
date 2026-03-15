@@ -9,7 +9,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ForceGraph2D from "react-force-graph-2d";
-import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed } from "../types";
+import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed, PredictedEdge } from "../types";
 import prismosLogo from "../assets/prismos-logo.svg";
 import "./SpectrumGraphView.css";
 
@@ -58,6 +58,7 @@ interface GraphLink {
   edge_id: string;
   reinforcements: number;
   last_reinforced: string | null;
+  predicted?: boolean;
 }
 
 interface GraphData {
@@ -83,6 +84,10 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const [glowPhase, setGlowPhase] = useState(0);
   const glowRef = useRef<number>(0);
   const [recentEdges, setRecentEdges] = useState<Set<string>>(new Set());
+  const [predictions, setPredictions] = useState<PredictedEdge[]>([]);
+  const [showIntro, setShowIntro] = useState(
+    () => !localStorage.getItem("prismos-graph-intro-seen")
+  );
 
   // Animate glow pulse for high-momentum edges
   useEffect(() => {
@@ -161,10 +166,41 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     }
   }, []);
 
+  // ─── Load edge prophecy predictions ────────────────────────────────────
+
+  const loadPredictions = useCallback(async () => {
+    try {
+      const result = await invoke<string>("predict_edges", { limit: 10 });
+      setPredictions(JSON.parse(result));
+    } catch (e) {
+      console.error("Failed to load edge predictions:", e);
+    }
+  }, []);
+
+  const confirmPrediction = useCallback(async (sourceId: string, targetId: string) => {
+    try {
+      await invoke("confirm_predicted_edge", { sourceId, targetId });
+      loadGraph();
+      loadPredictions();
+    } catch (e) {
+      console.error("Failed to confirm predicted edge:", e);
+    }
+  }, [loadGraph, loadPredictions]);
+
+  const dismissPrediction = useCallback(async (sourceId: string, targetId: string) => {
+    try {
+      await invoke("dismiss_predicted_edge", { sourceId, targetId });
+      loadPredictions();
+    } catch (e) {
+      console.error("Failed to dismiss predicted edge:", e);
+    }
+  }, [loadPredictions]);
+
   useEffect(() => {
     loadGraph();
     loadAnticipations();
-  }, [loadGraph, loadAnticipations, refreshKey]);
+    loadPredictions();
+  }, [loadGraph, loadAnticipations, loadPredictions, refreshKey]);
 
   // ─── Resize handling (measure canvas area, not full container) ────────
 
@@ -259,6 +295,20 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       const target = link.target as unknown as { x: number; y: number };
       if (!source || !target) return;
 
+      // Predicted edges render as dashed lines
+      if (link.predicted) {
+        ctx.save();
+        ctx.setLineDash([8 / globalScale, 4 / globalScale]);
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.strokeStyle = "rgba(180, 140, 255, 0.5)";
+        ctx.lineWidth = 1.5 / globalScale;
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
       // Width proportional to edge weight
       const width = Math.max(0.5, link.weight * 1.5) / globalScale;
 
@@ -336,7 +386,25 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           </div>
         ) : (
           <ForceGraph2D
-            graphData={graphData as never}
+            graphData={{
+              nodes: graphData.nodes,
+              links: [
+                ...graphData.links,
+                ...predictions
+                  .filter((p) => graphData.nodes.some((n) => n.id === p.source_id) && graphData.nodes.some((n) => n.id === p.target_id))
+                  .map((p) => ({
+                    source: p.source_id,
+                    target: p.target_id,
+                    relation: p.reason,
+                    weight: p.probability,
+                    momentum: 0,
+                    edge_id: `predicted-${p.source_id}-${p.target_id}`,
+                    reinforcements: 0,
+                    last_reinforced: null,
+                    predicted: true,
+                  })),
+              ],
+            } as never}
             width={dimensions.width}
             height={dimensions.height}
             nodeCanvasObject={paintNode as never}
@@ -381,6 +449,24 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           <button className="sg-refresh-btn" onClick={loadGraph}>
             ↻ Refresh
           </button>
+        </div>
+      )}
+
+      {/* ── Graph Intro Overlay ── */}
+      {showIntro && graphData.nodes.length > 0 && (
+        <div className="sg-intro-overlay">
+          <div className="sg-intro-card">
+            <h3>🌈 Welcome to Your Spectrum Graph</h3>
+            <p>This is your living knowledge graph. Each node is something you've discussed, and edges show how ideas connect. It grows as you chat.</p>
+            <ul>
+              <li><strong>Click</strong> a node to see details</li>
+              <li><strong>+/−</strong> buttons reinforce or weaken edges</li>
+              <li><strong>Dashed lines</strong> are predicted connections</li>
+            </ul>
+            <button className="sg-intro-dismiss" onClick={() => { localStorage.setItem("prismos-graph-intro-seen", "1"); setShowIntro(false); }}>
+              Got it! →
+            </button>
+          </div>
         </div>
       )}
 
@@ -462,6 +548,43 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
                   <span className="sg-confidence">
                     {(need.confidence * 100).toFixed(0)}%
                   </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Edge Prophecy — predicted connections */}
+        {predictions.length > 0 && (
+          <div className="sg-prophecy">
+            <h4>✨ Edge Prophecy</h4>
+            <p className="sg-prophecy-desc">Predicted connections between your ideas</p>
+            {predictions.slice(0, 5).map((pred, i) => (
+              <div key={i} className="sg-prophecy-item">
+                <div className="sg-prophecy-labels">
+                  <span className="sg-prophecy-source">{pred.source_label}</span>
+                  <span className="sg-prophecy-arrow">↔</span>
+                  <span className="sg-prophecy-target">{pred.target_label}</span>
+                </div>
+                <div className="sg-prophecy-reason">{pred.reason}</div>
+                <div className="sg-prophecy-meta">
+                  <span className="sg-confidence">{(pred.probability * 100).toFixed(0)}%</span>
+                  <div className="sg-prophecy-actions">
+                    <button
+                      className="sg-prophecy-btn sg-prophecy-confirm"
+                      onClick={() => confirmPrediction(pred.source_id, pred.target_id)}
+                      title="Confirm this connection"
+                    >
+                      ✓ Confirm
+                    </button>
+                    <button
+                      className="sg-prophecy-btn sg-prophecy-dismiss"
+                      onClick={() => dismissPrediction(pred.source_id, pred.target_id)}
+                      title="Dismiss this suggestion"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

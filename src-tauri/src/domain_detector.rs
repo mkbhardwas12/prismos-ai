@@ -329,6 +329,33 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_education() {
+        assert_eq!(DomainProfile::classify_domain("Create a lesson plan for students"), UserDomain::Education);
+        assert_eq!(DomainProfile::classify_domain("Design a new curriculum for the semester"), UserDomain::Education);
+        assert_eq!(DomainProfile::classify_domain("The student needs help with homework"), UserDomain::Education);
+        assert_eq!(DomainProfile::classify_domain("Prepare the exam for the teacher"), UserDomain::Education);
+        assert_eq!(DomainProfile::classify_domain("Grade the quiz and update the syllabus"), UserDomain::Education);
+    }
+
+    #[test]
+    fn test_classify_creative() {
+        assert_eq!(DomainProfile::classify_domain("Write a short story about space"), UserDomain::Creative);
+        assert_eq!(DomainProfile::classify_domain("Develop the main character arc"), UserDomain::Creative);
+        assert_eq!(DomainProfile::classify_domain("Outline the plot for my novel"), UserDomain::Creative);
+        assert_eq!(DomainProfile::classify_domain("The narrative needs stronger imagery"), UserDomain::Creative);
+        assert_eq!(DomainProfile::classify_domain("Compose a poem about autumn"), UserDomain::Creative);
+    }
+
+    #[test]
+    fn test_classify_business() {
+        assert_eq!(DomainProfile::classify_domain("Define the marketing strategy for Q3"), UserDomain::Business);
+        assert_eq!(DomainProfile::classify_domain("Prepare a sales proposal for the customer"), UserDomain::Business);
+        assert_eq!(DomainProfile::classify_domain("Analyze the competitor landscape and market"), UserDomain::Business);
+        assert_eq!(DomainProfile::classify_domain("Build a pitch deck for stakeholder review"), UserDomain::Business);
+        assert_eq!(DomainProfile::classify_domain("Set kpi targets and roadmap milestones"), UserDomain::Business);
+    }
+
+    #[test]
     fn test_classify_general() {
         assert_eq!(DomainProfile::classify_domain("Tell me a joke"), UserDomain::General);
         assert_eq!(DomainProfile::classify_domain("Hello how are you"), UserDomain::General);

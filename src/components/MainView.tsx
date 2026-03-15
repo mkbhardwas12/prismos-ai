@@ -16,7 +16,6 @@ import { useVoice } from "../hooks/useVoice";
 import { useOllama, RECOMMENDED_MODELS } from "../hooks/useOllama";
 import { useChat } from "../hooks/useChat";
 import { useSuggestions } from "../hooks/useSuggestions";
-import { getDefaultModel } from "../lib/modelRegistry";
 import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative } from "../types";
 import "./MainView.css";
 
@@ -43,6 +42,7 @@ export default function MainView({
 }: MainViewProps) {
   const [showGuide, setShowGuide] = useState(false);
   const [expandedRefractions, setExpandedRefractions] = useState<Set<string>>(new Set());
+  const [expandedTransparencies, setExpandedTransparencies] = useState<Set<string>>(new Set());
 
   // Voice output (TTS)
   const voiceOutput = useVoice(() => {}, settings.voiceOutputEnabled ?? false);
@@ -474,27 +474,46 @@ export default function MainView({
                   )}
                 </div>
               </div>
-              {/* ── Intent Transparency Bar ── */}
+              {/* ── Intent Transparency Bar (collapsible) ── */}
               {msg.role === "ai" && msg.transparency && (
-                <div className="transparency-bar">
-                  <span className="transparency-chip" title="Query classification">
-                    🏷️ {msg.transparency.query_type}
-                  </span>
-                  <span className="transparency-chip" title="Cognitive band used">
-                    🌈 {msg.transparency.applied_band}
-                  </span>
-                  {msg.transparency.context_nodes_used > 0 && (
-                    <span className="transparency-chip" title="Graph nodes used for context">
-                      🔗 {msg.transparency.context_nodes_used} nodes
-                    </span>
-                  )}
-                  <span className="transparency-chip" title="Model used">
-                    🤖 {msg.transparency.model_used}
-                  </span>
-                  {msg.transparency.domain_detected && msg.transparency.domain_detected !== "General" && (
-                    <span className="transparency-chip transparency-chip--domain" title="Detected professional domain">
-                      🎯 {msg.transparency.domain_detected}
-                    </span>
+                <div className="transparency-section">
+                  <button
+                    className={`transparency-toggle${expandedTransparencies.has(msg.id) ? " transparency-toggle--open" : ""}`}
+                    onClick={() => {
+                      setExpandedTransparencies((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(msg.id)) next.delete(msg.id);
+                        else next.add(msg.id);
+                        return next;
+                      });
+                    }}
+                    aria-expanded={expandedTransparencies.has(msg.id)}
+                  >
+                    🔍 Why this response?
+                    <span className={`transparency-toggle__chevron${expandedTransparencies.has(msg.id) ? " transparency-toggle__chevron--open" : ""}`}>▸</span>
+                  </button>
+                  {expandedTransparencies.has(msg.id) && (
+                    <div className="transparency-bar">
+                      <span className="transparency-chip" title="Query classification">
+                        🏷️ {msg.transparency.query_type}
+                      </span>
+                      <span className="transparency-chip" title="Cognitive band used">
+                        🌈 {msg.transparency.applied_band}
+                      </span>
+                      {msg.transparency.context_nodes_used > 0 && (
+                        <span className="transparency-chip" title="Graph nodes used for context">
+                          🔗 {msg.transparency.context_nodes_used} nodes
+                        </span>
+                      )}
+                      <span className="transparency-chip" title="Model used">
+                        🤖 {msg.transparency.model_used}
+                      </span>
+                      {msg.transparency.domain_detected && msg.transparency.domain_detected !== "General" && (
+                        <span className="transparency-chip transparency-chip--domain" title="Detected professional domain">
+                          🎯 {msg.transparency.domain_detected}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -668,53 +687,6 @@ export default function MainView({
         onPendingConsumed={() => chat.setPendingIntent("")}
         onScreenRead={chat.handleScreenRead}
       />
-
-      {/* ── First-Time Setup Wizard Modal ── */}
-      {ollama.showFirstTimeWizard && (
-        <div className="ftw-overlay" onClick={ollama.dismissFirstTimeWizard}>
-          <div className="ftw-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="ftw-header">
-              <img src={prismosLogo} alt="PrismOS-AI" className="ftw-logo" />
-              <h2 className="ftw-title">Welcome to PrismOS-AI!</h2>
-              <p className="ftw-subtitle">Your local-first AI assistant. Let's get you set up in under 2 minutes.</p>
-            </div>
-            <div className="ftw-steps">
-              <div className="ftw-step">
-                <div className="ftw-step-number">1</div>
-                <div className="ftw-step-body">
-                  <h3>Install Ollama</h3>
-                  <p>Ollama runs AI models on your computer — no cloud, no data sharing. It's free and takes seconds to install.</p>
-                  <button className="ftw-link-btn" onClick={() => shellOpen("https://ollama.com")}>🌐 Open ollama.com</button>
-                </div>
-              </div>
-              <div className="ftw-step">
-                <div className="ftw-step-number">2</div>
-                <div className="ftw-step-body">
-                  <h3>Start Ollama</h3>
-                  <p>After installing, just open the Ollama app. It runs quietly in the background — no setup needed.</p>
-                  <div className="ftw-code-hint">Or run <code>ollama serve</code> in a terminal</div>
-                </div>
-              </div>
-              <div className="ftw-step">
-                <div className="ftw-step-number">3</div>
-                <div className="ftw-step-body">
-                  <h3>Pull a Model</h3>
-                  <p>Download an AI model to use. We recommend starting small — it'll download automatically when you first chat.</p>
-                  <div className="ftw-code-hint">Or run <code>ollama pull {getDefaultModel().name}</code> in a terminal</div>
-                </div>
-              </div>
-            </div>
-            <div className="ftw-footer">
-              <div className="ftw-privacy-note">
-                🔒 Everything runs locally. Your data never leaves your device.
-              </div>
-              <button className="ftw-dismiss-btn" onClick={ollama.dismissFirstTimeWizard}>
-                Got it, let's go! →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <UserGuide open={showGuide} onClose={() => setShowGuide(false)} />
     </>

@@ -299,13 +299,15 @@ export function toLegacyFormat(spec: ModelSpec) {
   return { name: spec.name, desc: spec.desc, size: spec.size };
 }
 
-/** Convert to RECOMMENDED_MODELS format for useOllama backward compatibility */
-export function toRecommendedFormat(spec: ModelSpec) {
-  return {
-    name: spec.name,
-    label: spec.label,
-    desc: spec.desc,
-    size: spec.size,
-    tier: spec.tier,
-  };
+/** Convert full registry to RECOMMENDED_MODELS format for useOllama backward compatibility */
+export function toRecommendedFormat(): { name: string; label: string; desc: string; size: string; tier: string }[] {
+  return MODEL_REGISTRY
+    .sort((a, b) => a.priority - b.priority)
+    .map((spec) => ({
+      name: spec.name,
+      label: spec.label,
+      desc: spec.desc,
+      size: spec.size,
+      tier: spec.tier,
+    }));
 }

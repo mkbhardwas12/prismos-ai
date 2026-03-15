@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, OllamaModel } from "../types";
-import { MODEL_REGISTRY, toRecommendedFormat } from "../lib/modelRegistry";
+import { toRecommendedFormat } from "../lib/modelRegistry";
 
 // ── Tiered model catalog — derived from centralized Model Registry ──
 export const RECOMMENDED_MODELS = toRecommendedFormat();
@@ -35,16 +35,6 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
   const [pullStatus, setPullStatus] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [wizardExpanded, setWizardExpanded] = useState(false);
-
-  // First-time setup wizard modal
-  const [showFirstTimeWizard, setShowFirstTimeWizard] = useState(
-    () => !localStorage.getItem("prismos-setup-done")
-  );
-
-  const dismissFirstTimeWizard = useCallback(() => {
-    localStorage.setItem("prismos-setup-done", "1");
-    setShowFirstTimeWizard(false);
-  }, []);
 
   // Determine which setup step the user is on
   const getSetupStep = useCallback((): SetupStep => {
@@ -203,8 +193,8 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
     isRetrying,
     wizardExpanded,
     setWizardExpanded,
-    showFirstTimeWizard,
-    dismissFirstTimeWizard,
+    showFirstTimeWizard: false,
+    dismissFirstTimeWizard: () => {},
     getSetupStep,
     handleStartOllama,
     handleRetryConnection,

@@ -73,6 +73,20 @@ export default function DomainInsights() {
   const emoji = DOMAIN_EMOJIS[primary] || "🌐";
   const label = DOMAIN_LABELS[primary] || primary;
 
+  // Recommended model per domain
+  const DOMAIN_RECOMMENDED: Record<string, string> = {
+    Medical: "qwen3:14b",
+    Engineering: "qwen2.5-coder:7b",
+    Science: "qwen3:14b",
+    Legal: "qwen3:14b",
+    Finance: "qwen3:8b",
+    Education: "qwen3:4b",
+    Creative: "qwen3:8b",
+    Business: "qwen3:8b",
+    General: "qwen3:4b",
+  };
+  const recommendedModel = DOMAIN_RECOMMENDED[primary] || "qwen3:4b";
+
   // Convert domain_counts to sorted distribution
   const counts = profile.domain_counts || {};
   const total = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
@@ -99,6 +113,15 @@ export default function DomainInsights() {
           </div>
         </div>
       </div>
+
+      {profile.confidence >= 0.3 && primary !== "General" && (
+        <div className="domain-recommended-model">
+          <span className="domain-rec-icon">🎯</span>
+          <span className="domain-rec-text">
+            For <strong>{label}</strong> queries, we recommend <strong>{recommendedModel}</strong>
+          </span>
+        </div>
+      )}
 
       <div className="domain-distribution">
         {distribution.slice(0, 6).map((d) => (

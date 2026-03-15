@@ -75,6 +75,16 @@ export default function SettingsPanel({
   const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
   const [securityLoading, setSecurityLoading] = useState(false);
   const [modelVerification, setModelVerification] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["ollama", "hub"]));
+
+  const toggleSection = useCallback((key: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -391,7 +401,11 @@ export default function SettingsPanel({
 
         {/* ── Ollama Configuration ── */}
         <div className="settings-group">
-          <h3>🤖 Ollama Configuration</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("ollama")}>
+            🤖 Ollama Configuration
+            <span className={`settings-group-chevron${expandedSections.has("ollama") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("ollama") && (<>
           <div className="settings-item">
             <label>Ollama URL</label>
             <input
@@ -439,11 +453,16 @@ export default function SettingsPanel({
               onChange={(e) => update("maxTokens", parseInt(e.target.value) || 2048)}
             />
           </div>
+          </>)}
         </div>
 
         {/* ── Model Hub — Download, Manage, Delete Models ── */}
         <div className="settings-group">
-          <h3>📦 Model Hub</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("hub")}>
+            📦 Model Hub
+            <span className={`settings-group-chevron${expandedSections.has("hub") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("hub") && (<>
           <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
             Browse, download, and manage your local AI models. All models run entirely on your machine.
           </div>
@@ -540,11 +559,16 @@ export default function SettingsPanel({
               ↻ Refresh
             </button>
           </div>
+          </>)}
         </div>
 
         {/* ── Domain Insights + Recommend Best Model ── */}
         <div className="settings-group">
-          <h3>🧭 Domain Intelligence</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("domain")}>
+            🧭 Domain Intelligence
+            <span className={`settings-group-chevron${expandedSections.has("domain") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("domain") && (<>
           <DomainInsights />
           <div style={{ marginTop: "0.75rem" }}>
             <button
@@ -571,11 +595,16 @@ export default function SettingsPanel({
               🎯 Recommend Best Model
             </button>
           </div>
+          </>)}
         </div>
 
         {/* ── Spectrum Graph Management ── */}
         <div className="settings-group">
-          <h3>🌈 Spectrum Graph</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("graph")}>
+            🌈 Spectrum Graph
+            <span className={`settings-group-chevron${expandedSections.has("graph") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("graph") && (<>
           <div className="settings-item">
             <label>Current Size</label>
             <input
@@ -611,11 +640,16 @@ export default function SettingsPanel({
             Export uses You-Port end-to-end encryption (AES-256-GCM authenticated encryption).
             Files are device-bound and cannot be read on other devices.
           </div>
+          </>)}
         </div>
 
         {/* ── Multi-Device Sync (Patent Pending — Graph Merge/Diff) ── */}
         <div className="settings-group">
-          <h3>🔄 Multi-Device Sync</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("sync")}>
+            🔄 Multi-Device Sync
+            <span className={`settings-group-chevron${expandedSections.has("sync") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("sync") && (<>
           <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
             Sync your Spectrum Graph between devices using a shared passphrase.
             Files are encrypted — the same passphrase must be used on both devices.
@@ -790,11 +824,16 @@ export default function SettingsPanel({
             Sync uses passphrase-based encryption — portable across devices.
             Use "Preview Merge" to see conflicts before applying. Patent Pending.
           </div>
+          </>)}
         </div>
 
         {/* ── Appearance ── */}
         <div className="settings-group">
-          <h3>🎨 Appearance</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("appearance")}>
+            🎨 Appearance
+            <span className={`settings-group-chevron${expandedSections.has("appearance") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("appearance") && (<>
           <div className="settings-item">
             <label>Theme</label>
             <div className="settings-theme-toggle">
@@ -827,11 +866,16 @@ export default function SettingsPanel({
             </select>
             <div className="settings-hint">Choose which view PrismOS opens to on startup.</div>
           </div>
+          </>)}
         </div>
 
         {/* ── Voice I/O (Patent Pending) ── */}
         <div className="settings-group">
-          <h3>🎙️ Voice Input / Output</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("voice")}>
+            🎙️ Voice Input / Output
+            <span className={`settings-group-chevron${expandedSections.has("voice") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("voice") && (<>
           <div className="settings-item">
             <label>Voice Input (Speech-to-Text)</label>
             <div className="settings-theme-toggle">
@@ -858,11 +902,16 @@ export default function SettingsPanel({
             Voice uses Web Speech API — all processing stays in your browser.
             No audio is sent to any server. Patent Pending.
           </div>
+          </>)}
         </div>
 
         {/* ── Email Summary (Patent Pending) ── */}
         <div className="settings-group">
-          <h3>📬 Email Summary</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("email")}>
+            📬 Email Summary
+            <span className={`settings-group-chevron${expandedSections.has("email") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("email") && (<>
           <div className="settings-item">
             <label>Allow Email Summary</label>
             <div className="settings-theme-toggle">
@@ -880,11 +929,16 @@ export default function SettingsPanel({
             or leaves the Sandbox Prism. Credentials stay in memory only. Configure your IMAP
             server details below after enabling. Patent Pending.
           </div>
+          </>)}
         </div>
 
         {/* ── Calendar Integration (Patent Pending) ── */}
         <div className="settings-group">
-          <h3>📅 Calendar Integration</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("calendar")}>
+            📅 Calendar Integration
+            <span className={`settings-group-chevron${expandedSections.has("calendar") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("calendar") && (<>
           <div className="settings-item">
             <label>Allow Calendar Summary</label>
             <div className="settings-theme-toggle">
@@ -902,11 +956,16 @@ export default function SettingsPanel({
             No calendar data is ever modified, sent to the cloud, or leaves the Sandbox Prism.
             Point this to your exported .ics file or calendar directory. Patent Pending.
           </div>
+          </>)}
         </div>
 
         {/* ── Finance Keeper (Patent Pending) ── */}
         <div className="settings-group">
-          <h3>💰 Finance Keeper</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("finance")}>
+            💰 Finance Keeper
+            <span className={`settings-group-chevron${expandedSections.has("finance") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("finance") && (<>
           <div className="settings-item">
             <label>Allow Portfolio Tracking</label>
             <div className="settings-theme-toggle">
@@ -923,11 +982,16 @@ export default function SettingsPanel({
             No trades are executed, no financial accounts are accessed, and no API keys are required.
             Add your ticker symbols (e.g. AAPL, GOOG, TSLA) below after enabling. Patent Pending.
           </div>
+          </>)}
         </div>
 
         {/* ── Security Status (live from backend) ── */}
         <div className="settings-group">
-          <h3>🛡️ Security Status</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("security")}>
+            🛡️ Security Status
+            <span className={`settings-group-chevron${expandedSections.has("security") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("security") && (<>
           {securityLoading ? (
             <div className="settings-hint">Loading security status…</div>
           ) : (
@@ -1013,11 +1077,16 @@ export default function SettingsPanel({
           <div className="settings-hint">
             All protections are always active. PrismOS-AI is designed with security-by-default — no configuration needed.
           </div>
+          </>)}
         </div>
 
         {/* ── System Info ── */}
         <div className="settings-group">
-          <h3>📊 System Information</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("system")}>
+            📊 System Information
+            <span className={`settings-group-chevron${expandedSections.has("system") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("system") && (<>
           <div className="settings-version-banner">
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
@@ -1053,11 +1122,16 @@ export default function SettingsPanel({
             <label>Encryption</label>
             <input className="settings-input" value="You-Port — AES-256-GCM Authenticated Encryption (Device-Bound)" readOnly />
           </div>
+          </>)}
         </div>
 
         {/* ── About + Patent Notice ── */}
         <div className="settings-group settings-about">
-          <h3><img src={prismosIcon} alt="" className="header-icon" /> About PrismOS-AI</h3>
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("about")}>
+            <img src={prismosIcon} alt="" className="header-icon" /> About PrismOS-AI
+            <span className={`settings-group-chevron${expandedSections.has("about") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("about") && (<>
           <p className="settings-about-text">
             PrismOS-AI is a local-first agentic personal AI operating system. All
             data stays on your device. Powered by Ollama for local LLM
@@ -1077,6 +1151,7 @@ export default function SettingsPanel({
               © 2026 PrismOS-AI Contributors. All rights reserved.
             </p>
           </div>
+          </>)}
         </div>
       </div>
     </>

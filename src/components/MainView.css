@@ -1846,14 +1846,50 @@
   background: rgba(0, 0, 0, 0.04);
 }
 
-/* ── Intent Transparency Bar ── */
+/* ── Intent Transparency Section ── */
+.transparency-section {
+  margin: -4px 0 8px 48px;
+}
+
+.transparency-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+
+.transparency-toggle:hover {
+  color: var(--text-secondary, #cbd5e1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.transparency-toggle--open {
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.transparency-toggle__chevron {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.transparency-toggle__chevron--open {
+  transform: rotate(90deg);
+}
+
 .transparency-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 6px 16px;
-  margin: -4px 0 8px 48px;
-  opacity: 0.75;
+  padding: 6px 0 6px 8px;
+  margin-top: 4px;
+  opacity: 0.85;
   transition: opacity 0.2s;
 }
 

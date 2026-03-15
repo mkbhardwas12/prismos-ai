@@ -141,7 +141,7 @@ pub fn detect_capabilities(model_name: &str) -> ModelCapabilities {
         name: model_name.to_string(),
         is_vision: is_vision_model(model_name),
         is_code: is_code_model(model_name),
-        is_reasoning: lower.contains("deepseek-r1"),
+        is_reasoning: lower.contains("deepseek-r1") || lower.contains("qwen3") || lower.contains("phi4"),
         is_multilingual,
         is_math,
         is_agentic,
@@ -442,6 +442,30 @@ mod tests {
         assert!(caps.is_multilingual);
         assert!(caps.is_math);
         assert!(caps.is_agentic);
+        assert!(caps.is_reasoning);
         assert_eq!(caps.context_tier, "medium");
+    }
+
+    #[test]
+    fn test_reasoning_detection_phi4() {
+        let caps = detect_capabilities("phi4:latest");
+        assert!(caps.is_reasoning);
+        assert!(!caps.is_vision);
+        assert!(!caps.is_code);
+    }
+
+    #[test]
+    fn test_reasoning_detection_deepseek_r1() {
+        let caps = detect_capabilities("deepseek-r1:1.5b");
+        assert!(caps.is_reasoning);
+        assert!(caps.is_math);
+    }
+
+    #[test]
+    fn test_no_reasoning_for_regular_model() {
+        let caps = detect_capabilities("mistral:latest");
+        assert!(!caps.is_reasoning);
+        let caps2 = detect_capabilities("llama3.2:3b");
+        assert!(!caps2.is_reasoning);
     }
 }

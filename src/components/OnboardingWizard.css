@@ -400,3 +400,12 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] .model-badge--chat { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
+[data-theme="light"] .model-badge--code { background: rgba(16, 185, 129, 0.1); color: #059669; }
+[data-theme="light"] .model-badge--vision { background: rgba(168, 85, 247, 0.1); color: #7c3aed; }
+[data-theme="light"] .model-badge--reasoning { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+[data-theme="light"] .model-badge--agentic { background: rgba(251, 191, 36, 0.1); color: #d97706; }
+[data-theme="light"] .model-badge--multilingual { background: rgba(20, 184, 166, 0.1); color: #0d9488; }
+[data-theme="light"] .model-badge--math { background: rgba(59, 130, 246, 0.1); color: #2563eb; }

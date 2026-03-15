@@ -81,7 +81,23 @@ async fn refract_intent(app: tauri::AppHandle, input: String, model: Option<Stri
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let lens = intent_lens::IntentLens::new();
     let parsed = lens.parse(&input);
-    let model_name = model.unwrap_or_else(|| "mistral".to_string());
+    let user_model = model.unwrap_or_else(|| "mistral".to_string());
+
+    // Detect code intent for smart routing
+    let code_keywords = ["code", "function", "debug", "compile", "algorithm",
+        "implement", "refactor", "programming", "bug", "api", "endpoint",
+        "deploy", "rust", "python", "javascript", "typescript"];
+    let lower_input = input.to_lowercase();
+    let has_code_request = code_keywords.iter().any(|kw| lower_input.contains(kw));
+
+    // Smart-route: swap to code model if code intent detected
+    let model_name = if has_code_request && !smart_router::is_code_model(&user_model) {
+        let available = ollama_bridge::list_models(None).await.unwrap_or_default();
+        let model_names: Vec<String> = available.iter().map(|m| m.name.clone()).collect();
+        smart_router::find_best_code_model(&model_names).unwrap_or(user_model)
+    } else {
+        user_model
+    };
 
     let engine = refractive_core::RefractiveEngine::new();
     let result = engine

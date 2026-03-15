@@ -21,6 +21,30 @@
   color: var(--text-primary);
 }
 
+.settings-group-toggle {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+
+.settings-group-toggle:hover {
+  color: var(--color-accent, #0ea5e9);
+}
+
+.settings-group-chevron {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+
+.settings-group-chevron--open {
+  transform: rotate(90deg);
+}
+
 .settings-item {
   margin-bottom: 14px;
 }

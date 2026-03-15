@@ -24,11 +24,13 @@ interface OnboardingWizardProps {
 // Build POPULAR_MODELS from the registry — show essential + recommended tiers
 const POPULAR_MODELS = MODEL_REGISTRY
   .filter((m) => m.tier === "essential" || m.tier === "recommended")
+  .sort((a, b) => a.priority - b.priority)
   .map((m) => ({
     name: m.name,
-    desc: `${m.isDefault ? "🏆 Recommended — " : ""}${m.description}`,
-    size: m.sizeLabel,
+    desc: `${m.isDefault ? "🏆 Recommended — " : ""}${m.desc}`,
+    size: m.size,
     capabilities: m.capabilities,
+    ramMin: m.ramMin,
   }));
 
 export default function OnboardingWizard({
@@ -40,7 +42,7 @@ export default function OnboardingWizard({
   const [ollamaOk, setOllamaOk] = useState(false);
   const [checking, setChecking] = useState(false);
   const [models, setModels] = useState<OllamaModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState(settings.defaultModel || getDefaultModel().name);
+  const [selectedModel, setSelectedModel] = useState(settings.defaultModel || getDefaultModel(8).name);
   const [pulling, setPulling] = useState(false);
   const [pullProgress, setPullProgress] = useState("");
   const [sampleIntent, setSampleIntent] = useState("");

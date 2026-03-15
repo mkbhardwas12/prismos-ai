@@ -33,7 +33,7 @@ export default function ThoughtCurrentsCard() {
 
   if (loading) return null;
 
-  if (currents.length === 0) {
+  if (!Array.isArray(currents) || currents.length === 0) {
     return (
       <div className="thought-currents-card">
         <h3>🌊 Thought Currents</h3>

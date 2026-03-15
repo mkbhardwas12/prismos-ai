@@ -33,7 +33,7 @@ export default function RefractionJournal() {
 
   if (loading) return null;
 
-  if (!insights || insights.total_refractions === 0) {
+  if (!insights || !insights.band_distribution || !insights.total_refractions) {
     return (
       <div className="refraction-journal">
         <h3>🔮 Refraction Journal</h3>

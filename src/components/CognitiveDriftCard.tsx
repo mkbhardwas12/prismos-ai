@@ -34,7 +34,7 @@ export default function CognitiveDriftCard() {
 
   if (loading) return null;
 
-  if (!drift || drift.weeks_compared === 0) {
+  if (!drift || !drift.current || !drift.deltas || drift.weeks_compared === 0) {
     return (
       <div className="cognitive-drift-card">
         <h3>🧬 Cognitive Drift</h3>

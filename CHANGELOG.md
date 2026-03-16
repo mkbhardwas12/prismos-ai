@@ -13,47 +13,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Highlights
 
-PrismOS-AI v0.5.2 — **Phase 7: Unified Dashboard & Keeper Agents** release. Adds the Daily Dashboard view combining morning brief, proactive cards, and quick links into a single unified landing page. Introduces the ProactivePanel — a permanent collapsible sidebar panel with live calendar, email, finance, and graph feeds. Three new Keeper agents (Email, Calendar, Finance) join the agent roster, bringing the total to 8 AI agents. Startup View setting lets users choose their default view.
+PrismOS-AI v0.5.2 — **Phase 7–10: Self-Learning Intelligence** release. Massive expansion adding Self-Learning AI (Cognitive Drift detection, Thought Currents tracking, Edge Prophecy predictions, Refraction Journal), Domain Detection (auto-detect code/medical/legal/finance/science domains), Model Registry (15 curated models across 4 tiers), Model Tracker (per-model performance analytics), Smart Router code routing, Intent Transparency UI, Daily Dashboard, ProactivePanel, 3 Keeper Agents, comprehensive security hardening, and 478 tests.
 
 ### Added
 
-- **Daily Dashboard** — New unified view (`DailyDashboard.tsx`, 442 lines) with:
+- **Self-Learning System** — Four interconnected self-learning modules:
+  - `cognitive_drift.rs` — Detects topic drift patterns over time; `DriftVector` with magnitude/direction/confidence; `analyze_drift()` identifies sudden vs gradual topic shifts; graph persistence as `drift_pattern` nodes
+  - `thought_currents.rs` — Tracks recurring thought patterns and frequencies; `ThoughtCurrent` with topic/frequency/momentum/last_seen; `detect_currents()` identifies dominant thinking patterns; graph persistence as `thought_current` nodes
+  - `edge_prophecy.rs` — Predicts likely future connections in the knowledge graph; `Prophecy` with predicted source/target/confidence/reasoning; `predict_edges()` uses spectral similarity + temporal patterns; graph persistence as `edge_prophecy` nodes
+  - `refraction_journal.rs` — Records every AI reasoning step for introspection; `JournalEntry` with intent/context/reasoning_path/outcome/learning; `record_refraction()` + `get_journal()` + `get_insights()`; graph persistence as `journal_entry` nodes
+- **Domain Detection** — `domain_detector.rs` with automatic domain classification:
+  - 6 domains: Code, Medical, Legal, Finance, Science, General
+  - Keyword-based detection with confidence scoring
+  - `detect_domain()` returns `DomainClassification` with domain/confidence/keywords_matched
+  - Used by Smart Router for model selection
+- **Model Registry** — `modelRegistry.ts` single source of truth for 15 curated AI models:
+  - 📝 Essential tier: qwen3:4b (🏆 default), llama3.2, phi4-mini, gemma3:4b
+  - 🎯 Recommended tier: mistral, deepseek-r1, llama3.1
+  - ⚡ Power tier: qwen2.5, codellama, command-r, granite3.1-dense
+  - 🔬 Edge/Specialized tier: moondream, tinyllama, llama3.2-vision, nomic-embed-text
+  - Each model: id, name, size, description, category, tier, isDefault, visionCapable, embeddingModel flags
+  - `getModelsByTier()`, `getDefaultModel()`, `getVisionModels()`, `getEmbeddingModels()` helpers
+- **Model Tracker** — `model_tracker.rs` per-model performance analytics:
+  - Tracks response_time, token_count, success/failure, domain per query
+  - `ModelStats` with total_queries, avg_response_time, success_rate, tokens_generated, favorite_domain
+  - `record_model_usage()` + `get_model_stats()` + `get_all_model_stats()`
+  - SQLite `model_usage` table with full history
+- **Smart Router Code Routing** — Enhanced `smart_router.rs`:
+  - Domain-aware routing: code tasks → codellama, vision tasks → llama3.2-vision
+  - `RoutingDecision` includes domain, auto_swapped flag, and human-readable reason
+  - Integrates with Domain Detector for automatic classification
+- **Intent Transparency** — UI shows routing decisions to the user:
+  - Model swap badge when Smart Router auto-switches models
+  - Domain detection indicator in conversation metadata
+  - Processing timer showing response latency
+- **Daily Dashboard** — New unified view (`DailyDashboard.tsx`) with:
   - Hero greeting with time-of-day awareness (morning/afternoon/evening/night)
   - Stats strip: total nodes, today's additions, active agents, health score
   - Six content cards: Calendar Events, Email Summary, Finance Overview, Today's Highlights, Pending Topics, Daily Suggestions
   - Quick links grid for one-click navigation to all views
   - Auto-refresh every 10 minutes with manual refresh button
-  - Full glassmorphism styling with responsive grid layout
-  - Spectrum theming: `[data-spectrum="dashboard"]` purple/cyan accent
-  - Keyboard shortcut: `Ctrl+7`
-- **ProactivePanel** — Permanent collapsible sidebar panel (`ProactivePanel.tsx`, 276 lines) with:
+  - Spectrum theming: `[data-spectrum="dashboard"]` purple/cyan accent; keyboard shortcut `Ctrl+7`
+- **ProactivePanel** — Permanent collapsible sidebar panel (`ProactivePanel.tsx`) with:
   - Live calendar, email, finance, and daily suggestions feeds
   - Graph insight card showing top Spectrum Graph node
   - Collapsible with smooth animation; state persists across sessions
-  - Color-coded sections with glassmorphism cards
-- **Email Keeper Agent** — AI agent for email monitoring, inbox summaries, and smart notifications
-- **Calendar Keeper Agent** — AI agent for calendar awareness, upcoming events, and scheduling reminders
-- **Finance Keeper Agent** — AI agent for portfolio tracking, market alerts, and financial insights
-- **Startup View Setting** — New "Startup View" dropdown in Settings → Appearance; choose default view on launch (Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings); `defaultView` field in `AppSettings` with `localStorage` persistence
+- **Keeper Agents** — Three new AI agents (total now 8):
+  - Email Keeper — inbox monitoring, smart notifications
+  - Calendar Keeper — event awareness, scheduling reminders
+  - Finance Keeper — portfolio tracking, market alerts
+- **Startup View Setting** — Default view dropdown in Settings → Appearance
+- **Security Hardening** — 5 critical security fixes:
+  - WASM fuel/memory validation: clamped to safe ranges (1K–100M fuel, 1–256 pages)
+  - Sandbox enforcement: `enforce_sandbox()` gate on all code execution paths
+  - Audit log completeness: 6 new audit points (model changes, exports, setting modifications)
+  - CSP meta tag: strict Content-Security-Policy in `index.html`
+  - Tauri capabilities: locked to minimum required permissions in `default.json`
+  - Model verification: SHA-256 integrity checks on model files
 
 ### Changed
 
-- `Sidebar.tsx`: Added 🏠 Daily Dashboard as first nav item (Ctrl+7); integrated ProactivePanel below navigation
-- `App.tsx`: Added `"dashboard"` to View type; `renderView()` handles dashboard case; Spotlight commands include Dashboard; startup reads `defaultView` from localStorage
-- `App.css`: Added `[data-spectrum="dashboard"]` accent theming
-- `types/index.ts`: Added `defaultView: string` to `AppSettings` interface
-- `lib/config.ts`: Added `defaultView: "chat"` to `DEFAULT_SETTINGS`
-- `SettingsPanel.tsx`: Added Startup View dropdown in Appearance section
-- `SettingsPanel.css`: Added `.settings-select` dropdown styling
-- Agent count increased from 5 to **8** across all documentation and UI references
-- Total test count: **162** (97 frontend Vitest + 65 backend cargo test)
+- `lib.rs`: Added 10 new modules; registered 9 new Tauri commands; total IPC commands now **85**
+- `spectrum_graph.rs`: 4 new tables (`model_usage`, `domain_cache`, `thought_currents`, `edge_prophecies`); total **14 tables**
+- `Cargo.toml`: Added `default-run = "prismos"`; version bumped to 0.5.2
+- Default model changed from `llama3.2` to `qwen3:4b` across all config
+- Agent count increased from 5 to **8**
+- All components updated with security audit recommendations
 
 ### Tests
 
-- `DailyDashboard.test.tsx` — 8 tests: region, greeting, date, refresh, quick links (6), navigation, empty state
-- `ProactivePanel.test.tsx` — 9 tests: header, accessibility, greeting, collapse/expand, graph insight, refresh, interaction
-- Total frontend tests: **97** (was 80)
-- Total backend tests: **65** (unchanged)
+- **478 tests total** (was 162):
+  - Frontend (Vitest): **151 tests** across 16 test files
+  - Backend (cargo test): **327 tests** across all Rust modules
+- New test files: `cognitive_drift.test.tsx`, `thought_currents.test.tsx`, `edge_prophecy.test.tsx`, `refraction_journal.test.tsx`, `domain_detector.test.tsx`, `model_tracker.test.tsx`, `model_registry.test.tsx`, `intent_transparency.test.tsx`, `security_hardening.test.tsx`, `processing_timer.test.tsx`
+- Rust tests: comprehensive unit tests in every new module (drift vectors, current detection, edge prediction, journal CRUD, domain classification, model stats, routing logic)
 
 ---
 

@@ -4,19 +4,20 @@
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.5.2-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
+[![Version](https://img.shields.io/badge/version-0.6.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 [![Patent](https://img.shields.io/badge/Patent-Pending-10b981)](./)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Tests](https://img.shields.io/badge/tests-478%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
+[![Tests](https://img.shields.io/badge/tests-499%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
+[![Brain Wrapped](https://img.shields.io/badge/%E2%9C%A8-Brain%20Wrapped-ff6ec7)](#-brain-wrapped--cognitive-fingerprint-new-in-v060)
 [![Models](https://img.shields.io/badge/models-15%20supported-blueviolet)](src/lib/modelRegistry.ts)
 
 **Patent Pending** — US Provisional Patent filed February 2026
 
 PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you.
 
-Features include **Cognitive Imprint™** (an adaptive personality engine that learns HOW you think), **Prism Refraction™** (multiple reasoning perspectives per response), **Domain Detection** (learns WHAT you work on — medical, engineering, science, legal, etc.), **Thought Currents** (discovers recurring patterns in your queries), **Edge Prophecy** (predicts knowledge connections), **Model Registry** (15 curated 2025-2026 models with hardware-aware recommendations), **Smart Router** (auto-swaps to specialized models for code/vision tasks), **Local Vision**, **Document RAG**, **Background Omnipresence** (Ctrl+Space), **Proactive Suggestions**, **WASM Sandbox Prisms**, and a comprehensive **defense-in-depth security model** (AES-256-GCM encryption, WASM isolation, HMAC signing, tamper-evident audit chain, Secure Enclave key derivation) — all running entirely offline.
+Features include **Brain Wrapped + Cognitive Fingerprint™** (a privacy-preserving, deterministic SHA-256 hash of your mind that powers a Spotify-Wrapped-style 7-slide story — the world's first cognitive identity primitive, no prior art), **Cognitive Imprint™** (an adaptive personality engine that learns HOW you think), **Prism Refraction™** (multiple reasoning perspectives per response), **Domain Detection** (learns WHAT you work on — medical, engineering, science, legal, etc.), **Thought Currents** (discovers recurring patterns in your queries), **Edge Prophecy** (predicts knowledge connections), **Model Registry** (15 curated 2025-2026 models with hardware-aware recommendations), **Smart Router** (auto-swaps to specialized models for code/vision tasks), **Local Vision**, **Document RAG**, **Background Omnipresence** (Ctrl+Space), **Proactive Suggestions**, **WASM Sandbox Prisms**, and a comprehensive **defense-in-depth security model** (AES-256-GCM encryption, WASM isolation, HMAC signing, tamper-evident audit chain, Secure Enclave key derivation) — all running entirely offline.
 
 <p align="center">
   <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to eight AI agents at once" />

@@ -18,6 +18,7 @@ import DailyDashboard from "./components/DailyDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import OnboardingWizard from "./components/OnboardingWizard";
 import SpotlightOverlay from "./components/SpotlightOverlay";
+import BrainWrapped from "./components/BrainWrapped";
 import { DEFAULT_SETTINGS } from "./lib/config";
 import prismosIcon from "./assets/prismos-icon.svg";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
@@ -74,6 +75,14 @@ function App() {
     () => !localStorage.getItem("prismos-onboarding-done")
   );
   const [spotlightOpen, setSpotlightOpen] = useState(false);
+  const [brainWrappedOpen, setBrainWrappedOpen] = useState(false);
+
+  // ── Brain Wrapped: open via custom event from Sidebar / Spotlight ──
+  useEffect(() => {
+    const open = () => setBrainWrappedOpen(true);
+    window.addEventListener("prismos:open-brain-wrapped", open);
+    return () => window.removeEventListener("prismos:open-brain-wrapped", open);
+  }, []);
 
   // ── Settings: load from localStorage (persists across restarts) ──
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -492,6 +501,11 @@ function App() {
         onSubmit={handleSpotlightSubmit}
         suggestions={startupSuggestions}
       />
+
+      {/* Brain Wrapped™ — shareable cognitive story (Patent Pending) */}
+      {brainWrappedOpen && (
+        <BrainWrapped onClose={() => setBrainWrappedOpen(false)} />
+      )}
 
       {/* You-Port session restore toast */}
       {toast?.visible && (

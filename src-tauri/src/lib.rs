@@ -23,6 +23,7 @@ mod cognitive_profile;
 mod thought_currents;
 mod domain_detector;
 mod model_tracker;
+mod brain_wrapped;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -1141,6 +1142,90 @@ async fn get_refraction_insights(db: tauri::State<'_, DbState>) -> Result<String
     let graph = db.0.lock().map_err(|e| e.to_string())?;
     let insights = graph.get_refraction_insights().map_err(|e| e.to_string())?;
     serde_json::to_string(&insights).map_err(|e| e.to_string())
+}
+
+// ─── Brain Wrapped™ + Cognitive Fingerprint™ (Patent Pending) ──────────────
+//
+// THE INNOVATION: A shareable, animated story of HOW you think — generated
+// entirely from local cognitive data. Includes a deterministic visual
+// fingerprint that's mathematically unique to each mind, enabling both
+// privacy-preserving identity AND cognitive compatibility scoring.
+
+/// Generate a complete Brain Wrapped snapshot — the data needed for the
+/// shareable, animated story UI. Aggregates profile + drift + currents +
+/// prophecies + refraction insights + lifetime stats into one payload.
+#[tauri::command]
+async fn generate_brain_snapshot(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+
+    // Pull all the cognitive data sources (graceful fallbacks for cold-start)
+    let profile = graph.get_cognitive_profile().map_err(|e| e.to_string())?;
+    let drift = graph.get_cognitive_drift(12).ok();
+    let currents_raw = graph.get_thought_currents().unwrap_or_default();
+    let prophecies = graph.predict_edges(10).unwrap_or_default();
+    let refraction = graph.get_refraction_insights().ok();
+    let metrics = graph.get_metrics().map_err(|e| e.to_string())?;
+
+    // Map ThoughtCurrent → CurrentSummary (UI-friendly shape)
+    let currents: Vec<brain_wrapped::CurrentSummary> = currents_raw
+        .iter()
+        .take(5)
+        .map(|c| brain_wrapped::CurrentSummary {
+            theme: c.description.clone(),
+            frequency: c.evidence.len() as u32,
+            momentum: if c.confidence > 0.7 {
+                "rising".to_string()
+            } else if c.confidence > 0.4 {
+                "steady".to_string()
+            } else {
+                "fading".to_string()
+            },
+        })
+        .collect();
+
+    // Total intents + days_active from intent_log
+    let (total_intents, days_active) = graph.get_lifetime_stats().map_err(|e| e.to_string())?;
+
+    let snapshot = brain_wrapped::build_snapshot(
+        profile,
+        drift,
+        currents,
+        prophecies,
+        refraction,
+        total_intents,
+        metrics.node_count as u32,
+        metrics.edge_count as u32,
+        days_active,
+    );
+
+    serde_json::to_string(&snapshot).map_err(|e| e.to_string())
+}
+
+/// Compute cognitive compatibility between the current user's profile and
+/// another profile (passed as JSON). Returns a 0.0–1.0 score plus interpretation.
+/// Used for: "Find your AI twin", you-now vs you-then comparisons, etc.
+#[tauri::command]
+async fn compute_cognitive_compatibility(
+    db: tauri::State<'_, DbState>,
+    other_profile_json: String,
+) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let me = graph.get_cognitive_profile().map_err(|e| e.to_string())?;
+    let other: cognitive_profile::CognitiveProfile = serde_json::from_str(&other_profile_json)
+        .map_err(|e| format!("invalid profile JSON: {}", e))?;
+
+    let score = brain_wrapped::compute_compatibility(&me, &other);
+    serde_json::to_string(&score).map_err(|e| e.to_string())
+}
+
+/// Get just the cognitive fingerprint (cheaper than full snapshot, for
+/// rendering the small fingerprint badge in the sidebar / title bar).
+#[tauri::command]
+async fn get_cognitive_fingerprint(db: tauri::State<'_, DbState>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let profile = graph.get_cognitive_profile().map_err(|e| e.to_string())?;
+    let fingerprint = brain_wrapped::generate_fingerprint(&profile);
+    serde_json::to_string(&fingerprint).map_err(|e| e.to_string())
 }
 
 // ─── Domain Detection (Patent Pending) ──────────────────────────────────────
@@ -2803,6 +2888,10 @@ pub fn run() {
             dismiss_predicted_edge,
             // Refraction Journal (Patent Pending)
             get_refraction_insights,
+            // Brain Wrapped™ + Cognitive Fingerprint™ (Patent Pending)
+            generate_brain_snapshot,
+            compute_cognitive_compatibility,
+            get_cognitive_fingerprint,
             // Domain Detection (Patent Pending)
             get_domain_profile,
             // Model Performance (Patent Pending)

@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] — 2026-04-18
+
+### 🎯 Highlights
+
+**Brain Wrapped + Cognitive Fingerprint** — the world's first privacy-preserving, deterministic cognitive identity primitive. A Spotify-Wrapped-style 7-slide animated story refracted entirely from on-device data, with a SHA-256 fingerprint hash that lets two PrismOS users compute "cognitive twin" compatibility without ever sharing raw data. **No prior art.**
+
+### Added
+
+- **`brain_wrapped.rs`** (~500 lines, 10 tests) — Cognitive Fingerprint engine:
+  - `CognitiveFingerprint` — deterministic SHA-256 hash of 5-axis cognitive profile (depth/creativity/formality/technical_level/example_preference); same input ⇒ same hash, forever
+  - 12 archetypes (Architect, Explorer, Synthesizer, Strategist, Storyteller, Specialist, Scout, Sage, Maker, Catalyst, Pragmatist, Pattern-Seer); selected via Euclidean distance to anchor points in 5-D cognitive space
+  - HSL color palette + pentagon shape-points generated from the hash → unique visual signature per mind
+  - `compute_compatibility(a, b)` — normalized Euclidean distance with 6-tier interpretation ("cognitive twin" → "complementary opposites")
+  - `build_snapshot()` — aggregates fingerprint + profile + axis labels + drift + currents + prophecies + lifetime stats into a single shareable payload
+- **`BrainWrapped.tsx`** + **`BrainWrapped.css`** (~930 lines, 11 tests) — 7-slide animated story:
+  - Slide 1: SVG cognitive fingerprint pentagon
+  - Slide 2: Archetype reveal with tagline
+  - Slide 3: Five animated axis bars
+  - Slide 4: Evolution / cognitive drift summary
+  - Slide 5: Top thought currents
+  - Slide 6: Edge prophecies (predicted connections)
+  - Slide 7: Lifetime stats
+  - Auto-advance, pause, keyboard nav (←/→/Space/Esc), PNG export via `html2canvas`, X (Twitter) share button, "◆ PrismOS-AI · prismos.ai · local · private" watermark
+- **3 new Tauri commands** (96 → **99**): `generate_brain_snapshot`, `compute_cognitive_compatibility`, `get_cognitive_fingerprint`
+- **Sidebar entry** "✨ Brain Wrapped" with shimmer hover gradient
+
+### Changed
+
+- Test counts: backend **327 → 337** tests, frontend **151 → 162** tests (16 files), all passing
+- `spectrum_graph.rs` — added public `get_lifetime_stats()` helper
+- `Cargo.toml` — added `hex = "0.4"` dependency
+- `package.json` — added `html2canvas` dependency
+- `types/index.ts` — added 7 new interfaces for Brain Wrapped payload
+
+### Why this matters
+
+A cognitive fingerprint hash is to 2026 what an SSH public key was to 1995: a small string you can publish that proves identity-of-a-mind without revealing anything sensitive. PrismOS-AI is shipping the primitive first.
+
+---
+
 ## [0.5.2] — 2026-03-03
 
 ### 🎯 Highlights

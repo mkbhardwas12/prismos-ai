@@ -490,3 +490,70 @@ export interface SystemInfo {
   os: string;
   arch: string;
 }
+
+// ─── Brain Wrapped™ + Cognitive Fingerprint™ (Patent Pending) ──────────────
+
+/** Deterministic visual signature of a cognitive profile. */
+export interface CognitiveFingerprint {
+  hash: string;
+  palette: string[];
+  shape_points: [number, number][];
+  rotation: number;
+  archetype: string;
+  archetype_tagline: string;
+  seed: number;
+}
+
+export interface AxisLabels {
+  depth: string;
+  creativity: string;
+  formality: string;
+  technical_level: string;
+  example_preference: string;
+}
+
+export interface CurrentSummary {
+  theme: string;
+  frequency: number;
+  momentum: "rising" | "steady" | "fading";
+}
+
+export interface RefractionSummary {
+  dominant_band: string;
+  dominant_pct: number;
+  blind_spot: string | null;
+  growth_score: number;
+}
+
+export interface LifetimeStats {
+  total_intents: number;
+  total_nodes: number;
+  total_edges: number;
+  days_active: number;
+  interactions: number;
+  favorite_archetype_phrase: string;
+}
+
+/** Complete Brain Wrapped snapshot — feeds the animated story UI. */
+export interface BrainSnapshot {
+  fingerprint: CognitiveFingerprint;
+  profile: CognitiveProfile;
+  axis_labels: AxisLabels;
+  drift: CognitiveDrift | null;
+  evolution_summary: string;
+  top_currents: CurrentSummary[];
+  prophecy_count: number;
+  top_prophecies: PredictedEdge[];
+  refraction: RefractionSummary | null;
+  stats: LifetimeStats;
+  generated_at: string;
+  schema_version: number;
+}
+
+/** Cognitive compatibility score between two profiles. */
+export interface CompatibilityScore {
+  score: number;
+  axis_distances: CognitiveDeltaSet;
+  interpretation: string;
+  shared_archetype: boolean;
+}

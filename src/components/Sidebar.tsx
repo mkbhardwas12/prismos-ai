@@ -195,6 +195,15 @@ export default function Sidebar({
             </div>
 
             <button
+              className="sidebar-item sidebar-item-special"
+              onClick={() => window.dispatchEvent(new CustomEvent("prismos:open-brain-wrapped"))}
+              title="See your shareable Cognitive Fingerprint and year-in-thinking story"
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">✨</span>
+              Brain Wrapped<span className="sidebar-item-subtitle">Your mind, visualized</span>
+            </button>
+
+            <button
               className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}
               onClick={() => handleNavigate("settings")}
               aria-current={currentView === "settings" ? "page" : undefined}

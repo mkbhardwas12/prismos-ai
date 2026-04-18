@@ -4493,6 +4493,7 @@ dependencies = [
  "docx-rs",
  "futures-util",
  "getrandom 0.2.17",
+ "hex",
  "hmac",
  "hound",
  "ical",

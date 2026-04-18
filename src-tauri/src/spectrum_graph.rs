@@ -2193,6 +2193,23 @@ impl SpectrumGraph {
         Ok(rows)
     }
 
+    /// Lifetime stats for Brain Wrapped: (total_intents, distinct_active_days)
+    pub fn get_lifetime_stats(&self) -> Result<(u32, u32), Box<dyn std::error::Error + Send + Sync>> {
+        let total_intents: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM intent_log", [], |row| row.get(0))
+            .unwrap_or(0);
+        let days_active: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(DISTINCT DATE(created_at)) FROM intent_log",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        Ok((total_intents.max(0) as u32, days_active.max(0) as u32))
+    }
+
     /// Generate a daily brief/recap from Spectrum Graph activity
     /// Returns stats about today's activity: intents processed, nodes created/updated,
     /// edges strengthened, top facets, and highlights

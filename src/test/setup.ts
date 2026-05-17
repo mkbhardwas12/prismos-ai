@@ -57,3 +57,40 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   } as any;
 }
+
+// Mock localStorage / sessionStorage — vitest v4 + jsdom no longer ships them
+// as a real Storage implementation, so tests that call .clear()/.getItem() blow up.
+function makeStorage(): Storage {
+  let store: Record<string, string> = {};
+  return {
+    get length() {
+      return Object.keys(store).length;
+    },
+    key(i: number) {
+      return Object.keys(store)[i] ?? null;
+    },
+    getItem(k: string) {
+      return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
+    },
+    setItem(k: string, v: string) {
+      store[k] = String(v);
+    },
+    removeItem(k: string) {
+      delete store[k];
+    },
+    clear() {
+      store = {};
+    },
+  } as Storage;
+}
+
+for (const name of ["localStorage", "sessionStorage"] as const) {
+  const current = (window as any)[name];
+  if (!current || typeof current.clear !== "function") {
+    Object.defineProperty(window, name, {
+      value: makeStorage(),
+      writable: true,
+      configurable: true,
+    });
+  }
+}

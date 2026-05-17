@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="PrismOS-AI demo: drop a contract, eight local agents debate, answer arrives offline.">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#0a0a14"/>
+      <stop offset="1" stop-color="#10121f"/>
+    </linearGradient>
+    <linearGradient id="prism" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0"   stop-color="#ff5c8a"/>
+      <stop offset=".25" stop-color="#ffb84d"/>
+      <stop offset=".5"  stop-color="#48e0a7"/>
+      <stop offset=".75" stop-color="#4dc7ff"/>
+      <stop offset="1"   stop-color="#a780ff"/>
+    </linearGradient>
+    <style>
+      .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+      .sans { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .fade-in  { opacity: 0; animation: fadeIn .6s ease forwards; }
+      .fade-out { opacity: 1; animation: fadeOut .4s ease forwards; }
+      @keyframes fadeIn  { to { opacity: 1 } }
+      @keyframes fadeOut { to { opacity: 0 } }
+
+      /* 22 second total loop */
+      .scene { opacity: 0; }
+      .s1 { animation: s1 22s linear infinite; }
+      .s2 { animation: s2 22s linear infinite; }
+      .s3 { animation: s3 22s linear infinite; }
+      .s4 { animation: s4 22s linear infinite; }
+      @keyframes s1 { 0% {opacity:0} 2% {opacity:1} 22% {opacity:1} 26% {opacity:0} 100% {opacity:0} }
+      @keyframes s2 { 0% {opacity:0} 26% {opacity:0} 30% {opacity:1} 50% {opacity:1} 54% {opacity:0} 100% {opacity:0} }
+      @keyframes s3 { 0% {opacity:0} 54% {opacity:0} 58% {opacity:1} 78% {opacity:1} 82% {opacity:0} 100% {opacity:0} }
+      @keyframes s4 { 0% {opacity:0} 82% {opacity:0} 86% {opacity:1} 98% {opacity:1} 100% {opacity:0} }
+
+      .agent       { opacity: 0; animation: agentPulse 22s linear infinite; }
+      .agent-1     { animation-delay: -16.4s }
+      .agent-2     { animation-delay: -15.8s }
+      .agent-3     { animation-delay: -15.2s }
+      .agent-4     { animation-delay: -14.6s }
+      .agent-5     { animation-delay: -14.0s }
+      .agent-6     { animation-delay: -13.4s }
+      .agent-7     { animation-delay: -12.8s }
+      .agent-8     { animation-delay: -12.2s }
+      @keyframes agentPulse {
+        0%   { opacity: 0; transform: scale(.85) }
+        6%   { opacity: 1; transform: scale(1.08) }
+        14%  { opacity: .6; transform: scale(1) }
+        70%  { opacity: .6; transform: scale(1) }
+        72%  { opacity: 0; transform: scale(.85) }
+        100% { opacity: 0; transform: scale(.85) }
+      }
+
+      .ring {
+        fill: none; stroke: url(#prism); stroke-width: 2;
+        stroke-dasharray: 4 6;
+        animation: spin 8s linear infinite;
+        transform-origin: 240px 320px;
+      }
+      @keyframes spin { to { transform: rotate(360deg) } }
+
+      .cursor { animation: blink 1s steps(2) infinite; }
+      @keyframes blink { 50% { opacity: 0 } }
+
+      .stream-line { stroke-dasharray: 600; stroke-dashoffset: 600;
+                     animation: draw 6s ease-out infinite; }
+      @keyframes draw { 30% {stroke-dashoffset:0} 90% {stroke-dashoffset:0} 100% {stroke-dashoffset:600} }
+    </style>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- Top status bar -->
+  <g class="sans" fill="#7a7e9a" font-size="13">
+    <circle cx="22" cy="22" r="6" fill="#ff5c8a"/>
+    <circle cx="42" cy="22" r="6" fill="#ffb84d"/>
+    <circle cx="62" cy="22" r="6" fill="#48e0a7"/>
+    <text x="92" y="27">PrismOS-AI · local · offline</text>
+    <text x="1170" y="27" text-anchor="end" fill="#48e0a7">● 0 bytes egress</text>
+  </g>
+
+  <!-- Prism core (always visible) -->
+  <g transform="translate(240 320)">
+    <circle r="74" class="ring"/>
+    <polygon points="0,-46 40,23 -40,23" fill="url(#prism)" opacity=".85"/>
+    <text x="0" y="92" text-anchor="middle" fill="#cfd2ea" class="sans" font-size="14" font-weight="600">PRISM CORE</text>
+    <text x="0" y="110" text-anchor="middle" fill="#7a7e9a" class="sans" font-size="11">8 agents · LangGraph debate</text>
+  </g>
+
+  <!-- 8 agent satellites around the prism -->
+  <g transform="translate(240 320)">
+    <g class="agent agent-1"><circle cx="0"    cy="-130" r="18" fill="#ff5c8a"/><text x="0"    y="-126" text-anchor="middle" font-size="14" class="sans">🎯</text></g>
+    <g class="agent agent-2"><circle cx="92"   cy="-92"  r="18" fill="#ffb84d"/><text x="92"   y="-88"  text-anchor="middle" font-size="14" class="sans">🧠</text></g>
+    <g class="agent agent-3"><circle cx="130"  cy="0"    r="18" fill="#48e0a7"/><text x="130"  y="5"    text-anchor="middle" font-size="14" class="sans">💡</text></g>
+    <g class="agent agent-4"><circle cx="92"   cy="92"   r="18" fill="#4dc7ff"/><text x="92"   y="97"   text-anchor="middle" font-size="14" class="sans">🔧</text></g>
+    <g class="agent agent-5"><circle cx="0"    cy="130"  r="18" fill="#a780ff"/><text x="0"    y="135"  text-anchor="middle" font-size="14" class="sans">🛡️</text></g>
+    <g class="agent agent-6"><circle cx="-92"  cy="92"   r="18" fill="#ff5c8a"/><text x="-92"  y="97"   text-anchor="middle" font-size="14" class="sans">📬</text></g>
+    <g class="agent agent-7"><circle cx="-130" cy="0"    r="18" fill="#ffb84d"/><text x="-130" y="5"    text-anchor="middle" font-size="14" class="sans">📅</text></g>
+    <g class="agent agent-8"><circle cx="-92"  cy="-92"  r="18" fill="#48e0a7"/><text x="-92"  y="-88"  text-anchor="middle" font-size="14" class="sans">💰</text></g>
+  </g>
+
+  <!-- ────────── Scene 1: drop a file ────────── -->
+  <g class="scene s1">
+    <text x="520" y="180" class="sans" fill="#cfd2ea" font-size="28" font-weight="600">1. Drop a contract.</text>
+    <g transform="translate(520 220)">
+      <rect width="260" height="140" rx="10" fill="#1a1d2e" stroke="#3a3f5e" stroke-width="1.5"/>
+      <rect x="20"  y="22" width="180" height="8"  rx="3" fill="#3a3f5e"/>
+      <rect x="20"  y="42" width="220" height="8"  rx="3" fill="#3a3f5e"/>
+      <rect x="20"  y="62" width="160" height="8"  rx="3" fill="#3a3f5e"/>
+      <rect x="20"  y="82" width="200" height="8"  rx="3" fill="#3a3f5e"/>
+      <rect x="20" y="102" width="120" height="8"  rx="3" fill="#3a3f5e"/>
+      <text x="20" y="132" class="mono" fill="#7a7e9a" font-size="11">contract-v2.pdf · 14 pages</text>
+    </g>
+  </g>
+
+  <!-- ────────── Scene 2: ask the question ────────── -->
+  <g class="scene s2">
+    <text x="520" y="180" class="sans" fill="#cfd2ea" font-size="28" font-weight="600">2. Ask anything.</text>
+    <g transform="translate(520 220)">
+      <rect width="640" height="64" rx="10" fill="#1a1d2e" stroke="#48e0a7" stroke-width="1.5"/>
+      <text x="22" y="40" class="mono" fill="#cfd2ea" font-size="16">› What changed vs. last week's draft?<tspan class="cursor" fill="#48e0a7">▍</tspan></text>
+    </g>
+    <text x="520" y="310" class="mono" fill="#7a7e9a" font-size="13">↩ enter — eight agents take it from here</text>
+  </g>
+
+  <!-- ────────── Scene 3: agents debate, answer streams ────────── -->
+  <g class="scene s3">
+    <text x="520" y="180" class="sans" fill="#cfd2ea" font-size="28" font-weight="600">3. They debate. Locally.</text>
+
+    <!-- streaming lines from prism to answer box -->
+    <g stroke="url(#prism)" stroke-width="1.2" fill="none" opacity=".7">
+      <path class="stream-line" d="M 340 320 C 420 280, 470 240, 530 230"/>
+      <path class="stream-line" d="M 340 320 C 420 320, 470 260, 530 250" style="animation-delay:-1.5s"/>
+      <path class="stream-line" d="M 340 320 C 420 360, 470 280, 530 270" style="animation-delay:-3s"/>
+    </g>
+
+    <g transform="translate(520 210)">
+      <rect width="700" height="220" rx="10" fill="#1a1d2e" stroke="#3a3f5e" stroke-width="1.5"/>
+      <text x="22" y="38" class="mono" fill="#48e0a7" font-size="13">▎Reasoner · streaming</text>
+      <text x="22" y="68"  class="mono" fill="#cfd2ea" font-size="13">▸ §4.2 indemnity cap raised $1M → $3M</text>
+      <text x="22" y="92"  class="mono" fill="#cfd2ea" font-size="13">▸ Termination notice 30d → 60d</text>
+      <text x="22" y="116" class="mono" fill="#cfd2ea" font-size="13">▸ New §9 — IP assignment clause added</text>
+      <text x="22" y="140" class="mono" fill="#cfd2ea" font-size="13">▸ Governing law DE → NY</text>
+      <text x="22" y="170" class="mono" fill="#ffb84d" font-size="12">🛡️ Sentinel: 1 risk flagged — review §9</text>
+      <text x="22" y="194" class="mono" fill="#7a7e9a" font-size="11">latency 1.8s · 0 cloud calls · stored in Spectrum Graph</text>
+    </g>
+  </g>
+
+  <!-- ────────── Scene 4: tagline ────────── -->
+  <g class="scene s4">
+    <text x="520" y="220" class="sans" fill="#cfd2ea" font-size="44" font-weight="700">Your offline cofounder.</text>
+    <text x="520" y="270" class="sans" fill="#7a7e9a" font-size="18">100% local · 8 agents · persistent memory · zero egress</text>
+
+    <g transform="translate(520 320)">
+      <rect width="380" height="46" rx="8" fill="#0a0a14" stroke="url(#prism)" stroke-width="1.5"/>
+      <text x="20" y="30" class="mono" fill="#cfd2ea" font-size="14">$ curl -fsSL prismos.sh | sh</text>
+    </g>
+    <text x="520" y="400" class="sans" fill="#48e0a7" font-size="13">github.com/mkbhardwas12/prismos-ai</text>
+  </g>
+
+  <!-- Bottom watermark -->
+  <g class="sans" fill="#3a3f5e" font-size="11">
+    <text x="22" y="624">◆ PrismOS-AI · local · private · MIT</text>
+    <text x="1258" y="624" text-anchor="end">no data leaves this machine</text>
+  </g>
+</svg>

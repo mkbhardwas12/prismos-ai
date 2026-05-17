@@ -1,27 +1,57 @@
-# PrismOS-AI — Local-First Agentic Personal AI Operating System
+# PrismOS-AI
 
-> **Try it in 30 seconds:** `git clone https://github.com/mkbhardwas12/prismos-ai.git && cd prismos-ai && npm install && npm run tauri dev`
+> **Ask anything. Eight local agents debate it, remember it, and refract it — all on your laptop, offline.**
+
+You drop a PDF onto PrismOS-AI and say "what changed in this contract vs. last week's draft?" Eight agents read it locally, debate the answer, and file the result into a knowledge graph that grows with every conversation. No cloud round-trip. Nothing leaves your machine.
+
+<!-- Animated SVG hero — renders inline on GitHub, no GIF/video needed.
+     A full screen-capture demo can replace this once recorded — see docs/DEMO_RECORDING.md. -->
+<p align="center">
+  <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">
+    <img src="docs/media/prismos-demo.gif" width="880" alt="PrismOS-AI demo — ask anything locally, eight agents debate, knowledge graph grows, all offline" />
+  </a>
+  <br/>
+  <sub>
+    <a href="docs/media/prismos-demo.mp4">▶ 1280×720 MP4</a> ·
+    <a href="docs/screenshots/hero.svg">animated SVG fallback</a> ·
+    <a href="docs/screenshots/">all stills</a>
+  </sub>
+</p>
+
+```bash
+# One line:
+curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
+```
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![Version](https://img.shields.io/badge/version-0.6.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
-[![Patent](https://img.shields.io/badge/Patent-Pending-10b981)](./)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![Tests](https://img.shields.io/badge/tests-499%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
 [![Brain Wrapped](https://img.shields.io/badge/%E2%9C%A8-Brain%20Wrapped-ff6ec7)](#-brain-wrapped--cognitive-fingerprint-new-in-v060)
 [![Models](https://img.shields.io/badge/models-15%20supported-blueviolet)](src/lib/modelRegistry.ts)
 
-**Patent Pending** — US Provisional Patent filed February 2026
+> **Hermes is your cloud agent. PrismOS is your offline cofounder.**
+> Cloud agents are great when you're on Wi-Fi and OK paying per token. PrismOS-AI is for the work that should never leave your laptop: contracts, codebases, journals, half-formed ideas. Open the lid, get an answer, close the lid.
 
-PrismOS-AI is a **local-first agentic personal AI operating system** built with Tauri 2.0 + React 18 + Rust. It runs **100% on your device** — your data never leaves your machine. Eight collaborative AI agents work together via a formal debate pipeline, storing everything in a persistent 7-dimensional Spectrum Graph that grows with you.
+### How PrismOS-AI is different
 
-Features include **Brain Wrapped + Cognitive Fingerprint™** (a privacy-preserving, deterministic SHA-256 hash of your mind that powers a Spotify-Wrapped-style 7-slide story — the world's first cognitive identity primitive, no prior art), **Cognitive Imprint™** (an adaptive personality engine that learns HOW you think), **Prism Refraction™** (multiple reasoning perspectives per response), **Domain Detection** (learns WHAT you work on — medical, engineering, science, legal, etc.), **Thought Currents** (discovers recurring patterns in your queries), **Edge Prophecy** (predicts knowledge connections), **Model Registry** (15 curated 2025-2026 models with hardware-aware recommendations), **Smart Router** (auto-swaps to specialized models for code/vision tasks), **Local Vision**, **Document RAG**, **Background Omnipresence** (Ctrl+Space), **Proactive Suggestions**, **WASM Sandbox Prisms**, and a comprehensive **defense-in-depth security model** (AES-256-GCM encryption, WASM isolation, HMAC signing, tamper-evident audit chain, Secure Enclave key derivation) — all running entirely offline.
+| | Cloud agents (Hermes / GPT / Claude) | **PrismOS-AI** |
+|---|---|---|
+| Where it runs | Someone else's GPU | Your laptop |
+| Data egress | Every prompt + reply | Zero bytes |
+| Works on a plane | No | Yes |
+| Per-token cost | Yes | None |
+| Memory | Session window | Persistent 7D knowledge graph |
+| Multi-agent | Tool calls in one model | 8 specialised agents, formal debate |
+| Plugins | Vendor catalog | Local skills + WASM sandbox |
+| Patent footprint | n/a | US Provisional, Feb 2026 |
 
-<p align="center">
-  <img src="docs/screenshots/intent-console.png" width="700" alt="PrismOS-AI Intent Console — talk to eight AI agents at once" />
-</p>
+---
+
+**What's inside:** a local-first agentic AI built with Tauri 2.0 + React 18 + Rust. Eight collaborative agents — Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper — work through a LangGraph debate pipeline and persist everything to a 7-dimensional Spectrum Graph (SQLite, 14 tables). Other things in the box: Brain Wrapped (a Spotify-Wrapped-style story of how *you* think), an adaptive personality engine, multi-band reasoning, recurring-pattern discovery, predicted knowledge connections, 15 curated 2025-2026 models with hardware-aware recommendations, smart routing to vision/code models, local vision + document RAG, a global Ctrl+Space hotkey, and a defense-in-depth security stack (AES-256-GCM, WASM isolation, HMAC, tamper-evident audit chain, Secure Enclave key derivation).
 
 ---
 
@@ -35,6 +65,7 @@ Features include **Brain Wrapped + Cognitive Fingerprint™** (a privacy-preserv
 - [Testing](#-testing)
 - [Project Structure](#-project-structure)
 - [Security Model](#-security-model)
+- [Skills & Plugins](#-skills--plugins-draft)
 - [Contributing](#-contributing)
 - [Tech Stack](#%EF%B8%8F-tech-stack)
 - [Roadmap](#%EF%B8%8F-roadmap)
@@ -65,12 +96,12 @@ Features include **Brain Wrapped + Cognitive Fingerprint™** (a privacy-preserv
 
 | Feature | Description |
 |---------|-------------|
-| **Refractive Core™** | Intent processing pipeline with intent transparency |
-| **Spectrum Graph™** | Persistent multi-dimensional knowledge graph with edge prophecy |
+| **Refractive Core** | Intent processing pipeline with intent transparency |
+| **Spectrum Graph** | Persistent multi-dimensional knowledge graph with edge prophecy |
 | **8 AI Agents** | Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper |
 | **LangGraph Debates** | Multi-agent debate with formal consensus voting |
-| **Sandbox Prism™** | WASM-isolated execution with per-agent allow-lists + auto-rollback |
-| **Cognitive Imprint™** | Adaptive 5-axis personality engine (depth, creativity, formality, technical, examples) |
+| **Sandbox Prism** | WASM-isolated execution with per-agent allow-lists + auto-rollback |
+| **Cognitive Imprint** | Adaptive 5-axis personality engine (depth, creativity, formality, technical, examples) |
 | **Cognitive Drift** | Weekly snapshots track how your thinking style evolves over time |
 | **Thought Currents** | Discovers recurring patterns, seasonal cycles, and thought chains in your queries |
 | **Edge Prophecy** | Predicts knowledge connections using Jaccard similarity + co-access patterns |
@@ -85,7 +116,7 @@ Features include **Brain Wrapped + Cognitive Fingerprint™** (a privacy-preserv
 | **Email Keeper** | AI agent for IMAP email monitoring, summaries, and smart categorization |
 | **Calendar Keeper** | AI agent for .ics calendar awareness, scheduling, and conflict detection |
 | **Finance Keeper** | AI agent for portfolio tracking, market alerts, and financial insights |
-| **You-Port™** | AES-256-GCM encrypted state migration with device-bound keys |
+| **You-Port** | AES-256-GCM encrypted state migration with device-bound keys |
 | **Secure Enclave** | Platform-specific key derivation (TPM 2.0 / macOS SE / Linux TPM / software fallback) |
 | **Audit Log** | Tamper-evident SHA-256 hash chain with genesis entry for all critical operations |
 | **Voice I/O** | Hybrid local voice engine (cpal audio capture + Web Speech API fallback) |
@@ -142,37 +173,37 @@ See [docs/diagrams/](docs/diagrams/) for more SVG diagrams (data flow, security 
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| [Node.js](https://nodejs.org/) | ≥ 18 | Frontend build |
-| [Rust](https://rustup.rs/) | ≥ 1.75 | Tauri backend |
-| [Ollama](https://ollama.com/) | Latest | Local LLM |
-
-### Install & Run
+### One-line install (macOS + Linux)
 
 ```bash
-# Clone the repository
-git clone https://github.com/mkbhardwas12/prismos-ai.git
-cd prismos-ai
-
-# Install frontend dependencies
-npm install
-
-# Pull a local model (PrismOS-AI will guide you through this on first launch)
-ollama pull llama3.2
-
-# Start Ollama in the background
-ollama serve &
-
-# Run in development mode
-npm run tauri dev
+curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 ```
 
-### Download Pre-Built Installers
+### One-line install (Windows · PowerShell)
 
-Pre-built installers are available on the [Releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest):
+```powershell
+irm https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.ps1 | iex
+```
+
+Both installers detect your OS/arch, download the latest signed release, and bootstrap Ollama with a sensible default model (`qwen3:4b`) if it isn't already on your machine. Per-user install on Windows — **no admin required**. Safe to re-run; nothing is ever overwritten without asking. Read the scripts first if you'd like: [`scripts/install.sh`](scripts/install.sh) · [`scripts/install.ps1`](scripts/install.ps1).
+
+### CLI mode (no GUI required)
+
+For headless / dev use, there's a tiny standalone CLI that talks straight to your local Ollama daemon:
+
+```bash
+cargo build --release --bin prismos-cli
+./target/release/prismos-cli ask "explain WASM sandboxing in one paragraph"
+cat notes.md | ./target/release/prismos-cli ask --stdin --model qwen3:4b
+./target/release/prismos-cli models    # list locally-pulled models
+./target/release/prismos-cli health    # check the daemon
+```
+
+Set `PRISMOS_MODEL` / `PRISMOS_OLLAMA_URL` to change defaults. The full agent-debate experience still lives in the GUI; the CLI is the "quick check" surface.
+
+### Download pre-built installers
+
+Pre-built installers are also available on the [Releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest):
 
 - **Windows**: `.msi` or `.exe` installer
 - **macOS**: `.dmg` (Apple Silicon & Intel)
@@ -267,7 +298,7 @@ prismos-ai/
 │       ├── sandbox_prism.rs      # WASM runtime (wasmtime 27) + HMAC signing + allow-lists
 │       ├── ollama_bridge.rs      # LLM + vision streaming
 │       ├── smart_router.rs       # Auto model switching (vision + code routing)
-│       ├── cognitive_profile.rs  # Cognitive Imprint™ — adaptive 5-axis personality engine
+│       ├── cognitive_profile.rs  # Cognitive Imprint — adaptive 5-axis personality engine
 │       ├── thought_currents.rs   # Temporal pattern analysis (recurring cycles, thought chains)
 │       ├── domain_detector.rs    # Professional domain classification (9 domains, 200+ keywords)
 │       ├── model_tracker.rs      # Per-model × per-domain performance tracking
@@ -317,6 +348,14 @@ PrismOS-AI implements **defense-in-depth** with patent-pending security architec
 | **Model Integrity Verification** | SHA-256 checking against known-good model registry | ✅ Active |
 
 See [docs/diagrams/security-model.svg](docs/diagrams/security-model.svg) for the full security flow.
+
+---
+
+## 🧩 Skills & Plugins (draft)
+
+PrismOS-AI is designed to be extended. A *skill* is a folder with a `SKILL.md` (instructions for both the user and the model) and a `manifest.json` (capabilities, triggers, sandbox limits). Skills run inside the same WASM Sandbox Prism as the built-in agents, with the same 3-tier allow-list and audit-chain guarantees.
+
+The full spec — manifest schema, lifecycle, security model, and how it lines up with the emerging `agentskills.io` / Anthropic Skills conventions — is in [`docs/SKILLS.md`](docs/SKILLS.md). It's an open draft (v0.1). Comments + PRs welcome before the v0.7 implementation lands.
 
 ---
 
@@ -375,18 +414,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 PrismOS-AI and its core architectures are protected by a US Provisional Patent filed February 2026. Patent-pending inventions include:
 
-- **Spectrum Graph™** — Persistent multi-dimensional knowledge representation
-- **Refractive Core™** — Intent processing through multiple reasoning perspectives
-- **Sandbox Prism™** — WASM-isolated execution with cryptographic signing
-- **Cognitive Imprint™** — Adaptive 5-axis personality engine
-- **Prism Refraction™** — Multi-band reasoning perspectives per response
-- **Query×Profile Matrix™** — Intent classification × cognitive profile interaction
-- **You-Port™** — AES-256-GCM encrypted state migration with device-bound keys
+- **Spectrum Graph** — Persistent multi-dimensional knowledge representation
+- **Refractive Core** — Intent processing through multiple reasoning perspectives
+- **Sandbox Prism** — WASM-isolated execution with cryptographic signing
+- **Cognitive Imprint** — Adaptive 5-axis personality engine
+- **Prism Refraction** — Multi-band reasoning perspectives per response
+- **Query×Profile Matrix** — Intent classification × cognitive profile interaction
+- **You-Port** — AES-256-GCM encrypted state migration with device-bound keys
 - **Edge Prophecy** — Predictive knowledge connection using graph analysis
 - **Thought Currents** — Temporal pattern discovery in user query streams
 - **Domain Detection** — Professional domain learning from interaction patterns
 
-This open-source release is made available for personal, educational, and non-commercial use. The patented methods and architectures may not be used commercially without a license.
+This open-source release is made available for personal, educational, and non-commercial use under the MIT License. Trademarks for the names above are reserved; the patented methods may not be used commercially without a license.
 
 ---
 

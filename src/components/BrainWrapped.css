@@ -546,6 +546,28 @@
 .bw-action-share:hover {
   box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
 }
+.bw-action:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* ─── Share toast ─────────────────────────────────────────────────────── */
+.bw-share-toast {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 32, 0.92);
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  z-index: 10;
+}
 
 /* ─── Bottom progress ─────────────────────────────────────────────────── */
 .bw-bottom-progress {

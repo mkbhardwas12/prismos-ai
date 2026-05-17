@@ -6,6 +6,7 @@
 // Every slide is shareable as a PNG card with the unique Cognitive Fingerprint.
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, AnimatePresence } from "framer-motion";
 import type { BrainSnapshot } from "../types";
@@ -22,6 +23,8 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
   const [error, setError] = useState<string | null>(null);
   const [slideIndex, setSlideIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const totalSlides = 7;
 
@@ -100,6 +103,174 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
     }
   }, [snapshot]);
 
+  // ─── Build the full 7-slide poster + share / download ────────────────────
+  // This is the viral loop: one tall PNG that captures the whole Wrapped,
+  // ready to drop into Twitter / Bluesky / Discord without a screenshot tool.
+  //
+  // Implementation note: we render the poster into a detached DOM subtree via
+  // createRoot, capture it with html2canvas, then tear it down. This keeps the
+  // hidden DOM out of the user-facing component tree (so existing tests don't
+  // see duplicate "This is your mind." text) and avoids any layout flicker.
+  const shareWrapped = useCallback(async () => {
+    if (!snapshot || sharing) return;
+    setSharing(true);
+    setShareStatus("Rendering your Wrapped…");
+
+    const container = document.createElement("div");
+    container.setAttribute("aria-hidden", "true");
+    container.dataset.prismosPoster = "true";
+    container.style.cssText =
+      "position:fixed;left:-10000px;top:0;width:720px;pointer-events:none;opacity:0;z-index:-1";
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      // Render every slide into the detached container.
+      root.render(
+        <div>
+          {Array.from({ length: totalSlides }).map((_, i) => (
+            <div
+              key={i}
+              className="bw-poster-slide"
+              style={{
+                width: 720,
+                minHeight: 720,
+                padding: 32,
+                background: "#0a0a14",
+                color: "#ffffff",
+                boxSizing: "border-box",
+                fontFamily: "inherit",
+                position: "relative",
+              }}
+            >
+              {renderSlide(i, snapshot)}
+              <div className="bw-watermark" style={{ marginTop: 24 }}>
+                <span className="bw-watermark-mark">◆ PrismOS-AI</span>
+                <span className="bw-watermark-tag">prismos.ai · local · private</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+
+      // Wait two frames so React commits + the browser paints the subtree.
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+
+      const { default: html2canvas } = await import("html2canvas");
+      const slideNodes = Array.from(
+        container.querySelectorAll<HTMLElement>(".bw-poster-slide")
+      );
+      if (slideNodes.length === 0) throw new Error("no slides to render");
+
+      // Render each slide to its own canvas, then stitch them top-to-bottom.
+      // Serial to keep peak memory low on weaker laptops.
+      const slideCanvases: HTMLCanvasElement[] = [];
+      for (let i = 0; i < slideNodes.length; i++) {
+        setShareStatus(`Rendering slide ${i + 1} of ${slideNodes.length}…`);
+        // eslint-disable-next-line no-await-in-loop
+        const c = await html2canvas(slideNodes[i], {
+          backgroundColor: "#0a0a14",
+          scale: 2,
+          logging: false,
+          useCORS: true,
+        });
+        slideCanvases.push(c);
+      }
+
+      const width = Math.max(...slideCanvases.map((c) => c.width));
+      const totalHeight = slideCanvases.reduce((sum, c) => sum + c.height, 0);
+      const composite = document.createElement("canvas");
+      composite.width = width;
+      composite.height = totalHeight;
+      const ctx = composite.getContext("2d");
+      if (!ctx) throw new Error("canvas 2d context unavailable");
+      ctx.fillStyle = "#0a0a14";
+      ctx.fillRect(0, 0, width, totalHeight);
+      let y = 0;
+      for (const c of slideCanvases) {
+        const x = Math.floor((width - c.width) / 2);
+        ctx.drawImage(c, x, y);
+        y += c.height;
+      }
+
+      const blob: Blob = await new Promise((resolve, reject) => {
+        composite.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))),
+          "image/png"
+        );
+      });
+
+      const filename = `prismos-brain-wrapped-${snapshot.fingerprint.hash.slice(0, 8)}.png`;
+      const shareText = `My cognitive fingerprint is ${snapshot.fingerprint.hash.slice(0, 12)}… — I'm ${snapshot.fingerprint.archetype} in @PrismOS_AI 🧠✨\n\n100% local. 0 bytes left my device.`;
+
+      // Best path: native share sheet with the image attached.
+      const file = new File([blob], filename, { type: "image/png" });
+      const nav = navigator as Navigator & {
+        canShare?: (d: ShareData) => boolean;
+        share?: (d: ShareData) => Promise<void>;
+      };
+      const canShareFile =
+        typeof nav.canShare === "function" && nav.canShare({ files: [file] });
+
+      if (canShareFile && typeof nav.share === "function") {
+        try {
+          await nav.share({ files: [file], text: shareText, title: "My PrismOS Brain Wrapped" });
+          setShareStatus("Shared ✓");
+          setTimeout(() => setShareStatus(null), 2500);
+          return;
+        } catch (err) {
+          if ((err as DOMException)?.name === "AbortError") {
+            setShareStatus(null);
+            return;
+          }
+          // Other errors → fall through to download fallback.
+        }
+      }
+
+      // Fallback: download the image, copy the share text, then open Twitter
+      // with the text pre-filled. The user attaches the just-downloaded image.
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = url;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      try {
+        await navigator.clipboard.writeText(shareText);
+      } catch {
+        /* clipboard unavailable — non-fatal */
+      }
+
+      window.open(
+        `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
+        "_blank"
+      );
+      setShareStatus("Image saved — drag it into your post ✓");
+      setTimeout(() => setShareStatus(null), 4500);
+    } catch (e) {
+      console.error("Share failed:", e);
+      setShareStatus(
+        `Couldn't build poster: ${e instanceof Error ? e.message : String(e)}`
+      );
+      setTimeout(() => setShareStatus(null), 4500);
+    } finally {
+      // Tear down the detached subtree on a microtask so React can finish any
+      // pending work that the render kicked off.
+      queueMicrotask(() => {
+        try {
+          root.unmount();
+        } catch {
+          /* already unmounted */
+        }
+        container.remove();
+      });
+      setSharing(false);
+    }
+  }, [snapshot, sharing]);
+
   // ─── Render states ───────────────────────────────────────────────────────
   if (error) {
     return (
@@ -177,25 +348,27 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
 
       {/* Bottom bar: actions */}
       <div className="bw-actionbar">
-        <button className="bw-action" onClick={exportPng}>
-          📥 Save as Image
+        <button className="bw-action" onClick={exportPng} disabled={sharing}>
+          📥 Save Slide
         </button>
-        <button className="bw-action" onClick={copyFingerprint}>
+        <button className="bw-action" onClick={copyFingerprint} disabled={sharing}>
           🔗 Copy Fingerprint
         </button>
         <button
           className="bw-action bw-action-share"
-          onClick={async () => {
-            await copyFingerprint();
-            const text = encodeURIComponent(
-              `My cognitive fingerprint is ${snapshot.fingerprint.hash} — I'm ${snapshot.fingerprint.archetype} in @PrismOS_AI 🧠✨`
-            );
-            window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank");
-          }}
+          onClick={shareWrapped}
+          disabled={sharing}
+          title="Build a single tall image of all 7 slides and share it"
         >
-          𝕏 Share
+          {sharing ? "…" : "🪐 Share My Wrapped"}
         </button>
       </div>
+
+      {shareStatus && (
+        <div className="bw-share-toast" role="status" aria-live="polite">
+          {shareStatus}
+        </div>
+      )}
 
       {/* Animated progress bar */}
       <div className="bw-bottom-progress">

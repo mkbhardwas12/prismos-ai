@@ -139,9 +139,9 @@ describe("BrainWrapped", () => {
   it("includes share buttons", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
     await waitFor(() => screen.getByText("This is your mind."));
-    expect(screen.getByText(/Save as Image/i)).toBeInTheDocument();
+    expect(screen.getByText(/Save Slide/i)).toBeInTheDocument();
     expect(screen.getByText(/Copy Fingerprint/i)).toBeInTheDocument();
-    expect(screen.getByText(/Share/i)).toBeInTheDocument();
+    expect(screen.getByText(/Share My Wrapped/i)).toBeInTheDocument();
   });
 
   it("advances slides via right arrow key", async () => {

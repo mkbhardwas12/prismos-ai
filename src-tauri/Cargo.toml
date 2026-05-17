@@ -10,6 +10,13 @@ default-run = "prismos"
 name = "prismos_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Standalone CLI for headless / dev use — talks directly to local Ollama.
+# Build:  cargo build --release --bin prismos-cli
+# Run:    ./target/release/prismos-cli ask "your question"
+[[bin]]
+name = "prismos-cli"
+path = "src/bin/prismos_cli.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

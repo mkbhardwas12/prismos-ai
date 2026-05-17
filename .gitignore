@@ -29,6 +29,8 @@ Desktop.ini
 
 # Demo build artifacts (intermediate; regenerate via scripts/build-demo.sh)
 docs/media/_overlays/
+docs/media/_brain_wrapped/
+docs/media/_stream/
 docs/screenshots/live/
 
 # Private / legal (do not sync)

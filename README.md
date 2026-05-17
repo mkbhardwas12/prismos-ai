@@ -1,8 +1,8 @@
 # PrismOS-AI
 
-> **Ask anything. Eight local agents debate it, remember it, and refract it — all on your laptop, offline.**
+> **Open the lid, ask, close the lid. Your AI runs on your laptop — zero bytes leave the machine.**
 
-You drop a PDF onto PrismOS-AI and say "what changed in this contract vs. last week's draft?" Eight agents read it locally, debate the answer, and file the result into a knowledge graph that grows with every conversation. No cloud round-trip. Nothing leaves your machine.
+Drop a PDF onto PrismOS-AI and ask *"what changed in this contract vs. last week's draft?"* Eight local agents read it, debate the answer, and write the result to a knowledge graph that grows with every conversation. Works on a plane. Works at 30,000 feet. Works with the Wi-Fi off.
 
 <!-- Animated SVG hero — renders inline on GitHub, no GIF/video needed.
      A full screen-capture demo can replace this once recorded — see docs/DEMO_RECORDING.md. -->
@@ -12,9 +12,24 @@ You drop a PDF onto PrismOS-AI and say "what changed in this contract vs. last w
   </a>
   <br/>
   <sub>
-    <a href="docs/media/prismos-demo.mp4">▶ 1280×720 MP4</a> ·
+    <a href="docs/media/prismos-demo.mp4">▶ 1280×720 MP4 (with voiceover)</a> ·
     <a href="docs/screenshots/hero.svg">animated SVG fallback</a> ·
     <a href="docs/screenshots/">all stills</a>
+  </sub>
+</p>
+
+<p align="center">
+  <a href="docs/media/stream-demo.mp4">
+    <img src="docs/media/stream-demo.gif" width="640" alt="Live streaming demo — real Ollama response token-by-token" />
+  </a>
+  &nbsp;
+  <a href="docs/media/brain-wrapped-loop.mp4">
+    <img src="docs/media/brain-wrapped-loop.gif" width="220" alt="Brain Wrapped preview loop" />
+  </a>
+  <br/>
+  <sub>
+    <b>Left:</b> live capture of a real Ollama stream via <code>prismos-cli</code> ·
+    <b>Right:</b> Brain Wrapped preview (Spotify-Wrapped, but for how you think)
   </sub>
 </p>
 
@@ -32,6 +47,8 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 [![Tests](https://img.shields.io/badge/tests-499%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
 [![Brain Wrapped](https://img.shields.io/badge/%E2%9C%A8-Brain%20Wrapped-ff6ec7)](#-brain-wrapped--cognitive-fingerprint-new-in-v060)
 [![Models](https://img.shields.io/badge/models-15%20supported-blueviolet)](src/lib/modelRegistry.ts)
+[![Offline](https://img.shields.io/badge/offline-100%25-success)](#)
+[![Egress](https://img.shields.io/badge/cloud%20egress-0%20bytes-success)](#)
 
 > **Hermes is your cloud agent. PrismOS is your offline cofounder.**
 > Cloud agents are great when you're on Wi-Fi and OK paying per token. PrismOS-AI is for the work that should never leave your laptop: contracts, codebases, journals, half-formed ideas. Open the lid, get an answer, close the lid.
@@ -47,7 +64,6 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 | Memory | Session window | Persistent 7D knowledge graph |
 | Multi-agent | Tool calls in one model | 8 specialised agents, formal debate |
 | Plugins | Vendor catalog | Local skills + WASM sandbox |
-| Patent footprint | n/a | US Provisional, Feb 2026 |
 
 ---
 
@@ -70,7 +86,6 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 - [Tech Stack](#%EF%B8%8F-tech-stack)
 - [Roadmap](#%EF%B8%8F-roadmap)
 - [Project Stats](#-project-stats)
-- [Patent Notice](#-patent-notice)
 
 <details>
 <summary><strong>📸 More Screenshots</strong> (click to expand)</summary>
@@ -410,22 +425,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 
 ---
 
-## 📜 Patent Notice
+## 📜 License & IP
 
-PrismOS-AI and its core architectures are protected by a US Provisional Patent filed February 2026. Patent-pending inventions include:
-
-- **Spectrum Graph** — Persistent multi-dimensional knowledge representation
-- **Refractive Core** — Intent processing through multiple reasoning perspectives
-- **Sandbox Prism** — WASM-isolated execution with cryptographic signing
-- **Cognitive Imprint** — Adaptive 5-axis personality engine
-- **Prism Refraction** — Multi-band reasoning perspectives per response
-- **Query×Profile Matrix** — Intent classification × cognitive profile interaction
-- **You-Port** — AES-256-GCM encrypted state migration with device-bound keys
-- **Edge Prophecy** — Predictive knowledge connection using graph analysis
-- **Thought Currents** — Temporal pattern discovery in user query streams
-- **Domain Detection** — Professional domain learning from interaction patterns
-
-This open-source release is made available for personal, educational, and non-commercial use under the MIT License. Trademarks for the names above are reserved; the patented methods may not be used commercially without a license.
+Released under the **MIT License** — free for personal, educational, and commercial use within the terms of that license. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
 
 ---
 

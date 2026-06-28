@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Ollama Bridge — Local LLM Inference Interface
 //
 // Provides a Rust HTTP client for the Ollama REST API running on localhost.
@@ -12,6 +11,39 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const GENERATE_TIMEOUT: Duration = Duration::from_secs(300); // 5 min — large models (deepseek-r1) on doc analysis need time
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// How long Ollama keeps a model resident in memory after a request. Keeping it
+/// warm means follow-up queries skip the multi-second model reload — essential
+/// for a snappy daily-driver feel. Override with the `OLLAMA_KEEP_ALIVE` env var
+/// (e.g. "60m", "-1" to keep loaded indefinitely, "0" to unload immediately).
+const DEFAULT_KEEP_ALIVE: &str = "30m";
+
+/// Resolve the keep-alive window from the environment, falling back to 30 min.
+fn keep_alive() -> String {
+    std::env::var("OLLAMA_KEEP_ALIVE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_KEEP_ALIVE.to_string())
+}
+
+/// Hybrid "thinking" models (qwen3 family) emit chain-of-thought into the
+/// response by default, which leaks "Okay, the user is asking…" preamble into
+/// user-facing answers. They honour an inline `/no_think` directive (the
+/// `think:false` request flag is NOT respected by qwen3 on Ollama 0.24).
+///
+/// Policy: for a thinking-toggle model, append `/no_think` so everyday answers
+/// are clean and fast — UNLESS the caller already specified `/think` or
+/// `/no_think` (the reasoning lane opts back into thinking by passing `/think`).
+fn apply_think_control(model: &str, content: &str) -> String {
+    let lower = model.to_lowercase();
+    let supports_toggle = lower.contains("qwen3");
+    let already_directed = content.contains("/think") || content.contains("/no_think");
+    if supports_toggle && !already_directed {
+        format!("{} /no_think", content)
+    } else {
+        content.to_string()
+    }
+}
+
 // ─── Request / Response Types ──────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
@@ -24,6 +56,9 @@ struct GenerateRequest {
     /// Base64-encoded images for multimodal vision models (llava, llama3.2-vision)
     #[serde(skip_serializing_if = "Option::is_none")]
     images: Option<Vec<String>>,
+    /// How long to keep the model resident after this request (e.g. "30m").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keep_alive: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -41,6 +76,9 @@ struct ChatRequest {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<ChatOptions>,
+    /// How long to keep the model resident after this request (e.g. "30m").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keep_alive: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,10 +170,11 @@ pub async fn generate(
     let options = max_tokens.map(|n| GenerateOptions { num_predict: Some(n) });
     let request = GenerateRequest {
         model: model.to_string(),
-        prompt: prompt.to_string(),
+        prompt: apply_think_control(model, prompt),
         stream: false,
         options,
         images,
+        keep_alive: Some(keep_alive()),
     };
 
     let response = client
@@ -200,10 +239,11 @@ pub async fn chat(
         }
     }
 
-    // User message — the actual question with context
+    // User message — the actual question with context.
+    // Keep answers clean on hybrid thinking models (qwen3) by default.
     messages.push(ChatMessage {
         role: "user".to_string(),
-        content: user_content.to_string(),
+        content: apply_think_control(model, user_content),
         images,
     });
 
@@ -216,6 +256,7 @@ pub async fn chat(
             num_ctx: Some(8192),     // 4x default — room for RAG context
             num_predict: Some(1024), // Up to 1K tokens response
         }),
+        keep_alive: Some(keep_alive()),
     };
 
     let response = client
@@ -286,10 +327,11 @@ where
     let options = max_tokens.map(|n| GenerateOptions { num_predict: Some(n) });
     let request = GenerateRequest {
         model: model.to_string(),
-        prompt: prompt.to_string(),
+        prompt: apply_think_control(model, prompt),
         stream: true,
         options,
         images,
+        keep_alive: Some(keep_alive()),
     };
 
     let response = client
@@ -327,4 +369,46 @@ where
     }
 
     Ok(full_response)
+}
+
+// ─── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keep_alive_default() {
+        // With no env override, defaults to the constant.
+        std::env::remove_var("OLLAMA_KEEP_ALIVE");
+        assert_eq!(keep_alive(), DEFAULT_KEEP_ALIVE);
+    }
+
+    #[test]
+    fn test_think_control_appends_no_think_for_qwen3() {
+        let out = apply_think_control("qwen3:30b-a3b", "What is 2+2?");
+        assert_eq!(out, "What is 2+2? /no_think");
+    }
+
+    #[test]
+    fn test_think_control_skips_non_thinking_models() {
+        // Non-qwen3 models are untouched.
+        assert_eq!(apply_think_control("llama3.3:70b", "hello"), "hello");
+        assert_eq!(apply_think_control("qwen2.5-coder:7b", "hello"), "hello");
+        assert_eq!(apply_think_control("mistral", "hello"), "hello");
+    }
+
+    #[test]
+    fn test_think_control_respects_explicit_directive() {
+        // Reasoning lane opts into thinking by passing /think — we must not override.
+        assert_eq!(
+            apply_think_control("qwen3:30b-a3b", "Solve this carefully /think"),
+            "Solve this carefully /think"
+        );
+        // Already /no_think → not doubled.
+        assert_eq!(
+            apply_think_control("qwen3:30b-a3b", "quick q /no_think"),
+            "quick q /no_think"
+        );
+    }
 }

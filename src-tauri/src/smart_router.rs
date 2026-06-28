@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Smart Model Router — Automatic model selection based on payload content
 //
 // When an image is detected in the payload, PrismOS automatically swaps to
@@ -20,6 +19,9 @@ const VISION_MODEL_PATTERNS: &[&str] = &[
     "minicpm-v",
     "cogvlm",
     "qwen2-vl",
+    "qwen2.5vl",
+    "qwen2.5-vl",
+    "qwen3-vl",
     "gemma3",
     "internvl",
     "phi3.5-vision",
@@ -27,6 +29,9 @@ const VISION_MODEL_PATTERNS: &[&str] = &[
 
 /// Priority order for auto-selecting a vision model when none is specified
 const VISION_MODEL_PRIORITY: &[&str] = &[
+    "qwen2.5vl",
+    "qwen2.5-vl",
+    "qwen3-vl",
     "llama3.2-vision",
     "gemma3",
     "qwen2-vl",
@@ -60,6 +65,29 @@ const CODE_MODEL_PRIORITY: &[&str] = &[
     "starcoder2",
     "codestral",
     "starcoder",
+];
+
+/// Known reasoning-specialized model name fragments (chain-of-thought / deliberate)
+const REASONING_MODEL_PATTERNS: &[&str] = &[
+    "deepseek-r1",
+    "qwq",
+    "qwen3",
+    "phi4",
+    "marco-o1",
+    "openthinker",
+    "mathstral",
+];
+
+/// Priority order for auto-selecting a reasoning model when the task is
+/// analysis/math/multi-step planning or judging.
+const REASONING_MODEL_PRIORITY: &[&str] = &[
+    "deepseek-r1",
+    "qwq",
+    "qwen3",
+    "phi4",
+    "openthinker",
+    "marco-o1",
+    "mathstral",
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -109,13 +137,22 @@ pub fn is_code_model(model_name: &str) -> bool {
         .any(|pattern| lower.contains(pattern))
 }
 
+/// Check if a model name indicates reasoning (chain-of-thought) specialization
+pub fn is_reasoning_model(model_name: &str) -> bool {
+    let lower = model_name.to_lowercase();
+    REASONING_MODEL_PATTERNS
+        .iter()
+        .any(|pattern| lower.contains(pattern))
+}
+
 /// Detect capabilities for a model based on its name
 pub fn detect_capabilities(model_name: &str) -> ModelCapabilities {
     let lower = model_name.to_lowercase();
     let is_multilingual = lower.contains("qwen")
         || lower.contains("gemma")
         || lower.contains("aya")
-        || lower.contains("bloom");
+        || lower.contains("bloom")
+        || lower.contains("glm");
     let is_math = lower.contains("mathstral")
         || lower.contains("deepseek-r1")
         || lower.contains("qwen3");
@@ -176,6 +213,114 @@ pub fn find_best_code_model(available_models: &[String]) -> Option<String> {
         }
     }
     None
+}
+
+/// Find the best available reasoning model from a list of installed models.
+/// Returns None if no reasoning-specialized model is installed.
+pub fn find_best_reasoning_model(available_models: &[String]) -> Option<String> {
+    for preferred in REASONING_MODEL_PRIORITY {
+        for available in available_models {
+            let lower = available.to_lowercase();
+            if lower.contains(preferred) {
+                return Some(available.clone());
+            }
+        }
+    }
+    None
+}
+
+// ─── Per-Role / Per-Task Routing ────────────────────────────────────────────────
+
+/// The kind of work an agent role needs to perform on this turn. The Refractive
+/// Core maps an intent (and the active loop stage) to one of these, and the
+/// router picks the best locally-installed model for it. Decoupled from
+/// `AgentRole` to avoid a dependency cycle with the agents module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskKind {
+    /// Default conversational / synthesis work — use the user's chosen model.
+    General,
+    /// Multi-step analysis, math, planning, or judging — prefer a reasoning model.
+    Reasoning,
+    /// Code generation / review — prefer a code-specialized model.
+    Code,
+    /// Anything involving an image — requires a vision model.
+    Vision,
+}
+
+/// Route to the best locally-installed model for a specific task kind, falling
+/// back to the user's model when no specialist is installed. This is what wires
+/// per-role model selection into the agent workflow (Planner/Critic → reasoning,
+/// Builder → code/general, image intents → vision).
+pub fn route_for_task(
+    user_model: &str,
+    task: TaskKind,
+    available_models: &[String],
+) -> RoutingDecision {
+    let original = user_model.to_string();
+    match task {
+        TaskKind::Vision => {
+            if is_vision_model(user_model) {
+                return RoutingDecision {
+                    model: user_model.to_string(),
+                    auto_swapped: false,
+                    original_model: original,
+                    reason: "User-selected vision model".to_string(),
+                    is_vision: true,
+                };
+            }
+            let model = find_best_vision_model(available_models)
+                .unwrap_or_else(|| "llava".to_string());
+            RoutingDecision {
+                reason: format!("Routed to {} for vision task", model),
+                auto_swapped: model != user_model,
+                model,
+                original_model: original,
+                is_vision: true,
+            }
+        }
+        TaskKind::Code => {
+            if is_code_model(user_model) {
+                return keep(user_model, "User-selected code model");
+            }
+            match find_best_code_model(available_models) {
+                Some(model) => RoutingDecision {
+                    reason: format!("Routed to {} for code task", model),
+                    auto_swapped: true,
+                    model,
+                    original_model: original,
+                    is_vision: false,
+                },
+                None => keep(user_model, "No code model installed — using current model"),
+            }
+        }
+        TaskKind::Reasoning => {
+            if is_reasoning_model(user_model) {
+                return keep(user_model, "User model is already reasoning-capable");
+            }
+            match find_best_reasoning_model(available_models) {
+                Some(model) => RoutingDecision {
+                    reason: format!("Routed to {} for reasoning task", model),
+                    auto_swapped: true,
+                    model,
+                    original_model: original,
+                    is_vision: false,
+                },
+                None => keep(user_model, "No reasoning model installed — using current model"),
+            }
+        }
+        TaskKind::General => keep(user_model, "General task — using current model"),
+    }
+}
+
+/// Helper: a no-swap decision that keeps the user's model.
+fn keep(user_model: &str, reason: &str) -> RoutingDecision {
+    RoutingDecision {
+        model: user_model.to_string(),
+        auto_swapped: false,
+        original_model: user_model.to_string(),
+        reason: reason.to_string(),
+        is_vision: is_vision_model(user_model),
+    }
 }
 
 /// Core routing decision: given the payload characteristics and available models,
@@ -467,5 +612,88 @@ mod tests {
         assert!(!caps.is_reasoning);
         let caps2 = detect_capabilities("llama3.2:3b");
         assert!(!caps2.is_reasoning);
+    }
+
+    // ─── Reasoning lane + route_for_task ─────────────────────────────────────
+
+    #[test]
+    fn test_is_reasoning_model() {
+        assert!(is_reasoning_model("deepseek-r1:32b"));
+        assert!(is_reasoning_model("qwen3:30b-a3b"));
+        assert!(is_reasoning_model("qwq:latest"));
+        assert!(is_reasoning_model("phi4:latest"));
+        assert!(!is_reasoning_model("mistral:latest"));
+        assert!(!is_reasoning_model("llama3.1:8b"));
+    }
+
+    #[test]
+    fn test_find_best_reasoning_model_priority() {
+        let models = vec![
+            "qwen3:30b-a3b".to_string(),
+            "deepseek-r1:32b".to_string(),
+            "mistral:latest".to_string(),
+        ];
+        // deepseek-r1 outranks qwen3 in priority
+        assert_eq!(
+            find_best_reasoning_model(&models),
+            Some("deepseek-r1:32b".to_string())
+        );
+    }
+
+    #[test]
+    fn test_find_best_reasoning_model_none() {
+        let models = vec!["mistral:latest".to_string(), "llama3.1:8b".to_string()];
+        assert_eq!(find_best_reasoning_model(&models), None);
+    }
+
+    #[test]
+    fn test_route_for_task_reasoning_swaps() {
+        let models = vec!["mistral:latest".to_string(), "deepseek-r1:32b".to_string()];
+        let d = route_for_task("mistral", TaskKind::Reasoning, &models);
+        assert!(d.auto_swapped);
+        assert_eq!(d.model, "deepseek-r1:32b");
+    }
+
+    #[test]
+    fn test_route_for_task_reasoning_keeps_capable_model() {
+        let models = vec!["qwen3:30b-a3b".to_string()];
+        // qwen3 is itself reasoning-capable → no swap
+        let d = route_for_task("qwen3:30b-a3b", TaskKind::Reasoning, &models);
+        assert!(!d.auto_swapped);
+        assert_eq!(d.model, "qwen3:30b-a3b");
+    }
+
+    #[test]
+    fn test_route_for_task_code_swaps() {
+        let models = vec!["qwen3:30b-a3b".to_string(), "qwen2.5-coder:7b".to_string()];
+        let d = route_for_task("qwen3:30b-a3b", TaskKind::Code, &models);
+        assert!(d.auto_swapped);
+        assert_eq!(d.model, "qwen2.5-coder:7b");
+    }
+
+    #[test]
+    fn test_route_for_task_vision_swaps() {
+        let models = vec!["qwen3:30b-a3b".to_string(), "qwen2.5vl:7b".to_string()];
+        let d = route_for_task("qwen3:30b-a3b", TaskKind::Vision, &models);
+        assert!(d.auto_swapped);
+        assert!(d.is_vision);
+        assert_eq!(d.model, "qwen2.5vl:7b");
+    }
+
+    #[test]
+    fn test_route_for_task_general_keeps_user_model() {
+        let models = vec!["qwen3:30b-a3b".to_string()];
+        let d = route_for_task("qwen3:30b-a3b", TaskKind::General, &models);
+        assert!(!d.auto_swapped);
+        assert_eq!(d.model, "qwen3:30b-a3b");
+    }
+
+    #[test]
+    fn test_route_for_task_falls_back_when_no_specialist() {
+        let models = vec!["mistral:latest".to_string()];
+        // No code model installed → keep user's model, no swap
+        let d = route_for_task("mistral", TaskKind::Code, &models);
+        assert!(!d.auto_swapped);
+        assert_eq!(d.model, "mistral");
     }
 }

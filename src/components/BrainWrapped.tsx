@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // BrainWrapped — Animated, shareable story of how the user thinks.
 //
 // THE INNOVATION: Spotify Wrapped, but for your mind. Generated entirely

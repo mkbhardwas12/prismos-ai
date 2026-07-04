@@ -153,8 +153,6 @@
 ````markdown
 ## PrismOS-AI vX.X.X — [Release Name]
 
-**Patent Pending** — US Provisional Patent filed February 2026
-
 ### 🎯 Highlights
 
 - New feature 1

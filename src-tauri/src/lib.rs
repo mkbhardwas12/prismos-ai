@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Local-First Agentic Personal AI Operating System
 // Main application library — Tauri command handlers and system initialization
 
@@ -24,6 +23,8 @@ mod thought_currents;
 mod domain_detector;
 mod model_tracker;
 mod brain_wrapped;
+mod doc_generator;
+mod project_reviewer;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -47,9 +48,13 @@ pub struct IndexerState(pub Mutex<file_indexer::FileIndexer>);
 /// Shared voice recording stop flag
 pub struct VoiceStopFlag(pub Arc<AtomicBool>);
 
+/// Pending project-review scans awaiting explicit user approval (Gate 1).
+/// scan_id → PendingScan. A review can only run for a scan_id present here.
+pub struct ReviewState(pub Mutex<std::collections::HashMap<String, project_reviewer::PendingScan>>);
+
 // ─── Tauri Commands ────────────────────────────────────────────────────────────
 
-/// process_intent — Full Refractive Core pipeline (Patent Pending)
+/// process_intent — Full Refractive Core pipeline
 /// Parses raw input → Intent Lens → Spectrum Graph context → NPU scoring →
 /// Agent selection → LLM inference → Closed-loop feedback → Result
 #[tauri::command]
@@ -393,6 +398,165 @@ async fn index_document_chunks(
     serde_json::to_string(&node_ids).map_err(|e| e.to_string())
 }
 
+// ─── Document Generation Commands ──────────────────────────────────────────────
+
+/// create_word_document — Build a real .docx from a structured JSON spec and
+/// write it to the user's Downloads folder. Returns GeneratedFile metadata JSON.
+/// 100% local: nothing leaves the machine.
+#[tauri::command]
+async fn create_word_document(app: tauri::AppHandle, spec_json: String) -> Result<String, String> {
+    let spec: doc_generator::WordSpec = serde_json::from_str(&spec_json)
+        .map_err(|e| format!("Invalid document spec: {e}"))?;
+    let generated = doc_generator::generate_docx(&spec)?;
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append("create_word_document", "user", &generated.filename);
+    }
+
+    serde_json::to_string(&generated).map_err(|e| e.to_string())
+}
+
+/// create_powerpoint — Build a real .pptx from a structured JSON spec and write
+/// it to the user's Downloads folder. Returns GeneratedFile metadata JSON.
+/// 100% local: nothing leaves the machine.
+#[tauri::command]
+async fn create_powerpoint(app: tauri::AppHandle, spec_json: String) -> Result<String, String> {
+    let spec: doc_generator::DeckSpec = serde_json::from_str(&spec_json)
+        .map_err(|e| format!("Invalid presentation spec: {e}"))?;
+    let generated = doc_generator::generate_pptx(&spec)?;
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append("create_powerpoint", "user", &generated.filename);
+    }
+
+    serde_json::to_string(&generated).map_err(|e| e.to_string())
+}
+
+/// open_generated_file — Open a generated file (or reveal its folder) with the
+/// OS default handler. Only allows opening files that actually exist on disk.
+#[tauri::command]
+async fn open_generated_file(path: String, reveal: Option<bool>) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("File no longer exists".to_string());
+    }
+    let reveal = reveal.unwrap_or(false);
+
+    #[cfg(target_os = "macos")]
+    let (cmd, args): (&str, Vec<String>) = if reveal {
+        ("open", vec!["-R".to_string(), path.clone()])
+    } else {
+        ("open", vec![path.clone()])
+    };
+
+    #[cfg(target_os = "windows")]
+    let (cmd, args): (&str, Vec<String>) = if reveal {
+        ("explorer", vec![format!("/select,{}", path)])
+    } else {
+        ("cmd", vec!["/C".to_string(), "start".to_string(), "".to_string(), path.clone()])
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let (cmd, args): (&str, Vec<String>) = if reveal {
+        let parent = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+        ("xdg-open", vec![parent])
+    } else {
+        ("xdg-open", vec![path.clone()])
+    };
+
+    std::process::Command::new(cmd)
+        .args(&args)
+        .spawn()
+        .map_err(|e| format!("Failed to open file: {e}"))?;
+    Ok(())
+}
+
+// ─── Project Review Commands (gated, READ-ONLY) ───────────────────────────────
+
+/// Gate 1 (part A): metadata-only scan of a project directory. Reads NO file
+/// contents. Returns a preview the user must approve before any review runs.
+#[tauri::command]
+async fn scan_project_for_review(
+    app: tauri::AppHandle,
+    path: String,
+    review_state: tauri::State<'_, ReviewState>,
+) -> Result<String, String> {
+    let (scan, preview) = project_reviewer::scan_project(&path)?;
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append(
+            "review_scan",
+            "user",
+            &format!("Scan preview for {} ({} candidates) — awaiting approval", preview.root, preview.candidate_files),
+        );
+    }
+
+    review_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(preview.scan_id.clone(), scan);
+
+    serde_json::to_string(&preview).map_err(|e| e.to_string())
+}
+
+/// Gate 1 (part B): run the gated review for a scan the user APPROVED in the
+/// UI. The scan_id acts as the approval token — unknown ids are rejected.
+/// The entire pipeline is read-only; the only artifact is the report in Downloads.
+#[tauri::command]
+async fn run_project_review(
+    app: tauri::AppHandle,
+    scan_id: String,
+    model: Option<String>,
+    review_state: tauri::State<'_, ReviewState>,
+) -> Result<String, String> {
+    let scan = review_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&scan_id)
+        .ok_or("No pending scan with that id — request a new scan and approve it first")?;
+
+    let model = model.unwrap_or_else(|| "qwen3:4b".to_string());
+    let root_str = scan.root.to_string_lossy().to_string();
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append("review_approved", "user", &format!("Review approved and started for {}", root_str));
+    }
+
+    let report = project_reviewer::run_review(app.clone(), scan, &model).await?;
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append(
+            "review_complete",
+            "system",
+            &format!("Review of {} complete — {} findings, report {}", root_str, report.findings.len(), report.report_docx_filename),
+        );
+    }
+
+    serde_json::to_string(&report).map_err(|e| e.to_string())
+}
+
+/// Discard a pending scan (user declined the approval gate).
+#[tauri::command]
+async fn cancel_project_review(
+    app: tauri::AppHandle,
+    scan_id: String,
+    review_state: tauri::State<'_, ReviewState>,
+) -> Result<(), String> {
+    review_state.0.lock().map_err(|e| e.to_string())?.remove(&scan_id);
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append("review_declined", "user", &format!("Scan {} declined — no content was read", scan_id));
+    }
+    Ok(())
+}
+
 // ─── Spectrum Graph Commands ───────────────────────────────────────────────────
 
 #[tauri::command]
@@ -422,7 +586,7 @@ async fn get_active_agents(active_agent: Option<String>) -> Result<String, Strin
     serde_json::to_string(&agents).map_err(|e| e.to_string())
 }
 
-// ─── Email Keeper Commands (Patent Pending — Read-Only IMAP Summary) ──────────
+// ─── Email Keeper Commands (Read-Only IMAP Summary) ──────────
 
 /// Fetch unread email summary via read-only IMAP.
 /// All processing happens locally through the Sandbox Prism.
@@ -503,7 +667,7 @@ async fn test_email_connection(
     Ok("✅ Connection successful — IMAP credentials verified.".into())
 }
 
-/// Calendar Keeper — Fetch today's events from local .ics files (Patent Pending)
+/// Calendar Keeper — Fetch today's events from local .ics files
 #[tauri::command]
 async fn fetch_calendar_summary(
     calendar_path: String,
@@ -538,7 +702,7 @@ async fn fetch_calendar_summary(
     serde_json::to_string(&summary).map_err(|e| e.to_string())
 }
 
-/// Finance Keeper — Fetch portfolio summary for ticker watchlist (Patent Pending)
+/// Finance Keeper — Fetch portfolio summary for ticker watchlist
 #[tauri::command]
 async fn fetch_finance_summary(
     tickers: Vec<String>,
@@ -651,6 +815,7 @@ async fn pull_ollama_model(app: tauri::AppHandle, model: String, ollama_url: Opt
     // Stream progress chunks back to the frontend via Tauri events
     let mut stream = resp.bytes_stream();
     let mut last_status = String::new();
+    let mut stream_error: Option<String> = None;
 
     while let Some(chunk_result) = stream.next().await {
         let chunk_bytes = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
@@ -659,6 +824,19 @@ async fn pull_ollama_model(app: tauri::AppHandle, model: String, ollama_url: Opt
         for line in chunk_str.lines() {
             if line.trim().is_empty() { continue; }
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+                // Ollama reports pull failures as an `error` field on an otherwise
+                // HTTP-200 stream (e.g. a nonexistent tag → "file does not exist").
+                // Without this check the loop saw no "status" and then falsely
+                // reported success — the silent "saved successfully but nothing
+                // happened" bug. Capture it and stop.
+                if let Some(err) = parsed.get("error").and_then(|e| e.as_str()) {
+                    stream_error = Some(err.to_string());
+                    let _ = app.emit("pull-progress", serde_json::json!({
+                        "model": model, "status": format!("error: {}", err),
+                        "completed": 0, "total": 0, "percent": 0,
+                    }));
+                    break;
+                }
                 let status = parsed.get("status").and_then(|s| s.as_str()).unwrap_or("").to_string();
                 let completed = parsed.get("completed").and_then(|v| v.as_u64()).unwrap_or(0);
                 let total = parsed.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -673,15 +851,44 @@ async fn pull_ollama_model(app: tauri::AppHandle, model: String, ollama_url: Opt
                     "percent": percent,
                 }));
 
-                last_status = status;
+                if !status.is_empty() { last_status = status; }
             }
         }
+        if stream_error.is_some() { break; }
     }
 
-    if last_status == "success" || last_status.is_empty() {
+    if let Some(err) = stream_error {
+        return Err(format!(
+            "Couldn't pull '{}': {}. Check the model name/tag exists on ollama.com \
+             (e.g. DeepSeek reasoning is `deepseek-r1:32b`, not `deepseek-v3:16b`).",
+            model, err
+        ));
+    }
+
+    // Only claim success on Ollama's explicit terminal "success" status, and then
+    // confirm the model is actually installed — a truncated/aborted stream must not
+    // be reported as a successful download.
+    let installed = ollama_bridge::list_models(Some(url))
+        .await
+        .map(|models| {
+            models.iter().any(|m| {
+                m.name == model || m.name == format!("{}:latest", model)
+            })
+        })
+        .unwrap_or(false);
+
+    if last_status == "success" && installed {
         Ok(format!("Model '{}' pulled successfully", model))
+    } else if installed {
+        // Present but no terminal "success" line seen (rare stream quirk) — trust the list.
+        Ok(format!("Model '{}' is installed", model))
     } else {
-        Ok(format!("Model '{}' — {}", model, last_status))
+        Err(format!(
+            "Pull of '{}' did not complete — the model is not installed (last status: '{}'). \
+             Try again, or verify the tag exists on ollama.com.",
+            model,
+            if last_status.is_empty() { "none" } else { &last_status }
+        ))
     }
 }
 
@@ -788,7 +995,7 @@ async fn rollback_sandbox(name: String) -> Result<String, String> {
     serde_json::to_string(&checkpoint).map_err(|e| e.to_string())
 }
 
-/// execute_in_sandbox — Primary Sandbox Prism entry point (Patent Pending)
+/// execute_in_sandbox — Primary Sandbox Prism entry point
 /// Validates, signs, and executes an action within the WASM-isolated Sandbox Prism.
 /// Returns a fully auditable result with HMAC-SHA256 signature and side effects.
 #[tauri::command]
@@ -797,7 +1004,7 @@ async fn execute_in_sandbox(action: String, agent_id: String) -> Result<String, 
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-// ─── New Spectrum Graph Commands (Patent Pending) ───────────────────────────
+// ─── New Spectrum Graph Commands ───────────────────────────
 
 /// Get the full Spectrum Graph snapshot for frontend visualization
 #[tauri::command]
@@ -953,7 +1160,7 @@ async fn submit_response_feedback(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  COGNITIVE IMPRINT — Adaptive Response Personality (Patent Pending)
+//  COGNITIVE IMPRINT — Adaptive Response Personality
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Get the user's cognitive profile (creates default if none exists)
@@ -1069,7 +1276,7 @@ async fn get_daily_brief(db: tauri::State<'_, DbState>) -> Result<String, String
     serde_json::to_string(&brief).map_err(|e| e.to_string())
 }
 
-// ─── Cognitive Drift & Thought Currents (Patent Pending) ────────────────────
+// ─── Cognitive Drift & Thought Currents ────────────────────
 
 /// Get cognitive drift — compare current profile against weekly historical snapshots
 #[tauri::command]
@@ -1092,7 +1299,7 @@ async fn get_thought_currents(db: tauri::State<'_, DbState>) -> Result<String, S
     serde_json::to_string(&currents).map_err(|e| e.to_string())
 }
 
-// ─── Edge Prophecy (Patent Pending) ─────────────────────────────────────────
+// ─── Edge Prophecy ─────────────────────────────────────────
 
 /// Predict potential edges between unconnected nodes
 #[tauri::command]
@@ -1134,7 +1341,7 @@ async fn dismiss_predicted_edge(
         .map_err(|e| e.to_string())
 }
 
-// ─── Refraction Journal (Patent Pending) ────────────────────────────────────
+// ─── Refraction Journal ────────────────────────────────────
 
 /// Get refraction insights — aggregated band usage statistics
 #[tauri::command]
@@ -1144,7 +1351,7 @@ async fn get_refraction_insights(db: tauri::State<'_, DbState>) -> Result<String
     serde_json::to_string(&insights).map_err(|e| e.to_string())
 }
 
-// ─── Brain Wrapped™ + Cognitive Fingerprint™ (Patent Pending) ──────────────
+// ─── Brain Wrapped™ + Cognitive Fingerprint™ ──────────────
 //
 // THE INNOVATION: A shareable, animated story of HOW you think — generated
 // entirely from local cognitive data. Includes a deterministic visual
@@ -1228,7 +1435,7 @@ async fn get_cognitive_fingerprint(db: tauri::State<'_, DbState>) -> Result<Stri
     serde_json::to_string(&fingerprint).map_err(|e| e.to_string())
 }
 
-// ─── Domain Detection (Patent Pending) ──────────────────────────────────────
+// ─── Domain Detection ──────────────────────────────────────
 
 /// Get the user's learned domain profile
 #[tauri::command]
@@ -1238,7 +1445,7 @@ async fn get_domain_profile(db: tauri::State<'_, DbState>) -> Result<String, Str
     serde_json::to_string(&profile).map_err(|e| e.to_string())
 }
 
-// ─── Model Performance (Patent Pending) ─────────────────────────────────────
+// ─── Model Performance ─────────────────────────────────────
 
 /// Get model recommendations based on historical performance data
 #[tauri::command]
@@ -1284,7 +1491,7 @@ async fn update_spectrum_node(
     graph.update_node(&id, &label, &content).map_err(|e| e.to_string())
 }
 
-// ─── You-Port Encrypted State Handoff (Patent Pending) ──────────────────────
+// ─── You-Port Encrypted State Handoff ──────────────────────
 
 /// Save complete PrismOS-AI state to encrypted file (Spectrum Graph + agents + metadata)
 /// Called on app close or manually by the user.
@@ -1331,7 +1538,7 @@ async fn has_saved_state(app: tauri::AppHandle) -> Result<bool, String> {
     Ok(you_port::has_saved_state(&app_dir))
 }
 
-// ─── Settings Commands (Patent Pending) ─────────────────────────────────────
+// ─── Settings Commands ─────────────────────────────────────
 
 /// Export the Spectrum Graph as an encrypted JSON package (You-Port encryption)
 /// Returns the encrypted package JSON string for the user to save externally.
@@ -1516,7 +1723,7 @@ async fn deduplicate_graph(db: tauri::State<'_, DbState>) -> Result<String, Stri
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-// ─── LangGraph Workflow Commands (Patent Pending) ───────────────────────────
+// ─── LangGraph Workflow Commands ───────────────────────────
 
 /// Run a full LangGraph multi-agent collaboration for a given intent.
 /// Returns a WorkflowSummary with debate log, consensus, and transitions.
@@ -1552,7 +1759,7 @@ async fn get_debate_log() -> Result<String, String> {
     serde_json::to_string(&empty).map_err(|e| e.to_string())
 }
 
-// ─── Multi-Window Support (Patent Pending — Spectral Timeline) ──────────────
+// ─── Multi-Window Support (Spectral Timeline) ──────────────
 
 /// Open a secondary window (e.g. Spectrum Graph or Spectral Timeline in its own window).
 /// Creates a new Tauri webview window pointed at the same frontend with a route hash.
@@ -1674,7 +1881,7 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
     serde_json::to_string(&events).map_err(|e| e.to_string())
 }
 
-// ─── Graph Merge/Diff Commands (Patent Pending — Multi-Device Sync) ───────
+// ─── Graph Merge/Diff Commands (Multi-Device Sync) ───────
 
 /// Export the local Spectrum Graph as a passphrase-encrypted sync package.
 /// The resulting file can be transferred to another PrismOS-AI instance and
@@ -1751,7 +1958,7 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
-// ─── Security Commands (Patent Pending) ─────────────────────────────────────
+// ─── Security Commands ─────────────────────────────────────
 
 /// Get the most recent audit log entries (tamper-evident hash chain)
 #[tauri::command]
@@ -2741,6 +2948,7 @@ pub fn run() {
             }
 
             app.manage(DbState(Mutex::new(db)));
+            app.manage(ReviewState(Mutex::new(std::collections::HashMap::new())));
 
             // Initialize tamper-evident audit log
             let audit = audit_log::AuditLog::new(&app_dir);
@@ -2759,7 +2967,6 @@ pub fn run() {
 
             println!("╔══════════════════════════════════════════════╗");
             println!("║  ◈ PrismOS-AI v0.5.2 — Local-First AI OS       ║");
-            println!("║  Patent Pending — US Provisional             ║");
             println!("║  Refractive Core + Spectrum Graph: ACTIVE    ║");
             println!("║  Whisper Voice Engine: READY                 ║");
             println!("║  Local File Indexer: READY                   ║");
@@ -2843,7 +3050,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            // Core pipeline (Patent Pending)
+            // Core pipeline
             process_intent,
             process_intent_full,
             refract_intent,
@@ -2858,7 +3065,7 @@ pub fn run() {
             add_spectrum_edge,
             get_node_connections,
             get_graph_stats,
-            // Spectrum Graph — Patent Pending
+            // Spectrum Graph
             get_spectrum_graph,
             update_edge_weight,
             query_spectrum_intent,
@@ -2875,31 +3082,31 @@ pub fn run() {
             submit_response_feedback,
             get_recent_intents,
             get_daily_brief,
-            // Cognitive Imprint (Patent Pending — Adaptive Response Personality)
+            // Cognitive Imprint (Adaptive Response Personality)
             get_cognitive_profile,
             generate_refraction_alternative,
             select_refraction_preference,
-            // Cognitive Drift & Thought Currents (Patent Pending)
+            // Cognitive Drift & Thought Currents
             get_cognitive_drift,
             get_thought_currents,
-            // Edge Prophecy (Patent Pending)
+            // Edge Prophecy
             predict_edges,
             confirm_predicted_edge,
             dismiss_predicted_edge,
-            // Refraction Journal (Patent Pending)
+            // Refraction Journal
             get_refraction_insights,
-            // Brain Wrapped™ + Cognitive Fingerprint™ (Patent Pending)
+            // Brain Wrapped™ + Cognitive Fingerprint™
             generate_brain_snapshot,
             compute_cognitive_compatibility,
             get_cognitive_fingerprint,
-            // Domain Detection (Patent Pending)
+            // Domain Detection
             get_domain_profile,
-            // Model Performance (Patent Pending)
+            // Model Performance
             get_model_recommendations,
             get_system_info,
             // Agents
             get_active_agents,
-            // LangGraph Workflow (Patent Pending — Multi-Agent Collaboration)
+            // LangGraph Workflow (Multi-Agent Collaboration)
             run_collaboration,
             get_workflow_graph,
             get_debate_log,
@@ -2909,30 +3116,30 @@ pub fn run() {
             pull_ollama_model,
             list_ollama_models,
             delete_ollama_model,
-            // Sandbox (Patent Pending — WASM Isolation + Cryptographic Signing)
+            // Sandbox (WASM Isolation + Cryptographic Signing)
             create_sandbox,
             execute_in_sandbox,
             rollback_sandbox,
-            // You-Port (Patent Pending — Encrypted State Migration)
+            // You-Port (Encrypted State Migration)
             export_you_port,
             import_you_port,
             save_state,
             load_state,
             has_saved_state,
-            // Settings (Patent Pending — Graph Export/Import/Clear)
+            // Settings (Graph Export/Import/Clear)
             export_graph,
             import_graph,
             clear_graph,
             deduplicate_graph,
-            // Multi-Window + Spectral Timeline (Patent Pending)
+            // Multi-Window + Spectral Timeline
             open_graph_window,
             get_timeline_data,
-            // Graph Merge/Diff — Multi-Device Sync (Patent Pending)
+            // Graph Merge/Diff — Multi-Device Sync
             export_sync_package,
             import_sync_package,
             preview_sync_merge,
             diff_graph,
-            // Security Hardening (Patent Pending)
+            // Security Hardening
             get_audit_log,
             verify_audit_chain,
             verify_model,
@@ -2958,12 +3165,12 @@ pub fn run() {
             // Phase 7 — Contextual Screen Awareness (local screen capture)
             capture_screen,
             read_screen,
-            // Email Keeper — Read-only IMAP summary (Patent Pending)
+            // Email Keeper — Read-only IMAP summary
             fetch_email_summary,
             test_email_connection,
-            // Calendar Keeper — Local .ics calendar integration (Patent Pending)
+            // Calendar Keeper — Local .ics calendar integration
             fetch_calendar_summary,
-            // Finance Keeper — Stock/portfolio tracking (Patent Pending)
+            // Finance Keeper — Stock/portfolio tracking
             fetch_finance_summary,
             // Phase 6 — Smart Model Router + Document RAG
             smart_route_model,
@@ -2971,6 +3178,14 @@ pub fn run() {
             chunk_document,
             rag_query,
             index_document_chunks,
+            // Document Generation — local Word (.docx) + PowerPoint (.pptx)
+            create_word_document,
+            create_powerpoint,
+            open_generated_file,
+            // Project Review — gated, read-only whole-project review
+            scan_project_for_review,
+            run_project_review,
+            cancel_project_review,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

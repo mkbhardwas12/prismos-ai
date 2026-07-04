@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Proactive Suggestion Engine
 //
 // Generates context-aware, time-sensitive suggestions based on graph state,

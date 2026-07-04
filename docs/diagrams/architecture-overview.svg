@@ -39,7 +39,7 @@
 
   <!-- Title -->
   <text x="480" y="38" text-anchor="middle" font-size="20" font-weight="800" fill="url(#titleGrad)" filter="url(#glow)">PrismOS-AI — System Architecture</text>
-  <text x="480" y="56" text-anchor="middle" font-size="11" fill="#64748b" font-weight="500">v0.5.1 · Patent Pending · 100% Local-First</text>
+  <text x="480" y="56" text-anchor="middle" font-size="11" fill="#64748b" font-weight="500">v0.5.1 · 100% Local-First</text>
 
   <!-- ═══ FRONTEND LAYER ═══ -->
   <rect x="30" y="72" width="900" height="158" rx="12" fill="#0f172a" stroke="#06b6d4" stroke-width="1.3" filter="url(#s)"/>
@@ -199,8 +199,6 @@
   <rect x="180" y="636" width="95" height="24" rx="12" fill="#1e1b4b" fill-opacity="0.5" stroke="#818cf8" stroke-width="0.6"/>
   <text x="227" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#c4b5fd">No Cloud</text>
 
-  <rect x="287" y="636" width="105" height="24" rx="12" fill="#78350f" fill-opacity="0.5" stroke="#f59e0b" stroke-width="0.6"/>
-  <text x="339" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#fde68a">Patent Pending</text>
 
   <rect x="404" y="636" width="110" height="24" rx="12" fill="#0c4a6e" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.6"/>
   <text x="459" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#67e8f9">No Telemetry</text>
@@ -218,5 +216,5 @@
   <text x="480" y="686" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="600">Phases 1–7 · Vision · Document RAG · Alt+Space Omnipresence · Daily Dashboard · 5-Agent LangGraph DAG + 3 Keepers</text>
 
   <!-- Copyright -->
-  <text x="480" y="708" text-anchor="middle" font-size="9" fill="#475569">© 2026 Manish Kumar · PrismOS-AI v0.5.1 · MIT License · Patent Pending</text>
+  <text x="480" y="708" text-anchor="middle" font-size="9" fill="#475569">© 2026 Manish Kumar · PrismOS-AI v0.5.1 · MIT License</text>
 </svg>

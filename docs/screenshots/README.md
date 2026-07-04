@@ -29,4 +29,3 @@ Place screenshots here for the README and GitHub Release page.
 - **Format**: PNG
 - **Theme**: Dark (primary) + Light (secondary)
 
-> Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)

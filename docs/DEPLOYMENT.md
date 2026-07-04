@@ -211,10 +211,6 @@ npx tauri ios build --release
    zero cloud dependencies. Your conversations, files, and knowledge graph
    stay on your device.
 
-   PATENT PENDING:
-   PrismOS-AI's core architectures (Spectrum Graph, Refractive Core,
-   You-Port) are protected by US Provisional Patent.
-
    REQUIREMENTS:
    • Ollama installed (https://ollama.com)
    • At least one LLM model downloaded
@@ -474,11 +470,6 @@ adb install src-tauri/gen/android/app/build/outputs/apk/release/app-release.apk
    • 2GB RAM minimum, 4GB recommended
    • 1GB free storage (plus space for AI models)
    • Ollama app installed (available separately)
-
-   🔬 PATENT PENDING
-
-   PrismOS-AI's core architectures (Spectrum Graph™, Refractive Core™,
-   You-Port™) are protected by US Provisional Patent (Feb 2026).
 
    📖 OPEN SOURCE
 
@@ -839,13 +830,6 @@ gh release view v0.5.2 --json assets
 ---
 
 ## Legal & Compliance
-
-### Patent Notice
-
-All distribution materials must include:
-```
-Patent Pending — US Provisional Patent filed February 2026
-```
 
 ### Open Source License
 

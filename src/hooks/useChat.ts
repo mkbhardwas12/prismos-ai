@@ -1,9 +1,10 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // useChat — Messages, intent processing, conversation history
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency } from "../types";
+import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
+import { detectDocRequest, generateDocument } from "../lib/docGen";
+import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -233,6 +234,93 @@ export function useChat({
         await refreshSuggestions(input, aiMsg.id);
 
       } else {
+        // ── Project review path (gated, READ-ONLY) ──
+        // "Review this project/codebase …" → metadata-only scan first, then an
+        // explicit approval card. Nothing is read until the user approves;
+        // nothing is EVER modified or deleted in the reviewed project.
+        // Checked before doc-gen because review requests often say "create a report".
+        const reviewReq = detectReviewRequest(input);
+        if (reviewReq) {
+          if (!reviewReq.path) {
+            const askMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "ai",
+              content: "I can review an entire project — read-only, with approval gates — and produce a report. Which folder should I look at? Reply with the full path, e.g.:\n\n`review the project at ~/Documents/my-app`",
+              timestamp: new Date(),
+              agent: "Code Reviewer",
+            };
+            setMessages((prev) => [...prev, askMsg]);
+            onIntentProcessed("Code Reviewer");
+            return;
+          }
+
+          setProcessingPhase(`Scanning ${reviewReq.path} (metadata only)…`);
+          const previewJson = await invoke<string>("scan_project_for_review", { path: reviewReq.path });
+          const p = JSON.parse(previewJson) as {
+            scan_id: string; root: string; project_name: string; total_files: number;
+            candidate_files: number; total_candidate_bytes: number; llm_files: number;
+            skipped_dirs: string[]; top_extensions: [string, number][]; truncated: boolean;
+          };
+
+          const review: ReviewRequest = {
+            scanId: p.scan_id,
+            root: p.root,
+            projectName: p.project_name,
+            totalFiles: p.total_files,
+            candidateFiles: p.candidate_files,
+            totalCandidateBytes: p.total_candidate_bytes,
+            llmFiles: p.llm_files,
+            skippedDirs: p.skipped_dirs,
+            topExtensions: p.top_extensions,
+            truncated: p.truncated,
+            status: "pending",
+          };
+          const gateMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: `🔍 Scan of **${p.project_name}** complete — metadata only, no file contents read yet.\n\nApprove below to start the **read-only** review. I will not modify, create or delete anything in the project; the only output is a report saved to Downloads.`,
+            timestamp: new Date(),
+            agent: "Code Reviewer",
+            reviewRequest: review,
+          };
+          setMessages((prev) => [...prev, gateMsg]);
+          onIntentProcessed("Code Reviewer");
+          return;
+        }
+
+        // ── Document / presentation generation path ──
+        // If the user asks to create a Word doc or PowerPoint, produce a real
+        // file locally instead of just answering in chat.
+        const docKind = detectDocRequest(input);
+        if (docKind) {
+          setProcessingPhase("Checking Ollama connection…");
+          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+          if (!ollamaOk) {
+            throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+          }
+
+          const attachment = await generateDocument(docKind, input, {
+            model: settings.defaultModel || "mistral",
+            ollamaUrl: settings.ollamaUrl || null,
+            maxTokens: settings.maxTokens || 4096,
+            onPhase: setProcessingPhase,
+          });
+
+          const kindLabel = docKind === "pptx" ? "PowerPoint presentation" : "Word document";
+          const aiMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it to your Downloads folder.\n\n───\n📎 ${docKind.toUpperCase()} · generated locally · 100% private`,
+            timestamp: new Date(),
+            agent: docKind === "pptx" ? "Presentation Builder" : "Document Writer",
+            attachment,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          onIntentProcessed(aiMsg.agent);
+          await refreshSuggestions(input, aiMsg.id);
+          return;
+        }
+
         // ── Standard text path (Refractive Core pipeline) ──
         try {
           const resultJson = await withRetry(() => invoke<string>("refract_intent", { input, model: settings.defaultModel || "mistral" }));
@@ -445,6 +533,84 @@ export function useChat({
     }
   }
 
+  // ── Project Review approval gates ──
+  // Approve: consumes the scan_id (one-shot token) and runs the read-only review.
+  async function approveProjectReview(messageId: string) {
+    const msg = messages.find((m) => m.id === messageId);
+    const review = msg?.reviewRequest;
+    if (!review || review.status !== "pending") return;
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId && m.reviewRequest
+          ? { ...m, reviewRequest: { ...m.reviewRequest, status: "approved" } }
+          : m,
+      ),
+    );
+
+    setIsProcessing(true);
+    processingStartRef.current = Date.now();
+    setProcessingElapsed(0);
+    processingTimerRef.current = setInterval(() => {
+      setProcessingElapsed(Math.floor((Date.now() - processingStartRef.current) / 1000));
+    }, 1000);
+    clearLiveSteps();
+    setProcessingPhase(`Reviewing ${review.projectName} (read-only)…`);
+
+    try {
+      const reportJson = await invoke<string>("run_project_review", {
+        scanId: review.scanId,
+        model: settings.defaultModel || null,
+      });
+      const report = JSON.parse(reportJson) as ReviewReportPayload;
+
+      const aiMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "ai",
+        content: formatReportMarkdown(report),
+        timestamp: new Date(),
+        agent: "Code Reviewer",
+        attachment: {
+          path: report.report_docx_path,
+          filename: report.report_docx_filename,
+          kind: "docx",
+        },
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+      onIntentProcessed("Code Reviewer");
+    } catch (err) {
+      setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
+    } finally {
+      if (processingTimerRef.current) {
+        clearInterval(processingTimerRef.current);
+        processingTimerRef.current = null;
+      }
+      setIsProcessing(false);
+      setProcessingPhase("");
+      setProcessingElapsed(0);
+    }
+  }
+
+  // Decline: discards the pending scan server-side; nothing was ever read.
+  async function declineProjectReview(messageId: string) {
+    const msg = messages.find((m) => m.id === messageId);
+    const review = msg?.reviewRequest;
+    if (!review || review.status !== "pending") return;
+
+    try {
+      await invoke("cancel_project_review", { scanId: review.scanId });
+    } catch {
+      // State cleanup is best-effort; the scan_id is one-shot anyway.
+    }
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId && m.reviewRequest
+          ? { ...m, reviewRequest: { ...m.reviewRequest, status: "declined" } }
+          : m,
+      ),
+    );
+  }
+
   return {
     messages,
     isProcessing,
@@ -458,6 +624,8 @@ export function useChat({
     clearConversation,
     submitFeedback,
     selectRefractionPreference,
+    approveProjectReview,
+    declineProjectReview,
   };
 }
 

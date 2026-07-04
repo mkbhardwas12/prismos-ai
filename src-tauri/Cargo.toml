@@ -1,7 +1,7 @@
 [package]
 name = "prismos"
 version = "0.5.2"
-description = "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)"
+description = "PrismOS-AI — Local-First Agentic Personal AI Operating System"
 authors = ["PrismOS-AI Contributors"]
 edition = "2021"
 default-run = "prismos"
@@ -60,11 +60,11 @@ zip = "2"
 xcap = "0.8"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
-# Email Keeper — Read-only IMAP summary (Patent Pending)
+# Email Keeper — Read-only IMAP summary
 imap = "2.4"
 native-tls = "0.2"
 
-# Calendar Keeper — Local .ics calendar integration (Patent Pending)
+# Calendar Keeper — Local .ics calendar integration
 ical = "0.11"
 
 # System Info — Hardware detection for model recommendations

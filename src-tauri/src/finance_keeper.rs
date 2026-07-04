@@ -1,5 +1,4 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
-// Finance Keeper — Local portfolio tracking with optional market data (Patent Pending)
+// Finance Keeper — Local portfolio tracking with optional market data
 //
 // This module provides:
 // - Local ticker watchlist management (stored in localStorage, passed via IPC)

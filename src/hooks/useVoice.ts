@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Voice Engine — Hybrid: Local Whisper (Tauri) + Web Speech API fallback
 //
 // Phase 4: First attempts local Whisper transcription via Tauri IPC

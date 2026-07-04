@@ -1,6 +1,5 @@
 # PrismOS-AI Test Suite
 
-> Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 
 ## Test Architecture
 
@@ -127,7 +126,6 @@ Use this checklist to verify all features before a release:
   - [ ] Preview Merge shows diff stats and conflicts
   - [ ] Apply Merge runs merge with selected strategy
   - [ ] Strategy selector (Latest/Theirs/Ours) works
-- [ ] Patent notice visible
 - [ ] Version banner shows v0.5.1
 
 #### Frameless Window & System Tray

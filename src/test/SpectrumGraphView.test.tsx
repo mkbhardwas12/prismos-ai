@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — SpectrumGraphView Component Tests (Edge Prophecy + Intro Overlay)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -170,8 +169,50 @@ describe("SpectrumGraphView", () => {
       render(<SpectrumGraphView />);
     });
     await waitFor(() => {
-      expect(screen.getByText("2")).toBeInTheDocument(); // node_count
+      // "2" appears in the metrics bar (node_count) and may also appear in
+      // the cluster legend count badge — both are correct.
+      expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("nodes")).toBeInTheDocument();
     });
+  });
+
+  it("renders the cluster legend and toggles expansion on click", async () => {
+    localStorage.setItem("prismos-graph-intro-seen", "1");
+    setupMocks();
+    await act(async () => {
+      render(<SpectrumGraphView />);
+    });
+    // Both mock nodes (work + learning types) fall into the Knowledge bucket
+    await waitFor(() => {
+      expect(screen.getByText(/Knowledge/)).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Knowledge/));
+    });
+    expect(JSON.parse(localStorage.getItem("prismos-graph-expanded") || "[]")).toContain("knowledge");
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Knowledge/));
+    });
+    expect(JSON.parse(localStorage.getItem("prismos-graph-expanded") || "[]")).not.toContain("knowledge");
+  });
+
+  it("expand all / collapse all toolbar buttons update the expanded set", async () => {
+    localStorage.setItem("prismos-graph-intro-seen", "1");
+    setupMocks();
+    await act(async () => {
+      render(<SpectrumGraphView />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Expand all/)).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Expand all/));
+    });
+    expect(JSON.parse(localStorage.getItem("prismos-graph-expanded") || "[]").length).toBeGreaterThan(0);
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Collapse all/));
+    });
+    expect(JSON.parse(localStorage.getItem("prismos-graph-expanded") || "[]")).toEqual([]);
   });
 
   it("hides Edge Prophecy panel when no predictions", async () => {

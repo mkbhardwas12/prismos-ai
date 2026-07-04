@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SIDEBAR — PrismOS-AI (Patent Pending)
+   SIDEBAR — PrismOS-AI
    Modern glassmorphism sidebar with overflow-safe layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -227,7 +227,7 @@
   white-space: nowrap;
 }
 
-/* ── Open-in-Window Button (Patent Pending — Multi-Window) ── */
+/* ── Open-in-Window Button (Multi-Window) ── */
 .sidebar-item-row {
   display: flex;
   align-items: stretch;

@@ -40,7 +40,6 @@ HMAC-signed actions. WASM sandboxing. Tamper-evident audit logs with SHA-256 has
 → 8 autonomous AI agents with consensus voting
 → Local Vision + Document Analysis (PDF/DOCX/PPTX/XLSX)
 → Smart Model Routing + Document RAG
-→ Patent pending
 
 I built every line of this. Frontend. Backend. Security. Agents. Graph engine. UI. All of it.
 
@@ -50,7 +49,7 @@ If you've ever felt uncomfortable about where your AI conversations go — this 
 
 I'd genuinely appreciate a ⭐ if this resonates. And I'd love to hear what you think.
 
-#AI #OpenSource #Privacy #Rust #TypeScript #LocalFirst #DesktopAI #Patent #BuildInPublic
+#AI #OpenSource #Privacy #Rust #TypeScript #LocalFirst #DesktopAI #BuildInPublic
 
 ---
 
@@ -65,7 +64,7 @@ I built an AI operating system that never phones home.
 No cloud. No API keys. No telemetry.
 Your data stays on YOUR machine. Period.
 
-It's called PrismOS-AI, it's patent-pending, and I just open-sourced it.
+It's called PrismOS-AI, and I just open-sourced it.
 
 🧵 Here's what makes it different ↓
 ```
@@ -140,7 +139,7 @@ All hand-written. All local. All open source. ⚡
 
 ### Tweet 7 — Call to Action
 ```
-PrismOS-AI is patent-pending (Patent Pending) and fully open source under MIT.
+PrismOS-AI is fully open source under MIT.
 
 If you believe your AI should work for YOU — not a platform — take a look.
 
@@ -176,8 +175,6 @@ Stack: Tauri 2.0 (Rust backend) + React 18 + TypeScript 5.5. SQLite for persiste
 
 The guided setup wizard walks you through installing Ollama on first launch. Supports Mistral, Llama 3.x, Phi-3, Gemma 2, DeepSeek, and others.
 
-Patent pending — US Provisional Patent Application (filed February 2026).
-
 GitHub: https://github.com/mkbhardwas12/prismos-ai
 
 I'd appreciate any feedback — especially on the spectral knowledge representation. That's the part I think is genuinely novel, and I'm curious what HN thinks.
@@ -194,7 +191,7 @@ Your AI, on your machine. Zero cloud. Zero telemetry. Nine security layers.
 
 ### Description
 ```
-PrismOS-AI is a patent-pending AI operating system that runs entirely on your device.
+PrismOS-AI is an AI operating system that runs entirely on your device.
 
 Unlike cloud AI tools, PrismOS-AI keeps everything local — your conversations, your knowledge graph, your data. Nothing ever leaves your machine.
 

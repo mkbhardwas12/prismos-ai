@@ -12,7 +12,6 @@
 // The full GUI still does the agent debate / Spectrum Graph / Brain Wrapped
 // flow — this CLI is the "quick check" surface for devs and shell scripts.
 //
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026).
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};

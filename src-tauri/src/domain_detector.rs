@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Domain Detector — Learns what kind of professional the user is
 //
 // Tracks query domains over time to build a user profile that goes

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — DomainInsights Component Tests (Recommended Model Display)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

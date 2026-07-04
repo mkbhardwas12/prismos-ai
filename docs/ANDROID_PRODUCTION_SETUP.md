@@ -535,10 +535,6 @@ Your private AI assistant that runs entirely on your device. No cloud, no tracki
 • 2GB RAM minimum, 4GB recommended
 • 1GB free storage (plus space for AI models)
 
-🔬 PATENT PENDING
-
-PrismOS-AI's core architectures (Spectrum Graph™, Refractive Core™, You-Port™) are protected by US Provisional Patent (Feb 2026).
-
 📖 OPEN SOURCE
 
 MIT License - https://github.com/mkbhardwas12/prismos-ai

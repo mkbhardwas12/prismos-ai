@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Agent Definitions — LangGraph Workflow Architecture
 //
 // Defines the 5 core PrismOS-AI agents with system prompts, debate roles,

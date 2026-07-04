@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
 
 import { useState, useEffect, useCallback } from "react";
@@ -101,7 +100,7 @@ export default function Sidebar({
       <div className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`} role="complementary" aria-label="Sidebar navigation">
         <div className="sidebar-header">
           <span className="sidebar-logo"><img src={prismosIcon} alt="PrismOS-AI" className="sidebar-logo-img" /> PrismOS-AI</span>
-          <span className="sidebar-version">v0.5.1</span>
+          <span className="sidebar-version">v0.5.2</span>
         </div>
 
         <nav className="sidebar-nav" aria-label="Main navigation">
@@ -287,8 +286,6 @@ export default function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          Patent Pending
-          <br />
           Local-First AI · Feb 2026
         </div>
       </div>

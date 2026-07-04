@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // DailyDashboard — Your personal command center for the day.
 //
 // Combines Morning Brief, Proactive Suggestions, Quick Links,

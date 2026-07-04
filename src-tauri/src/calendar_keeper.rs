@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Calendar Keeper — Local-First, Sandbox-Isolated Calendar Agent
 //
 // The Calendar Keeper reads local .ics (iCalendar) files in READ-ONLY mode,

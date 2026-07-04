@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SETTINGS PANEL — PrismOS-AI (Patent Pending)
-   Includes: Settings groups, inputs, model selector, theme toggle, patent
-   notice, version banner, multi-device sync UI
+   SETTINGS PANEL — PrismOS-AI
+   Includes: Settings groups, inputs, model selector, theme toggle,
+   version banner, multi-device sync UI
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .settings-panel {
@@ -280,7 +280,7 @@
   color: var(--text-primary);
 }
 
-/* ── Patent Notice ── */
+/* ── About ── */
 .settings-about-text {
   font-size: 13px;
   line-height: 1.7;
@@ -288,40 +288,9 @@
   margin-bottom: 16px;
 }
 
-.settings-patent-notice {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(245, 158, 11, 0.06));
-  border: 1px solid rgba(37, 99, 235, 0.2);
-  border-radius: 10px;
-  padding: 16px 20px;
-}
-
-.settings-patent-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(37, 99, 235, 0.15));
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 6px;
-  padding: 4px 12px;
+.settings-about-legal {
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #fbbf24;
-  margin-bottom: 12px;
-}
-
-.settings-patent-notice p {
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--text-secondary);
-  margin: 8px 0;
-}
-
-.settings-patent-notice strong {
-  color: var(--text-primary);
-}
-
-.settings-patent-legal {
-  font-size: 11px !important;
-  color: var(--text-muted) !important;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -373,18 +342,6 @@
   align-items: flex-end;
 }
 
-.settings-badge-patent {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(37, 99, 235, 0.15));
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 4px;
-  padding: 2px 8px;
-  color: #fbbf24;
-}
-
 .settings-badge-local {
   font-size: 9px;
   font-weight: 600;
@@ -397,7 +354,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MULTI-DEVICE SYNC UI (Patent Pending — Graph Merge/Diff)
+   MULTI-DEVICE SYNC UI (Graph Merge/Diff)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Strategy selector */
@@ -561,12 +518,6 @@
   border: 1px solid #e2e8f0;
 }
 
-[data-theme="light"] .settings-patent-notice {
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
-}
-
-[data-theme="light"] .settings-badge-patent,
 [data-theme="light"] .settings-badge-local {
   background-color: #dbeafe;
   color: #2563eb;

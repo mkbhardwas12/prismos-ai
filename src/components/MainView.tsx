@@ -1,9 +1,10 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Main View — Intent Console + Conversation
 // Refactored: logic extracted into useOllama, useChat, useSuggestions hooks
 
 import { useState, Fragment } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
+import { formatBytes } from "../lib/projectReview";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import prismosLogo from "../assets/prismos-logo.svg";
@@ -21,6 +22,8 @@ import "./MainView.css";
 
 interface MainViewProps {
   ollamaConnected: boolean;
+  /** Re-run the Ollama health check now (clicking the offline badge). */
+  onRetryConnection?: () => void | Promise<void>;
   settings: AppSettings;
   onSettingsChange: (s: AppSettings) => void;
   onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
@@ -32,6 +35,7 @@ interface MainViewProps {
 
 export default function MainView({
   ollamaConnected,
+  onRetryConnection,
   settings,
   onSettingsChange,
   onIntentProcessed,
@@ -41,6 +45,7 @@ export default function MainView({
   dailyGreeting,
 }: MainViewProps) {
   const [showGuide, setShowGuide] = useState(false);
+  const [checkingConn, setCheckingConn] = useState(false);
   const [expandedRefractions, setExpandedRefractions] = useState<Set<string>>(new Set());
   const [expandedTransparencies, setExpandedTransparencies] = useState<Set<string>>(new Set());
 
@@ -80,14 +85,35 @@ export default function MainView({
           )}
           <div className="ollama-status" ref={ollama.modelDropdownRef}>
             <button
-              className="model-selector-btn"
-              onClick={() => ollamaConnected && ollama.setModelDropdownOpen(v => !v)}
-              title={ollamaConnected ? "Click to change model" : "Ollama is offline"}
+              className={`model-selector-btn ${!ollamaConnected ? "offline" : ""}`}
+              onClick={async () => {
+                if (ollamaConnected) {
+                  ollama.setModelDropdownOpen(v => !v);
+                  return;
+                }
+                // Offline → clicking retries the connection right now instead
+                // of waiting for the next background poll.
+                if (checkingConn) return;
+                setCheckingConn(true);
+                try {
+                  await onRetryConnection?.();
+                } finally {
+                  // Brief hold so "Checking…" is visible even on instant results
+                  setTimeout(() => setCheckingConn(false), 400);
+                }
+              }}
+              title={
+                ollamaConnected
+                  ? "Click to change model"
+                  : "Click to retry the connection — if it stays offline, start Ollama with `ollama serve`"
+              }
             >
-              <span className={`status-dot ${ollamaConnected ? "connected" : ""}`} />
+              <span className={`status-dot ${ollamaConnected ? "connected" : ""} ${checkingConn ? "checking" : ""}`} />
               {ollamaConnected
                 ? <><span className="model-selector-label">Ollama ·</span> <strong>{settings.defaultModel}</strong> <span className="model-selector-caret">{ollama.modelDropdownOpen ? "▲" : "▼"}</span></>
-                : "Ollama Offline"}
+                : checkingConn
+                  ? "Checking…"
+                  : <>Ollama Offline <span className="retry-icon">↻</span></>}
             </button>
             {ollama.modelDropdownOpen && (
               <div className="model-dropdown">
@@ -192,6 +218,21 @@ export default function MainView({
           </button>
         </div>
       </div>
+
+      {ollama.modelWarning && (
+        <div className="model-warning-banner" role="status">
+          <span className="model-warning-icon">⚠️</span>
+          <span className="model-warning-text">{ollama.modelWarning}</span>
+          <button
+            className="model-warning-dismiss"
+            onClick={ollama.dismissModelWarning}
+            aria-label="Dismiss"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="conversation-area" ref={chat.conversationRef} role="log" aria-label="Conversation history" aria-live="polite">
         {/* ── Morning Brief / Evening Recap ── */}
@@ -442,6 +483,65 @@ export default function MainView({
                     ))
                   )}
                 </div>
+                {msg.reviewRequest && (
+                  <div className="review-gate-card">
+                    <div className="review-gate-header">
+                      🛡️ Review Gate — approval required
+                      {msg.reviewRequest.status === "approved" && <span className="review-gate-status review-gate-status--ok">✓ Approved</span>}
+                      {msg.reviewRequest.status === "declined" && <span className="review-gate-status review-gate-status--no">✗ Declined</span>}
+                    </div>
+                    <div className="review-gate-stats">
+                      <span title="Project root">📁 {msg.reviewRequest.root}</span>
+                      <span>{msg.reviewRequest.totalFiles} files found</span>
+                      <span>{msg.reviewRequest.candidateFiles} reviewable ({formatBytes(msg.reviewRequest.totalCandidateBytes)})</span>
+                      <span>{msg.reviewRequest.llmFiles} deep-review candidates</span>
+                      {msg.reviewRequest.skippedDirs.length > 0 && (
+                        <span>skipping: {msg.reviewRequest.skippedDirs.join(", ")}</span>
+                      )}
+                      {msg.reviewRequest.truncated && <span>⚠️ large project — scan capped</span>}
+                    </div>
+                    <div className="review-gate-note">
+                      Read-only: nothing in the project will be modified, created or deleted. Only a report is written (to Downloads).
+                    </div>
+                    {msg.reviewRequest.status === "pending" && (
+                      <div className="review-gate-actions">
+                        <button
+                          className="attachment-btn"
+                          disabled={chat.isProcessing}
+                          onClick={() => chat.approveProjectReview(msg.id)}
+                        >
+                          ✓ Approve & start review
+                        </button>
+                        <button
+                          className="attachment-btn attachment-btn--secondary"
+                          disabled={chat.isProcessing}
+                          onClick={() => chat.declineProjectReview(msg.id)}
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {msg.attachment && (
+                  <div className="attachment-actions">
+                    <span className="attachment-chip">
+                      {msg.attachment.kind === "pptx" ? "📊" : "📄"} {msg.attachment.filename}
+                    </span>
+                    <button
+                      className="attachment-btn"
+                      onClick={() => invoke("open_generated_file", { path: msg.attachment!.path, reveal: false })}
+                    >
+                      Open
+                    </button>
+                    <button
+                      className="attachment-btn attachment-btn--secondary"
+                      onClick={() => invoke("open_generated_file", { path: msg.attachment!.path, reveal: true })}
+                    >
+                      Reveal in Finder
+                    </button>
+                  </div>
+                )}
                 <div className="message-meta">
                   {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
                   {msg.timestamp.toLocaleTimeString()}

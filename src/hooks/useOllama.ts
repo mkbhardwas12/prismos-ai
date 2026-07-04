@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // useOllama — Ollama connection, model management, setup wizard state
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -6,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, OllamaModel } from "../types";
 import { toRecommendedFormat } from "../lib/modelRegistry";
+import { resolveDefaultModel } from "../lib/config";
 
 // ── Tiered model catalog — derived from centralized Model Registry ──
 export const RECOMMENDED_MODELS = toRecommendedFormat();
@@ -27,6 +27,9 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
   const [pullPercent, setPullPercent] = useState<number>(0);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Stale/uninstalled default-model banner (self-heal notice)
+  const [modelWarning, setModelWarning] = useState<string | null>(null);
+
   // Setup wizard state
   const [hasModels, setHasModels] = useState<boolean | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -44,21 +47,45 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
     return "start";
   }, [ollamaConnected, hasModels]);
 
-  // Check if Ollama has models when it connects
+  // On connect: load installed models, then self-heal a stale `defaultModel`.
+  // If the saved model isn't installed (e.g. a `deepseek-v3:16b` that was never
+  // pulled), fall back to an installed one and persist it — so the app can never
+  // try to run a missing model and then surface a misleading "Ollama is down".
   useEffect(() => {
-    if (ollamaConnected) {
-      (async () => {
-        try {
-          const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-          const models = JSON.parse(result);
-          setHasModels(Array.isArray(models) && models.length > 0);
-        } catch {
-          setHasModels(false);
-        }
-      })();
-    } else {
+    if (!ollamaConnected) {
       setHasModels(null);
+      return;
     }
+    (async () => {
+      try {
+        const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
+        const parsed = JSON.parse(result);
+        const list: OllamaModel[] = Array.isArray(parsed) ? parsed : [];
+        setAvailableModels(list);
+        setHasModels(list.length > 0);
+
+        const names = list.map((m) => m.name);
+        const { model, fellBack } = resolveDefaultModel(settings.defaultModel, names);
+        if (model && fellBack) {
+          // Genuine stale setting — warn and switch to an installed model.
+          setModelWarning(
+            `"${settings.defaultModel}" isn't installed — switched to "${model}". ` +
+            `Run \`ollama pull ${settings.defaultModel}\` or pick a model in Settings.`
+          );
+          onSettingsChange({ ...settings, defaultModel: model });
+        } else if (model && model !== settings.defaultModel) {
+          // Tag normalization only (e.g. llama3.2 → llama3.2:latest) — heal silently.
+          setModelWarning(null);
+          onSettingsChange({ ...settings, defaultModel: model });
+        } else {
+          setModelWarning(null);
+        }
+      } catch {
+        setHasModels(false);
+      }
+    })();
+    // Validation runs once per connect; intentionally not re-run on settings changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ollamaConnected]);
 
   // Fetch available models when connected & dropdown opens
@@ -184,6 +211,9 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
     modelDropdownRef,
     selectModel,
     pullModelFromDropdown,
+    // Stale-model self-heal banner
+    modelWarning,
+    dismissModelWarning: () => setModelWarning(null),
     // Wizard
     hasModels,
     isLaunching,

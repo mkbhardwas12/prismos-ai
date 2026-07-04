@@ -1,7 +1,5 @@
 # PrismOS-AI Architecture
 
-> Patent Pending — US Provisional Patent, Feb 2026
-
 ## Overview
 
 PrismOS-AI is built as a **Tauri 2.0 desktop application** with a React frontend and a Rust backend. All processing happens locally — no data ever leaves the user's device.
@@ -79,7 +77,6 @@ The Rust backend handles all data processing, storage, and AI inference.
 | `file_indexer.rs` | Local RAG file watcher + auto-ingest |
 | `agents/` | 5 agent sub-modules (Planner, Researcher, Coder, Reviewer, Executor) |
 | `agents/langgraph_workflow.rs` | LangGraph state-machine orchestration |
-| `patent_benchmarks.rs` | Performance benchmark binary |
 
 ### 4. Storage
 

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Cognitive Imprint — Adaptive Response Personality Engine
 //
 // Unlike every other AI assistant that learns WHAT you're interested in (topics),
@@ -114,7 +113,7 @@ impl RefractionBand {
 
 // ─── Query Type Classification ─────────────────────────────────────────────────
 //
-// Context-Aware Band Switching (Patent Pending)
+// Context-Aware Band Switching
 //
 // The key insight: the optimal reasoning style depends on BOTH who is asking
 // AND what they're asking. A user who normally prefers Creative responses
@@ -330,7 +329,7 @@ impl CognitiveProfile {
         (max_deviation * 2.0 * confidence).min(1.0)
     }
 
-    /// Context-Aware Band Selection (Patent Pending)
+    /// Context-Aware Band Selection
     ///
     /// The core of the Query-Type × Cognitive-Profile Matrix. Instead of
     /// always using the user's preferred band, this method considers what

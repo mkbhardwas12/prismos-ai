@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Intent Input — Natural Language Input with Voice + Vision Support
 //
 // Supports typed, voice, image drag-drop, and camera capture input.
@@ -699,7 +698,7 @@ export default function IntentInput({
       <div className="intent-hint">
         <span className="intent-hint-keys">Enter ↵ send · Shift+Enter ↵ newline</span>
         <span className="intent-hint-sep">·</span>
-        <span>📎 Attach files (max {MAX_FILE_SIZE_LABEL}) · 🎙️ Voice · 100% local · Patent Pending</span>
+        <span>📎 Attach files (max {MAX_FILE_SIZE_LABEL}) · 🎙️ Voice · 100% local</span>
       </div>
     </div>
   );

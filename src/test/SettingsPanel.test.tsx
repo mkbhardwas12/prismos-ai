@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — SettingsPanel Component Tests (Accordion Behavior)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

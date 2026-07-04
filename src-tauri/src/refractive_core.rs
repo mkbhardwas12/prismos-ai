@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Refractive Core — NPU-Accelerated Multi-Agent Orchestration Engine
 //
 // The Refractive Core is the central nervous system of PrismOS-AI.
@@ -339,14 +338,51 @@ impl RefractiveEngine {
     ) -> Result<RefractiveResult, Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
 
+        // ── Step 0: Semantic layer — embed the query on local Ollama ──
+        // Graceful: if the embed model isn't pulled or Ollama is down, we fall
+        // back to keyword-only retrieval (exactly the old behavior). Localhost
+        // only — the offline invariant holds.
+        let query_embedding = match crate::ollama_bridge::embed(&intent.raw, None).await {
+            Ok(v) => Some(v),
+            Err(e) => {
+                eprintln!(
+                    "[RefractiveCore] embeddings unavailable ({}); keyword-only retrieval",
+                    e
+                );
+                None
+            }
+        };
+
         // ── Step 1: Query Spectrum Graph for contextual memory ──
         let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
         let intent_type_str = intent.intent_type.to_string();
 
-        let context_results = graph.query_intent(
+        // Opportunistic backfill: embed a few not-yet-embedded nodes per query
+        // (newest first). The graph becomes semantically searchable over time
+        // with zero migrations; ~ms per node once the embed model is warm.
+        if query_embedding.is_some() {
+            const EMBED_BACKFILL_PER_QUERY: usize = 12;
+            if let Ok(missing) = graph.nodes_missing_embedding(EMBED_BACKFILL_PER_QUERY) {
+                for (node_id, label, content) in missing {
+                    let text: String = format!("{}\n{}", label, content)
+                        .chars()
+                        .take(2000)
+                        .collect();
+                    match crate::ollama_bridge::embed(&text, None).await {
+                        Ok(v) => {
+                            let _ = graph.set_node_embedding(&node_id, &v);
+                        }
+                        Err(_) => break, // embed model went away mid-loop — stop quietly
+                    }
+                }
+            }
+        }
+
+        let context_results = graph.query_intent_hybrid(
             &intent.raw,
             &intent_type_str,
             &intent.entities,
+            query_embedding.as_deref(),
         )?;
 
         let context_node_ids: Vec<String> =
@@ -398,7 +434,28 @@ impl RefractiveEngine {
         scored_context.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // ── Step 3: Build context-enriched summary ──
-        let mut context_summary = self.build_context_summary(&context_results);
+        // Identity anchor first: the standing user profile is ALWAYS in the
+        // prompt, independent of retrieval. "Who am I?" has no useful keywords
+        // and no guaranteed semantic hit — a hosted assistant answers it from a
+        // pinned profile, and now so does PrismOS.
+        let pinned = graph.pinned_profile_nodes(4).unwrap_or_default();
+        let pinned_ids: Vec<String> = pinned.iter().map(|n| n.id.clone()).collect();
+        let retrieved: Vec<crate::spectrum_graph::IntentQueryResult> = context_results
+            .iter()
+            .filter(|r| !pinned_ids.contains(&r.node.id))
+            .cloned()
+            .collect();
+
+        let mut context_summary = self.build_context_summary(&retrieved);
+
+        let profile_block = Self::build_profile_block(&pinned);
+        if !profile_block.is_empty() {
+            context_summary = if context_summary.is_empty() {
+                profile_block
+            } else {
+                format!("{}\n\n{}", profile_block, context_summary)
+            };
+        }
 
         // Inject domain-specific guidance if the user has a detected domain
         if !domain_prefix.is_empty() {
@@ -563,7 +620,7 @@ impl RefractiveEngine {
         let mut entries: Vec<String> = Vec::new();
         let mut conversation_count = 0u32;
 
-        for r in results.iter().take(12) {
+        for r in results.iter().take(20) {
             // Skip suggestion nodes
             if r.node.node_type == "suggestion" {
                 continue;
@@ -579,11 +636,14 @@ impl RefractiveEngine {
                 }
                 conversation_count += 1;
             }
-            if entries.len() >= 8 {
+            if entries.len() >= 12 {
                 break;
             }
-            // Include more content per node (400 chars) for better grounding
-            let content: String = r.node.content.chars().take(400).collect();
+            // Generous per-node budget: dense knowledge nodes (project/user
+            // facts) run 600–1200 chars; the old 400-char cap truncated them
+            // mid-sentence. 12 × 1200 chars ≈ 4k tokens — comfortable inside
+            // the 16k num_ctx window with room for history and the answer.
+            let content: String = r.node.content.chars().take(1200).collect();
             entries.push(format!(
                 "**{}** ({}): {}",
                 r.node.label,
@@ -598,9 +658,26 @@ impl RefractiveEngine {
 
         entries.join("\n\n")
     }
+
+    /// Render the standing user-profile block from pinned personal/core nodes.
+    /// Kept separate from retrieval so it is ALWAYS present in the prompt —
+    /// identity questions ("who am I?", "what are my rules?") never depend on
+    /// keyword or vector luck.
+    fn build_profile_block(pinned: &[crate::spectrum_graph::SpectrumNode]) -> String {
+        if pinned.is_empty() {
+            return String::new();
+        }
+        let mut block =
+            String::from("Standing profile of the user you are assisting (always applies):");
+        for n in pinned {
+            let content: String = n.content.chars().take(700).collect();
+            block.push_str(&format!("\n**{}**: {}", n.label, content.trim()));
+        }
+        block
+    }
 }
 
-// ─── Process Intent — Full Pipeline Entry Point (Patent Pending) ────────────
+// ─── Process Intent — Full Pipeline Entry Point ────────────
 
 /// Full process_intent entry point: parses raw input through Intent Lens,
 /// then routes through the complete Refractive Core pipeline.
@@ -909,6 +986,52 @@ mod tests {
         let engine = RefractiveEngine::new();
         let result = engine.build_context_summary(&[]);
         assert!(result.is_empty());
+    }
+
+    // ─── Standing Profile Block ────────────────────────────────────────────
+
+    #[test]
+    fn test_build_profile_block_empty() {
+        assert!(RefractiveEngine::build_profile_block(&[]).is_empty());
+    }
+
+    #[test]
+    fn test_build_profile_block_renders_pinned_nodes() {
+        let node = crate::spectrum_graph::SpectrumNode {
+            id: "user-manish".into(),
+            label: "Manish (owner)".into(),
+            content: "Solo builder of 8 products across AI, SAP, and security.".into(),
+            node_type: "personal".into(),
+            layer: "core".into(),
+            access_count: 0,
+            last_accessed: String::new(),
+            created_at: String::new(),
+            updated_at: String::new(),
+            connections: vec![],
+        };
+        let block = RefractiveEngine::build_profile_block(&[node]);
+        assert!(block.contains("Standing profile"));
+        assert!(block.contains("Manish (owner)"));
+        assert!(block.contains("Solo builder of 8 products"));
+    }
+
+    #[test]
+    fn test_build_profile_block_truncates_long_content() {
+        let node = crate::spectrum_graph::SpectrumNode {
+            id: "user-long".into(),
+            label: "Long".into(),
+            content: "x".repeat(5000),
+            node_type: "personal".into(),
+            layer: "core".into(),
+            access_count: 0,
+            last_accessed: String::new(),
+            created_at: String::new(),
+            updated_at: String::new(),
+            connections: vec![],
+        };
+        let block = RefractiveEngine::build_profile_block(&[node]);
+        // 700-char cap per node + header/label overhead
+        assert!(block.len() < 800, "profile block must cap node content");
     }
 
     #[test]

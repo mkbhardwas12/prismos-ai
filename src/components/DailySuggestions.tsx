@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — DailySuggestions — Permanent sidebar section
 //
 // Always-visible sidebar panel that shows proactive, graph-aware daily

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Sandbox Prism v0.5.0 — TRUE WASM Isolation with Cryptographic Signing,
 //                         Allow-List Enforcement, and Automatic Rollback
 //

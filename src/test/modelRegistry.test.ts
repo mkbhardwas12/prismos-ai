@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Model Registry Unit Tests
 
 import { describe, it, expect } from "vitest";

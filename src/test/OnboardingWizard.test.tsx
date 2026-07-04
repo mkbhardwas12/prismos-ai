@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — OnboardingWizard Component Tests (field names, getDefaultModel)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

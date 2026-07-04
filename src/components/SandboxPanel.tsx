@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Sandbox Panel — Prism Execution & Rollback UI
 
 import { useState, useCallback, memo } from "react";

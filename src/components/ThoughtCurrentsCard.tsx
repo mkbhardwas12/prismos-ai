@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // ThoughtCurrentsCard — Shows temporal patterns discovered in user intent history
 
 import React, { useEffect, useState } from "react";

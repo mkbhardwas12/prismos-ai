@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Main Application Shell
 
 import { useState, useEffect, useCallback } from "react";
@@ -6,7 +5,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AnimatePresence, motion } from "framer-motion";
-import TitleBar from "./components/TitleBar";
 import Sidebar from "./components/Sidebar";
 import MainView from "./components/MainView";
 import SettingsPanel from "./components/SettingsPanel";
@@ -157,6 +155,16 @@ function App() {
       setOllamaConnected(false);
     }
   }, [settings.ollamaUrl]);
+
+  // Fast reconnect probe while offline: the 30s baseline poll leaves the badge
+  // saying "Offline" long after `ollama serve` comes up. While disconnected,
+  // probe every 8s so the UI flips to online by itself shortly after Ollama
+  // starts — no restart or manual refresh needed.
+  useEffect(() => {
+    if (ollamaConnected) return;
+    const iv = setInterval(checkOllama, 8000);
+    return () => clearInterval(iv);
+  }, [ollamaConnected, checkOllama]);
 
   // P1+P2: Fetch proactive suggestions from the Spectrum Graph (startup + periodic)
   const fetchProactiveSuggestions = useCallback(async () => {
@@ -430,7 +438,6 @@ function App() {
 
   return (
     <div className="app-layout" role="application" aria-label="PrismOS-AI">
-      <TitleBar />
       <div className="app-body">
       <Sidebar
         currentView={view}
@@ -459,6 +466,7 @@ function App() {
           <div style={{ display: view === "chat" ? "contents" : "none" }}>
             <MainView
               ollamaConnected={ollamaConnected}
+              onRetryConnection={checkOllama}
               settings={settings}
               onSettingsChange={handleSettingsChange}
               onIntentProcessed={onIntentProcessed}
@@ -502,7 +510,7 @@ function App() {
         suggestions={startupSuggestions}
       />
 
-      {/* Brain Wrapped™ — shareable cognitive story (Patent Pending) */}
+      {/* Brain Wrapped™ — shareable cognitive story */}
       {brainWrappedOpen && (
         <BrainWrapped onClose={() => setBrainWrappedOpen(false)} />
       )}

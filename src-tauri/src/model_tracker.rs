@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Model Tracker — Per-model performance tracking and recommendations
 //
 // Tracks which model was used for each query domain, latency,

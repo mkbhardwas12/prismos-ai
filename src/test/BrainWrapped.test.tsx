@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // BrainWrapped Component Tests — verifies the shareable cognitive story UI
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

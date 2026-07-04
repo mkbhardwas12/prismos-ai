@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN CONTENT — PrismOS-AI (Patent Pending)
+   MAIN CONTENT — PrismOS-AI
    Includes: Header, Conversation, Messages, Welcome Screen, Ollama Wizard
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1434,6 +1434,112 @@
   flex-wrap: wrap;
 }
 
+/* ── Generated file attachment (Word / PowerPoint) ── */
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 6px;
+  flex-wrap: wrap;
+}
+
+.attachment-chip {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
+.attachment-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent, #4472c4);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.attachment-btn:hover {
+  opacity: 0.85;
+}
+
+.attachment-btn--secondary {
+  background: transparent;
+  color: var(--accent, #4472c4);
+  border: 1px solid var(--accent, #4472c4);
+}
+
+/* ── Project Review approval gate card ── */
+.review-gate-card {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-left: 3px solid var(--accent, #6366f1);
+  border-radius: 8px;
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-gate-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-gate-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.review-gate-status--ok {
+  color: #34d399;
+  border: 1px solid #34d399;
+}
+
+.review-gate-status--no {
+  color: #f87171;
+  border: 1px solid #f87171;
+}
+
+.review-gate-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.review-gate-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.review-gate-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.review-gate-actions .attachment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Response Feedback Buttons (👍 👎) ── */
 .feedback-buttons {
   display: inline-flex;
@@ -1940,4 +2046,71 @@
 
 [data-theme="light"] .processing-timer {
   color: rgba(109, 40, 217, 0.7);
+}
+
+/* ── Stale/uninstalled default-model self-heal banner ───────────────────────── */
+.model-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 1rem 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  background: rgba(234, 179, 8, 0.12);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.model-warning-icon {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+.model-warning-text {
+  flex: 1 1 auto;
+  font-family: var(--font-sans);
+}
+.model-warning-dismiss {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  transition: color var(--transition-fast);
+}
+.model-warning-dismiss:hover {
+  color: var(--text-primary);
+}
+
+/* ── Offline badge: clickable retry ────────────────────────────────────── */
+
+.model-selector-btn.offline {
+  cursor: pointer;
+  border-color: rgba(255, 120, 120, 0.35);
+}
+
+.model-selector-btn.offline:hover {
+  border-color: rgba(255, 160, 120, 0.6);
+  background: rgba(60, 30, 30, 0.35);
+}
+
+.retry-icon {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.model-selector-btn.offline:hover .retry-icon {
+  opacity: 1;
+}
+
+.status-dot.checking {
+  background: #ffc46b;
+  animation: sd-checking 0.9s ease-in-out infinite;
+}
+
+@keyframes sd-checking {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
 }

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Type & Settings Unit Tests
 //
 // Validates default settings values, type shapes, and data transformations

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // LangGraph Messages — Structured Inter-Agent Communication Protocol
 //
 // Agents communicate through typed messages that carry proposals, votes,

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // SpotlightOverlay — Global hotkey-activated command palette / quick-launch bar
 //
 // Activated by Alt+Space (or Cmd+/ on macOS). Provides instant access to

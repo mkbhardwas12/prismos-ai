@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Entry Point
 
 import React from "react";

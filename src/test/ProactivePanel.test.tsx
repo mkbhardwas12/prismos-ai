@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — ProactivePanel Component Tests
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

@@ -1,5 +1,4 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
-// DailyBrief — Morning Brief & Evening Recap (Patent Pending)
+// DailyBrief — Morning Brief & Evening Recap
 //
 // Morning (before noon): Prominent "Good morning" card with 3-4 personalized
 // items from the Spectrum Graph — today's priorities, yesterday's recap, quick actions.

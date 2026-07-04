@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — React Error Boundary
 // Catches rendering crashes and displays a recovery UI instead of a blank screen.
 

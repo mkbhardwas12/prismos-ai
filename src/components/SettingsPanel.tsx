@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Settings Panel — Full Configuration, Export/Import, Theme, About
 
 import { useState, useCallback, useEffect } from "react";
@@ -643,7 +642,7 @@ export default function SettingsPanel({
           </>)}
         </div>
 
-        {/* ── Multi-Device Sync (Patent Pending — Graph Merge/Diff) ── */}
+        {/* ── Multi-Device Sync (Graph Merge/Diff) ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("sync")}>
             🔄 Multi-Device Sync
@@ -822,7 +821,7 @@ export default function SettingsPanel({
 
           <div className="settings-hint">
             Sync uses passphrase-based encryption — portable across devices.
-            Use "Preview Merge" to see conflicts before applying. Patent Pending.
+            Use "Preview Merge" to see conflicts before applying.
           </div>
           </>)}
         </div>
@@ -869,7 +868,7 @@ export default function SettingsPanel({
           </>)}
         </div>
 
-        {/* ── Voice I/O (Patent Pending) ── */}
+        {/* ── Voice I/O ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("voice")}>
             🎙️ Voice Input / Output
@@ -900,12 +899,12 @@ export default function SettingsPanel({
           </div>
           <div className="settings-hint">
             Voice uses Web Speech API — all processing stays in your browser.
-            No audio is sent to any server. Patent Pending.
+            No audio is sent to any server.
           </div>
           </>)}
         </div>
 
-        {/* ── Email Summary (Patent Pending) ── */}
+        {/* ── Email Summary ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("email")}>
             📬 Email Summary
@@ -927,12 +926,12 @@ export default function SettingsPanel({
             When enabled, PrismOS connects to your IMAP mailbox in <strong>read-only</strong> mode
             to summarize unread email subject lines. No email content is ever stored, sent to the cloud,
             or leaves the Sandbox Prism. Credentials stay in memory only. Configure your IMAP
-            server details below after enabling. Patent Pending.
+            server details below after enabling.
           </div>
           </>)}
         </div>
 
-        {/* ── Calendar Integration (Patent Pending) ── */}
+        {/* ── Calendar Integration ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("calendar")}>
             📅 Calendar Integration
@@ -954,12 +953,12 @@ export default function SettingsPanel({
             When enabled, PrismOS reads local <strong>.ics</strong> calendar files in <strong>read-only</strong> mode
             to show today's events, detect conflicts, and suggest free time blocks.
             No calendar data is ever modified, sent to the cloud, or leaves the Sandbox Prism.
-            Point this to your exported .ics file or calendar directory. Patent Pending.
+            Point this to your exported .ics file or calendar directory.
           </div>
           </>)}
         </div>
 
-        {/* ── Finance Keeper (Patent Pending) ── */}
+        {/* ── Finance Keeper ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("finance")}>
             💰 Finance Keeper
@@ -980,7 +979,7 @@ export default function SettingsPanel({
           <div className="settings-hint">
             When enabled, PrismOS fetches <strong>public market data</strong> for your ticker watchlist.
             No trades are executed, no financial accounts are accessed, and no API keys are required.
-            Add your ticker symbols (e.g. AAPL, GOOG, TSLA) below after enabling. Patent Pending.
+            Add your ticker symbols (e.g. AAPL, GOOG, TSLA) below after enabling.
           </div>
           </>)}
         </div>
@@ -1094,7 +1093,6 @@ export default function SettingsPanel({
               <span className="settings-version-number">v0.5.2</span>
             </div>
             <div className="settings-version-badges">
-              <span className="settings-badge-patent">Patent Pending</span>
               <span className="settings-badge-local">100% Local</span>
             </div>
           </div>
@@ -1125,7 +1123,7 @@ export default function SettingsPanel({
           </>)}
         </div>
 
-        {/* ── About + Patent Notice ── */}
+        {/* ── About ── */}
         <div className="settings-group settings-about">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("about")}>
             <img src={prismosIcon} alt="" className="header-icon" /> About PrismOS-AI
@@ -1138,19 +1136,9 @@ export default function SettingsPanel({
             inference and a multi-agent Refractive Core architecture with
             persistent Spectrum Graph memory.
           </p>
-          <div className="settings-patent-notice">
-            <div className="settings-patent-badge">⚖️ PATENT PENDING</div>
-            <p>
-              <strong>US Provisional Patent Application</strong><br />
-              Filed: February 2026
-            </p>
-            <p className="settings-patent-legal">
-              This software and its core architectures are protected under US Patent Law.
-            </p>
-            <p className="settings-patent-legal">
-              © 2026 PrismOS-AI Contributors. All rights reserved.
-            </p>
-          </div>
+          <p className="settings-about-legal">
+            © 2026 PrismOS-AI Contributors. Released under the MIT License.
+          </p>
           </>)}
         </div>
       </div>

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // RefractionJournal — Shows how the refraction engine adapts to the user's preferences
 
 import React, { useEffect, useState } from "react";

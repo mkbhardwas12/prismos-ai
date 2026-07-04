@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — First-Run Onboarding Wizard
 //
 // 3-step interactive wizard shown on first launch:

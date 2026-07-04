@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Whisper Engine — 100% Local Voice Capture + Transcription Pipeline
 //
 // Provides true offline speech-to-text by:

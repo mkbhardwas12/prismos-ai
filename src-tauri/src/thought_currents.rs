@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Thought Currents — Temporal Pattern Mining in User Intent History
 //
 // Discovers recurring cycles, seasonal patterns, thought chains, and

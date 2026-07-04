@@ -638,7 +638,6 @@ Or via Settings:
 
 - **GitHub**: https://github.com/mkbhardwas12/prismos-ai
 - **License**: MIT (see [LICENSE](LICENSE))
-- **Patent**: US Provisional Patent (Feb 2026)
 
 ---
 

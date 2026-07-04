@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — SuggestionCard — Reusable proactive suggestion card
 //
 // A highly visible, clickable card used both inline (after AI responses)

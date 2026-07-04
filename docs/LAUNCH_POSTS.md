@@ -60,7 +60,7 @@ laptops — fine for "summarize this", "what changed", "draft this email" but
 not for "write me a 10k-word research report". Pick the right tool for the
 job; sometimes that tool should run on your machine.
 
-Repo (MIT, US provisional patent on the architecture): https://github.com/mkbhardwas12/prismos-ai
+Repo (MIT): https://github.com/mkbhardwas12/prismos-ai
 CLI (no GUI required): `cargo install --path src-tauri --bin prismos-cli`
 
 Happy to answer questions about the sandbox model, the LangGraph workflow, or
@@ -72,7 +72,6 @@ why I picked SQLite over a real graph DB. Roast away — that's why I'm here.
 | Comment | Reply |
 |---|---|
 | "Why not just use Ollama directly?" | Ollama is the inference backend. PrismOS is the layer above: persistent memory, multi-agent debate, sandboxing, the cognitive graph. You can still drop down to raw Ollama via `prismos-cli`. |
-| "Patent pending on what exactly?" | The Spectrum Graph + Refractive Core architecture, not on running models locally. Code is MIT. The patent line is there because investors and customers ask. |
 | "How is this different from $other_local_agent?" | Three things: persistent 7D knowledge graph, formal multi-agent debate (not tool calls), WASM sandbox with auto-rollback. Most others are wrappers around a single model. |
 | "Does it work without a GPU?" | Yes — qwen3:4b runs at conversational speed on an M1 or a recent Intel. We auto-recommend a model based on detected hardware. |
 
@@ -116,7 +115,7 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 
 Windows: `.msi` on the [releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest).
 
-**Source + license**: MIT, [github.com/mkbhardwas12/prismos-ai](https://github.com/mkbhardwas12/prismos-ai). Patent-pending on the architecture (Spectrum Graph + Refractive Core), code itself is open.
+**Source + license**: MIT, [github.com/mkbhardwas12/prismos-ai](https://github.com/mkbhardwas12/prismos-ai). Code is fully open.
 
 **Demo GIF**: ↑ at top of the README.
 
@@ -155,8 +154,6 @@ Open to feedback — particularly interested in what models you'd want as defaul
 > • Spectrum Graph — 7-dimensional persistent memory
 > • Refractive Core — multi-agent debate w/ formal consensus
 > • Sandbox Prism — WASM-isolated action execution + auto-rollback
->
-> US provisional patent filed Feb 2026.
 
 > **5/** Brain Wrapped 🪐
 >

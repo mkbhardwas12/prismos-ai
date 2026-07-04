@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Document Chunker + RAG Engine — Retrieval-Augmented Generation for large documents
 //
 // Instead of stuffing entire documents into the prompt (which hits context limits),

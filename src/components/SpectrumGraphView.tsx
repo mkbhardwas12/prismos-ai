@@ -1,12 +1,16 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Spectrum Graph View — Force-Directed Knowledge Graph Visualization
 //
 // Renders the multi-layered Spectrum Graph using react-force-graph-2d.
-// Nodes are colored by facet type (life facets per patent).
-// Edges are rendered with thickness proportional to intent weight.
-// Supports click-to-select, hover tooltips, and zoom/pan.
+//
+// Organized as CLUSTERS: nodes are grouped into knowledge families (You,
+// PrismOS, PolyEdgeBot, Projects, Chats, Documents, Insights, Knowledge).
+// Collapsed clusters render as one hub bubble — click a hub to expand its
+// members in place; click again (or use the legend / toolbar) to collapse.
+// Clicking a member focuses it: neighbors stay lit, everything else dims.
+// Custom collision + cluster-anchor forces keep groups apart so labels stay
+// readable instead of piling on top of each other.
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ForceGraph2D from "react-force-graph-2d";
 import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed, PredictedEdge } from "../types";
@@ -26,13 +30,45 @@ const FACET_COLORS: Record<string, string> = {
   note: "#aed581",
   conversation: "#78909c",
   meta: "#b0bec5",
+  personal: "#f48fb1",
+  document: "#aed581",
+  doc_chunk: "#9ccc65",
 };
 
 const LAYER_SIZES: Record<string, number> = {
   core: 10,
   context: 6,
+  knowledge: 6,
   ephemeral: 4,
 };
+
+// ─── Knowledge Clusters ────────────────────────────────────────────────────────
+// First match wins. The final entry is the catch-all bucket.
+
+interface ClusterDef {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  match: (id: string, nodeType: string) => boolean;
+}
+
+const CLUSTER_DEFS: ClusterDef[] = [
+  { id: "you", name: "You", icon: "👤", color: "#f48fb1", match: (id) => id.startsWith("user-") },
+  { id: "prismos", name: "PrismOS", icon: "🔮", color: "#64b5f6", match: (id) => id.startsWith("pos-") || id === "proj-prismos" },
+  { id: "polyedgebot", name: "PolyEdgeBot", icon: "📈", color: "#ffb74d", match: (id) => id.startsWith("peb-") },
+  { id: "projects", name: "Projects", icon: "🗂️", color: "#4fc3f7", match: (id) => id.startsWith("proj-") },
+  { id: "chats", name: "Chats", icon: "💬", color: "#78909c", match: (_id, t) => t === "conversation" },
+  { id: "documents", name: "Documents", icon: "📄", color: "#aed581", match: (_id, t) => t === "document" || t === "doc_chunk" },
+  { id: "insights", name: "Insights", icon: "✨", color: "#ce93d8", match: (_id, t) => ["suggestion", "drift_pattern", "thought_current", "refraction", "meta"].includes(t) },
+  { id: "knowledge", name: "Knowledge", icon: "🧠", color: "#81c784", match: () => true },
+];
+
+function clusterOf(id: string, nodeType: string): ClusterDef {
+  return CLUSTER_DEFS.find((c) => c.match(id, nodeType)) ?? CLUSTER_DEFS[CLUSTER_DEFS.length - 1];
+}
+
+const EXPANDED_STORE_KEY = "prismos-graph-expanded";
 
 // ─── Force Graph Data Types ────────────────────────────────────────────────────
 
@@ -45,8 +81,15 @@ interface GraphNode {
   content: string;
   color: string;
   val: number;
+  cluster: string;
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
+  // Cluster-hub extras
+  isHub?: boolean;
+  count?: number;
+  icon?: string;
 }
 
 interface GraphLink {
@@ -59,12 +102,16 @@ interface GraphLink {
   reinforcements: number;
   last_reinforced: string | null;
   predicted?: boolean;
+  aggregated?: number; // >1 when this link bundles many collapsed connections
 }
 
 interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
 }
+
+const linkEndId = (end: GraphLink["source"]): string =>
+  typeof end === "string" ? end : (end as unknown as GraphNode).id;
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
@@ -77,28 +124,51 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const [metrics, setMetrics] = useState<GraphMetrics | null>(null);
   const [anticipations, setAnticipations] = useState<AnticipatedNeed[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null);
+  const didInitialFit = useRef(false);
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
-  const [glowPhase, setGlowPhase] = useState(0);
+  // Glow phase is animated in a ref + throttled tick (~10 fps) to avoid
+  // pegging the JS thread by re-rendering the entire force-graph every
+  // animation frame (was ~60 fps → 100% CPU + frozen UI).
   const glowRef = useRef<number>(0);
+  const [glowTick, setGlowTick] = useState(0);
   const [recentEdges, setRecentEdges] = useState<Set<string>>(new Set());
   const [predictions, setPredictions] = useState<PredictedEdge[]>([]);
   const [showIntro, setShowIntro] = useState(
     () => !localStorage.getItem("prismos-graph-intro-seen")
   );
+  // Which clusters are expanded. Default: all collapsed → a calm, readable
+  // constellation of hubs. Persisted so the view reopens the way you left it.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(EXPANDED_STORE_KEY);
+      return new Set<string>(saved ? (JSON.parse(saved) as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
 
-  // Animate glow pulse for high-momentum edges
+  const persistExpanded = useCallback((next: Set<string>) => {
+    setExpanded(next);
+    try {
+      localStorage.setItem(EXPANDED_STORE_KEY, JSON.stringify([...next]));
+    } catch {
+      /* storage full/unavailable — view still works */
+    }
+  }, []);
+
+  // Animate glow pulse for high-momentum edges (throttled, see note above).
   useEffect(() => {
-    let frame: number;
-    const tick = () => {
-      glowRef.current += 0.03;
-      setGlowPhase(glowRef.current);
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    const iv = setInterval(() => {
+      glowRef.current += 0.18;
+      setGlowTick((t) => (t + 1) % 1_000_000);
+    }, 100);
+    return () => clearInterval(iv);
   }, []);
 
   // ─── Load full graph snapshot ──────────────────────────────────────────
@@ -109,7 +179,6 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       const result = await invoke<string>("get_spectrum_graph");
       const snapshot: GraphSnapshot = JSON.parse(result);
 
-      // Transform to force-graph format
       const nodes: GraphNode[] = snapshot.nodes.map((n: SpectrumNode) => ({
         id: n.id,
         label: n.label,
@@ -119,6 +188,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         content: n.content,
         color: FACET_COLORS[n.node_type] || "#b0bec5",
         val: LAYER_SIZES[n.layer || "context"] || 6,
+        cluster: clusterOf(n.id, n.node_type).id,
       }));
 
       const nodeIds = new Set(nodes.map((n) => n.id));
@@ -219,11 +289,271 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     return () => ro.disconnect();
   }, [loading]);
 
-  // ─── Node click handler ───────────────────────────────────────────────
+  // ─── Cluster membership & displayed (collapsed/expanded) graph ────────
 
-  const handleNodeClick = useCallback((node: GraphNode) => {
-    setSelectedNode(node);
+  const clusterCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const n of graphData.nodes) {
+      counts.set(n.cluster, (counts.get(n.cluster) ?? 0) + 1);
+    }
+    return counts;
+  }, [graphData.nodes]);
+
+  const activeClusters = useMemo(
+    () => CLUSTER_DEFS.filter((c) => (clusterCounts.get(c.id) ?? 0) > 0),
+    [clusterCounts]
+  );
+
+  const displayed: GraphData = useMemo(() => {
+    const nodes: GraphNode[] = [];
+    const nodeById = new Map<string, GraphNode>();
+    for (const n of graphData.nodes) nodeById.set(n.id, n);
+
+    // Hub bubble per collapsed cluster; member nodes for expanded clusters.
+    for (const c of activeClusters) {
+      const count = clusterCounts.get(c.id) ?? 0;
+      if (expanded.has(c.id)) continue;
+      nodes.push({
+        id: `cluster:${c.id}`,
+        label: c.name,
+        node_type: "cluster",
+        layer: "core",
+        access_count: 0,
+        content: `${count} items`,
+        color: c.color,
+        val: 14 + Math.sqrt(count) * 3,
+        cluster: c.id,
+        isHub: true,
+        count,
+        icon: c.icon,
+      });
+    }
+    for (const n of graphData.nodes) {
+      if (expanded.has(n.cluster)) nodes.push(n);
+    }
+
+    // Remap links to whichever endpoint is displayed (member or its hub),
+    // bundling everything that lands on the same displayed pair.
+    const displayId = (rawId: string): string => {
+      const n = nodeById.get(rawId);
+      if (!n) return rawId;
+      return expanded.has(n.cluster) ? n.id : `cluster:${n.cluster}`;
+    };
+
+    const allRaw: GraphLink[] = [
+      ...graphData.links,
+      ...predictions
+        .filter((p) => nodeById.has(p.source_id) && nodeById.has(p.target_id))
+        .map((p) => ({
+          source: p.source_id,
+          target: p.target_id,
+          relation: p.reason,
+          weight: p.probability,
+          momentum: 0,
+          edge_id: `predicted-${p.source_id}-${p.target_id}`,
+          reinforcements: 0,
+          last_reinforced: null,
+          predicted: true,
+        })),
+    ];
+
+    const bundled = new Map<string, GraphLink>();
+    for (const l of allRaw) {
+      const s = displayId(linkEndId(l.source));
+      const t = displayId(linkEndId(l.target));
+      if (s === t) continue; // interior to a collapsed cluster
+      const bothMembers = !s.startsWith("cluster:") && !t.startsWith("cluster:");
+      if (bothMembers) {
+        // Real edge between two visible nodes — keep it intact (reinforce
+        // buttons, glow, prophecy dashes all rely on the real edge identity).
+        bundled.set(l.edge_id, { ...l, source: s, target: t });
+        continue;
+      }
+      const key = s < t ? `${s}→${t}` : `${t}→${s}`;
+      const prev = bundled.get(key);
+      if (prev) {
+        prev.aggregated = (prev.aggregated ?? 1) + 1;
+        prev.weight = Math.max(prev.weight, l.weight);
+        prev.momentum = Math.max(prev.momentum, l.momentum);
+        prev.relation = `${prev.aggregated} connections`;
+        prev.predicted = prev.predicted && l.predicted;
+      } else {
+        bundled.set(key, {
+          ...l,
+          source: s,
+          target: t,
+          edge_id: `agg:${key}`,
+          relation: l.predicted ? l.relation : "1 connection",
+          aggregated: 1,
+        });
+      }
+    }
+
+    return { nodes, links: [...bundled.values()] };
+  }, [graphData, predictions, expanded, activeClusters, clusterCounts]);
+
+  // ─── Focus set: selected member + its displayed neighbors ─────────────
+
+  const focusIds = useMemo(() => {
+    if (!selectedNode || selectedNode.isHub) return null;
+    const set = new Set<string>([selectedNode.id]);
+    for (const l of displayed.links) {
+      const s = linkEndId(l.source);
+      const t = linkEndId(l.target);
+      if (s === selectedNode.id) set.add(t);
+      if (t === selectedNode.id) set.add(s);
+    }
+    return set;
+  }, [selectedNode, displayed.links]);
+
+  // ─── Layout forces: cluster anchors + collision (no overlap) ───────────
+
+  const anchors = useMemo(() => {
+    const map = new Map<string, { x: number; y: number }>();
+    const n = activeClusters.length || 1;
+    const radius = n <= 2 ? 160 : 150 + n * 42;
+    activeClusters.forEach((c, i) => {
+      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+      map.set(c.id, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+    });
+    return map;
+  }, [activeClusters]);
+
+  const nodeRadius = (n: GraphNode) => (n.isHub ? n.val : (n.val || 6)) as number;
+
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg || displayed.nodes.length === 0) return;
+
+    // Pull every node gently toward its cluster's anchor — hubs harder, so
+    // collapsed bubbles sit in a clean ring; members swarm their own anchor.
+    const clusterForce = () => {
+      let nodes: GraphNode[] = [];
+      const force = (alpha: number) => {
+        for (const node of nodes) {
+          const a = anchors.get(node.cluster);
+          if (!a) continue;
+          const k = (node.isHub ? 0.22 : 0.05) * alpha;
+          node.vx = (node.vx ?? 0) + (a.x - (node.x ?? 0)) * k;
+          node.vy = (node.vy ?? 0) + (a.y - (node.y ?? 0)) * k;
+        }
+      };
+      force.initialize = (ns: GraphNode[]) => {
+        nodes = ns;
+      };
+      return force;
+    };
+
+    // Pairwise collision keeps circles (and their labels) from stacking.
+    // O(n²) per tick is fine at this graph's scale (≤ a few hundred shown).
+    const collideForce = () => {
+      let nodes: GraphNode[] = [];
+      const force = () => {
+        const pad = 10;
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i];
+            const b = nodes[j];
+            const dx = (b.x ?? 0) - (a.x ?? 0);
+            const dy = (b.y ?? 0) - (a.y ?? 0);
+            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+            const min = nodeRadius(a) + nodeRadius(b) + pad;
+            if (dist < min) {
+              const push = ((min - dist) / dist) * 0.5;
+              const px = dx * push;
+              const py = dy * push;
+              a.x = (a.x ?? 0) - px * 0.5;
+              a.y = (a.y ?? 0) - py * 0.5;
+              b.x = (b.x ?? 0) + px * 0.5;
+              b.y = (b.y ?? 0) + py * 0.5;
+            }
+          }
+        }
+      };
+      force.initialize = (ns: GraphNode[]) => {
+        nodes = ns;
+      };
+      return force;
+    };
+
+    fg.d3Force("center", null);
+    fg.d3Force("cluster", clusterForce());
+    fg.d3Force("collide", collideForce());
+    const charge = fg.d3Force("charge");
+    if (charge?.strength) charge.strength(-70);
+    const link = fg.d3Force("link");
+    if (link?.distance) {
+      link.distance((l: GraphLink) => {
+        const s = linkEndId(l.source);
+        const t = linkEndId(l.target);
+        const sn = displayed.nodes.find((n) => n.id === s);
+        const tn = displayed.nodes.find((n) => n.id === t);
+        return sn && tn && sn.cluster === tn.cluster ? 42 : 170;
+      });
+    }
+    fg.d3ReheatSimulation();
+  }, [displayed, anchors]);
+
+  const fitView = useCallback((ms = 500) => {
+    fgRef.current?.zoomToFit(ms, 70);
   }, []);
+
+  // First layout settle → frame everything once.
+  const handleEngineStop = useCallback(() => {
+    if (!didInitialFit.current) {
+      didInitialFit.current = true;
+      fitView(600);
+    }
+  }, [fitView]);
+
+  // ─── Expand / collapse ─────────────────────────────────────────────────
+
+  const toggleCluster = useCallback(
+    (clusterId: string) => {
+      const next = new Set(expanded);
+      if (next.has(clusterId)) {
+        next.delete(clusterId);
+        if (selectedNode && !selectedNode.isHub && selectedNode.cluster === clusterId) {
+          setSelectedNode(null);
+        }
+      } else {
+        next.add(clusterId);
+      }
+      persistExpanded(next);
+      setTimeout(() => fitView(500), 350);
+    },
+    [expanded, persistExpanded, selectedNode, fitView]
+  );
+
+  const expandAll = useCallback(() => {
+    persistExpanded(new Set(activeClusters.map((c) => c.id)));
+    setTimeout(() => fitView(500), 350);
+  }, [activeClusters, persistExpanded, fitView]);
+
+  const collapseAll = useCallback(() => {
+    persistExpanded(new Set());
+    setSelectedNode(null);
+    setTimeout(() => fitView(500), 350);
+  }, [persistExpanded, fitView]);
+
+  // ─── Node click: hubs expand, members focus ────────────────────────────
+
+  const handleNodeClick = useCallback(
+    (node: GraphNode) => {
+      if (node.isHub) {
+        toggleCluster(node.cluster);
+        return;
+      }
+      setSelectedNode(node);
+      // Bring the neighborhood into view without yanking the camera far away.
+      if (typeof node.x === "number" && typeof node.y === "number") {
+        fgRef.current?.centerAt(node.x, node.y, 500);
+      }
+    },
+    [toggleCluster]
+  );
+
+  const handleBackgroundClick = useCallback(() => setSelectedNode(null), []);
 
   // ─── Reinforce edge (closed-loop feedback from UI) ────────────────────
 
@@ -246,12 +576,60 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
 
   const paintNode = useCallback(
     (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const fontSize = 10 / globalScale;
-      const nodeSize = (node.val || 6) / globalScale;
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
+      const dimmed = focusIds ? !focusIds.has(node.id) && !node.isHub : false;
+      ctx.save();
+      if (dimmed) ctx.globalAlpha = 0.14;
 
-      // Draw node circle
+      if (node.isHub) {
+        // ── Cluster hub bubble ──
+        const r = node.val;
+        const grad = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
+        grad.addColorStop(0, node.color);
+        grad.addColorStop(1, node.color + "55");
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.lineWidth = 1.5 / globalScale;
+        ctx.stroke();
+
+        // Icon + name + count — hubs are the map's landmarks, always labeled.
+        const iconSize = Math.max(10, r * 0.9);
+        ctx.font = `${iconSize}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(node.icon ?? "●", x, y);
+
+        const nameSize = Math.max(4, 13 / globalScale);
+        ctx.font = `600 ${nameSize}px Inter, sans-serif`;
+        const name = node.label;
+        const countText = `${node.count}`;
+        const nameW = ctx.measureText(name).width;
+        const labelY = y + r + 4 / globalScale;
+        ctx.fillStyle = "rgba(8,10,16,0.72)";
+        const padX = 5 / globalScale;
+        const lineH = nameSize * 1.25;
+        ctx.beginPath();
+        ctx.roundRect(x - nameW / 2 - padX, labelY, nameW + padX * 2, lineH * 2, 4 / globalScale);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.textBaseline = "top";
+        ctx.fillText(name, x, labelY + lineH * 0.12);
+        ctx.font = `${nameSize * 0.85}px Inter, sans-serif`;
+        ctx.fillStyle = node.color;
+        ctx.fillText(`${countText} items`, x, labelY + lineH);
+        ctx.restore();
+        return;
+      }
+
+      // ── Member node ──
+      const nodeSize = (node.val || 6) / Math.max(globalScale * 0.55, 1);
+
       ctx.beginPath();
-      ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize, 0, 2 * Math.PI);
+      ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
       ctx.fillStyle = node.color;
       ctx.fill();
 
@@ -265,45 +643,73 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       // Access count ring (closed-loop feedback indicator)
       if (node.access_count > 3) {
         ctx.beginPath();
-        ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 2 / globalScale, 0, 2 * Math.PI);
+        ctx.arc(x, y, nodeSize + 2 / globalScale, 0, 2 * Math.PI);
         ctx.strokeStyle = "rgba(255,255,255,0.3)";
         ctx.lineWidth = 1 / globalScale;
         ctx.stroke();
       }
 
-      // Label
-      if (globalScale > 0.6) {
+      // Label only when it can actually be read: zoomed in, or part of the
+      // focused neighborhood, or hovered. This is what kills the label pile-up.
+      const inFocus = focusIds?.has(node.id) ?? false;
+      const isHovered = hoverNode?.id === node.id;
+      const showLabel = !dimmed && (globalScale > 1.4 || inFocus || isHovered || selectedNode?.id === node.id);
+      if (showLabel) {
+        const fontSize = Math.max(3.5, 11 / globalScale);
         ctx.font = `${fontSize}px Inter, sans-serif`;
+        const text = node.label.length > 26 ? node.label.slice(0, 26) + "…" : node.label;
+        const w = ctx.measureText(text).width;
+        const ly = y + nodeSize + 2.5 / globalScale;
+        ctx.fillStyle = "rgba(8,10,16,0.66)";
+        ctx.beginPath();
+        ctx.roundRect(x - w / 2 - 3 / globalScale, ly, w + 6 / globalScale, fontSize * 1.35, 3 / globalScale);
+        ctx.fill();
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.fillText(
-          node.label.length > 20 ? node.label.slice(0, 20) + "…" : node.label,
-          node.x ?? 0,
-          (node.y ?? 0) + nodeSize + 2 / globalScale
-        );
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.fillText(text, x, ly + fontSize * 0.15);
       }
+      ctx.restore();
     },
-    [selectedNode]
+    [selectedNode, hoverNode, focusIds]
   );
 
   // ─── Custom link rendering ────────────────────────────────────────────
 
   const paintLink = useCallback(
     (link: GraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const source = link.source as unknown as { x: number; y: number };
-      const target = link.target as unknown as { x: number; y: number };
+      const source = link.source as unknown as { x: number; y: number; id?: string };
+      const target = link.target as unknown as { x: number; y: number; id?: string };
       if (!source || !target) return;
+
+      const dimmed = focusIds
+        ? !(focusIds.has(linkEndId(link.source)) && focusIds.has(linkEndId(link.target)))
+        : false;
+      ctx.save();
+      if (dimmed) ctx.globalAlpha = 0.08;
 
       // Predicted edges render as dashed lines
       if (link.predicted) {
-        ctx.save();
         ctx.setLineDash([8 / globalScale, 4 / globalScale]);
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
         ctx.lineTo(target.x, target.y);
         ctx.strokeStyle = "rgba(180, 140, 255, 0.5)";
         ctx.lineWidth = 1.5 / globalScale;
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      // Bundled hub↔hub / hub↔node links: width grows with how many real
+      // connections they carry, drawn softly so hubs stay visually calm.
+      if ((link.aggregated ?? 0) > 0 && link.edge_id.startsWith("agg:")) {
+        const w = Math.min(4, 0.6 + (link.aggregated ?? 1) * 0.25) / globalScale;
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.strokeStyle = "rgba(140, 160, 200, 0.35)";
+        ctx.lineWidth = w;
         ctx.stroke();
         ctx.restore();
         return;
@@ -319,8 +725,9 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
 
       // Glow effect for newly strengthened edges (golden pulse)
       const isRecent = recentEdges.has(link.edge_id);
+      const phase = glowRef.current;
       if (isRecent) {
-        const pulse = 0.5 + 0.5 * Math.abs(Math.sin(glowPhase * 1.5 + link.weight * 3));
+        const pulse = 0.5 + 0.5 * Math.abs(Math.sin(phase * 1.5 + link.weight * 3));
         ctx.save();
         ctx.shadowColor = "rgba(255, 200, 60, " + (0.6 * pulse) + ")";
         ctx.shadowBlur = (6 + 4 * pulse) / globalScale;
@@ -336,7 +743,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       // Glow effect for high-momentum edges (Phase 1 — Alive Graph)
       const isHighMomentum = link.momentum > 0.1;
       if (isHighMomentum) {
-        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(glowPhase * 2 + link.weight));
+        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(phase * 2 + link.weight));
         ctx.save();
         ctx.shadowColor = "rgba(100, 200, 255, " + (0.8 * pulse) + ")";
         ctx.shadowBlur = (8 + 6 * pulse) / globalScale;
@@ -355,8 +762,9 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.stroke();
+      ctx.restore();
     },
-    [glowPhase, recentEdges]
+    [glowTick, recentEdges, focusIds]
   );
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -385,44 +793,58 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
             <p className="sg-empty-hint">Try sending an intent like <em>"Summarize my week"</em> to get started.</p>
           </div>
         ) : (
-          <ForceGraph2D
-            graphData={{
-              nodes: graphData.nodes,
-              links: [
-                ...graphData.links,
-                ...predictions
-                  .filter((p) => graphData.nodes.some((n) => n.id === p.source_id) && graphData.nodes.some((n) => n.id === p.target_id))
-                  .map((p) => ({
-                    source: p.source_id,
-                    target: p.target_id,
-                    relation: p.reason,
-                    weight: p.probability,
-                    momentum: 0,
-                    edge_id: `predicted-${p.source_id}-${p.target_id}`,
-                    reinforcements: 0,
-                    last_reinforced: null,
-                    predicted: true,
-                  })),
-              ],
-            } as never}
-            width={dimensions.width}
-            height={dimensions.height}
-            nodeCanvasObject={paintNode as never}
-            linkCanvasObject={paintLink as never}
-            onNodeClick={handleNodeClick as never}
-            nodeLabel={(node: GraphNode) =>
-              `${node.label}\n[${node.node_type}] Layer: ${node.layer}\nAccessed: ${node.access_count}x`
-            }
-            linkLabel={(link: GraphLink) =>
-              `${link.relation} (weight: ${link.weight.toFixed(2)}, momentum: ${link.momentum.toFixed(2)})`
-            }
-            cooldownTicks={100}
-            d3AlphaDecay={0.02}
-            d3VelocityDecay={0.3}
-            linkDirectionalArrowLength={3}
-            linkDirectionalArrowRelPos={1}
-            backgroundColor="transparent"
-          />
+          <>
+            <div className="sg-toolbar">
+              <button className="sg-tool-btn" onClick={expandAll} title="Expand every cluster">
+                ⊕ Expand all
+              </button>
+              <button className="sg-tool-btn" onClick={collapseAll} title="Collapse back to cluster bubbles">
+                ⊖ Collapse all
+              </button>
+              <button className="sg-tool-btn" onClick={() => fitView(500)} title="Frame the whole graph">
+                ⌖ Fit
+              </button>
+              {selectedNode && !selectedNode.isHub && (
+                <button className="sg-tool-btn sg-tool-focus" onClick={() => setSelectedNode(null)} title="Clear focus">
+                  ✕ Unfocus
+                </button>
+              )}
+            </div>
+            <ForceGraph2D
+              ref={fgRef as never}
+              graphData={displayed as never}
+              width={dimensions.width}
+              height={dimensions.height}
+              nodeCanvasObject={paintNode as never}
+              nodePointerAreaPaint={((node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
+                ctx.beginPath();
+                ctx.arc(node.x ?? 0, node.y ?? 0, nodeRadius(node) + 4, 0, 2 * Math.PI);
+                ctx.fillStyle = color;
+                ctx.fill();
+              }) as never}
+              linkCanvasObject={paintLink as never}
+              onNodeClick={handleNodeClick as never}
+              onNodeHover={((node: GraphNode | null) => setHoverNode(node)) as never}
+              onBackgroundClick={handleBackgroundClick}
+              onEngineStop={handleEngineStop}
+              nodeLabel={(node: GraphNode) =>
+                node.isHub
+                  ? `${node.icon} ${node.label} — ${node.count} items\nClick to ${expanded.has(node.cluster) ? "collapse" : "expand"}`
+                  : `${node.label}\n[${node.node_type}] Layer: ${node.layer}\nAccessed: ${node.access_count}x`
+              }
+              linkLabel={(link: GraphLink) =>
+                link.edge_id.startsWith("agg:")
+                  ? `${link.aggregated} connection${(link.aggregated ?? 1) > 1 ? "s" : ""} between groups`
+                  : `${link.relation} (weight: ${link.weight.toFixed(2)}, momentum: ${link.momentum.toFixed(2)})`
+              }
+              cooldownTicks={120}
+              d3AlphaDecay={0.02}
+              d3VelocityDecay={0.32}
+              linkDirectionalArrowLength={3}
+              linkDirectionalArrowRelPos={1}
+              backgroundColor="transparent"
+            />
+          </>
         )}
       </div>
 
@@ -457,9 +879,10 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         <div className="sg-intro-overlay">
           <div className="sg-intro-card">
             <h3>🌈 Welcome to Your Spectrum Graph</h3>
-            <p>This is your living knowledge graph. Each node is something you've discussed, and edges show how ideas connect. It grows as you chat.</p>
+            <p>This is your living knowledge graph, organized into clusters. It grows as you chat.</p>
             <ul>
-              <li><strong>Click</strong> a node to see details</li>
+              <li><strong>Click a bubble</strong> to expand that cluster</li>
+              <li><strong>Click a node</strong> to focus it — neighbors light up</li>
               <li><strong>+/−</strong> buttons reinforce or weaken edges</li>
               <li><strong>Dashed lines</strong> are predicted connections</li>
             </ul>
@@ -473,7 +896,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       {/* ── Side Panel ── */}
       <div className="sg-side-panel">
         {/* Selected Node Detail */}
-        {selectedNode && (
+        {selectedNode && !selectedNode.isHub && (
           <div className="sg-node-detail">
             <h4>
               <span
@@ -495,12 +918,8 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
               {graphData.links
                 .filter(
                   (l) =>
-                    (typeof l.source === "string"
-                      ? l.source
-                      : (l.source as unknown as GraphNode).id) === selectedNode.id ||
-                    (typeof l.target === "string"
-                      ? l.target
-                      : (l.target as unknown as GraphNode).id) === selectedNode.id
+                    linkEndId(l.source) === selectedNode.id ||
+                    linkEndId(l.target) === selectedNode.id
                 )
                 .slice(0, 5)
                 .map((l) => (
@@ -591,14 +1010,21 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           </div>
         )}
 
-        {/* Facet Legend */}
+        {/* Cluster Legend — click to expand/collapse a knowledge family */}
         <div className="sg-legend">
-          <h5>Facet Types</h5>
-          {Object.entries(FACET_COLORS).map(([type, color]) => (
-            <div key={type} className="sg-legend-item">
-              <span className="sg-dot" style={{ background: color }} />
-              <span>{type}</span>
-            </div>
+          <h5>Clusters</h5>
+          {activeClusters.map((c) => (
+            <button
+              key={c.id}
+              className={`sg-legend-item sg-cluster-item ${expanded.has(c.id) ? "expanded" : ""}`}
+              onClick={() => toggleCluster(c.id)}
+              title={expanded.has(c.id) ? "Collapse" : "Expand"}
+            >
+              <span className="sg-dot" style={{ background: c.color }} />
+              <span className="sg-cluster-name">{c.icon} {c.name}</span>
+              <span className="sg-cluster-count">{clusterCounts.get(c.id) ?? 0}</span>
+              <span className="sg-cluster-state">{expanded.has(c.id) ? "−" : "+"}</span>
+            </button>
           ))}
         </div>
       </div>

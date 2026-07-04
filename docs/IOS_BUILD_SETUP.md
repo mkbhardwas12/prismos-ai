@@ -118,7 +118,7 @@ Add iOS-specific configuration:
 [package]
 name = "prismos"
 version = "0.5.1"
-description = "PrismOS-AI — Local-First Agentic Personal AI Operating System (Patent Pending)"
+description = "PrismOS-AI — Local-First Agentic Personal AI Operating System"
 authors = ["PrismOS-AI Contributors"]
 edition = "2021"
 
@@ -434,9 +434,6 @@ CORE FEATURES:
 PRIVACY FIRST:
 All AI processing happens locally using on-device models.
 Zero telemetry. Zero cloud dependencies. Your data is yours alone.
-
-PATENT PENDING:
-PrismOS-AI's core architectures are protected by US Provisional Patent.
 
 REQUIREMENTS:
 • iOS 13.0 or later

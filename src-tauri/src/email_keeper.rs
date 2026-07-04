@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Email Keeper — Read-Only, Sandbox-Isolated Email Summary Agent
 //
 // The Email Keeper connects to a user's IMAP mailbox in READ-ONLY mode,

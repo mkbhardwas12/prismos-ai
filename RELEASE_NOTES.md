@@ -7,7 +7,6 @@
 **Your AI. Your Data. Your Machine. Period.**
 
 [![Release](https://img.shields.io/badge/Release-v0.5.1-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
-[![Patent](https://img.shields.io/badge/Patent-Pending-10b981?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
 [![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
 
@@ -19,7 +18,7 @@
 
 ## 🎯 What Is This Release?
 
-PrismOS-AI v0.5.1 is a feature release of the patent-pending AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+PrismOS-AI v0.5.1 is a feature release of the AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
 
 > **In one sentence:** A Tauri 2.0 desktop app with 8 AI agents, a physics-inspired knowledge graph, WASM sandboxing, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Local Vision, Document Analysis, frameless window, system tray, auto-updater, and a modern glassmorphism UI — all running 100% offline.
 
@@ -220,8 +219,6 @@ npm run tauri dev
 
 | | |
 |:--|:--|
-| **Patent** | US Provisional Patent Application (Patent Pending) |
-| **Filed** | February 2026 |
 | **Author** | Manish Kumar |
 | **License** | MIT — free to use, modify, distribute |
 

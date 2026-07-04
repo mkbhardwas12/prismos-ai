@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Brain Wrapped™ + Cognitive Fingerprint™ — Shareable Mind Snapshot Engine
 //
 // THE INNOVATION (no prior art):

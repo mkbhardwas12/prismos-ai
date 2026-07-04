@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // CognitiveDriftCard — Visualizes how the user's cognitive profile evolves over time
 
 import React, { useEffect, useState } from "react";

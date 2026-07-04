@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — Type Definitions
 
 export interface Agent {
@@ -236,9 +235,34 @@ export interface Message {
   refractionAlternative?: RefractionAlternative;
   /** Intent transparency — what the system detected about this message */
   transparency?: IntentTransparency;
+  /** Generated file (Word/PowerPoint) attached to this response */
+  attachment?: GeneratedAttachment;
+  /** Project review awaiting approval (Gate 1) — renders Approve/Decline card */
+  reviewRequest?: ReviewRequest;
 }
 
-/** A refraction alternative — a different reasoning perspective on the same question */
+/** A pending project-review scan shown for human approval */
+export interface ReviewRequest {
+  scanId: string;
+  root: string;
+  projectName: string;
+  totalFiles: number;
+  candidateFiles: number;
+  totalCandidateBytes: number;
+  llmFiles: number;
+  skippedDirs: string[];
+  topExtensions: [string, number][];
+  truncated: boolean;
+  status: "pending" | "approved" | "declined";
+}
+
+/** A file generated locally (Word/PowerPoint) and saved to disk */
+export interface GeneratedAttachment {
+  path: string;
+  filename: string;
+  kind: "docx" | "pptx";
+}
+
 export interface RefractionAlternative {
   band: string;
   band_label: string;
@@ -359,7 +383,7 @@ export interface AgentState {
   last_active: string | null;
 }
 
-// ─── Graph Merge/Diff Types (Patent Pending — Multi-Device Sync) ───────────
+// ─── Graph Merge/Diff Types (Multi-Device Sync) ───────────
 
 export interface MergeConflict {
   entity_type: string;
@@ -405,7 +429,7 @@ export interface CrossDeviceMergeResult {
   source_timestamp: string;
 }
 
-// ─── New Feature Types (Patent Pending) ─────────────────────────────────────
+// ─── New Feature Types ─────────────────────────────────────
 
 /** Intent Transparency — what the system detected about a user message */
 export interface IntentTransparency {
@@ -491,7 +515,7 @@ export interface SystemInfo {
   arch: string;
 }
 
-// ─── Brain Wrapped™ + Cognitive Fingerprint™ (Patent Pending) ──────────────
+// ─── Brain Wrapped™ + Cognitive Fingerprint™ ──────────────
 
 /** Deterministic visual signature of a cognitive profile. */
 export interface CognitiveFingerprint {

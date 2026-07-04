@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Active Agents — Agent Status Panel with LangGraph Collaboration & Debate Trace
 
 import { memo } from "react";

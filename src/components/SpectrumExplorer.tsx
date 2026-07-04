@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Spectrum Explorer — Full Knowledge Graph Browser
 
 import { useState, useCallback, useMemo, useEffect, memo } from "react";

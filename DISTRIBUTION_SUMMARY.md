@@ -536,7 +536,6 @@ git push origin v0.5.1
 
 ## 📝 Final Notes
 
-- **Patent Notice**: All materials include US Provisional Patent notice
 - **License**: MIT License for open source distribution
 - **Version**: Currently at v0.5.1
 - **Test Coverage**: 162 tests (97 frontend, 65 backend)

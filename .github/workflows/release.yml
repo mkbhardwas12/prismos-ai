@@ -97,8 +97,6 @@ jobs:
           releaseBody: |
             ## PrismOS-AI — Local-First Agentic Personal AI Operating System
 
-            **Patent Pending** — US Provisional Patent filed February 2026
-
             ### What's New in v0.5.1
             - 🧠 8-Agent Collaborative AI System (Orchestrator, MemoryKeeper, Reasoner, ToolSmith, Sentinel + Email/Calendar/Finance Keepers)
             - 🌈 7D Alive Spectrum Graph — persistent knowledge memory, visualized and growing

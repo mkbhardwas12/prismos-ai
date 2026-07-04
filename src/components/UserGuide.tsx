@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI User Guide — In-app help & onboarding
 
 import { useState, useCallback } from "react";
@@ -282,17 +281,10 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
               <div className="guide-section">
                 <h3>⚖️ About & Legal</h3>
 
-                <div className="guide-card highlight">
-                  <h4>📋 Patent Notice</h4>
-                  <p><strong>Patent Pending</strong> — US Provisional Patent Application (filed February 2026).</p>
-                  <p>PrismOS-AI and its core architectures are protected by a pending United States patent.</p>
-                  <p style={{ marginTop: "10px", fontSize: "12px", opacity: 0.8 }}>Created by Manish Kumar</p>
-                </div>
-
                 <div className="guide-card">
                   <h4>📄 License</h4>
-                  <p>PrismOS-AI is released under the <strong>MIT License</strong> for personal and educational use.</p>
-                  <p>Commercial use of the patented inventions (Spectrum Graph, Refractive Core, You-Port) requires a separate license from the creator.</p>
+                  <p>PrismOS-AI is released under the <strong>MIT License</strong>.</p>
+                  <p style={{ marginTop: "10px", fontSize: "12px", opacity: 0.8 }}>Created by Manish Kumar</p>
                 </div>
 
                 <div className="guide-card">

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // You-Port — Encrypted State Migration & Session Handoff
 //
 // You-Port enables secure, end-to-end encrypted export/import of the complete
@@ -526,7 +525,7 @@ pub fn has_saved_state(app_dir: &Path) -> bool {
     app_dir.join(STATE_FILE).exists()
 }
 
-// ─── Advanced You-Port: Cross-Device Merge (Patent Pending) ─────────────────
+// ─── Advanced You-Port: Cross-Device Merge ─────────────────
 
 /// Result of a cross-device merge operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -749,7 +748,7 @@ mod tests {
     #[test]
     fn test_xor_cipher_roundtrip() {
         let key = derive_key("test-device", "test-nonce");
-        let plaintext = b"Hello PrismOS-AI! Patent Pending - encrypted handoff test data that spans multiple blocks to verify counter mode works correctly.";
+        let plaintext = b"Hello PrismOS-AI! Encrypted handoff test data that spans multiple blocks to verify counter mode works correctly.";
 
         let ciphertext = xor_stream_cipher(&key, plaintext);
         assert_ne!(&ciphertext, plaintext);

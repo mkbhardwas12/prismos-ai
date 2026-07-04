@@ -1,4 +1,3 @@
-# Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 # PrismOS-AI CI — Type-check, lint, test, and verify on every push / PR
 
 name: CI

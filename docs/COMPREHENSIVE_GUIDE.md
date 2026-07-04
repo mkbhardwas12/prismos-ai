@@ -1,7 +1,5 @@
 # PrismOS-AI Comprehensive Guide
 
-> **Patent Pending** — US Provisional Patent filed February 2026
-
 ---
 
 ## Table of Contents
@@ -25,7 +23,7 @@
 
 PrismOS-AI is a **local-first agentic personal AI operating system** that runs entirely on your device. Unlike cloud-based AI assistants, PrismOS-AI ensures that your data never leaves your machine. It combines eight collaborative AI agents with a persistent 7-dimensional knowledge graph called the Spectrum Graph, creating a personal AI OS that grows with you.
 
-### Key Innovations (Patent Pending)
+### Key Innovations
 
 - **Spectrum Graph™**: 7-dimensional knowledge representation (cognitive, emotional, temporal, social, creative, analytical, physical)
 - **Refractive Core™**: Intent processing pipeline that refracts user inputs through the knowledge graph
@@ -634,9 +632,6 @@ A: Not yet. iOS support is in development (see roadmap).
 
 ### Privacy & Security
 
-**Q: Is the patent notice a concern?**
-A: The open-source MIT license allows free personal and educational use. The patent protects the core architectures (Spectrum Graph, Refractive Core, You-Port) from unauthorized commercial exploitation.
-
 **Q: How is encryption handled?**
 A: You-Port uses AES-256-GCM encryption. Keys derived via platform-specific Secure Enclave (TPM on Windows/Linux, Secure Enclave on macOS).
 
@@ -674,8 +669,6 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup, code style, and
 ## License
 
 MIT License — See [LICENSE](../LICENSE)
-
-**Patent Pending** — US Provisional Patent filed February 2026
 
 ---
 

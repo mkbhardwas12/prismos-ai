@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // LangGraph Workflow Engine — Formal State-Graph Multi-Agent Orchestration
 //
 // This module implements a formal LangGraph-style state graph for
@@ -788,7 +787,48 @@ impl WorkflowEngine {
         let intent_for_ts = intent.clone();
         let intent_for_mk = intent.clone();
         let ctx_len = context_node_ids.len();
-        let model_name = model.to_string();
+
+        // ── Per-role model routing (smart_router) ──
+        // Give the Reasoner the best locally-installed model for THIS task kind:
+        // analysis → reasoning lane, code → code lane, otherwise keep the user's
+        // model (normal chat is unchanged). Falls back to the user's model when no
+        // specialist is installed, and surfaces any swap in the activity feed.
+        let raw_lower = intent.raw.to_lowercase();
+        let is_code_intent = [
+            "code", "function", "debug", "compile", "algorithm", "implement",
+            "refactor", "programming", "bug", "api", "endpoint", "rust",
+            "python", "javascript", "typescript",
+        ]
+        .iter()
+        .any(|kw| raw_lower.contains(kw));
+        let reasoner_task = if is_code_intent {
+            crate::smart_router::TaskKind::Code
+        } else if matches!(intent.intent_type, crate::refractive_core::IntentType::Analyze) {
+            crate::smart_router::TaskKind::Reasoning
+        } else {
+            crate::smart_router::TaskKind::General
+        };
+        let model_name = if matches!(reasoner_task, crate::smart_router::TaskKind::General) {
+            model.to_string()
+        } else {
+            let available = crate::ollama_bridge::list_models(None).await.unwrap_or_default();
+            let model_names: Vec<String> = available.into_iter().map(|m| m.name).collect();
+            let decision = crate::smart_router::route_for_task(model, reasoner_task, &model_names);
+            if decision.auto_swapped {
+                emit_activity(
+                    &app_handle,
+                    "Reasoner",
+                    &format!("Routing to {} — {}", decision.model, decision.reason),
+                    "thinking",
+                    "analyze",
+                );
+                eprintln!(
+                    "[LangGraph-WF] Reasoner routed {} → {} ({})",
+                    model, decision.model, decision.reason
+                );
+            }
+            decision.model
+        };
 
         // ── Run all three specialists concurrently via tokio::join! ──
         // Reasoner awaits the LLM network call while Tool Smith and Memory
@@ -830,15 +870,42 @@ impl WorkflowEngine {
                         match crate::ollama_bridge::chat(&model_name, &system_prompt, &user_content, None, None, few_shots).await {
                             Ok(r) => r,
                             Err(e) => {
-                                eprintln!("[LangGraph-WF] Ollama unavailable: {}", e);
-                                format!(
-                                    "I'm currently unable to reach the AI model. \
-                                     Please make sure Ollama is running:\n\n\
-                                     1. Open a terminal\n\
-                                     2. Run `ollama serve`\n\
-                                     3. Try your question again\n\n\
-                                     Your data is safe — everything stays local."
-                                )
+                                let err_text = e.to_string();
+                                let lower = err_text.to_lowercase();
+                                // Distinguish "model not installed" from "Ollama is down".
+                                // Ollama answers HTTP 404 with `model '<name>' not found`
+                                // when the tag isn't pulled; any HTTP status back means
+                                // the daemon is up — so confirm with is_available().
+                                let looks_like_missing_model = lower.contains("not found")
+                                    || lower.contains("no such model")
+                                    || lower.contains("(404");
+                                let ollama_up = crate::ollama_bridge::is_available(None)
+                                    .await
+                                    .unwrap_or(false);
+                                if looks_like_missing_model && ollama_up {
+                                    eprintln!(
+                                        "[LangGraph-WF] model not installed: {} ({})",
+                                        model_name, err_text
+                                    );
+                                    format!(
+                                        "The model `{model}` isn't installed.\n\n\
+                                         • Pull it:  `ollama pull {model}`\n\
+                                         • Or pick an installed model in Settings → Model.\n\n\
+                                         Ollama is running — only this model is missing. \
+                                         Your data stays local.",
+                                        model = model_name
+                                    )
+                                } else {
+                                    eprintln!("[LangGraph-WF] Ollama unavailable: {}", err_text);
+                                    format!(
+                                        "I'm currently unable to reach the AI model. \
+                                         Please make sure Ollama is running:\n\n\
+                                         1. Open a terminal\n\
+                                         2. Run `ollama serve`\n\
+                                         3. Try your question again\n\n\
+                                         Your data is safe — everything stays local."
+                                    )
+                                }
                             }
                         }
                     } else {

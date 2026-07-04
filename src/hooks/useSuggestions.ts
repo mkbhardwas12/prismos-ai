@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // useSuggestions — Proactive suggestion management & follow-up generation
 
 import { useState, useEffect, useCallback } from "react";

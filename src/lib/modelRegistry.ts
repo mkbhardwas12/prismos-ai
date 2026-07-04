@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Model Registry — Single source of truth for all supported models
 
 export interface ModelSpec {
@@ -212,16 +211,19 @@ export const MODEL_REGISTRY: ModelSpec[] = [
     releaseYear: 2025,
   },
   {
-    name: "deepseek-v3:16b",
-    label: "DeepSeek V3 16B",
-    desc: "🔥 Top-tier reasoning & coding",
-    size: "~10 GB",
-    vramMin: 12,
-    ramMin: 16,
+    // NOTE: there is no `deepseek-v3:16b` on the Ollama registry — DeepSeek-V3 only
+    // ships as 671B (won't fit consumer RAM). `deepseek-r1:32b` is the strongest
+    // DeepSeek reasoning model that fits a 64GB machine (~20GB at Q4).
+    name: "deepseek-r1:32b",
+    label: "DeepSeek R1 32B",
+    desc: "🔥 Top-tier chain-of-thought reasoning (fits 64GB)",
+    size: "~20 GB",
+    vramMin: 24,
+    ramMin: 32,
     context: 131072,
     tier: "power",
     capabilities: ["text", "code", "reasoning", "math"],
-    license: "DeepSeek",
+    license: "MIT",
     priority: 31,
     releaseYear: 2025,
   },

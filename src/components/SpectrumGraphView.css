@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SPECTRUM GRAPH VIEW — PrismOS-AI (Patent Pending)
+   SPECTRUM GRAPH VIEW — PrismOS-AI
    Includes: Sidebar spectrum list, Force-directed graph visualization,
    Side panel, Node detail, Anticipations, Legend
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -604,4 +604,81 @@
 
 .sg-intro-dismiss:hover {
   opacity: 0.9;
+}
+
+/* ── Cluster toolbar (overlay, top-left of canvas) ─────────────────────── */
+
+.sg-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+}
+
+.sg-tool-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(16, 20, 30, 0.72);
+  color: var(--text-muted, #b8c0d0);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: all 0.15s ease;
+}
+
+.sg-tool-btn:hover {
+  color: #fff;
+  border-color: rgba(120, 180, 255, 0.5);
+  background: rgba(30, 40, 60, 0.85);
+}
+
+.sg-tool-focus {
+  border-color: rgba(255, 200, 80, 0.45);
+}
+
+/* ── Clickable cluster legend ──────────────────────────────────────────── */
+
+.sg-cluster-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 6px;
+  text-transform: none;
+  transition: all 0.15s ease;
+}
+
+.sg-cluster-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.sg-cluster-item.expanded {
+  background: rgba(100, 180, 255, 0.08);
+  border-color: rgba(100, 180, 255, 0.25);
+}
+
+.sg-cluster-name {
+  flex: 1;
+  text-align: left;
+  color: inherit;
+}
+
+.sg-cluster-count {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted, #b8c0d0);
+}
+
+.sg-cluster-state {
+  width: 14px;
+  text-align: center;
+  color: var(--text-muted, #8892a8);
+  font-weight: 600;
 }

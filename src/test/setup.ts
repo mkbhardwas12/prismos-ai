@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Test Setup — Vitest + JSDOM + Testing Library
 
 import "@testing-library/jest-dom/vitest";

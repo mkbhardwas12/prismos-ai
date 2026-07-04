@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // DomainInsights — Shows the user's detected professional domain expertise
 
 import React, { useEffect, useState } from "react";

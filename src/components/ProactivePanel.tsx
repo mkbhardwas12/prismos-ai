@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — ProactivePanel — Permanent collapsible sidebar panel
 //
 // The most visible, helpful part of the UI. Pulls live data from:

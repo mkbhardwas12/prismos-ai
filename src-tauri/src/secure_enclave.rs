@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Secure Enclave — Hardware Security Module Abstraction
 //
 // Provides a hardware-backed key derivation layer for PrismOS-AI cryptographic

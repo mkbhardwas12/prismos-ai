@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI Spectral Timeline — Time-Based History of Spectrum Graph Events
 //
 // Renders a vertical timeline showing node creation, updates, edge creation,

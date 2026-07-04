@@ -335,7 +335,7 @@ prismos-ai/
 │       │   ├── messages.rs       # Inter-agent message protocol
 │       │   └── nodes.rs          # Individual agent node implementations
 │       └── bin/
-│           └── patent_benchmarks.rs  # Performance benchmarks for patent filing
+│           └── prismos_cli.rs    # Headless CLI (prismos-cli)
 ├── docs/                         # Architecture diagrams + screenshots
 ├── .github/workflows/            # CI + Release Build (cross-platform)
 ├── package.json                  # v0.5.2
@@ -346,7 +346,7 @@ prismos-ai/
 
 ## 🔒 Security Model
 
-PrismOS-AI implements **defense-in-depth** with patent-pending security architecture:
+PrismOS-AI implements **defense-in-depth** with a layered security architecture:
 
 | Layer | Technology | Status |
 |-------|-----------|--------|

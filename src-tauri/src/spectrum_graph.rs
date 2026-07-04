@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // Spectrum Graph — Persistent Multi-Layered Knowledge Graph
 //
 // The Spectrum Graph is PrismOS-AI's persistent memory system.
@@ -1701,7 +1700,7 @@ impl SpectrumGraph {
         Ok((node_count, edge_count))
     }
 
-    /// Clear all nodes and edges from the Spectrum Graph (Patent Pending)
+    /// Clear all nodes and edges from the Spectrum Graph
     /// Returns the count of deleted nodes and edges.
     pub fn clear_graph(&self) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
         let (nodes, edges) = self.stats()?;
@@ -1811,20 +1810,19 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  PERSIST / LOAD — Explicit Graph Serialization (Patent Pending)
+    //  PERSIST / LOAD — Explicit Graph Serialization
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Persist the current graph state to a JSON export file.
     /// This is a point-in-time snapshot that can be restored via `load()`.
     /// The SQLite database is always the source of truth; this provides
-    /// portable backup / migration support as required by the patent.
+    /// portable backup / migration support.
     pub fn persist(&self, export_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let snapshot = self.get_full_graph()?;
 
         // Add metadata envelope
         let export = serde_json::json!({
             "format": "prismos-spectrum-graph-v1",
-            "patent": "Patent Pending",
             "exported_at": Utc::now().to_rfc3339(),
             "snapshot": snapshot,
             "intent_log_count": self.conn.query_row(
@@ -1844,7 +1842,7 @@ impl SpectrumGraph {
 
     /// Load a previously persisted graph snapshot, merging into the current database.
     /// Nodes and edges that already exist (by ID) are skipped; new ones are inserted.
-    /// This supports the You-Port device handoff pattern from the patent.
+    /// This supports the You-Port device handoff pattern.
     pub fn load(&self, import_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let json = std::fs::read_to_string(import_path)?;
         let export: serde_json::Value = serde_json::from_str(&json)?;
@@ -1901,7 +1899,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  VECTOR SIMILARITY — NPU-Ready Embedding Support (Patent Pending)
+    //  VECTOR SIMILARITY — NPU-Ready Embedding Support
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Store a vector embedding for a node (stored as BLOB in SQLite).
@@ -1953,7 +1951,7 @@ impl SpectrumGraph {
 
     /// Cosine similarity search across all nodes with embeddings.
     /// Returns (node_id, similarity_score) pairs sorted by similarity.
-    /// This is the vector layer of the multi-layered Spectrum Graph per patent.
+    /// This is the vector layer of the multi-layered Spectrum Graph.
     pub fn vector_search(
         &self,
         query_embedding: &[f64],
@@ -1986,6 +1984,114 @@ impl SpectrumGraph {
 
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(top_k);
+        Ok(results)
+    }
+
+    /// Nodes that don't have an embedding yet — newest first, so fresh
+    /// knowledge becomes semantically searchable soonest. Used by the
+    /// opportunistic per-query backfill in the refractive core (no migration
+    /// needed: the graph embeds itself over time).
+    pub fn nodes_missing_embedding(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content FROM nodes
+             WHERE embedding IS NULL OR length(embedding) = 0
+             ORDER BY updated_at DESC
+             LIMIT ?1",
+        )?;
+        let rows: Vec<(String, String, String)> = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Identity anchor: core personal-layer nodes that should ALWAYS reach the
+    /// prompt regardless of keyword/semantic match — this is how "who am I?" /
+    /// "what are my rules?" get answered like a hosted assistant with a standing
+    /// user profile. Populated by knowledge ingestion (user-* nodes) or any
+    /// node saved with node_type='personal', layer='core'.
+    pub fn pinned_profile_nodes(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes
+             WHERE node_type = 'personal' AND COALESCE(layer, 'context') = 'core'
+             ORDER BY updated_at DESC
+             LIMIT ?1",
+        )?;
+        let nodes: Vec<SpectrumNode> = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(SpectrumNode {
+                    id: row.get(0)?,
+                    label: row.get(1)?,
+                    content: row.get(2)?,
+                    node_type: row.get(3)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                    connections: vec![],
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(nodes)
+    }
+
+    /// Hybrid retrieval: keyword+graph results from `query_intent`, enriched
+    /// with vector-similarity hits when a query embedding is available.
+    /// Semantic-only hits (things keyword search can never find — "who am I?"
+    /// shares no ≥4-char terms with the profile) are pulled in; nodes found by
+    /// BOTH paths get an agreement boost. Falls back to plain `query_intent`
+    /// when `query_embedding` is None, so retrieval quality can only go up.
+    pub fn query_intent_hybrid(
+        &self,
+        raw_input: &str,
+        intent_type: &str,
+        entities: &[String],
+        query_embedding: Option<&[f64]>,
+    ) -> Result<Vec<IntentQueryResult>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut results = self.query_intent(raw_input, intent_type, entities)?;
+        let Some(qe) = query_embedding else {
+            return Ok(results);
+        };
+
+        // Noise floor: below this cosine similarity a hit is topic drift, not
+        // meaning. 0.35 is conservative for nomic-embed-text-class models.
+        const SEMANTIC_FLOOR: f64 = 0.35;
+
+        for (node_id, sim) in self.vector_search(qe, 12)? {
+            if sim < SEMANTIC_FLOOR {
+                continue;
+            }
+            if let Some(r) = results.iter_mut().find(|r| r.node.id == node_id) {
+                // Keyword AND semantic agreement — strongest possible signal
+                r.relevance_score += sim * 0.5;
+            } else if let Ok(Some(node)) = self.get_node_without_access(&node_id) {
+                let temporal_boost = self.calculate_temporal_boost(&node.updated_at);
+                results.push(IntentQueryResult {
+                    relevance_score: 0.3 + sim * 0.6,
+                    path_strength: 0.0,
+                    temporal_boost,
+                    node,
+                });
+            }
+        }
+
+        results.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(20);
         Ok(results)
     }
 
@@ -2104,7 +2210,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  COGNITIVE IMPRINT — Adaptive Response Personality (Patent Pending)
+    //  COGNITIVE IMPRINT — Adaptive Response Personality
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Load the user's cognitive profile (creates default if none exists)
@@ -2406,7 +2512,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  COGNITIVE DRIFT — Weekly Snapshot & Drift Detection (Patent Pending)
+    //  COGNITIVE DRIFT — Weekly Snapshot & Drift Detection
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Save a weekly cognitive profile snapshot for drift tracking
@@ -2536,7 +2642,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  THOUGHT CURRENTS — Temporal Pattern Mining (Patent Pending)
+    //  THOUGHT CURRENTS — Temporal Pattern Mining
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Analyze thought currents from intent history
@@ -2565,7 +2671,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  EDGE PROPHECY — Predictive Edge Suggestions (Patent Pending)
+    //  EDGE PROPHECY — Predictive Edge Suggestions
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Predict potential edges between unconnected nodes
@@ -2703,7 +2809,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  REFRACTION JOURNAL — Band Choice Logging (Patent Pending)
+    //  REFRACTION JOURNAL — Band Choice Logging
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Log a refraction band decision
@@ -2805,7 +2911,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  AGENT MEMORY — Per-Agent Key-Value Store (Patent Pending)
+    //  AGENT MEMORY — Per-Agent Key-Value Store
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Store a memory entry for an agent
@@ -2869,7 +2975,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  DOMAIN PROFILE — Persistence Layer (Patent Pending)
+    //  DOMAIN PROFILE — Persistence Layer
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Get the stored domain profile
@@ -2924,7 +3030,7 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  MODEL PERFORMANCE — Per-Model Tracking (Patent Pending)
+    //  MODEL PERFORMANCE — Per-Model Tracking
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Store a model performance data point
@@ -3000,7 +3106,7 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  GRAPH MERGE/DIFF ENGINE — Multi-Device Sync (Patent Pending)
+//  GRAPH MERGE/DIFF ENGINE — Multi-Device Sync
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 //  Supports three merge strategies:
@@ -3443,7 +3549,6 @@ impl SpectrumGraph {
         let snapshot = self.get_full_graph()?;
         let package = serde_json::json!({
             "format": "prismos-sync-v1",
-            "patent": "Patent Pending",
             "device_id": Uuid::new_v4().to_string(),
             "exported_at": Utc::now().to_rfc3339(),
             "snapshot": snapshot,
@@ -3809,6 +3914,91 @@ mod tests {
         let examples = g.get_good_examples("Rust ownership", 5).unwrap();
         assert!(!examples.is_empty());
         assert!(examples[0].0.contains("Rust"));
+    }
+
+    // ─── Hybrid (Semantic + Keyword) Retrieval ─────────────────────────────
+
+    #[test]
+    fn test_nodes_missing_embedding_backfill_cycle() {
+        let (g, _dir) = test_graph();
+        let n = g.add_node("Alpha", "alpha node content for testing", "work").unwrap();
+        let missing = g.nodes_missing_embedding(50).unwrap();
+        assert!(missing.iter().any(|(id, _, _)| id == &n.id));
+
+        g.set_node_embedding(&n.id, &[1.0, 0.0, 0.0]).unwrap();
+        let missing = g.nodes_missing_embedding(50).unwrap();
+        assert!(
+            !missing.iter().any(|(id, _, _)| id == &n.id),
+            "embedded node must leave the backfill queue"
+        );
+    }
+
+    #[test]
+    fn test_query_intent_hybrid_finds_semantic_only_hit() {
+        let (g, _dir) = test_graph();
+        // Profile node — shares NO ≥4-char keyword with the query "who am i".
+        let n = g
+            .add_node("User profile", "Manish builds local-first software products", "personal")
+            .unwrap();
+        g.set_node_embedding(&n.id, &[1.0, 0.0, 0.0]).unwrap();
+
+        // Keyword-only retrieval cannot find it
+        let kw = g.query_intent("who am i", "Query", &[]).unwrap();
+        assert!(!kw.iter().any(|r| r.node.id == n.id));
+
+        // Hybrid retrieval with a nearby query embedding finds it
+        let hy = g
+            .query_intent_hybrid("who am i", "Query", &[], Some(&[0.9, 0.1, 0.0]))
+            .unwrap();
+        assert!(
+            hy.iter().any(|r| r.node.id == n.id),
+            "semantic-only hit must surface in hybrid retrieval"
+        );
+    }
+
+    #[test]
+    fn test_query_intent_hybrid_none_matches_keyword_path() {
+        let (g, _dir) = test_graph();
+        g.add_node("Rust notes", "Rust lifetimes and borrowing rules", "learning")
+            .unwrap();
+        let kw = g.query_intent("Rust lifetimes", "Query", &[]).unwrap();
+        let hy = g
+            .query_intent_hybrid("Rust lifetimes", "Query", &[], None)
+            .unwrap();
+        assert_eq!(kw.len(), hy.len(), "None embedding must behave like keyword-only");
+    }
+
+    #[test]
+    fn test_query_intent_hybrid_ignores_below_noise_floor() {
+        let (g, _dir) = test_graph();
+        let n = g
+            .add_node("Unrelated", "completely different topic entirely", "work")
+            .unwrap();
+        // Orthogonal embedding → cosine 0.0 < 0.35 floor → must NOT surface
+        g.set_node_embedding(&n.id, &[0.0, 1.0, 0.0]).unwrap();
+        let hy = g
+            .query_intent_hybrid("who am i", "Query", &[], Some(&[1.0, 0.0, 0.0]))
+            .unwrap();
+        assert!(!hy.iter().any(|r| r.node.id == n.id));
+    }
+
+    #[test]
+    fn test_pinned_profile_nodes_returns_personal_core_only() {
+        let (g, _dir) = test_graph();
+        let pin = g
+            .add_node_with_layer("Manish (owner)", "Solo builder of 8 products", "personal", "core")
+            .unwrap();
+        g.add_node_with_layer("Some doc", "regular knowledge content", "document", "knowledge")
+            .unwrap();
+        g.add_node("Casual note", "personal-ish but context layer", "personal")
+            .unwrap();
+
+        let pins = g.pinned_profile_nodes(4).unwrap();
+        assert!(pins.iter().any(|p| p.id == pin.id), "personal/core node must be pinned");
+        assert!(
+            pins.iter().all(|p| p.node_type == "personal" && p.layer == "core"),
+            "only personal+core nodes may be pinned"
+        );
     }
 
     // ─── Cognitive Profile ─────────────────────────────────────────────────

@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // PrismOS-AI — MainView Component Tests (FTW removed, transparency toggle)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -106,6 +105,30 @@ describe("MainView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(invoke).mockImplementation(async () => "{}");
+  });
+
+  it("offline badge retries the connection when clicked", async () => {
+    const onRetryConnection = vi.fn();
+    await act(async () => {
+      render(<MainView {...defaultProps} ollamaConnected={false} onRetryConnection={onRetryConnection} />);
+    });
+    expect(screen.getByText(/Ollama Offline/)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Ollama Offline/));
+    });
+    expect(onRetryConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it("connected badge does not trigger a connection retry", async () => {
+    const onRetryConnection = vi.fn();
+    await act(async () => {
+      render(<MainView {...defaultProps} onRetryConnection={onRetryConnection} />);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText(/qwen3:4b/));
+    });
+    // Connected → click is the model-dropdown toggle (mocked hook), never a retry
+    expect(onRetryConnection).not.toHaveBeenCalled();
   });
 
   it("does NOT render first-time-wizard modal", async () => {

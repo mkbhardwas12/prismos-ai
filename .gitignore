@@ -43,8 +43,13 @@ docs/screenshots/live/
 # PrismOS still ingests them locally; they just must not be committed.
 # ─────────────────────────────────────────────────────────────────────────────
 knowledge/
-.claude/skills/polyedgebot-ops/
 PrismDocs/
+
+# Local AI-agent config + project guide. CLAUDE.md and the skills describe the
+# owner's private portfolio, live-money trading bot, local paths and secrets —
+# local-only tooling, NEVER push to the public repo. (polyedgebot-ops lives here.)
+CLAUDE.md
+.claude/
 
 # Python
 __pycache__/

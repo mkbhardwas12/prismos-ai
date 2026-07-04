@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // LangGraph Agent Nodes — Each Agent's Processing Logic
 //
 // Each agent is a "node" in the LangGraph DAG. It receives messages,

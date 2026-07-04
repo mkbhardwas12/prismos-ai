@@ -1,4 +1,3 @@
-// Patent Pending — PrismOS-AI (US Provisional Patent, Feb 2026)
 // File Indexer — Local RAG: Watch directories, extract text, ingest into Spectrum Graph
 //
 // Watches user-configured directories (default: ~/Documents/PrismDocs) for file

@@ -22,7 +22,7 @@ interface SpotlightOverlayProps {
 const QUICK_COMMANDS = [
   { icon: "💬", label: "Chat", hint: "Open conversation", action: "view:chat" },
   { icon: "📊", label: "Spectrum Graph", hint: "Visualize knowledge", action: "view:graph" },
-  { icon: "🧪", label: "Sandbox", hint: "Run isolated code", action: "view:sandbox" },
+  { icon: "🧪", label: "Action Policies", hint: "Evaluate policy decisions", action: "view:sandbox" },
   { icon: "⚙️", label: "Settings", hint: "Configure PrismOS-AI", action: "view:settings" },
   { icon: "📈", label: "Timeline", hint: "View activity timeline", action: "view:timeline" },
   { icon: "🔍", label: "Explorer", hint: "Browse Spectrum nodes", action: "view:spectrum" },

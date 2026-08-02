@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A local, ethical launch room for earning organic GitHub stars and forks." />
+  <title>Repo Launch Night</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+<div class="night-shell">
+  <header class="topbar">
+    <a class="brand" href="#portfolio" aria-label="Repo Launch Night home">
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <span>
+        <strong>Repo Launch Night</strong>
+        <small>Organic GitHub launch room</small>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <span class="local-badge"><span aria-hidden="true"></span> Local only</span>
+      <button class="button button-quiet" id="export-button" type="button">Export plan</button>
+      <button class="button button-quiet danger-text" id="reset-button" type="button">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Tonight’s mission</p>
+        <h1 id="page-title">Turn repository polish into qualified attention.</h1>
+        <p>
+          Audit one or more repos, focus the highest-leverage work, prepare honest launch copy,
+          and compare the morning numbers. No bots, spam, or manufactured engagement.
+        </p>
+      </div>
+
+      <form class="repo-entry" id="repo-form">
+        <label for="repo-input">GitHub repositories</label>
+        <div class="repo-input-row">
+          <input
+            id="repo-input"
+            name="repos"
+            type="text"
+            autocomplete="off"
+            placeholder="owner/repo, github.com/owner/another-repo"
+            aria-describedby="repo-hint repo-error"
+          />
+          <button class="button button-primary" type="submit">Add to launch room</button>
+        </div>
+        <div class="field-foot">
+          <span id="repo-hint">Paste several repos separated by commas or spaces.</span>
+          <button class="text-button" id="example-button" type="button">Load an example</button>
+        </div>
+        <p class="form-error" id="repo-error" role="alert"></p>
+      </form>
+    </section>
+
+    <section class="workspace empty" id="workspace" aria-live="polite">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-orbit" aria-hidden="true"><span>✦</span></div>
+        <h2>Your launch room is clear.</h2>
+        <p>Add a repository to build an honest, time-boxed overnight campaign.</p>
+      </div>
+
+      <div class="workspace-content" id="workspace-content" hidden>
+        <nav class="tabs" role="tablist" aria-label="Launch room sections">
+          <button class="tab active" id="tab-button-portfolio" type="button" role="tab" data-tab="portfolio" aria-controls="tab-portfolio" aria-selected="true">Portfolio</button>
+          <button class="tab" id="tab-button-audit" type="button" role="tab" data-tab="audit" aria-controls="tab-audit" aria-selected="false">Readiness audit</button>
+          <button class="tab" id="tab-button-plan" type="button" role="tab" data-tab="plan" aria-controls="tab-plan" aria-selected="false">Night plan</button>
+          <button class="tab" id="tab-button-copy" type="button" role="tab" data-tab="copy" aria-controls="tab-copy" aria-selected="false">Copy deck</button>
+          <button class="tab" id="tab-button-morning" type="button" role="tab" data-tab="morning" aria-controls="tab-morning" aria-selected="false">Morning report</button>
+        </nav>
+
+        <div id="tab-portfolio" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-portfolio" data-panel="portfolio"></div>
+        <div id="tab-audit" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-audit" data-panel="audit" hidden></div>
+        <div id="tab-plan" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-plan" data-panel="plan" hidden></div>
+        <div id="tab-copy" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-copy" data-panel="copy" hidden></div>
+        <div id="tab-morning" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-morning" data-panel="morning" hidden></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Earn attention by making the repository useful, clear, trustworthy, and easy to try.</p>
+    <p>Growth is never guaranteed. Changes in stars or forks are observations, not proof of causation.</p>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

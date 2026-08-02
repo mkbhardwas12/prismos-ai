@@ -1,16 +1,16 @@
-// Sandbox Prism v0.5.0 — TRUE WASM Isolation with Cryptographic Signing,
-//                         Allow-List Enforcement, and Automatic Rollback
+// Sandbox Prism v0.5.0 — Bounded Policy Checks, HMAC Records,
+//                         Allow-List Enforcement, and Logical Rollback
 //
-// Sandbox Prisms are the core security component of PrismOS-AI.
-// Every agent action passes through the Sandbox Prism before execution:
-//   1. Cryptographic signing — HMAC-SHA256 signs every action for tamper proof
+// Operations deliberately routed through this module receive these controls;
+// ordinary chat inference and arbitrary host side effects are not universally
+// executed inside an isolation runtime:
+//   1. HMAC records — HMAC-SHA256 makes later modification detectable
 //   2. Allow-list enforcement — only pre-approved operation categories execute
-//   3. TRUE WASM isolation — actions run inside wasmtime with per-agent
-//      memory limits, CPU fuel metering, and zero ambient authority
-//   4. Anomaly detection — deviation from expected patterns triggers rollback
-//   5. Auto-rollback — reverts side effects with plain-English explanation
-//
-// All data stays local. No telemetry. No cloud dependency.
+//   3. Bounded policy evaluation — modeled actions have strict categories,
+//      lengths, risk tiers, and per-agent allow-lists before native handling
+//   4. Anomaly detection — deviations can reject or logically roll back a record
+//   5. Rollback metadata — explains reversible modeled effects; it is not a
+//      generic transaction over filesystem, network, or database side effects
 
 use chrono::Utc;
 use hmac::{Hmac, Mac};
@@ -18,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::LazyLock;
 use uuid::Uuid;
-use wasmtime::*;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -53,11 +52,18 @@ impl AllowedOperation {
     /// Risk tier: 1 = safe, 2 = moderate, 3 = restricted
     pub fn risk_tier(&self) -> u8 {
         match self {
-            Self::GraphRead | Self::MemoryQuery | Self::StatusCheck | Self::EmailRead | Self::CalendarRead | Self::FinanceRead => 1,
-            Self::GraphWrite | Self::ConversationStore
-            | Self::EdgeReinforce | Self::NodeCreate => 2,
-            Self::LlmInference | Self::ExternalNetwork
-            | Self::ToolExecution | Self::FileAccess => 3,
+            Self::GraphRead
+            | Self::MemoryQuery
+            | Self::StatusCheck
+            | Self::EmailRead
+            | Self::CalendarRead
+            | Self::FinanceRead => 1,
+            Self::GraphWrite | Self::ConversationStore | Self::EdgeReinforce | Self::NodeCreate => {
+                2
+            }
+            Self::LlmInference | Self::ExternalNetwork | Self::ToolExecution | Self::FileAccess => {
+                3
+            }
         }
     }
 
@@ -88,8 +94,10 @@ impl AllowedOperation {
 
         // Tier 1
         if lower.contains("read") && lower.contains("graph")
-            || lower.contains("get_node") || lower.contains("get_spectrum")
-            || lower.contains("search_node") || lower.contains("query_intent")
+            || lower.contains("get_node")
+            || lower.contains("get_spectrum")
+            || lower.contains("search_node")
+            || lower.contains("query_intent")
         {
             return Some(Self::GraphRead);
         }
@@ -101,28 +109,46 @@ impl AllowedOperation {
         if lower.contains("status") || lower.contains("health") || lower.contains("check") {
             return Some(Self::StatusCheck);
         }
-        if lower.contains("email") && (lower.contains("read") || lower.contains("fetch") || lower.contains("summary") || lower.contains("unread")) {
+        if lower.contains("email")
+            && (lower.contains("read")
+                || lower.contains("fetch")
+                || lower.contains("summary")
+                || lower.contains("unread"))
+        {
             return Some(Self::EmailRead);
         }
-        if lower.contains("calendar") && (lower.contains("read") || lower.contains("events") || lower.contains("today") || lower.contains("schedule")) {
+        if lower.contains("calendar")
+            && (lower.contains("read")
+                || lower.contains("events")
+                || lower.contains("today")
+                || lower.contains("schedule"))
+        {
             return Some(Self::CalendarRead);
         }
-        if lower.contains("finance") || lower.contains("stock") || lower.contains("ticker") || lower.contains("portfolio") || lower.contains("market") {
+        if lower.contains("finance")
+            || lower.contains("stock")
+            || lower.contains("ticker")
+            || lower.contains("portfolio")
+            || lower.contains("market")
+        {
             return Some(Self::FinanceRead);
         }
 
         // Tier 2
-        if lower.contains("reinforce") || lower.contains("update_edge")
+        if lower.contains("reinforce")
+            || lower.contains("update_edge")
             || lower.contains("feedback")
         {
             return Some(Self::EdgeReinforce);
         }
-        if lower.contains("add_node") || lower.contains("create_node")
+        if lower.contains("add_node")
+            || lower.contains("create_node")
             || lower.contains("node_create")
         {
             return Some(Self::NodeCreate);
         }
-        if lower.contains("conversation") || lower.contains("store_chat")
+        if lower.contains("conversation")
+            || lower.contains("store_chat")
             || lower.contains("save_message")
         {
             return Some(Self::ConversationStore);
@@ -134,17 +160,24 @@ impl AllowedOperation {
         }
 
         // Tier 3
-        if lower.contains("llm") || lower.contains("ollama") || lower.contains("inference")
-            || lower.contains("generate") || lower.contains("mistral")
+        if lower.contains("llm")
+            || lower.contains("ollama")
+            || lower.contains("inference")
+            || lower.contains("generate")
+            || lower.contains("mistral")
         {
             return Some(Self::LlmInference);
         }
-        if lower.contains("network") || lower.contains("http") || lower.contains("fetch")
+        if lower.contains("network")
+            || lower.contains("http")
+            || lower.contains("fetch")
             || lower.contains("download")
         {
             return Some(Self::ExternalNetwork);
         }
-        if lower.contains("execute") || lower.contains("run") || lower.contains("tool")
+        if lower.contains("execute")
+            || lower.contains("run")
+            || lower.contains("tool")
             || lower.contains("sandbox_exec")
         {
             return Some(Self::ToolExecution);
@@ -270,7 +303,7 @@ pub struct SideEffect {
     pub reversible: bool,
 }
 
-/// Cryptographically signed action record — tamper-proof audit trail
+/// HMAC-authenticated action record for tamper-evident auditing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedAction {
     pub action_id: String,
@@ -295,6 +328,8 @@ pub struct PrismResult {
     pub success: bool,
     pub output: String,
     pub side_effects: Vec<SideEffect>,
+    /// Legacy field name: true means the native Action Policy evaluated the
+    /// description. It does not mean OS/process/WASM isolation occurred.
     pub sandbox_protected: bool,
     pub action_signature: String,
     pub rollback_explanation: Option<String>,
@@ -314,15 +349,15 @@ pub struct SandboxVerdict {
     pub explanation: String,
 }
 
-// ─── WASM Isolation Engine (wasmtime) ──────────────────────────────────────────
+// ─── Legacy Isolation Telemetry Shape ──────────────────────────────────────────
 
-/// Per-agent WASM isolation limits derived from the operation risk tier.
-/// Lower tiers get tighter limits since they should be lightweight.
+/// Retained for backwards-compatible serialized Prism records. The vulnerable
+/// wasmtime policy shim was removed; new executions leave this field empty.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmIsolationConfig {
-    pub max_memory_pages: u32,         // WASM pages (64 KB each)
-    pub max_fuel: u64,                 // CPU instruction fuel budget
-    pub max_execution_time_ms: u64,    // Wall-clock timeout
+    pub max_memory_pages: u32,      // WASM pages (64 KB each)
+    pub max_fuel: u64,              // CPU instruction fuel budget
+    pub max_execution_time_ms: u64, // Wall-clock timeout
     pub risk_tier: u8,
 }
 
@@ -331,20 +366,20 @@ impl WasmIsolationConfig {
     pub fn for_risk_tier(tier: u8) -> Self {
         match tier {
             1 => Self {
-                max_memory_pages: 16,        // 1 MB for read-only ops
-                max_fuel: 100_000,           // Light CPU budget
+                max_memory_pages: 16, // 1 MB for read-only ops
+                max_fuel: 100_000,    // Light CPU budget
                 max_execution_time_ms: 1_000,
                 risk_tier: 1,
             },
             2 => Self {
-                max_memory_pages: 64,        // 4 MB for writes
-                max_fuel: 500_000,           // Medium CPU budget
+                max_memory_pages: 64, // 4 MB for writes
+                max_fuel: 500_000,    // Medium CPU budget
                 max_execution_time_ms: 5_000,
                 risk_tier: 2,
             },
             _ => Self {
-                max_memory_pages: 256,       // 16 MB for restricted ops
-                max_fuel: 2_000_000,         // High CPU budget
+                max_memory_pages: 256, // 16 MB for restricted ops
+                max_fuel: 2_000_000,   // High CPU budget
                 max_execution_time_ms: 30_000,
                 risk_tier: 3,
             },
@@ -359,31 +394,47 @@ impl WasmIsolationConfig {
 
 // ─── Cryptographic Signing Engine ──────────────────────────────────────────────
 
-/// Per-instance signing key derived from the Prism ID.
-/// Uses PRISMOS_SANDBOX_SALT environment variable at build time if set.
-/// Override for production deployments.
-const SANDBOX_SALT: &[u8] = match option_env!("PRISMOS_SANDBOX_SALT") {
-    Some(s) => s.as_bytes(),
-    None => b"PrismOS-SandboxPrism-Default-Salt-v1",
-};
+/// Process-local secret for authenticating ephemeral action records. It is not
+/// a code-signing key or hardware attestation and is intentionally not persisted.
+static ACTION_RECORD_KEY: LazyLock<[u8; 32]> = LazyLock::new(|| {
+    let mut key = [0u8; 32];
+    getrandom::getrandom(&mut key)
+        .expect("OS randomness is required for sandbox action-record authentication");
+    key
+});
 
-/// Sign an action with HMAC-SHA256 for tamper-proof audit trail
+/// Sign an action with HMAC-SHA256 for a tamper-evident audit record.
 fn sign_action(prism_id: &str, agent_id: &str, action: &str) -> String {
-    let key_material = format!("{}:{}:{}", prism_id, SANDBOX_SALT.len(), agent_id);
-    let mut mac = HmacSha256::new_from_slice(key_material.as_bytes())
+    let mut mac = HmacSha256::new_from_slice(ACTION_RECORD_KEY.as_slice())
         .expect("HMAC accepts any key length");
-    mac.update(action.as_bytes());
+    mac.update(prism_id.as_bytes());
+    mac.update(b"\0");
     mac.update(agent_id.as_bytes());
+    mac.update(b"\0");
+    mac.update(action.as_bytes());
     let result = mac.finalize();
     let bytes = result.into_bytes();
-    bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+    bytes
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>()
 }
 
 /// Verify an HMAC-SHA256 signature
 #[allow(dead_code)]
 fn verify_signature(prism_id: &str, agent_id: &str, action: &str, signature: &str) -> bool {
-    let expected = sign_action(prism_id, agent_id, action);
-    expected == signature
+    let Ok(signature_bytes) = hex::decode(signature) else {
+        return false;
+    };
+    let Ok(mut mac) = HmacSha256::new_from_slice(ACTION_RECORD_KEY.as_slice()) else {
+        return false;
+    };
+    mac.update(prism_id.as_bytes());
+    mac.update(b"\0");
+    mac.update(agent_id.as_bytes());
+    mac.update(b"\0");
+    mac.update(action.as_bytes());
+    mac.verify_slice(&signature_bytes).is_ok()
 }
 
 // ─── Anomaly Detection ─────────────────────────────────────────────────────────
@@ -457,6 +508,7 @@ impl AnomalyDetector {
 // ─── Prism Lifecycle ───────────────────────────────────────────────────────────
 
 /// Create a new sandboxed Prism execution environment for a specific agent
+#[allow(dead_code)] // Retained for callers using the pre-agent-binding compatibility API.
 pub fn create_prism(name: &str) -> Prism {
     create_prism_for_agent(name, "unknown")
 }
@@ -475,7 +527,7 @@ pub fn create_prism_for_agent(name: &str, agent_id: &str) -> Prism {
         side_effects: vec![],
         action_log: vec![],
         agent_id: agent_id.to_string(),
-        wasm_config: None, // Set per-execution based on risk tier
+        wasm_config: None, // Retained only for compatibility with older serialized state
     };
 
     // Auto-create initial checkpoint
@@ -484,7 +536,8 @@ pub fn create_prism_for_agent(name: &str, agent_id: &str) -> Prism {
     prism
 }
 
-/// Create a cryptographic checkpoint (SHA-256 state hash) for rollback support
+/// Create a SHA-256 digest of current Prism bookkeeping state.
+/// This is not a snapshot of filesystem, network, or database state.
 pub fn create_checkpoint(prism: &mut Prism) -> Checkpoint {
     let state_data = format!(
         "{}:{}:{:?}:{}:effects={}",
@@ -511,12 +564,12 @@ pub fn create_checkpoint(prism: &mut Prism) -> Checkpoint {
     checkpoint
 }
 
-/// Rollback a Prism to its last checkpoint with a plain-English explanation
+/// Mark Prism bookkeeping as rolled back with a plain-English explanation.
 pub fn rollback(prism: &mut Prism) -> Option<Checkpoint> {
     rollback_with_reason(prism, "Manual rollback requested by user")
 }
 
-/// Rollback with a specific reason — returns the checkpoint and records explanation
+/// Mark records with a specific reason; no external side effect is reversed.
 pub fn rollback_with_reason(prism: &mut Prism, reason: &str) -> Option<Checkpoint> {
     prism.status = PrismStatus::RolledBack;
 
@@ -524,8 +577,8 @@ pub fn rollback_with_reason(prism: &mut Prism, reason: &str) -> Option<Checkpoin
     prism.side_effects.push(SideEffect {
         effect_type: "rollback".to_string(),
         description: format!(
-            "Sandbox Prism rolled back all changes. Reason: {}. \
-             All {} previous side effects have been reversed.",
+            "Action Policy bookkeeping was marked rolled back. Reason: {}. \
+             {} recorded effect descriptions were marked; no filesystem, network, or database change was reversed.",
             reason,
             prism.side_effects.len()
         ),
@@ -544,21 +597,21 @@ pub fn rollback_with_reason(prism: &mut Prism, reason: &str) -> Option<Checkpoin
 
 // ─── Core Sandbox Execution Engine ─────────────────────────────────────────────
 
-/// Execute an action inside the Sandbox Prism security boundary.
-/// This is the primary entry point for ALL agent operations.
+/// Evaluate a modeled action through the explicit Action Policy surface.
+/// Ordinary chat and host operations do not automatically pass through it.
 ///
 /// Pipeline:
 ///   1. Classify action → AllowedOperation
 ///   2. Check agent allow-list
 ///   3. Sign action with HMAC-SHA256
 ///   4. Run anomaly detection
-///   5. Create pre-execution checkpoint
-///   6. Execute in WASM-style isolation boundary
-///   7. Record side effects
+///   5. Create a bookkeeping checkpoint
+///   6. Produce a deterministic policy-simulation result
+///   7. Record described effects
 ///   8. Return signed, auditable result
 ///
-/// If any step fails, the Prism auto-rolls back and returns a
-/// plain-English explanation of why the action was blocked.
+/// A failed step marks Prism records and returns a plain-English explanation;
+/// it does not undo arbitrary host state.
 #[allow(dead_code)]
 pub fn execute_in_sandbox(prism: &mut Prism, action: &str) -> PrismResult {
     execute_in_sandbox_for_agent(prism, action, &prism.agent_id.clone())
@@ -625,7 +678,11 @@ pub fn execute_in_sandbox_for_agent(
             agent_id,
             operation.label(),
             operation.risk_tier(),
-            allowed_ops.iter().map(|o| o.label()).collect::<Vec<_>>().join(", ")
+            allowed_ops
+                .iter()
+                .map(|o| o.label())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
         prism.action_log.push(SignedAction {
@@ -692,16 +749,12 @@ pub fn execute_in_sandbox_for_agent(
         create_checkpoint(prism);
     }
 
-    // ── Step 6: Execute in TRUE WASM isolation boundary (wasmtime) ──
-    // The action runs inside a wasmtime WASM sandbox with:
-    //   - Per-tier fuel budget (CPU metering)
-    //   - Bounded memory pages
-    //   - Zero ambient authority — only host-imported functions accessible
-    let wasm_config = WasmIsolationConfig::for_risk_tier(operation.risk_tier());
-    let wasm_memory_limit = wasm_config.memory_bytes();
-    prism.wasm_config = Some(wasm_config);
-    let (exec_output, side_effects, fuel_consumed) =
-        wasm_isolated_execute(&operation, action, agent_id);
+    // ── Step 6: Execute the bounded, deterministic policy simulator ──
+    // This does not run arbitrary user code and does not claim to isolate the
+    // approved native handler. Classification, allow-list, anomaly, and size
+    // gates above are the actual boundary.
+    prism.wasm_config = None;
+    let (exec_output, side_effects) = native_sandbox_execute(&operation, action, agent_id);
 
     // ── Step 7: Record signed action ──
     prism.action_log.push(SignedAction {
@@ -730,19 +783,27 @@ pub fn execute_in_sandbox_for_agent(
         sandbox_protected: true,
         action_signature: signature,
         rollback_explanation: None,
-        wasm_isolated: true,
-        wasm_fuel_consumed: Some(fuel_consumed),
-        wasm_memory_limit_bytes: Some(wasm_memory_limit),
+        wasm_isolated: false,
+        wasm_fuel_consumed: None,
+        wasm_memory_limit_bytes: None,
     }
 }
 
-// ─── WASM-Style Isolation Boundary ─────────────────────────────────────────────
+// ─── Retired WASM policy shim ──────────────────────────────────────────────────
 
-/// WebAssembly Text module for the Sandbox Prism isolation boundary.
-/// This module acts as a capability gatekeeper — all agent actions must pass
-/// through it. The wasmtime Store enforces memory limits and CPU fuel metering.
-/// Host functions are the ONLY way to interact with the system.
-const SANDBOX_WAT: &str = r#"
+// Kept only as non-compiled migration context for older serialized telemetry.
+// The pinned engine had known sandbox-escape advisories; policy evaluation no
+// longer links or executes it.
+#[cfg(any())]
+mod retired_wasm_policy_shim {
+    use super::*;
+    use wasmtime::*;
+
+    /// WebAssembly Text module for the Sandbox Prism isolation boundary.
+    /// This module acts as a capability gatekeeper — all agent actions must pass
+    /// through it. The wasmtime Store enforces memory limits and CPU fuel metering.
+    /// Host functions are the ONLY way to interact with the system.
+    const SANDBOX_WAT: &str = r#"
 (module
   ;; Host-imported capability boundary functions
   (import "sandbox" "validate_action" (func $validate (param i32 i32 i32) (result i32)))
@@ -792,187 +853,185 @@ const SANDBOX_WAT: &str = r#"
 )
 "#;
 
-/// WASM Store state — holds execution context for host callbacks
-struct SandboxStoreState {
-    operation_index: i32,
-    #[allow(dead_code)]
-    risk_tier: i32,
-    action: String,
-    agent_id: String,
-    result_output: Option<String>,
-    result_effects: Vec<SideEffect>,
-    validated: bool,
-}
-
-/// Global wasmtime Engine with fuel consumption enabled.
-/// Initialized once, shared across all sandbox executions.
-static WASM_ENGINE: LazyLock<Engine> = LazyLock::new(|| {
-    let mut config = Config::new();
-    config.consume_fuel(true);
-    Engine::new(&config).expect("Failed to initialize WASM sandbox engine")
-});
-
-/// Pre-compiled Sandbox WASM module — compiled once from WAT text.
-static SANDBOX_MODULE: LazyLock<Module> = LazyLock::new(|| {
-    Module::new(&WASM_ENGINE, SANDBOX_WAT)
-        .expect("Failed to compile sandbox WASM module")
-});
-
-/// Map an AllowedOperation to a numeric index for WASM parameter passing
-fn operation_to_index(op: &AllowedOperation) -> i32 {
-    match op {
-        AllowedOperation::GraphRead => 0,
-        AllowedOperation::MemoryQuery => 1,
-        AllowedOperation::StatusCheck => 2,
-        AllowedOperation::GraphWrite => 3,
-        AllowedOperation::ConversationStore => 4,
-        AllowedOperation::EdgeReinforce => 5,
-        AllowedOperation::NodeCreate => 6,
-        AllowedOperation::LlmInference => 7,
-        AllowedOperation::ExternalNetwork => 8,
-        AllowedOperation::ToolExecution => 9,
-        AllowedOperation::FileAccess => 10,
-        AllowedOperation::EmailRead => 11,
-        AllowedOperation::CalendarRead => 12,
-        AllowedOperation::FinanceRead => 13,
+    /// WASM Store state — holds execution context for host callbacks
+    struct SandboxStoreState {
+        operation_index: i32,
+        #[allow(dead_code)]
+        risk_tier: i32,
+        action: String,
+        agent_id: String,
+        result_output: Option<String>,
+        result_effects: Vec<SideEffect>,
+        validated: bool,
     }
-}
 
-/// Map a numeric index back to an AllowedOperation
-fn index_to_operation(idx: i32) -> Option<AllowedOperation> {
-    match idx {
-        0 => Some(AllowedOperation::GraphRead),
-        1 => Some(AllowedOperation::MemoryQuery),
-        2 => Some(AllowedOperation::StatusCheck),
-        3 => Some(AllowedOperation::GraphWrite),
-        4 => Some(AllowedOperation::ConversationStore),
-        5 => Some(AllowedOperation::EdgeReinforce),
-        6 => Some(AllowedOperation::NodeCreate),
-        7 => Some(AllowedOperation::LlmInference),
-        8 => Some(AllowedOperation::ExternalNetwork),
-        9 => Some(AllowedOperation::ToolExecution),
-        10 => Some(AllowedOperation::FileAccess),
-        11 => Some(AllowedOperation::EmailRead),
-        12 => Some(AllowedOperation::CalendarRead),
-        13 => Some(AllowedOperation::FinanceRead),
-        _ => None,
+    /// Global wasmtime Engine with fuel consumption enabled.
+    /// Initialized once, shared across all sandbox executions.
+    static WASM_ENGINE: LazyLock<Engine> = LazyLock::new(|| {
+        let mut config = Config::new();
+        config.consume_fuel(true);
+        Engine::new(&config).expect("Failed to initialize WASM sandbox engine")
+    });
+
+    /// Pre-compiled Sandbox WASM module — compiled once from WAT text.
+    static SANDBOX_MODULE: LazyLock<Module> = LazyLock::new(|| {
+        Module::new(&WASM_ENGINE, SANDBOX_WAT).expect("Failed to compile sandbox WASM module")
+    });
+
+    /// Map an AllowedOperation to a numeric index for WASM parameter passing
+    fn operation_to_index(op: &AllowedOperation) -> i32 {
+        match op {
+            AllowedOperation::GraphRead => 0,
+            AllowedOperation::MemoryQuery => 1,
+            AllowedOperation::StatusCheck => 2,
+            AllowedOperation::GraphWrite => 3,
+            AllowedOperation::ConversationStore => 4,
+            AllowedOperation::EdgeReinforce => 5,
+            AllowedOperation::NodeCreate => 6,
+            AllowedOperation::LlmInference => 7,
+            AllowedOperation::ExternalNetwork => 8,
+            AllowedOperation::ToolExecution => 9,
+            AllowedOperation::FileAccess => 10,
+            AllowedOperation::EmailRead => 11,
+            AllowedOperation::CalendarRead => 12,
+            AllowedOperation::FinanceRead => 13,
+        }
     }
-}
 
-/// Execute an agent action inside a TRUE wasmtime WASM sandbox.
-///
-/// Each invocation creates an isolated Store with:
-///   - Per-tier fuel budget (CPU metering)
-///   - Bounded memory (via WASM page limits)
-///   - Zero ambient authority — only host-imported functions are accessible
-///   - Deterministic execution — same input always produces same output
-///
-/// The WASM module calls back to host functions `validate_action` and
-/// `execute_action`, which perform the real work inside Rust but are
-/// fully gated by the WASM boundary.
-fn wasm_isolated_execute(
-    operation: &AllowedOperation,
-    action: &str,
-    agent_id: &str,
-) -> (String, Vec<SideEffect>, u64) {
-    let config = WasmIsolationConfig::for_risk_tier(operation.risk_tier());
-    let op_idx = operation_to_index(operation);
+    /// Map a numeric index back to an AllowedOperation
+    fn index_to_operation(idx: i32) -> Option<AllowedOperation> {
+        match idx {
+            0 => Some(AllowedOperation::GraphRead),
+            1 => Some(AllowedOperation::MemoryQuery),
+            2 => Some(AllowedOperation::StatusCheck),
+            3 => Some(AllowedOperation::GraphWrite),
+            4 => Some(AllowedOperation::ConversationStore),
+            5 => Some(AllowedOperation::EdgeReinforce),
+            6 => Some(AllowedOperation::NodeCreate),
+            7 => Some(AllowedOperation::LlmInference),
+            8 => Some(AllowedOperation::ExternalNetwork),
+            9 => Some(AllowedOperation::ToolExecution),
+            10 => Some(AllowedOperation::FileAccess),
+            11 => Some(AllowedOperation::EmailRead),
+            12 => Some(AllowedOperation::CalendarRead),
+            13 => Some(AllowedOperation::FinanceRead),
+            _ => None,
+        }
+    }
 
-    // Create an isolated Store with per-agent resource limits
-    let mut store = Store::new(
-        &WASM_ENGINE,
-        SandboxStoreState {
-            operation_index: op_idx,
-            risk_tier: operation.risk_tier() as i32,
-            action: action.to_string(),
-            agent_id: agent_id.to_string(),
-            result_output: None,
-            result_effects: vec![],
-            validated: false,
-        },
-    );
+    /// Execute an agent action inside a TRUE wasmtime WASM sandbox.
+    ///
+    /// Each invocation creates an isolated Store with:
+    ///   - Per-tier fuel budget (CPU metering)
+    ///   - Bounded memory (via WASM page limits)
+    ///   - Zero ambient authority — only host-imported functions are accessible
+    ///   - Deterministic execution — same input always produces same output
+    ///
+    /// The WASM module calls back to host functions `validate_action` and
+    /// `execute_action`, which perform the real work inside Rust but are
+    /// fully gated by the WASM boundary.
+    fn wasm_isolated_execute(
+        operation: &AllowedOperation,
+        action: &str,
+        agent_id: &str,
+    ) -> Result<(String, Vec<SideEffect>, u64), (String, u64)> {
+        let config = WasmIsolationConfig::for_risk_tier(operation.risk_tier());
+        let op_idx = operation_to_index(operation);
 
-    // Set CPU fuel budget — execution halts if exhausted
-    if let Err(e) = store.set_fuel(config.max_fuel) {
-        return (
-            format!("🛑 WASM sandbox fuel setup failed: {}", e),
-            vec![],
-            0,
+        // Create an isolated Store with per-agent resource limits
+        let mut store = Store::new(
+            &WASM_ENGINE,
+            SandboxStoreState {
+                operation_index: op_idx,
+                risk_tier: operation.risk_tier() as i32,
+                action: action.to_string(),
+                agent_id: agent_id.to_string(),
+                result_output: None,
+                result_effects: vec![],
+                validated: false,
+            },
         );
-    }
 
-    // Build a Linker with ONLY the approved host functions
-    let mut linker: Linker<SandboxStoreState> = Linker::new(&WASM_ENGINE);
+        // Set CPU fuel budget — execution halts if exhausted
+        if let Err(e) = store.set_fuel(config.max_fuel) {
+            return Err((format!("🛑 WASM sandbox fuel setup failed: {}", e), 0));
+        }
 
-    // Host function: validate_action — checks operation is within bounds
-    let _ = linker.func_wrap(
-        "sandbox",
-        "validate_action",
-        |mut caller: Caller<'_, SandboxStoreState>, op_type: i32, risk_tier: i32, _agent_idx: i32| -> i32 {
-            let valid = op_type >= 0
+        // Build a Linker with ONLY the approved host functions
+        let mut linker: Linker<SandboxStoreState> = Linker::new(&WASM_ENGINE);
+
+        // Host function: validate_action — checks operation is within bounds
+        let _ = linker.func_wrap(
+            "sandbox",
+            "validate_action",
+            |mut caller: Caller<'_, SandboxStoreState>,
+             op_type: i32,
+             risk_tier: i32,
+             _agent_idx: i32|
+             -> i32 {
+                let valid = op_type >= 0
                 && op_type <= 13  // 0-13: all AllowedOperation variants including EmailRead(11), CalendarRead(12), FinanceRead(13)
                 && risk_tier >= 1
                 && risk_tier <= 3
                 && index_to_operation(op_type).is_some();
-            caller.data_mut().validated = valid;
-            if valid { 1 } else { 0 }
-        },
-    );
+                caller.data_mut().validated = valid;
+                if valid {
+                    1
+                } else {
+                    0
+                }
+            },
+        );
 
-    // Host function: execute_action — performs the actual sandboxed work
-    let _ = linker.func_wrap(
-        "sandbox",
-        "execute_action",
-        |mut caller: Caller<'_, SandboxStoreState>, _op_type: i32, _risk_tier: i32, _agent_idx: i32| -> i32 {
-            let (op_idx, action_str, aid) = {
-                let s = caller.data();
-                (s.operation_index, s.action.clone(), s.agent_id.clone())
-            };
-            if let Some(op) = index_to_operation(op_idx) {
-                let (output, effects) = native_sandbox_execute(&op, &action_str, &aid);
-                let state = caller.data_mut();
-                state.result_output = Some(output);
-                state.result_effects = effects;
-                1
-            } else {
-                0
+        // Host function: execute_action — performs the actual sandboxed work
+        let _ = linker.func_wrap(
+            "sandbox",
+            "execute_action",
+            |mut caller: Caller<'_, SandboxStoreState>,
+             _op_type: i32,
+             _risk_tier: i32,
+             _agent_idx: i32|
+             -> i32 {
+                let (op_idx, action_str, aid) = {
+                    let s = caller.data();
+                    (s.operation_index, s.action.clone(), s.agent_id.clone())
+                };
+                if let Some(op) = index_to_operation(op_idx) {
+                    let (output, effects) = native_sandbox_execute(&op, &action_str, &aid);
+                    let state = caller.data_mut();
+                    state.result_output = Some(output);
+                    state.result_effects = effects;
+                    1
+                } else {
+                    0
+                }
+            },
+        );
+
+        // Instantiate the pre-compiled WASM module in this isolated Store
+        let instance = match linker.instantiate(&mut store, &SANDBOX_MODULE) {
+            Ok(inst) => inst,
+            Err(e) => {
+                return Err((format!("🛑 WASM sandbox instantiation failed: {}", e), 0));
             }
-        },
-    );
+        };
 
-    // Instantiate the pre-compiled WASM module in this isolated Store
-    let instance = match linker.instantiate(&mut store, &SANDBOX_MODULE) {
-        Ok(inst) => inst,
-        Err(e) => {
-            return (
-                format!("🛑 WASM sandbox instantiation failed: {}", e),
-                vec![],
-                0,
-            );
-        }
-    };
+        // Get the sandbox_run exported function
+        let sandbox_run =
+            match instance.get_typed_func::<(i32, i32, i32), i32>(&mut store, "sandbox_run") {
+                Ok(f) => f,
+                Err(e) => {
+                    return Err((format!("🛑 WASM sandbox function lookup failed: {}", e), 0));
+                }
+            };
 
-    // Get the sandbox_run exported function
-    let sandbox_run = match instance
-        .get_typed_func::<(i32, i32, i32), i32>(&mut store, "sandbox_run")
-    {
-        Ok(f) => f,
-        Err(e) => {
-            return (
-                format!("🛑 WASM sandbox function lookup failed: {}", e),
-                vec![],
-                0,
-            );
-        }
-    };
+        // Execute inside the WASM boundary with fuel metering
+        let fuel_before = store.get_fuel().unwrap_or(0);
+        let result = sandbox_run.call(&mut store, (op_idx, operation.risk_tier() as i32, 0));
+        let fuel_after = store.get_fuel().unwrap_or(0);
+        let fuel_consumed = fuel_before.saturating_sub(fuel_after);
 
-    // Execute inside the WASM boundary with fuel metering
-    let fuel_before = store.get_fuel().unwrap_or(0);
-    let result = sandbox_run.call(&mut store, (op_idx, operation.risk_tier() as i32, 0));
-    let fuel_after = store.get_fuel().unwrap_or(0);
-    let fuel_consumed = fuel_before.saturating_sub(fuel_after);
-
-    match result {
+        match result {
         Ok(1) => {
             let state = store.data();
             let output = state.result_output.clone().unwrap_or_else(|| {
@@ -982,35 +1041,33 @@ fn wasm_isolated_execute(
                 )
             });
             let effects = state.result_effects.clone();
-            (output, effects, fuel_consumed)
+            Ok((output, effects, fuel_consumed))
         }
-        Ok(_) => (
+        Ok(_) => Err((
             format!(
                 "🛑 WASM sandbox rejected action for agent '{}' — validation failed inside WASM boundary",
                 agent_id
             ),
-            vec![],
             fuel_consumed,
-        ),
+        )),
         Err(e) => {
             // Fuel exhaustion or trap — the WASM boundary enforced limits
-            (
+            Err((
                 format!(
                     "🛑 WASM sandbox terminated execution for agent '{}': {} \
                      (fuel consumed: {} / {} budget). \
                      The WASM isolation boundary enforced resource limits.",
                     agent_id, e, fuel_consumed, config.max_fuel
                 ),
-                vec![],
                 fuel_consumed,
-            )
+            ))
         }
+    }
     }
 }
 
-/// Native execution logic invoked FROM within the WASM boundary via host callback.
-/// This function performs the actual operation-specific work. It is ONLY reachable
-/// through the WASM module's `execute_action` host import — never directly.
+/// Deterministic operation-specific policy result generation. This function
+/// performs no arbitrary code execution, filesystem access, or network access.
 fn native_sandbox_execute(
     operation: &AllowedOperation,
     action: &str,
@@ -1019,114 +1076,114 @@ fn native_sandbox_execute(
     match operation {
         // Tier 1 — Read-only, no side effects
         AllowedOperation::GraphRead => (
-            format!("✅ [WASM Sandbox] Graph read approved for agent '{}': {}", agent_id, action),
+            format!("✅ [Action Policy] Graph read approved for agent '{}': {}", agent_id, action),
             vec![SideEffect {
                 effect_type: "graph_read".to_string(),
-                description: "Read-only graph query — no data modified (WASM isolated)".to_string(),
+                description: "Read-only graph operation approved; the policy simulator did not access the graph".to_string(),
                 reversible: true,
             }],
         ),
         AllowedOperation::MemoryQuery => (
-            format!("✅ [WASM Sandbox] Memory query approved for agent '{}': {}", agent_id, action),
+            format!("✅ [Action Policy] Memory query approved for agent '{}': {}", agent_id, action),
             vec![SideEffect {
                 effect_type: "memory_query".to_string(),
-                description: "Memory retrieval — no data modified (WASM isolated)".to_string(),
+                description: "Memory retrieval approved; any native handling occurs outside the policy simulator".to_string(),
                 reversible: true,
             }],
         ),
         AllowedOperation::StatusCheck => (
-            format!("✅ [WASM Sandbox] Status check approved for agent '{}'", agent_id),
+            format!("✅ [Action Policy] Status check approved for agent '{}'", agent_id),
             vec![],
         ),
 
         // Tier 2 — Write operations, checkpointed
         AllowedOperation::GraphWrite => (
-            format!("✅ [WASM Sandbox] Graph write approved for agent '{}'. Changes checkpointed.", agent_id),
+            format!("✅ [Action Policy] Graph write approved for agent '{}'. Prism checkpoint recorded.", agent_id),
             vec![SideEffect {
                 effect_type: "graph_write".to_string(),
-                description: format!("Graph modification by '{}' — checkpoint created for rollback (WASM isolated)", agent_id),
-                reversible: true,
+                description: format!("Graph modification by '{}' approved by policy probe; checkpoint is bookkeeping, not generic database undo", agent_id),
+                reversible: false,
             }],
         ),
         AllowedOperation::ConversationStore => (
-            format!("✅ [WASM Sandbox] Conversation stored by agent '{}'. Ephemeral layer.", agent_id),
+            format!("✅ [Action Policy] Conversation storage approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "conversation_store".to_string(),
-                description: "Conversation saved to ephemeral graph layer — auto-decays (WASM isolated)".to_string(),
-                reversible: true,
+                description: "Conversation storage approved by policy probe; retention follows the live graph policy".to_string(),
+                reversible: false,
             }],
         ),
         AllowedOperation::EdgeReinforce => (
-            format!("✅ [WASM Sandbox] Edge reinforcement approved for agent '{}'.", agent_id),
+            format!("✅ [Action Policy] Edge reinforcement approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "edge_reinforce".to_string(),
-                description: "Edge weight updated via closed-loop feedback — reversible (WASM isolated)".to_string(),
-                reversible: true,
+                description: "Edge weight update approved by policy probe; no generic rollback is provided".to_string(),
+                reversible: false,
             }],
         ),
         AllowedOperation::NodeCreate => (
-            format!("✅ [WASM Sandbox] Node creation approved for agent '{}'.", agent_id),
+            format!("✅ [Action Policy] Node creation approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "node_create".to_string(),
-                description: format!("New node created by '{}' — can be deleted to revert (WASM isolated)", agent_id),
-                reversible: true,
+                description: format!("Node creation by '{}' approved; any graph write occurs outside the simulator", agent_id),
+                reversible: false,
             }],
         ),
 
         // Tier 3 — Restricted, full audit trail
         AllowedOperation::LlmInference => (
-            format!("✅ [WASM Sandbox] LLM inference approved for agent '{}'. Local Ollama only.", agent_id),
+            format!("✅ [Action Policy] Modeled LLM inference approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "llm_inference".to_string(),
-                description: "LLM call to local Ollama — no data leaves device (WASM isolated)".to_string(),
+                description: "Modeled LLM operation accepted; no inference was performed by the policy simulator and endpoint privacy follows Ollama configuration".to_string(),
                 reversible: false,
             }],
         ),
         AllowedOperation::ExternalNetwork => (
-            format!("✅ [WASM Sandbox] Network access approved for agent '{}'. Scoped to approved endpoints.", agent_id),
+            format!("✅ [Action Policy] Modeled network request approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "external_network".to_string(),
-                description: "Network request — limited to localhost and approved endpoints (WASM isolated)".to_string(),
+                description: "No network request was performed by the policy simulator; the eventual caller must enforce its own endpoint policy".to_string(),
                 reversible: false,
             }],
         ),
         AllowedOperation::ToolExecution => (
-            format!("✅ [WASM Sandbox] Tool execution approved for agent '{}' in WASM boundary.", agent_id),
+            format!("✅ [Action Policy] Modeled tool action approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "tool_execution".to_string(),
-                description: format!("Tool executed by '{}' in true WASM isolation — zero ambient authority", agent_id),
-                reversible: true,
+                description: format!("No tool was executed by the policy simulator for '{}'", agent_id),
+                reversible: false,
             }],
         ),
         AllowedOperation::FileAccess => (
-            format!("✅ [WASM Sandbox] File access approved for agent '{}'. App data directory only.", agent_id),
+            format!("✅ [Action Policy] Modeled file-access action approved for agent '{}'.", agent_id),
             vec![SideEffect {
                 effect_type: "file_access".to_string(),
-                description: "File access scoped to PrismOS-AI app data directory only (WASM isolated)".to_string(),
-                reversible: true,
+                description: "No file was accessed by the policy simulator; the eventual caller must enforce its own path boundary".to_string(),
+                reversible: false,
             }],
         ),
         AllowedOperation::EmailRead => (
-            format!("✅ [WASM Sandbox] Email read approved for agent '{}': {}", agent_id, action),
+            format!("✅ [Action Policy] Email read approved for agent '{}': {}", agent_id, action),
             vec![SideEffect {
                 effect_type: "email_read".to_string(),
-                description: "Read-only IMAP envelope fetch — no email modified or deleted (WASM isolated)".to_string(),
+                description: "Read-only email operation approved; the policy simulator did not connect to IMAP".to_string(),
                 reversible: true,
             }],
         ),
         AllowedOperation::CalendarRead => (
-            format!("✅ [WASM Sandbox] Calendar read approved for agent '{}': {}", agent_id, action),
+            format!("✅ [Action Policy] Calendar read approved for agent '{}': {}", agent_id, action),
             vec![SideEffect {
                 effect_type: "calendar_read".to_string(),
-                description: "Read-only .ics calendar parse — no files modified (WASM isolated)".to_string(),
+                description: "Read-only calendar operation approved; the policy simulator did not open files".to_string(),
                 reversible: true,
             }],
         ),
         AllowedOperation::FinanceRead => (
-            format!("✅ [WASM Sandbox] Finance read approved for agent '{}': {}", agent_id, action),
+            format!("✅ [Action Policy] Finance read approved for agent '{}': {}", agent_id, action),
             vec![SideEffect {
                 effect_type: "finance_read".to_string(),
-                description: "Read-only public market data fetch — no trades executed (WASM isolated)".to_string(),
+                description: "Read-only market-data operation approved; the simulator made no request or trade".to_string(),
                 reversible: true,
             }],
         ),
@@ -1137,6 +1194,7 @@ fn native_sandbox_execute(
 
 /// Top-level sandbox execution entry point for Tauri commands.
 /// Creates a Prism, validates the action, executes in sandbox, returns JSON result.
+#[allow(dead_code)] // Retained for compatibility; the stateful command path is preferred.
 pub fn sandbox_execute(action: &str, agent_id: &str) -> PrismResult {
     let prism_name = format!("prism_{}_{}", agent_id, &Uuid::new_v4().to_string()[..8]);
     let mut prism = create_prism_for_agent(&prism_name, agent_id);
@@ -1157,9 +1215,21 @@ pub fn verify_action_signature(
 /// Get a human-readable sandbox status summary
 #[allow(dead_code)]
 pub fn sandbox_status_summary(prism: &Prism) -> String {
-    let approved = prism.action_log.iter().filter(|a| a.verdict == ActionVerdict::Approved).count();
-    let denied = prism.action_log.iter().filter(|a| a.verdict == ActionVerdict::Denied).count();
-    let rolled_back = prism.action_log.iter().filter(|a| a.verdict == ActionVerdict::RolledBack).count();
+    let approved = prism
+        .action_log
+        .iter()
+        .filter(|a| a.verdict == ActionVerdict::Approved)
+        .count();
+    let denied = prism
+        .action_log
+        .iter()
+        .filter(|a| a.verdict == ActionVerdict::Denied)
+        .count();
+    let rolled_back = prism
+        .action_log
+        .iter()
+        .filter(|a| a.verdict == ActionVerdict::RolledBack)
+        .count();
 
     format!(
         "🛡️ Sandbox Prism '{}' (Agent: {})\n\
@@ -1187,79 +1257,166 @@ mod tests {
 
     #[test]
     fn test_classify_graph_read() {
-        assert_eq!(AllowedOperation::classify("read graph node"), Some(AllowedOperation::GraphRead));
-        assert_eq!(AllowedOperation::classify("get_node by ID"), Some(AllowedOperation::GraphRead));
-        assert_eq!(AllowedOperation::classify("search_node for Rust"), Some(AllowedOperation::GraphRead));
-        assert_eq!(AllowedOperation::classify("query_intent"), Some(AllowedOperation::GraphRead));
+        assert_eq!(
+            AllowedOperation::classify("read graph node"),
+            Some(AllowedOperation::GraphRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("get_node by ID"),
+            Some(AllowedOperation::GraphRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("search_node for Rust"),
+            Some(AllowedOperation::GraphRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("query_intent"),
+            Some(AllowedOperation::GraphRead)
+        );
     }
 
     #[test]
     fn test_classify_memory_query() {
-        assert_eq!(AllowedOperation::classify("memory query recent"), Some(AllowedOperation::MemoryQuery));
-        assert_eq!(AllowedOperation::classify("retrieve memory from graph"), Some(AllowedOperation::MemoryQuery));
-        assert_eq!(AllowedOperation::classify("anticipate user needs"), Some(AllowedOperation::MemoryQuery));
+        assert_eq!(
+            AllowedOperation::classify("memory query recent"),
+            Some(AllowedOperation::MemoryQuery)
+        );
+        assert_eq!(
+            AllowedOperation::classify("retrieve memory from graph"),
+            Some(AllowedOperation::MemoryQuery)
+        );
+        assert_eq!(
+            AllowedOperation::classify("anticipate user needs"),
+            Some(AllowedOperation::MemoryQuery)
+        );
     }
 
     #[test]
     fn test_classify_status_check() {
-        assert_eq!(AllowedOperation::classify("status check"), Some(AllowedOperation::StatusCheck));
-        assert_eq!(AllowedOperation::classify("health report"), Some(AllowedOperation::StatusCheck));
+        assert_eq!(
+            AllowedOperation::classify("status check"),
+            Some(AllowedOperation::StatusCheck)
+        );
+        assert_eq!(
+            AllowedOperation::classify("health report"),
+            Some(AllowedOperation::StatusCheck)
+        );
     }
 
     #[test]
     fn test_classify_email_read() {
-        assert_eq!(AllowedOperation::classify("email read unread"), Some(AllowedOperation::EmailRead));
-        assert_eq!(AllowedOperation::classify("email summary fetch"), Some(AllowedOperation::EmailRead));
+        assert_eq!(
+            AllowedOperation::classify("email read unread"),
+            Some(AllowedOperation::EmailRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("email summary fetch"),
+            Some(AllowedOperation::EmailRead)
+        );
     }
 
     #[test]
     fn test_classify_calendar_read() {
-        assert_eq!(AllowedOperation::classify("calendar events today"), Some(AllowedOperation::CalendarRead));
-        assert_eq!(AllowedOperation::classify("read calendar schedule"), Some(AllowedOperation::CalendarRead));
+        assert_eq!(
+            AllowedOperation::classify("calendar events today"),
+            Some(AllowedOperation::CalendarRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("read calendar schedule"),
+            Some(AllowedOperation::CalendarRead)
+        );
     }
 
     #[test]
     fn test_classify_finance_read() {
-        assert_eq!(AllowedOperation::classify("stock ticker AAPL"), Some(AllowedOperation::FinanceRead));
-        assert_eq!(AllowedOperation::classify("portfolio balance"), Some(AllowedOperation::FinanceRead));
-        assert_eq!(AllowedOperation::classify("market data"), Some(AllowedOperation::FinanceRead));
+        assert_eq!(
+            AllowedOperation::classify("stock ticker AAPL"),
+            Some(AllowedOperation::FinanceRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("portfolio balance"),
+            Some(AllowedOperation::FinanceRead)
+        );
+        assert_eq!(
+            AllowedOperation::classify("market data"),
+            Some(AllowedOperation::FinanceRead)
+        );
     }
 
     #[test]
     fn test_classify_graph_write() {
-        assert_eq!(AllowedOperation::classify("write to graph node"), Some(AllowedOperation::GraphWrite));
-        assert_eq!(AllowedOperation::classify("delete graph edge"), Some(AllowedOperation::GraphWrite));
+        assert_eq!(
+            AllowedOperation::classify("write to graph node"),
+            Some(AllowedOperation::GraphWrite)
+        );
+        assert_eq!(
+            AllowedOperation::classify("delete graph edge"),
+            Some(AllowedOperation::GraphWrite)
+        );
     }
 
     #[test]
     fn test_classify_edge_reinforce() {
-        assert_eq!(AllowedOperation::classify("reinforce edge weight"), Some(AllowedOperation::EdgeReinforce));
-        assert_eq!(AllowedOperation::classify("update_edge feedback"), Some(AllowedOperation::EdgeReinforce));
+        assert_eq!(
+            AllowedOperation::classify("reinforce edge weight"),
+            Some(AllowedOperation::EdgeReinforce)
+        );
+        assert_eq!(
+            AllowedOperation::classify("update_edge feedback"),
+            Some(AllowedOperation::EdgeReinforce)
+        );
     }
 
     #[test]
     fn test_classify_node_create() {
-        assert_eq!(AllowedOperation::classify("add_node Rust"), Some(AllowedOperation::NodeCreate));
-        assert_eq!(AllowedOperation::classify("create_node for learning"), Some(AllowedOperation::NodeCreate));
+        assert_eq!(
+            AllowedOperation::classify("add_node Rust"),
+            Some(AllowedOperation::NodeCreate)
+        );
+        assert_eq!(
+            AllowedOperation::classify("create_node for learning"),
+            Some(AllowedOperation::NodeCreate)
+        );
     }
 
     #[test]
     fn test_classify_llm_inference() {
-        assert_eq!(AllowedOperation::classify("llm inference call"), Some(AllowedOperation::LlmInference));
-        assert_eq!(AllowedOperation::classify("ollama generate"), Some(AllowedOperation::LlmInference));
-        assert_eq!(AllowedOperation::classify("generate response via mistral"), Some(AllowedOperation::LlmInference));
+        assert_eq!(
+            AllowedOperation::classify("llm inference call"),
+            Some(AllowedOperation::LlmInference)
+        );
+        assert_eq!(
+            AllowedOperation::classify("ollama generate"),
+            Some(AllowedOperation::LlmInference)
+        );
+        assert_eq!(
+            AllowedOperation::classify("generate response via mistral"),
+            Some(AllowedOperation::LlmInference)
+        );
     }
 
     #[test]
     fn test_classify_tool_execution() {
-        assert_eq!(AllowedOperation::classify("execute script"), Some(AllowedOperation::ToolExecution));
-        assert_eq!(AllowedOperation::classify("run tool pipeline"), Some(AllowedOperation::ToolExecution));
+        assert_eq!(
+            AllowedOperation::classify("execute script"),
+            Some(AllowedOperation::ToolExecution)
+        );
+        assert_eq!(
+            AllowedOperation::classify("run tool pipeline"),
+            Some(AllowedOperation::ToolExecution)
+        );
     }
 
     #[test]
     fn test_classify_file_access() {
-        assert_eq!(AllowedOperation::classify("file read local"), Some(AllowedOperation::FileAccess));
-        assert_eq!(AllowedOperation::classify("disk path access"), Some(AllowedOperation::FileAccess));
+        assert_eq!(
+            AllowedOperation::classify("file read local"),
+            Some(AllowedOperation::FileAccess)
+        );
+        assert_eq!(
+            AllowedOperation::classify("disk path access"),
+            Some(AllowedOperation::FileAccess)
+        );
     }
 
     #[test]
@@ -1301,16 +1458,27 @@ mod tests {
     #[test]
     fn test_operation_labels_nonempty() {
         let ops = vec![
-            AllowedOperation::GraphRead, AllowedOperation::MemoryQuery,
-            AllowedOperation::StatusCheck, AllowedOperation::EmailRead,
-            AllowedOperation::CalendarRead, AllowedOperation::FinanceRead,
-            AllowedOperation::GraphWrite, AllowedOperation::ConversationStore,
-            AllowedOperation::EdgeReinforce, AllowedOperation::NodeCreate,
-            AllowedOperation::LlmInference, AllowedOperation::ExternalNetwork,
-            AllowedOperation::ToolExecution, AllowedOperation::FileAccess,
+            AllowedOperation::GraphRead,
+            AllowedOperation::MemoryQuery,
+            AllowedOperation::StatusCheck,
+            AllowedOperation::EmailRead,
+            AllowedOperation::CalendarRead,
+            AllowedOperation::FinanceRead,
+            AllowedOperation::GraphWrite,
+            AllowedOperation::ConversationStore,
+            AllowedOperation::EdgeReinforce,
+            AllowedOperation::NodeCreate,
+            AllowedOperation::LlmInference,
+            AllowedOperation::ExternalNetwork,
+            AllowedOperation::ToolExecution,
+            AllowedOperation::FileAccess,
         ];
         for op in ops {
-            assert!(!op.label().is_empty(), "label should not be empty for {:?}", op);
+            assert!(
+                !op.label().is_empty(),
+                "label should not be empty for {:?}",
+                op
+            );
         }
     }
 
@@ -1321,7 +1489,10 @@ mod tests {
         let ops = agent_allow_list("orchestrator");
         assert!(ops.contains(&AllowedOperation::GraphRead));
         assert!(ops.contains(&AllowedOperation::LlmInference));
-        assert!(!ops.contains(&AllowedOperation::FileAccess), "orchestrator should not access files");
+        assert!(
+            !ops.contains(&AllowedOperation::FileAccess),
+            "orchestrator should not access files"
+        );
     }
 
     #[test]
@@ -1382,21 +1553,34 @@ mod tests {
     fn test_sign_action_different_inputs() {
         let sig1 = sign_action("prism-1", "reasoner", "action A");
         let sig2 = sign_action("prism-1", "reasoner", "action B");
-        assert_ne!(sig1, sig2, "different actions should produce different signatures");
+        assert_ne!(
+            sig1, sig2,
+            "different actions should produce different signatures"
+        );
     }
 
     #[test]
     fn test_sign_action_different_agents() {
         let sig1 = sign_action("prism-1", "reasoner", "action");
         let sig2 = sign_action("prism-1", "sentinel", "action");
-        assert_ne!(sig1, sig2, "different agents should produce different signatures");
+        assert_ne!(
+            sig1, sig2,
+            "different agents should produce different signatures"
+        );
     }
 
     #[test]
     fn test_sign_action_hex_format() {
         let sig = sign_action("prism-1", "reasoner", "action");
-        assert_eq!(sig.len(), 64, "HMAC-SHA256 should produce 64-char hex string");
-        assert!(sig.chars().all(|c| c.is_ascii_hexdigit()), "signature should be hex");
+        assert_eq!(
+            sig.len(),
+            64,
+            "HMAC-SHA256 should produce 64-char hex string"
+        );
+        assert!(
+            sig.chars().all(|c| c.is_ascii_hexdigit()),
+            "signature should be hex"
+        );
     }
 
     #[test]
@@ -1407,7 +1591,12 @@ mod tests {
 
     #[test]
     fn test_verify_signature_invalid() {
-        assert!(!verify_signature("prism-1", "reasoner", "action", "invalid_signature"));
+        assert!(!verify_signature(
+            "prism-1",
+            "reasoner",
+            "action",
+            "invalid_signature"
+        ));
     }
 
     // ─── Prism Lifecycle ───────────────────────────────────────────────────
@@ -1459,7 +1648,10 @@ mod tests {
         assert!(cp.is_some());
         matches!(prism.status, PrismStatus::RolledBack);
         // Should record a rollback side effect
-        assert!(prism.side_effects.iter().any(|e| e.effect_type == "rollback"));
+        assert!(prism
+            .side_effects
+            .iter()
+            .any(|e| e.effect_type == "rollback"));
     }
 
     #[test]
@@ -1467,8 +1659,11 @@ mod tests {
         let mut prism = create_prism_for_agent("rollback-reason", "sentinel");
         let cp = rollback_with_reason(&mut prism, "Anomaly detected: excessive length");
         assert!(cp.is_some());
-        let rollback_effect = prism.side_effects.iter()
-            .find(|e| e.effect_type == "rollback").unwrap();
+        let rollback_effect = prism
+            .side_effects
+            .iter()
+            .find(|e| e.effect_type == "rollback")
+            .unwrap();
         assert!(rollback_effect.description.contains("Anomaly detected"));
     }
 
@@ -1477,10 +1672,14 @@ mod tests {
         let mut prism = create_prism_for_agent("rb-actions", "reasoner");
         // Manually add an approved action
         prism.action_log.push(SignedAction {
-            action_id: "a1".into(), agent_id: "reasoner".into(),
-            action: "test".into(), operation: "GraphRead".into(),
-            risk_tier: 1, hmac_signature: "sig".into(),
-            timestamp: Utc::now().to_rfc3339(), verdict: ActionVerdict::Approved,
+            action_id: "a1".into(),
+            agent_id: "reasoner".into(),
+            action: "test".into(),
+            operation: "GraphRead".into(),
+            risk_tier: 1,
+            hmac_signature: "sig".into(),
+            timestamp: Utc::now().to_rfc3339(),
+            verdict: ActionVerdict::Approved,
         });
         rollback(&mut prism);
         assert_eq!(prism.action_log[0].verdict, ActionVerdict::RolledBack);
@@ -1515,7 +1714,10 @@ mod tests {
     #[test]
     fn test_wasm_config_unknown_tier_defaults_to_3() {
         let config = WasmIsolationConfig::for_risk_tier(99);
-        assert_eq!(config.risk_tier, 3, "unknown tiers should default to tier 3 limits");
+        assert_eq!(
+            config.risk_tier, 3,
+            "unknown tiers should default to tier 3 limits"
+        );
     }
 
     // ─── Anomaly Detection ─────────────────────────────────────────────────
@@ -1523,7 +1725,10 @@ mod tests {
     #[test]
     fn test_anomaly_normal_action() {
         let result = AnomalyDetector::check(
-            "read graph node", "reasoner", &AllowedOperation::GraphRead, &[],
+            "read graph node",
+            "reasoner",
+            &AllowedOperation::GraphRead,
+            &[],
         );
         assert!(result.is_ok(), "normal action should pass anomaly check");
     }
@@ -1531,9 +1736,8 @@ mod tests {
     #[test]
     fn test_anomaly_excessive_length() {
         let huge_action = "x".repeat(11_000);
-        let result = AnomalyDetector::check(
-            &huge_action, "reasoner", &AllowedOperation::GraphRead, &[],
-        );
+        let result =
+            AnomalyDetector::check(&huge_action, "reasoner", &AllowedOperation::GraphRead, &[]);
         assert!(result.is_err(), "oversized action should be blocked");
         assert!(result.unwrap_err().contains("unusually large"));
     }
@@ -1541,15 +1745,24 @@ mod tests {
     #[test]
     fn test_anomaly_rapid_fire() {
         let now = Utc::now().to_rfc3339();
-        let log: Vec<SignedAction> = (0..25).map(|i| SignedAction {
-            action_id: format!("a{}", i), agent_id: "reasoner".into(),
-            action: "action".into(), operation: "GraphRead".into(),
-            risk_tier: 1, hmac_signature: "sig".into(),
-            timestamp: now.clone(), verdict: ActionVerdict::Approved,
-        }).collect();
+        let log: Vec<SignedAction> = (0..25)
+            .map(|i| SignedAction {
+                action_id: format!("a{}", i),
+                agent_id: "reasoner".into(),
+                action: "action".into(),
+                operation: "GraphRead".into(),
+                risk_tier: 1,
+                hmac_signature: "sig".into(),
+                timestamp: now.clone(),
+                verdict: ActionVerdict::Approved,
+            })
+            .collect();
 
         let result = AnomalyDetector::check(
-            "another action", "reasoner", &AllowedOperation::GraphRead, &log,
+            "another action",
+            "reasoner",
+            &AllowedOperation::GraphRead,
+            &log,
         );
         assert!(result.is_err(), "rapid-fire should be blocked");
         assert!(result.unwrap_err().contains("burst of activity"));
@@ -1559,7 +1772,10 @@ mod tests {
     fn test_anomaly_tier_escalation() {
         // email_keeper's max tier is 1; trying tier 3 should be blocked
         let result = AnomalyDetector::check(
-            "llm inference call", "email_keeper", &AllowedOperation::LlmInference, &[],
+            "llm inference call",
+            "email_keeper",
+            &AllowedOperation::LlmInference,
+            &[],
         );
         assert!(result.is_err(), "tier escalation should be blocked");
         assert!(result.unwrap_err().contains("Tier 3"));
@@ -1570,8 +1786,8 @@ mod tests {
     #[test]
     fn test_sandbox_execute_approved_action() {
         let result = sandbox_execute("read graph node status check", "orchestrator");
-        assert!(result.success || !result.success, "should not panic");
-        // May succeed or fail based on classification matching
+        assert!(result.success, "approved graph-read policy should pass");
+        assert!(!result.action_signature.is_empty());
     }
 
     #[test]
@@ -1587,7 +1803,8 @@ mod tests {
     fn test_execute_denied_not_on_allow_list() {
         let mut prism = create_prism_for_agent("deny-list", "email_keeper");
         // email_keeper can't do LLM inference
-        let result = execute_in_sandbox_for_agent(&mut prism, "llm inference generate", "email_keeper");
+        let result =
+            execute_in_sandbox_for_agent(&mut prism, "llm inference generate", "email_keeper");
         assert!(!result.success);
         assert!(result.sandbox_protected);
     }
@@ -1595,10 +1812,12 @@ mod tests {
     #[test]
     fn test_execute_approved_read_operation() {
         let mut prism = create_prism_for_agent("approve-test", "orchestrator");
-        let result = execute_in_sandbox_for_agent(&mut prism, "status check health", "orchestrator");
+        let result =
+            execute_in_sandbox_for_agent(&mut prism, "status check health", "orchestrator");
         assert!(result.success);
         assert!(result.sandbox_protected);
-        assert!(result.wasm_isolated);
+        assert!(!result.wasm_isolated);
+        assert!(result.wasm_fuel_consumed.is_none());
         assert!(!result.action_signature.is_empty());
     }
 
@@ -1614,7 +1833,10 @@ mod tests {
         let mut prism = create_prism_for_agent("cp-test", "memory_keeper");
         let cp_before = prism.checkpoints.len();
         execute_in_sandbox_for_agent(&mut prism, "write to graph node", "memory_keeper");
-        assert!(prism.checkpoints.len() > cp_before, "tier 2+ should create checkpoints");
+        assert!(
+            prism.checkpoints.len() > cp_before,
+            "tier 2+ should create checkpoints"
+        );
     }
 
     // ─── Sandbox Status Summary ────────────────────────────────────────────
@@ -1628,39 +1850,22 @@ mod tests {
         assert!(summary.contains("HMAC-SHA256"));
     }
 
-    // ─── Operation Index Roundtrip ─────────────────────────────────────────
-
-    #[test]
-    fn test_operation_index_roundtrip() {
-        let ops = vec![
-            AllowedOperation::GraphRead, AllowedOperation::MemoryQuery,
-            AllowedOperation::StatusCheck, AllowedOperation::GraphWrite,
-            AllowedOperation::ConversationStore, AllowedOperation::EdgeReinforce,
-            AllowedOperation::NodeCreate, AllowedOperation::LlmInference,
-            AllowedOperation::ExternalNetwork, AllowedOperation::ToolExecution,
-            AllowedOperation::FileAccess, AllowedOperation::EmailRead,
-            AllowedOperation::CalendarRead, AllowedOperation::FinanceRead,
-        ];
-        for op in &ops {
-            let idx = operation_to_index(op);
-            let roundtrip = index_to_operation(idx);
-            assert_eq!(roundtrip.as_ref(), Some(op),
-                "roundtrip failed for {:?} (idx={})", op, idx);
-        }
-    }
-
-    #[test]
-    fn test_index_to_operation_invalid() {
-        assert!(index_to_operation(-1).is_none());
-        assert!(index_to_operation(99).is_none());
-    }
-
     // ─── Verify Action Signature (public API) ──────────────────────────────
 
     #[test]
     fn test_verify_action_signature_public_api() {
         let sig = sign_action("p1", "agent1", "do something");
-        assert!(verify_action_signature("p1", "agent1", "do something", &sig));
-        assert!(!verify_action_signature("p1", "agent1", "do something else", &sig));
+        assert!(verify_action_signature(
+            "p1",
+            "agent1",
+            "do something",
+            &sig
+        ));
+        assert!(!verify_action_signature(
+            "p1",
+            "agent1",
+            "do something else",
+            &sig
+        ));
     }
 }

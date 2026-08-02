@@ -1,189 +1,144 @@
-# PrismOS-AI Cross-Platform Release Build
-# Builds Windows (.msi, .exe), macOS (.dmg, .app), Linux (.deb, .AppImage), and Android (.apk)
-# Triggered on version tags or manual dispatch
+# PrismOS-AI manual candidate-artifact build.
+#
+# This workflow deliberately DOES NOT create or update a GitHub Release. Current
+# packages are unsigned/unnotarized. The current Cargo audit reports zero known
+# vulnerabilities and 19 reviewed maintenance/unsound warnings, but the audit is
+# still a mandatory candidate gate: any vulnerability or unexpected warning
+# change requires review. A future release job must consume these read-only build
+# outputs only after independent signing, notarization, checksum/SBOM generation,
+# and human approval.
 
-name: 'Release Build'
+name: Candidate Artifacts (Manual, Unpublished)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v0.5.0)'
-        required: false
-        default: 'draft'
+        description: Candidate version label (for artifact names only)
+        required: true
+        default: draft
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: candidate-artifacts-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  # ──────────────────────────────────────────────
-  # Desktop builds (Windows, macOS, Linux)
-  # ──────────────────────────────────────────────
+  preflight:
+    name: Tests and security gates
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enforce public repository boundary
+        run: bash scripts/check-public-boundary.sh --treeish "$GITHUB_SHA"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.1
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libssl-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libasound2-dev libxcb1-dev libxrandr-dev libdbus-1-dev \
+            libpipewire-0.3-dev libwayland-dev libegl-dev libgbm-dev clang
+
+      - name: Install locked frontend dependencies
+        run: npm ci
+
+      - name: Frontend type-check and tests
+        run: |
+          npm exec tsc -- --noEmit
+          npm test -- --run
+
+      - name: Runtime and build dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Rust check, tests, and lint
+        working-directory: src-tauri
+        run: |
+          cargo check --locked --all-targets
+          cargo test --locked --lib
+          cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Install pinned cargo-audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - name: Rust dependency audit (release blocking)
+        run: python3 scripts/check-cargo-audit.py
+
   build-desktop:
+    name: Unsigned ${{ matrix.label }} candidate
+    needs: preflight
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'windows-latest'
-            args: ''
-            rust-targets: ''
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-            rust-targets: 'aarch64-apple-darwin'
-          - platform: 'macos-13'
-            args: '--target x86_64-apple-darwin'
-            rust-targets: 'x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
-            rust-targets: ''
+          - platform: windows-latest
+            label: windows-x64
+            args: ""
+            bundle-path: src-tauri/target/release/bundle/**
+          - platform: macos-15
+            label: macos-arm64
+            args: --target aarch64-apple-darwin
+            bundle-path: src-tauri/target/aarch64-apple-darwin/release/bundle/**
+          - platform: macos-15-intel
+            label: macos-x64
+            args: --target x86_64-apple-darwin
+            bundle-path: src-tauri/target/x86_64-apple-darwin/release/bundle/**
+          - platform: ubuntu-22.04
+            label: linux-x64
+            args: ""
+            bundle-path: src-tauri/target/release/bundle/**
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout exact source revision without credentials
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libasound2-dev \
-            libxcb1-dev \
-            libxrandr-dev \
-            libdbus-1-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libegl-dev \
-            libgbm-dev \
-            clang
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libssl-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libasound2-dev libxcb1-dev libxrandr-dev libdbus-1-dev \
+            libpipewire-0.3-dev libwayland-dev libegl-dev libgbm-dev clang
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24.18.1
+          cache: npm
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust-targets }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install frontend dependencies
+      - name: Install locked dependencies
         run: npm ci
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build unsigned candidate bundle
+        run: npm run tauri -- build ${{ matrix.args }}
+
+      - name: Upload immutable workflow artifact (not a release)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          tagName: ${{ github.ref_name || inputs.version || 'draft' }}
-          releaseName: "PrismOS-AI ${{ github.ref_name || inputs.version || 'draft' }}"
-          releaseBody: |
-            ## PrismOS-AI — Local-First Agentic Personal AI Operating System
-
-            ### What's New in v0.5.1
-            - 🧠 8-Agent Collaborative AI System (Orchestrator, MemoryKeeper, Reasoner, ToolSmith, Sentinel + Email/Calendar/Finance Keepers)
-            - 🌈 7D Alive Spectrum Graph — persistent knowledge memory, visualized and growing
-            - 📊 Daily Dashboard — Morning Brief & Evening Recap with proactive insights
-            - 📧 Email / Calendar / Finance Keeper agents for local-first productivity
-            - 🎨 Animated SVG logo with live prism light refraction
-            - 🖥️ Frameless window with system tray, drag-drop file ingest, auto-updater
-            - 🔍 Smart Model Routing + Document RAG + Background Omnipresence (Alt+Space)
-            - 👁️ Local Vision Engine — multimodal image analysis via llava/llama3.2-vision
-            - 📄 Document Analysis Engine — PDF, DOCX, PPTX, XLSX upload & AI analysis
-            - 🎤 Local Voice Engine + Spotlight Overlay + File Indexer
-            - 🏖️ WASM Sandbox for safe code execution with cryptographic signing
-            - 🔒 Fully local: your data never leaves your machine — no cloud, no telemetry
-            - ✅ 162 tests (97 frontend + 65 Rust) · 83 IPC commands · 17 Rust modules
-
-            ### Installation
-            - **Windows**: Download `.msi` (recommended) or `.exe` installer
-            - **macOS**: Download `.dmg` for Apple Silicon or Intel
-            - **Linux**: Download `.deb` or `.AppImage`
-
-            ### Requirements
-            - [Ollama](https://ollama.com) installed locally with at least one model (`ollama pull llama3.2`)
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
-
-  # ──────────────────────────────────────────────
-  # Android build
-  # ──────────────────────────────────────────────
-  build-android:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android NDK
-        run: |
-          sdkmanager --install "ndk;29.0.13846066"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Initialize Tauri Android
-        run: npx tauri android init
-
-      - name: Build Android APK
-        run: npx tauri android build --apk -- --features vendored-ssl
-        env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.13846066
-
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: prismos-android-apk
-          path: |
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
-          if-no-files-found: warn
-
-      - name: Attach APK to Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
-          tag_name: ${{ github.ref_name }}
-          draft: true
+          name: prismos-${{ inputs.version }}-${{ matrix.label }}-UNSIGNED
+          path: ${{ matrix.bundle-path }}
+          if-no-files-found: error
+          retention-days: 14

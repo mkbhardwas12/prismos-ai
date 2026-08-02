@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Capture a REAL Ollama streaming response and render it as a terminal-style
-PNG sequence, then stitch into a GIF + MP4. Proves the "runs locally" claim
-without faking anything.
+"""Render a reproducible public preview of PrismOS streaming.
 
-Default prompt is curated to produce a short, deterministic answer that
-showcases token-by-token streaming.
+The default is synthetic public data so rebuilding documentation never captures
+private prompts or nondeterministic model output. Set PRISMOS_DEMO_LIVE=1 to make
+an explicit live request to the fixed-loopback Ollama endpoint. Either mode only
+illustrates the app-to-daemon target; it is not daemon attestation or a
+whole-system network-egress audit.
 """
 from __future__ import annotations
 import json
@@ -23,9 +24,15 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 MODEL  = os.environ.get("PRISMOS_DEMO_MODEL", "qwen2.5:3b")
 PROMPT = os.environ.get(
     "PRISMOS_DEMO_PROMPT",
-    "In one short paragraph, explain why running an AI model on your own laptop is safer than sending every prompt to a cloud server. Keep it under 60 words.",
+    "What does the fixed-loopback demo prove?",
 )
-HOST   = "http://localhost:11434"
+HOST   = "http://127.0.0.1:11434"
+LIVE   = os.environ.get("PRISMOS_DEMO_LIVE") == "1"
+SYNTHETIC_RESPONSE = (
+    "Core PrismOS inference is configured for a fixed-loopback Ollama endpoint. "
+    "This illustrated preview shows the intended app-to-daemon route; it does not "
+    "authenticate the daemon or prove whole-system zero egress."
+)
 
 W, H = 1280, 720
 BG       = (12, 14, 24)
@@ -57,34 +64,41 @@ PAD_L, PAD_T = 60, 50
 HEADER_H     = 80
 LINE_H       = 30
 
-# ─── Step 1: Stream from Ollama, record (timestamp, accumulated_text) ───────
-print(f"» streaming from {MODEL} …")
-body = json.dumps({"model": MODEL, "prompt": PROMPT, "stream": True}).encode()
-req = urllib.request.Request(f"{HOST}/api/generate", data=body,
-                             headers={"Content-Type": "application/json"})
-
-t0 = time.time()
+# ─── Step 1: Build the public-safe stream frames ────────────────────────────
 chunks: list[tuple[float, str]] = []  # (elapsed_s, accumulated_text)
 acc = ""
-with urllib.request.urlopen(req, timeout=120) as resp:
-    for raw in resp:
-        line = raw.decode("utf-8").strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if obj.get("done"):
-            break
-        tok = obj.get("response", "")
-        if not tok:
-            continue
-        acc += tok
-        chunks.append((time.time() - t0, acc))
-
-total_elapsed = time.time() - t0
-print(f"✓ {len(chunks)} tokens in {total_elapsed:.2f}s, {len(acc)} chars")
+if LIVE:
+    print(f"» streaming an explicitly requested live sample from {MODEL} …")
+    body = json.dumps({"model": MODEL, "prompt": PROMPT, "stream": True}).encode()
+    req = urllib.request.Request(f"{HOST}/api/generate", data=body,
+                                 headers={"Content-Type": "application/json"})
+    t0 = time.time()
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        for raw in resp:
+            line = raw.decode("utf-8").strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if obj.get("done"):
+                break
+            tok = obj.get("response", "")
+            if not tok:
+                continue
+            acc += tok
+            chunks.append((time.time() - t0, acc))
+    total_elapsed = time.time() - t0
+    display_model = MODEL
+else:
+    print("» rendering synthetic public stream data …")
+    for index, token in enumerate(SYNTHETIC_RESPONSE.split()):
+        acc = f"{acc} {token}".strip()
+        chunks.append(((index + 1) * 0.14, acc))
+    total_elapsed = chunks[-1][0]
+    display_model = "synthetic public preview"
+print(f"✓ {len(chunks)} chunks in {total_elapsed:.2f}s, {len(acc)} chars")
 
 # ─── Step 2: Resample to 24fps, ~10s clip max ───────────────────────────────
 TARGET_FPS = 24
@@ -128,7 +142,7 @@ def render_frame(i: int) -> Path:
     d.rounded_rectangle([30, 30, W - 30, H - 30], radius=14, fill=TERM_BG)
     for j, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
         d.ellipse([55 + j*24, 55, 67 + j*24, 67], fill=c)
-    title = f"prismos-cli — {MODEL} — local"
+    title = f"prismos-cli — {display_model} — fixed-loopback policy"
     fnt_t = font(14)
     bb = fnt_t.getbbox(title)
     d.text(((W - (bb[2]-bb[0]))//2, 53), title, font=fnt_t, fill=DIM)
@@ -148,14 +162,21 @@ def render_frame(i: int) -> Path:
            font=fnt_p, fill=USER_C)
     y += LINE_H + 6
 
+    mode_line = (
+        f"live sample from {MODEL}"
+        if LIVE
+        else "illustrated sample · synthetic public data"
+    )
     d.text((PAD_L, y),
-           f"→ streaming from {MODEL}  ·  100% local  ·  0 bytes egress",
+           f"→ {mode_line} · target 127.0.0.1:11434 · daemon identity/egress not attested",
            font=fnt_s, fill=DIM)
     y += LINE_H + 4
 
     # streamed response
     frac = i / max(1, N_FRAMES - 1)
-    current = text_at(frac)
+    # Finish the reveal early enough to leave a readable hold on the complete,
+    # qualified statement instead of ending on a potentially misleading fragment.
+    current = text_at(min(1.0, frac / 0.78))
     max_w = W - PAD_L * 2
     for line in wrap(current, max_w, fnt_b):
         if y > H - 100:
@@ -169,7 +190,7 @@ def render_frame(i: int) -> Path:
 
     # footer
     d.text((PAD_L, H - 70),
-           "prismos-ai · github.com/mkbhardwas12/prismos-ai",
+           "prismos-ai · public preview · github.com/mkbhardwas12/prismos-ai",
            font=fnt_s, fill=DIM)
 
     p = OUT_DIR / f"f_{i:04d}.png"
@@ -177,6 +198,10 @@ def render_frame(i: int) -> Path:
     return p
 
 print(f"» rendering {N_FRAMES} frames @ {TARGET_FPS}fps …")
+for prior_frame in OUT_DIR.glob("f_[0-9][0-9][0-9][0-9].png"):
+    if prior_frame.is_symlink() or not prior_frame.is_file():
+        raise SystemExit(f"refusing unexpected stream frame path: {prior_frame}")
+    prior_frame.unlink()
 for i in range(N_FRAMES):
     render_frame(i)
 

@@ -1,15 +1,24 @@
-# PrismOS-AI one-line Windows installer
+# PrismOS-AI verified-release Windows installer
 #
-#   irm https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.ps1 | iex
+# Download and inspect this script, then run it with trust information obtained
+# independently from the release asset URL:
+#   .\scripts\install.ps1 -ExpectedSha256 <64-hex-digest> `
+#       -ExpectedPublisher 'Expected certificate subject fragment' [-PullModel]
 #
-# Detects arch, downloads the latest signed .msi release from GitHub, installs
-# it silently, then bootstraps Ollama and pulls the default model. No admin
-# required for the per-user MSI path. Re-runnable / idempotent.
+# The MSI is installed only after both SHA-256 and Authenticode publisher checks
+# pass. Model installation/downloads are separate explicit network actions.
 
 [CmdletBinding()]
 param(
     [string]$Repo         = 'mkbhardwas12/prismos-ai',
-    [string]$DefaultModel = $(if ($env:PRISMOS_DEFAULT_MODEL) { $env:PRISMOS_DEFAULT_MODEL } else { 'qwen3:4b' })
+    [string]$DefaultModel = $(if ($env:PRISMOS_DEFAULT_MODEL) { $env:PRISMOS_DEFAULT_MODEL } else { 'qwen3:4b' }),
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[A-Fa-f0-9]{64}$')]
+    [string]$ExpectedSha256,
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$ExpectedPublisher,
+    [switch]$PullModel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,6 +59,22 @@ $dest = Join-Path $env:TEMP $asset.name
 Info "downloading $($asset.name) …"
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing
 
+$actualSha256 = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash
+if ($actualSha256 -ine $ExpectedSha256) {
+    Die 'SHA-256 mismatch; refusing to install the downloaded MSI.'
+}
+Ok 'SHA-256 matches the independently supplied digest'
+
+$signature = Get-AuthenticodeSignature -LiteralPath $dest
+if ($signature.Status -ne 'Valid') {
+    Die "Authenticode verification failed with status '$($signature.Status)'."
+}
+$publisher = $signature.SignerCertificate.Subject
+if ($publisher.IndexOf($ExpectedPublisher, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    Die "Authenticode publisher '$publisher' does not match expected publisher '$ExpectedPublisher'."
+}
+Ok "Authenticode publisher verified: $publisher"
+
 # ─── 2. install MSI (per-user, no admin) ─────────────────────────────────────
 Info "installing $($asset.name) (silent, per-user) …"
 $logPath = Join-Path $env:TEMP 'prismos-msi.log'
@@ -66,12 +91,11 @@ function Test-Cmd ($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
 if (Test-Cmd 'ollama') {
     Ok "Ollama already installed"
 } else {
-    Info "installing Ollama (winget) …"
-    if (Test-Cmd 'winget') {
-        winget install --silent --accept-source-agreements --accept-package-agreements Ollama.Ollama | Out-Null
-    } else {
-        Warn "winget not found — open https://ollama.com/download/windows and install manually, then re-run."
-    }
+    Warn "Ollama is not installed. Install it separately from https://ollama.com/download/windows after reviewing its installer, then run 'ollama pull $DefaultModel'."
+}
+
+if (-not $PullModel) {
+    Warn "Model pull skipped. Re-run with -PullModel or run 'ollama pull $DefaultModel' after reviewing the registry/network action."
 }
 
 # Try to reach the local Ollama daemon. It usually auto-starts after install
@@ -83,7 +107,7 @@ function Test-Ollama {
     } catch { return $false }
 }
 
-if (-not (Test-Ollama)) {
+if ($PullModel -and -not (Test-Ollama)) {
     if (Test-Cmd 'ollama') {
         Info "starting ollama in the background …"
         Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden | Out-Null
@@ -91,7 +115,7 @@ if (-not (Test-Ollama)) {
     }
 }
 
-if (Test-Ollama -and (Test-Cmd 'ollama')) {
+if ($PullModel -and (Test-Ollama) -and (Test-Cmd 'ollama')) {
     $pulled = (& ollama list 2>$null) -split "`n" | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\s+')[0] }
     if ($pulled -contains $DefaultModel) {
         Ok "model $DefaultModel already pulled"
@@ -99,7 +123,7 @@ if (Test-Ollama -and (Test-Cmd 'ollama')) {
         Info "pulling default model: $DefaultModel (this may take several minutes)"
         try { & ollama pull $DefaultModel } catch { Warn "model pull failed — run 'ollama pull $DefaultModel' later." }
     }
-} else {
+} elseif ($PullModel) {
     Warn "Ollama not running. Start it manually with 'ollama serve' once installed."
 }
 
@@ -111,4 +135,5 @@ Write-Host '  Launch:        Start Menu → PrismOS-AI'
 Write-Host "  Default model: $DefaultModel  (change in Settings)"
 Write-Host "  Docs:          https://github.com/$Repo"
 Write-Host ''
-Write-Host 'Everything runs locally. No data leaves your machine.'
+Write-Host 'Core inference uses a fixed loopback client route. This installer queried GitHub,'
+Write-Host 'and pulling the model contacts the registry configured for Ollama.'

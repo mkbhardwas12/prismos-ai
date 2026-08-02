@@ -25,9 +25,7 @@ pub struct ThoughtCurrent {
 ///
 /// # Returns
 /// Up to 10 ThoughtCurrents sorted by confidence DESC.
-pub fn analyze_thought_currents(
-    intents: &[(String, String, String)],
-) -> Vec<ThoughtCurrent> {
+pub fn analyze_thought_currents(intents: &[(String, String, String)]) -> Vec<ThoughtCurrent> {
     if intents.len() < 5 {
         return vec![];
     }
@@ -71,10 +69,7 @@ pub fn analyze_thought_currents(
                 let confidence = (unique_weeks.len() as f64 / 8.0).min(1.0);
                 results.push(ThoughtCurrent {
                     pattern_type: "recurring_cycle".to_string(),
-                    description: format!(
-                        "You ask about {} every {}",
-                        itype, weekday
-                    ),
+                    description: format!("You ask about {} every {}", itype, weekday),
                     confidence,
                     evidence: unique_weeks
                         .iter()
@@ -239,7 +234,11 @@ pub fn analyze_thought_currents(
     }
 
     // Sort by confidence DESC and limit to 10
-    results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     results.truncate(10);
     results
 }
@@ -257,8 +256,16 @@ mod tests {
     #[test]
     fn test_few_intents_returns_empty() {
         let intents = vec![
-            ("hello".to_string(), "General".to_string(), "2026-01-01T10:00:00Z".to_string()),
-            ("world".to_string(), "General".to_string(), "2026-01-02T10:00:00Z".to_string()),
+            (
+                "hello".to_string(),
+                "General".to_string(),
+                "2026-01-01T10:00:00Z".to_string(),
+            ),
+            (
+                "world".to_string(),
+                "General".to_string(),
+                "2026-01-02T10:00:00Z".to_string(),
+            ),
         ];
         let result = analyze_thought_currents(&intents);
         assert!(result.is_empty());
@@ -270,7 +277,8 @@ mod tests {
         let mut intents = Vec::new();
         for week in 0..20 {
             for day in 0..7 {
-                let date = format!("2025-{:02}-{:02}T10:00:00Z",
+                let date = format!(
+                    "2025-{:02}-{:02}T10:00:00Z",
                     (week / 4) + 1,
                     (day + 1).min(28)
                 );

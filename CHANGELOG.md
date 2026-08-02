@@ -8,19 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## Current implementation correction — v0.5.2 source audit (2026-08-01)
+
+Release entries below are an archival record of what earlier revisions claimed;
+they are not a current feature inventory. In the current v0.5.2 source tree:
+
+- the Wasmtime/WASM execution path is retired and not compiled; the active
+  Sandbox Prism surface is a native, deterministic action-policy simulator and
+  signed bookkeeping layer, not arbitrary-code isolation;
+- checkpoint records do not provide generic automatic rollback of database,
+  filesystem, network, or tool effects;
+- the in-app updater and its update-manifest path are removed; releases are
+  downloaded, reviewed, and installed manually;
+- email, calendar, and finance keeper integrations are unavailable, and the
+  active backend registry contains five core software roles; and
+- the model-backed goal loop is sequential plan → build → judge → refine with a
+  bounded iteration budget. Logical roles, traces, or votes do not mean eight
+  models execute in parallel.
+
+Mentions of the retired facilities in v0.5.2 and older entries are retained only
+as historical change records and are explicitly superseded by this correction.
+
+---
+
 ## [0.6.0] — 2026-04-18
 
 ### 🎯 Highlights
 
-**Brain Wrapped + Cognitive Fingerprint** — the world's first privacy-preserving, deterministic cognitive identity primitive. A Spotify-Wrapped-style 7-slide animated story refracted entirely from on-device data, with a SHA-256 fingerprint hash that lets two PrismOS users compute "cognitive twin" compatibility without ever sharing raw data. **No prior art.**
+**Brain Wrapped + the legacy-named `CognitiveFingerprint`** — a Wrapped-style,
+7-slide illustration derived from a local interaction profile. Its deterministic,
+truncated SHA-256 value is a linkable profile signature, not a unique identity,
+authenticator, anonymity mechanism, psychological assessment, or proof of novelty.
 
 ### Added
 
 - **`brain_wrapped.rs`** (~500 lines, 10 tests) — Cognitive Fingerprint engine:
-  - `CognitiveFingerprint` — deterministic SHA-256 hash of 5-axis cognitive profile (depth/creativity/formality/technical_level/example_preference); same input ⇒ same hash, forever
+  - `CognitiveFingerprint` — legacy API name for a deterministic 16-hex-character truncation of a SHA-256 digest over a quantized 5-axis interaction profile; identical inputs produce the same value and collisions remain possible
   - 12 archetypes (Architect, Explorer, Synthesizer, Strategist, Storyteller, Specialist, Scout, Sage, Maker, Catalyst, Pragmatist, Pattern-Seer); selected via Euclidean distance to anchor points in 5-D cognitive space
-  - HSL color palette + pentagon shape-points generated from the hash → unique visual signature per mind
-  - `compute_compatibility(a, b)` — normalized Euclidean distance with 6-tier interpretation ("cognitive twin" → "complementary opposites")
+  - HSL color palette + pentagon shape-points generated from the hash → deterministic illustrated profile signature
+  - `compute_compatibility(a, b)` — heuristic normalized Euclidean-distance comparison between shared profile signatures; not identity or psychological compatibility proof
   - `build_snapshot()` — aggregates fingerprint + profile + axis labels + drift + currents + prophecies + lifetime stats into a single shareable payload
 - **`BrainWrapped.tsx`** + **`BrainWrapped.css`** (~930 lines, 11 tests) — 7-slide animated story:
   - Slide 1: SVG cognitive fingerprint pentagon
@@ -30,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Slide 5: Top thought currents
   - Slide 6: Edge prophecies (predicted connections)
   - Slide 7: Lifetime stats
-  - Auto-advance, pause, keyboard nav (←/→/Space/Esc), PNG export via `html2canvas`, X (Twitter) share button, "◆ PrismOS-AI · prismos.ai · local · private" watermark
+  - Auto-advance, pause, keyboard nav (←/→/Space/Esc), PNG export via `html2canvas`, and explicit sharing that discloses derived, linkable profile metadata
 - **3 new Tauri commands** (96 → **99**): `generate_brain_snapshot`, `compute_cognitive_compatibility`, `get_cognitive_fingerprint`
 - **Sidebar entry** "✨ Brain Wrapped" with shimmer hover gradient
 
@@ -44,7 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Why this matters
 
-A cognitive fingerprint hash is to 2026 what an SSH public key was to 1995: a small string you can publish that proves identity-of-a-mind without revealing anything sensitive. PrismOS-AI is shipping the primitive first.
+This feature makes a local activity/profile summary easier to inspect and share.
+The signature should be treated as derived personal metadata: sharing creates
+egress and linkability, and the value proves neither identity nor uniqueness.
 
 ---
 
@@ -52,7 +80,7 @@ A cognitive fingerprint hash is to 2026 what an SSH public key was to 1995: a sm
 
 ### 🎯 Highlights
 
-PrismOS-AI v0.5.2 — **Phase 7–10: Self-Learning Intelligence** release. Massive expansion adding Self-Learning AI (Cognitive Drift detection, Thought Currents tracking, Edge Prophecy predictions, Refraction Journal), Domain Detection (auto-detect code/medical/legal/finance/science domains), Model Registry (15 curated models across 4 tiers), Model Tracker (per-model performance analytics), Smart Router code routing, Intent Transparency UI, Daily Dashboard, ProactivePanel, 3 Keeper Agents, comprehensive security hardening, and 478 tests.
+This historical v0.5.2 release record described a large expansion: Self-Learning AI (Cognitive Drift detection, Thought Currents tracking, Edge Prophecy predictions, Refraction Journal), Domain Detection, a Model Registry, Model Tracker, Smart Router code routing, Intent Transparency UI, Daily Dashboard, ProactivePanel, three keeper prototypes that were later retired, security hardening, and the test count reported at that time. See the current implementation correction above for the shipped feature boundary.
 
 ### Added
 
@@ -97,13 +125,13 @@ PrismOS-AI v0.5.2 — **Phase 7–10: Self-Learning Intelligence** release. Mass
   - Live calendar, email, finance, and daily suggestions feeds
   - Graph insight card showing top Spectrum Graph node
   - Collapsible with smooth animation; state persists across sessions
-- **Keeper Agents** — Three new AI agents (total now 8):
+- **Keeper Agents (historical; retired in the current v0.5.2 tree)** — This revision introduced three UI/backend prototypes:
   - Email Keeper — inbox monitoring, smart notifications
   - Calendar Keeper — event awareness, scheduling reminders
   - Finance Keeper — portfolio tracking, market alerts
 - **Startup View Setting** — Default view dropdown in Settings → Appearance
 - **Security Hardening** — 5 critical security fixes:
-  - WASM fuel/memory validation: clamped to safe ranges (1K–100M fuel, 1–256 pages)
+  - WASM fuel/memory validation (historical; the Wasmtime path is now retired and not compiled): clamped to safe ranges (1K–100M fuel, 1–256 pages)
   - Sandbox enforcement: `enforce_sandbox()` gate on all code execution paths
   - Audit log completeness: 6 new audit points (model changes, exports, setting modifications)
   - CSP meta tag: strict Content-Security-Policy in `index.html`
@@ -116,7 +144,7 @@ PrismOS-AI v0.5.2 — **Phase 7–10: Self-Learning Intelligence** release. Mass
 - `spectrum_graph.rs`: 4 new tables (`model_usage`, `domain_cache`, `thought_currents`, `edge_prophecies`); total **14 tables**
 - `Cargo.toml`: Added `default-run = "prismos"`; version bumped to 0.5.2
 - Default model changed from `llama3.2` to `qwen3:4b` across all config
-- Agent count increased from 5 to **8**
+- Agent count increased from 5 to **8** in that historical revision; the current active registry exposes five core roles
 - All components updated with security audit recommendations
 
 ### Tests
@@ -187,14 +215,14 @@ PrismOS-AI v0.5.1 — **Phase 6: Brain Upgrades** release. Adds Smart Model Rout
 
 ### 🎯 Highlights
 
-PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native window decorations and adds a custom frameless title bar with drag region and window controls. System tray integration keeps agents resident when the window is closed. Drag-and-drop file ingest lets users drop files directly into the Intent Input for instant text extraction. Auto-updater infrastructure enables seamless OTA updates via GitHub Releases. **Phase 5.5: Local Vision** adds multimodal image analysis — drag-drop images or capture photos via webcam, analyzed entirely offline using llava/llama3.2-vision models.
+PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** historical release. It removed native window decorations and added a custom frameless title bar with drag region and window controls. System tray integration kept agents resident when the window was closed. Drag-and-drop file ingest let users drop files directly into the Intent Input for instant text extraction. This revision also introduced updater infrastructure that was later retired by the current v0.5.2 source tree. **Phase 5.5: Local Vision** added multimodal image analysis via llava/llama3.2-vision models.
 
 ### Added
 
 - **Frameless Window + Custom Title Bar** — Native decorations disabled; custom `TitleBar.tsx` component with app branding, drag region (`data-tauri-drag-region`), and minimize/maximize/close-to-tray buttons with Windows-style hover states
 - **System Tray** — `TrayIconBuilder` with "Show PrismOS-AI" and "Quit" menu items; clicking the tray icon restores the window; close button hides to tray instead of exiting
 - **Drag & Drop File Ingest** — Drop files onto Intent Input to auto-extract text content via Rust `extract_file_text` command; supports 50+ text/code/data file extensions; 5MB size limit; visual drag overlay and file badge indicator
-- **Auto-Updater Infrastructure** — `tauri-plugin-updater` configured with GitHub Releases endpoint; `tauri-plugin-window-state` for window position persistence across sessions
+- **Auto-Updater Infrastructure (historical; retired by current v0.5.2)** — `tauri-plugin-updater` was configured with a GitHub Releases endpoint; `tauri-plugin-window-state` handled window position persistence
 - **Local Vision Engine** — Multimodal image analysis via llava/llama3.2-vision models, entirely offline:
   - `query_ollama_vision` Tauri command: sends base64-encoded images to Ollama's `/api/generate` endpoint with vision models
   - `read_image_as_base64` Tauri command: reads image files from disk (jpg/png/gif/bmp/webp/tiff, 20MB limit) and returns base64
@@ -217,8 +245,8 @@ PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native 
 
 ### Changed
 
-- `tauri.conf.json`: `decorations` set to `false`, added `trayIcon` and `plugins.updater` config, version bumped to v0.5.0
-- `lib.rs`: Registered `tauri-plugin-updater` and `tauri-plugin-window-state` plugins; added tray menu with event handlers; enhanced `extract_file_text` with PDF/DOCX/PPTX/XLSX support; added `extract_document_for_analysis`, `query_ollama_vision`, and `read_image_as_base64` commands; startup banner updated with Local Vision + Document Ingest Engine lines
+- `tauri.conf.json` (historical): `decorations` set to `false`, added `trayIcon` and the since-retired `plugins.updater` config, version bumped to v0.5.0
+- `lib.rs` (historical): Registered the since-retired `tauri-plugin-updater` and `tauri-plugin-window-state`; added tray menu with event handlers; enhanced `extract_file_text` with PDF/DOCX/PPTX/XLSX support; added `extract_document_for_analysis`, `query_ollama_vision`, and `read_image_as_base64` commands; startup banner updated with Local Vision + Document Ingest Engine lines
 - `ollama_bridge.rs`: `GenerateRequest` struct extended with `images` field; `generate()` and `generate_stream()` accept images parameter
 - `refractive_core.rs`: Updated `generate()` call to pass `None` for images
 - `agents/langgraph_workflow.rs`: Updated `generate()` call to pass `None` for images
@@ -227,8 +255,8 @@ PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native 
 - `IntentInput.css`: Added vision CSS classes (preview, camera viewfinder, vision buttons, animations); added document CSS classes (doc-preview, doc-btn, type-specific styling)
 - `MainView.tsx`: `handleIntent` accepts optional `imageData` and `documentText` parameters; vision path routes to `query_ollama_vision`; document path extracts text, builds context prompt, routes to `query_ollama`
 - `IntentInput.test.tsx`: Updated `onSubmit` assertion for new `(input, imageData?, documentText?)` signature; updated button selector for vision/document buttons
-- `Cargo.toml`: Added `tauri-plugin-updater`, `tauri-plugin-window-state`, `pdf-extract`, `docx-rs`, `calamine`, `zip`; enabled `tray-icon` feature on `tauri` crate
-- `capabilities/default.json`: Added `updater:default` and `window-state:default` permissions
+- `Cargo.toml` (historical): Added the since-retired `tauri-plugin-updater`, plus `tauri-plugin-window-state`, `pdf-extract`, `docx-rs`, `calamine`, and `zip`; enabled `tray-icon` on `tauri`
+- `capabilities/default.json` (historical): Added the since-retired `updater:default` permission and `window-state:default`
 - All version references updated from v0.4.0 to v0.5.0
 
 ---
@@ -237,7 +265,7 @@ PrismOS-AI v0.5.0 — **Phase 5: Native OS Experience** release. Removes native 
 
 ### 🎯 Highlights
 
-PrismOS-AI v0.4.0 — **Local-First Agentic OS** release. Adds local voice engine (cpal audio capture + Whisper model download infrastructure), Spotlight-style global command palette (Ctrl+Space), local RAG file indexer watching directories and ingesting into Spectrum Graph, and deep Framer Motion animation polish across all UI components.
+PrismOS-AI v0.4.0 — historically branded the **Local-First Agentic OS** release; that name did not establish autonomous tool execution or an operating-system isolation boundary. It added a voice prototype, Spotlight-style global command palette (Ctrl+Space), a legacy RAG watcher, and Framer Motion animation polish. Those prototypes are superseded by the current release boundaries described above.
 
 ### Added
 
@@ -315,14 +343,14 @@ PrismOS-AI v0.2.1 is a polish and stability release focusing on code quality, te
 
 ### 🎉 Highlights
 
-PrismOS-AI v0.2.0 is a major feature release bringing WASM sandbox isolation, voice I/O,
+PrismOS-AI v0.2.0 was a historical feature release that claimed WASM sandbox isolation, voice I/O,
 multi-window support, a spectral timeline, graph merge/diff for multi-device sync,
 and full release polish with accessibility improvements.
 
 ### Added
 
-- **WASM Sandbox Isolation** — Full wasmtime-based containment for Sandbox Prisms with fuel metering, memory limits, and zero ambient authority
-- **Voice Input/Output** — Web Speech API integration for hands-free interaction (STT + TTS), all processing stays local
+- **WASM Sandbox Isolation (historical; retired by current v0.5.2)** — This revision introduced wasmtime-based containment with fuel metering and memory limits
+- **Voice Input/Output (historical claim, superseded)** — Web Speech API integration for hands-free interaction (STT + TTS). Current guidance does not claim local-only processing: browser/WebView providers may use the network, and bundled Whisper transcription is unavailable in v0.5.2.
 - **Multi-Window Support** — Open Spectrum Graph and Timeline in separate windows via Tauri WebviewWindowBuilder
 - **Spectral Timeline** — Time-based visualization of graph history with date grouping, search, and filtering
 - **LangGraph Workflow Engine** — Formal state-graph execution with structured debate rounds, argument types (Position, Challenge, Rebuttal, Support, Concession), and agreement scoring
@@ -371,7 +399,7 @@ and full release polish with accessibility improvements.
 ### Fixed (Phase 21)
 
 - **UTF-8 Panics** — Replaced `&content[..N]` with `.chars().take(N)` in 4 locations (lib.rs, spectrum_graph.rs) to prevent crashes on multi-byte characters
-- **Consensus Voting** — ToolSmith now rejects unsandboxed write operations; MemoryKeeper varies confidence (0.6–0.95) based on context node count
+- **Consensus Voting (historical label)** — ToolSmith rejected unsandboxed write operations and MemoryKeeper varied confidence; the current workflow uses deterministic logical traces and a sequential model-backed loop, not a parallel model council
 - **Theme Toggle** — Was a no-op; now applies `data-theme` attribute and persists to localStorage
 
 ---
@@ -383,8 +411,8 @@ and full release polish with accessibility improvements.
 - **Spectrum Graph™** — Multi-layered knowledge graph with 7-dimensional spectral embeddings (cognitive, emotional, temporal, social, creative, analytical, physical)
 - **Refractive Core™** — AI reasoning engine that refracts intents through the Spectrum Graph
 - **SQLite Persistence** — Full graph persistence with 3-table schema (nodes, edges, spectra)
-- **Multi-Agent Collaboration** — 5 specialized agents (Planner, Researcher, Coder, Reviewer, Executor) with structured messaging, voting, and consensus
-- **Sandbox Prisms** — Isolated execution with HMAC-SHA256 signing, allow-list enforcement, anomaly detection, and auto-rollback
+- **Multi-Agent Collaboration (historical label)** — earlier UI described five agents; the shipped architecture is a bounded sequential model-backed workflow plus deterministic role/policy traces, not five independently reasoning models
+- **Sandbox Prisms (historical; isolation and auto-rollback claims retired by current v0.5.2)** — This alpha described HMAC-SHA256 signing, allow-list enforcement, anomaly detection, and automatic rollback
 - **You-Port™** — Device-bound encrypted state migration for session handoff
 - **Ollama Integration** — Local LLM inference via Ollama (Mistral, Llama, etc.)
 - **React UI** — Intent Console with conversation history, Spectrum Explorer, Force-directed Graph Visualization, Sandbox Panel, Settings Panel

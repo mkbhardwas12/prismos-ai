@@ -13,12 +13,12 @@ VOICE="${PRISMOS_VOICE:-Samantha}"
 RATE="${PRISMOS_RATE:-185}"
 
 LINES=(
-  "Prism O S. Local. Private. Yours."
-  "Ask anything. No internet required."
-  "Every answer joins your knowledge graph."
-  "Searchable. Offline. Yours."
-  "Untrusted code stays in a sandbox."
-  "See how your thinking actually evolves."
+  "Prism O S. Local first. Explicit privacy controls."
+  "Chat uses loopback model inference by default."
+  "Approved knowledge and chats build your local graph."
+  "Searchable on your device."
+  "Modeled actions pass a bounded policy gate."
+  "See how your interaction profile changes over time."
   "Open source. M I T. Runs on your laptop."
 )
 

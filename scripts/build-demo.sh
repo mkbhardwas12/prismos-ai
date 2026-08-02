@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Build ~21-second demo MP4 + GIF from real app screenshots, using ffmpeg
-# overlay filter with pre-rendered overlay PNGs (see render-overlays.py).
-# Now with: (a) animated live-app intro stitched from 13 capture frames,
-# (b) macOS `say` voiceover muxed into the MP4.
+# Build the public demo MP4 + GIF exclusively from reviewed synthetic
+# screenshots, using ffmpeg overlays (see render-overlays.py). Local live
+# captures are deliberately excluded because they can contain private data or
+# stale claims. A macOS `say` voiceover is muxed into the MP4 when available.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SHOTS="$ROOT/docs/screenshots"
 OUT="$ROOT/docs/media"
 OVR="$OUT/_overlays"
-LIVE="$SHOTS/live"
 mkdir -p "$OUT"
+echo "» rendering privacy-safe illustrated screenshots"
+python3 "$ROOT/scripts/render-public-screenshots.py"
 echo "» rendering overlays"
 python3 "$ROOT/scripts/render-overlays.py"
 echo "» rendering voiceover"
@@ -22,36 +23,17 @@ FADE_SECONDS=0.6
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# ----- Scene 01: ANIMATED live intro from all available live frames -----
-LIVE_FRAMES=()
-if [[ -d "$LIVE" ]]; then
-  while IFS= read -r f; do LIVE_FRAMES+=("$f"); done < <(ls "$LIVE"/*.png 2>/dev/null | sort)
-fi
-if [[ ${#LIVE_FRAMES[@]} -eq 0 ]]; then
-  echo "!! no live frames found, falling back to single static intro"
-  LIVE_FRAMES=("$SHOTS/intent-console.png")
-fi
-N_LIVE=${#LIVE_FRAMES[@]}
-PER_FRAME=$(awk "BEGIN{printf \"%.4f\", $SCENE_SECONDS / $N_LIVE}")
-LIVE_LIST="$TMP/live_list.txt"
-: > "$LIVE_LIST"
-for f in "${LIVE_FRAMES[@]}"; do
-  echo "file '$f'"               >> "$LIVE_LIST"
-  echo "duration $PER_FRAME"     >> "$LIVE_LIST"
-done
-LAST_IDX=$(( ${#LIVE_FRAMES[@]} - 1 ))
-echo "file '${LIVE_FRAMES[$LAST_IDX]}'" >> "$LIVE_LIST"
-
-LIVE_RAW="$TMP/scene_00_live_raw.mp4"
-ffmpeg -y -loglevel error -f concat -safe 0 -i "$LIVE_LIST" \
+# ----- Scene 01: reviewed synthetic intro only -----
+INTRO_RAW="$TMP/intro_raw.mp4"
+ffmpeg -y -loglevel error -loop 1 -t "$SCENE_SECONDS" -i "$SHOTS/intent-console.png" \
   -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=0x0a0a14,setsar=1,fps=${FPS}" \
-  -c:v libx264 -pix_fmt yuv420p -r ${FPS} "$LIVE_RAW"
+  -c:v libx264 -pix_fmt yuv420p -r ${FPS} "$INTRO_RAW"
 
-LIVE_OVR="$OVR/scene_01.png"
-LIVE_OUT="$TMP/scene_00.mp4"
-ffmpeg -y -loglevel error -i "$LIVE_RAW" -loop 1 -t "$SCENE_SECONDS" -i "$LIVE_OVR" \
+INTRO_OVR="$OVR/scene_01.png"
+INTRO_OUT="$TMP/scene_00.mp4"
+ffmpeg -y -loglevel error -i "$INTRO_RAW" -loop 1 -t "$SCENE_SECONDS" -i "$INTRO_OVR" \
   -filter_complex "[1:v]scale=${W}:${H},format=rgba,setsar=1,fps=${FPS}[ovr];[0:v][ovr]overlay=0:0:format=auto[v]" \
-  -map "[v]" -c:v libx264 -pix_fmt yuv420p -r ${FPS} "$LIVE_OUT"
+  -map "[v]" -c:v libx264 -pix_fmt yuv420p -r ${FPS} "$INTRO_OUT"
 
 # ----- Static scenes -----
 SCENES=(

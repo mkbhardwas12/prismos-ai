@@ -1,49 +1,98 @@
-# PrismOS Flywheel — self-improving local LLM (prototype)
+# PrismOS Flywheel — synthetic smoke-test prototype
 
-Turns your validated answers into a better personal model — **100% offline**.
-See `docs/SELF_IMPROVING_LLM.md` for the architecture + the research behind it.
+The flywheel is **not currently authorized to train on PrismOS personal data**.
+Full harvesting/training is disabled until the dataset and output controls below
+are implemented and reviewed. Nothing runs on a schedule, and PrismOS never
+promotes or changes the default model automatically.
 
+The currently permitted path is `--smoke`: a mechanical validation using synthetic
+fixtures only. It must not read `spectrum_graph.db`, `response_feedback`, Project
+Knowledge, conversations, or another owner dataset.
+
+See `docs/SELF_IMPROVING_LLM.md` for the architecture and release conditions.
+
+```text
+CURRENT
+synthetic fixtures -> smoke training toolchain -> disposable smoke artifact
+
+DISABLED
+personal response_feedback -> harvest -> LoRA -> holdout -> candidate model
 ```
-harvest.py   spectrum_graph.db (rating>0) ─▶ data/train.jsonl, valid.jsonl, prefs.jsonl
-train_lora.py  MLX LoRA/QLoRA ─▶ fuse ─▶ GGUF ─▶ ollama create qwen3-prism:vN
-eval_gate.py   holdout: ship ONLY if it beats the base   ◀── hard safety gate
-run_flywheel.sh  orchestrates all three
-```
 
-## ⚠️ Privacy — this directory handles YOUR personal data
-`data/`, `adapters/`, `fused/`, `*.gguf`, `holdout.jsonl` contain your questions/answers and
-fine-tuned weights. **They are git-ignored and must NEVER be committed** (this repo is public).
-Do not move them outside this folder without re-checking `.gitignore`.
+## Privacy boundary
 
-## Setup (one time)
+Potential full-run inputs and outputs can contain questions, answers, source-derived
+facts, personal trends, memorized secrets, and recoverable information in model
+weights. Git ignore rules are not a privacy control.
+
+Never commit or publish:
+
+- `data/`, `holdout.jsonl`, review manifests, or extracted feedback;
+- `adapters/`, `fused/`, `*.gguf`, `*.safetensors`, or candidate weights;
+- a source database, audit log, device key, Private Vault, or passphrase.
+
+Smoke fixtures must be synthetic and non-sensitive. Smoke outputs are created in
+one temporary workspace, are not registered with Ollama, and are discarded after
+a normal run. A force-killed process can leave operating-system temporary files,
+so ordinary host cleanup and inspection still apply.
+
+## Setup for synthetic smoke validation
+
+Use a reviewed Python environment and locked dependencies. Installing MLX-LM or
+acquiring uncached smoke-model weights can use the network; review the package,
+publisher, hashes, and destination before proceeding.
+
 ```bash
-# mlx-lm needs a recent Python; if your default is 3.14 with no wheels, use a 3.11/3.12 venv:
-python3.12 -m venv .venv && source .venv/bin/activate     # optional but recommended
-pip install mlx-lm
-# For the GGUF step on MoE models (qwen3-a3b), MLX export may be unsupported — use llama.cpp:
-#   git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp && make
-#   python convert_hf_to_gguf.py <fused-dir> --outfile model-f16.gguf
-#   ./llama-quantize model-f16.gguf model-q4.gguf Q4_K_M
-```
-
-## Run
-```bash
-# 1) Validate the WHOLE pipeline on a tiny model first (minutes, ~1GB):
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install mlx-lm
 ./run_flywheel.sh --smoke
-
-# 2) Real round from a 4-bit MLX base (QLoRA, fits 64GB):
-./run_flywheel.sh --base mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit \
-                  --judge qwen3:32b --holdout holdout.jsonl
 ```
 
-## The rules (don't skip these)
-1. **Only `rating > 0` (validated) answers train** — unfiltered self-data → model collapse.
-2. **Nothing ships without `eval_gate.py` passing** a holdout vs the current base.
-3. **Keep the previous version** (`:vN-1`) — roll back instantly if a round regresses.
-4. For **code/SAP/math** holdouts use `--exact` (ground truth) — far safer than LLM self-judging,
-   which saturates after a few rounds. For market-research/innovation, gate on **human** ratings.
-5. Start with **hundreds** of validated examples, not dozens — small sets overfit a 30B model.
+`--smoke` is a toolchain check, not evidence that training quality, privacy,
+evaluation, registration, or promotion is production-ready.
+
+## Why full training is disabled
+
+A positive rating is not consent to use private text for model training and is not
+proof that the text contains no secret, PII, proprietary code, or source-derived
+material. A process-local “already running” flag also cannot prevent a second app
+process or direct script invocation from training concurrently.
+
+Full personal-data training must remain unavailable until all of these exist:
+
+1. **Explicit dataset review and consent** — show the exact bounded examples,
+   sources, purpose, base model, retention, and intended outputs before export.
+2. **Secret/PII and ownership handling** — scan, redact/exclude, and let the owner
+   remove individual examples; positive feedback alone is insufficient.
+3. **Private output destination** — require an explicit non-public, non-Git
+   destination with restrictive permissions for datasets, adapters, logs, and
+   fused weights.
+4. **Cross-process lock** — an OS-backed exclusive lock covering UI launches,
+   multiple PrismOS processes, and direct script execution, with safe stale-lock
+   recovery.
+5. **Immutable review manifest** — bind the approved dataset, split, tool versions,
+   base weights, evaluation set, and destination by digest.
+6. **Independent evaluation and manual promotion** — deterministic references or
+   blinded human review, retained prior model, and a separate promotion action.
+
+Until those gates ship, do not run `harvest.py` against a personal database and do
+not use the full-run arguments shown in older documentation.
+
+## Evaluation limits
+
+- Executable tests and exact references are preferred for code/math work.
+- LLM-as-judge results are advisory and cannot authorize release or promotion.
+- Subjective work requires blinded human review.
+- Process exit success means only that the process exited successfully.
+- No smoke or future full path may upload private weights to a remote Ollama daemon.
 
 ## Status
-Prototype: scripts are correct and `--smoke`-testable. A full 30B run needs `mlx-lm` installed
-and a `holdout.jsonl`. Wire `run_flywheel.sh` into a monthly cron once you trust a few manual rounds.
+
+| Path | Current state |
+|---|---|
+| Synthetic `--smoke` | Allowed for mechanical validation only |
+| Personal-data harvest | Disabled pending explicit review/consent and secret/PII controls |
+| Full LoRA training | Disabled pending private destination and cross-process lock |
+| Candidate evaluation | Design/prototype only; no automatic release decision |
+| Model promotion | Manual future action; never performed by these scripts |

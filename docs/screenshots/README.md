@@ -1,31 +1,29 @@
 # PrismOS-AI Screenshots
 
-Place screenshots here for the README and GitHub Release page.
+This directory contains reproducible illustrated release previews generated
+from synthetic public documentation data. They are not captures of an owner's
+live profile. Regenerate them with:
 
-## How to Capture
+```bash
+python3 scripts/render-public-screenshots.py
+```
 
-1. Run PrismOS-AI: `npm run tauri dev`
-2. Take screenshots of each view using your OS screenshot tool
-3. Save them here with these names:
+## Live capture safety
+
+If a live capture is ever substituted, use a clean disposable profile, synthetic
+public fixtures, and review every pixel for project names, paths, conversations,
+trend signals, account details, and retired security claims before committing it.
 
 | Filename | View |
 |----------|------|
-| `main.png` | Full app (Intent Console + Sidebar) |
-| `intent-console.png` | Intent Console with conversation |
-| `spectrum-graph.png` | Force-directed Spectrum Graph |
-| `spectrum-explorer.png` | Spectrum Explorer with node details |
-| `sandbox-prisms.png` | Sandbox Prisms dashboard |
-| `spectral-timeline.png` | Spectral Timeline view |
-| `settings-sync.png` | Settings + Multi-Device Sync |
-| `daily-dashboard.png` | Daily Dashboard view |
-| `proactive-panel.png` | ProactivePanel in sidebar |
-| `agent-debate.png` | Agent debate panel |
-| `light-theme.png` | Light theme view |
-| `loading-screen.png` | Startup loading screen |
+| `intent-console.png` | Local Knowledge Chat illustrated preview |
+| `spectrum-graph.png` | Synthetic public-document graph |
+| `Spectrum-Explorer.png` | Approved-source explorer preview |
+| `Sandbox-Prisms.png` | Action Policies boundary preview (legacy filename retained) |
+| `Spectral-Timeline.png` | Sequential reasoning timeline preview |
 
 ## Recommended Settings
 
 - **Window size**: 1280×800 or 1440×900
 - **Format**: PNG
 - **Theme**: Dark (primary) + Light (secondary)
-

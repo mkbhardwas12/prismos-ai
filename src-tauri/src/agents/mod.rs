@@ -1,15 +1,15 @@
-// PrismOS-AI LangGraph Multi-Agent Collaboration Framework
+// PrismOS-AI bounded sequential workflow compatibility module
 //
-// This module implements the LangGraph-style multi-agent workflow.
-// Five specialized agents collaborate through a structured
-// message-passing protocol with voting/consensus before any final action.
+// This module implements a LangGraph-style workflow. The Reasoner performs the
+// model call; the other named roles, debate, and votes are deterministic stages
+// that exchange structured messages before the final response.
 //
-// Workflow DAG (Directed Acyclic Graph):
+// Deterministic workflow trace (the named roles are not parallel model agents):
 //
 //   ┌──────────────┐
 //   │  Orchestrator │ ← Entry node: decomposes intent
 //   └──────┬───────┘
-//          │ broadcasts WorkUnit to all specialists
+//          │ prepares deterministic role inputs
 //          ├──────────────┬──────────────┐
 //          ▼              ▼              ▼
 //   ┌──────────┐  ┌────────────┐  ┌───────────┐
@@ -27,10 +27,11 @@
 //               └──────┬───────┘
 //                      ▼
 //               ┌──────────────┐
-//               │   Execute    │ ← Final action through Sandbox Prism
+//               │   Execute    │ ← Final response under action policy
 //               └──────────────┘
 //
-// All data stays local. No telemetry. No cloud dependency.
+// Ollama is loopback-only by default. Explicit remote opt-in and separate
+// integrations have their own network boundaries.
 
 pub mod graph;
 pub mod langgraph_workflow;

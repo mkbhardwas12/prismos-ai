@@ -1,4 +1,4 @@
-// DomainInsights — Shows the user's detected professional domain expertise
+// DomainInsights — shows a coarse mix of classified query topics
 
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -55,12 +55,15 @@ export default function DomainInsights() {
   if (!profile || profile.total_queries < 5) {
     return (
       <div className="domain-insights">
-        <h3>🧭 Domain Expertise</h3>
+        <h3>🧭 Query Topic Mix</h3>
         <div className="domain-empty">
-          <p>Keep asking questions — PrismOS will learn your professional domain and tailor responses accordingly.</p>
+          <p>
+            After five classified queries, PrismOS can show a coarse topic mix.
+            This does not infer your profession, credentials, or expertise.
+          </p>
           {profile && profile.total_queries > 0 && (
             <p style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>
-              {profile.total_queries}/5 queries analyzed
+              {profile.total_queries}/5 queries observed before the topic summary
             </p>
           )}
         </div>
@@ -68,11 +71,8 @@ export default function DomainInsights() {
     );
   }
 
-  const primary = profile.primary_domain || "General";
-  const emoji = DOMAIN_EMOJIS[primary] || "🌐";
-  const label = DOMAIN_LABELS[primary] || primary;
-
-  // Recommended model per domain
+  // Static model suggestions keyed by coarse topic. These are not benchmark
+  // rankings and do not imply anything about the user's role or credentials.
   const DOMAIN_RECOMMENDED: Record<string, string> = {
     Medical: "qwen3:14b",
     Engineering: "qwen2.5-coder:7b",
@@ -84,9 +84,7 @@ export default function DomainInsights() {
     Business: "qwen3:8b",
     General: "qwen3:4b",
   };
-  const recommendedModel = DOMAIN_RECOMMENDED[primary] || "qwen3:4b";
-
-  // Convert domain_counts to sorted distribution
+  // Convert the legacy domain_counts field to a deterministic topic-share list.
   const counts = profile.domain_counts || {};
   const total = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
   const distribution = Object.entries(counts)
@@ -95,29 +93,43 @@ export default function DomainInsights() {
       count: count as number,
       pct: total > 0 ? ((count as number) / total) * 100 : 0,
     }))
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain))
     .filter((d) => d.count > 0);
+  const hasSingleLeadingTopic =
+    distribution.length < 2 || distribution[0].count > distribution[1].count;
+  const primary = hasSingleLeadingTopic
+    ? distribution[0]?.domain || profile.primary_domain || "General"
+    : "General";
+  const primaryShare = total > 0 ? (distribution[0]?.count || 0) / total : 0;
+  const emoji = DOMAIN_EMOJIS[primary] || "🌐";
+  const label = DOMAIN_LABELS[primary] || primary;
+  const recommendedModel = DOMAIN_RECOMMENDED[primary] || "qwen3:4b";
 
   return (
     <div className="domain-insights">
-      <h3>🧭 Domain Expertise</h3>
+      <h3>🧭 Query Topic Mix</h3>
 
       <div className="domain-primary">
         <span className="domain-primary-icon">{emoji}</span>
         <div className="domain-primary-info">
-          <div className="domain-primary-name">{label}</div>
+          <div className="domain-primary-name">
+            {hasSingleLeadingTopic ? `Most frequent: ${label}` : "No single leading topic"}
+          </div>
           <div className="domain-primary-confidence">
-            {Math.round(profile.confidence * 100)}% confidence •{" "}
+            {Math.round(primaryShare * 100)}% {hasSingleLeadingTopic
+              ? "of classified queries"
+              : "largest topic share"} •{" "}
             {profile.total_queries} queries analyzed
           </div>
         </div>
       </div>
 
-      {profile.confidence >= 0.3 && primary !== "General" && (
+      {primaryShare >= 0.3 && primary !== "General" && (
         <div className="domain-recommended-model">
           <span className="domain-rec-icon">🎯</span>
           <span className="domain-rec-text">
-            For <strong>{label}</strong> queries, we recommend <strong>{recommendedModel}</strong>
+            Model suggestion for recurring <strong>{label}</strong> prompts:{" "}
+            <strong>{recommendedModel}</strong>
           </span>
         </div>
       )}
@@ -137,6 +149,10 @@ export default function DomainInsights() {
           </div>
         ))}
       </div>
+      <p className="domain-primary-confidence">
+        Heuristic keyword classification only; it does not infer profession,
+        credentials, or expertise.
+      </p>
     </div>
   );
 }

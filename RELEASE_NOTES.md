@@ -1,14 +1,14 @@
 <div align="center">
 
-# 🔷 PrismOS-AI v0.5.1
+# 🔷 PrismOS-AI v0.5.2
 
-### The Local-First AI Operating System
+### The Local-First Desktop Assistant with Bounded Sequential Workflows
 
-**Your AI. Your Data. Your Machine. Period.**
+**Local-first core. Explicit privacy boundaries.**
 
-[![Release](https://img.shields.io/badge/Release-v0.5.1-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
+[![Release](https://img.shields.io/badge/Release-v0.5.2-0ea5e9?style=for-the-badge&logo=github)](https://github.com/mkbhardwas12/prismos-ai)
 [![License](https://img.shields.io/badge/License-MIT-a78bfa?style=for-the-badge)](LICENSE)
-[![Offline](https://img.shields.io/badge/100%25-Offline-f59e0b?style=for-the-badge)](.)
+[![Local first](https://img.shields.io/badge/Core-Local--First-f59e0b?style=for-the-badge)](.)
 
 **Author:** Manish Kumar
 
@@ -18,70 +18,69 @@
 
 ## 🎯 What Is This Release?
 
-PrismOS-AI v0.5.1 is a feature release of the AI operating system that runs **entirely on your machine** — no cloud, no telemetry, no data ever leaves your device.
+PrismOS-AI v0.5.2 is a local-first desktop assistant with a persistent knowledge graph, bounded project ingestion, and private inference fixed to loopback Ollama. Optional model downloads, browser speech services, flywheel base-weight acquisition, and remote model-management/status operations can use the network; PrismOS does not emit telemetry. `PRISMOS_ALLOW_REMOTE_OLLAMA=1` permits a non-loopback management origin only and never reroutes private prompts.
 
-> **In one sentence:** A Tauri 2.0 desktop app with 8 AI agents, a physics-inspired knowledge graph, WASM sandboxing, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, Local Vision, Document Analysis, frameless window, system tray, auto-updater, and a modern glassmorphism UI — all running 100% offline.
+> **In one sentence:** A Tauri 2.0 desktop app with five core software roles, a bounded sequential plan → build → judge → refine loop, a physics-inspired knowledge graph, native action-policy bookkeeping, Private Vault recovery tooling, Local Vision, and document analysis.
 
 ### 📌 Key Numbers
 
 | | |
 |:--|:--|
-| 🔌 **76** Tauri IPC commands | 🤖 **8** autonomous AI agents |
-| 🦀 **20** Rust backend modules | ⚛️ **30+** core features |
-| 🔒 **7** security layers | 🌈 **7** spectral dimensions |
-| ✅ **162** automated tests | 📄 **4** document formats supported |
+| 🔌 **Typed** Tauri IPC boundaries | 🤖 **5** available core roles |
+| 🦀 **Rust** backend | ⚛️ **React + TypeScript** frontend |
+| 🔒 **Explicit** privacy boundaries | 🌈 **7** spectral dimensions |
+| ✅ **Automated** Rust and UI tests | 📄 **Bounded** document ingestion |
 
 ---
 
-## ✨ What's New in v0.5.1
+## ✨ Current v0.5.2 Status
 
 ### 🏠 Daily Dashboard
 > Your unified morning-brief command center.
 
 - Hero greeting with time-of-day awareness (morning/afternoon/evening/night)
 - Stats strip: total nodes, today's additions, active agents, health score
-- Six content cards: Calendar Events, Email Summary, Finance Overview, Today's Highlights, Pending Topics, Daily Suggestions
+- Local cards for graph highlights, pending topics, and daily suggestions
 - Quick links grid for one-click navigation to all views
 - Auto-refresh every 10 minutes; keyboard shortcut `Ctrl+7`
 
 ### 📊 ProactivePanel
 > A permanent sidebar panel that keeps you in the loop.
 
-- Live feeds: calendar events, email summaries, finance updates, daily suggestions
+- Local graph insight and daily suggestions; no background keeper-network requests
 - Graph insight card showing top Spectrum Graph node
 - Collapsible with smooth animation; state persists across sessions
 
-### 📧 Keeper Agents (Email, Calendar, Finance)
-> Three new specialized AI agents join the roster.
+### 📵 Unavailable Integrations
+> Email, calendar, and finance connectors are intentionally unavailable in this release.
 
-- **Email Keeper** — Email monitoring, inbox summaries, and smart notifications
-- **Calendar Keeper** — Calendar awareness, upcoming events, and scheduling reminders
-- **Finance Keeper** — Portfolio tracking, market alerts, and financial insights
-- Total AI agents: **8** (was 5)
+- No email or calendar credentials are accepted by the active settings flow
+- No background portfolio or market-data request is launched
+- The active registry exposes five core roles: Orchestrator, Memory Keeper, Reasoner, Tool Smith, and Sentinel
 
 ### ⚙️ Startup View Setting
 > Choose what greets you when PrismOS opens.
 
 - New "Startup View" dropdown in Settings → Appearance
-- Options: Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings
+- Options: Intent Console, Daily Dashboard, Spectrum Graph, Spectrum Explorer, and Spectral Timeline
 - Persists via localStorage
 
-### 📊 162 Automated Tests
+### 📊 Automated Tests
 > Comprehensive quality coverage.
 
-- 97 frontend tests (Vitest + React Testing Library)
-- 65 backend tests (cargo test)
-- 9 test files covering all major components
+- Frontend tests use Vitest + React Testing Library
+- Backend tests use Rust's test runner
+- Test counts are reported by CI rather than frozen in release prose
 
 ---
 
 ## ✨ Previously in v0.5.0 / v0.5.1
 
-### 🖼️ Frameless Window & Native Feel
-> A true desktop OS experience.
+### 🖼️ Window Chrome & Native Feel
+> A native-feeling desktop application.
 
-- Custom frameless window with titlebar drag region
-- Minimize / maximize / close buttons integrated into the UI
+- Earlier v0.5 builds introduced an in-app title bar with a drag region
+- The current build uses native OS window decorations and retains in-app window controls
 - Native window state persistence via `tauri-plugin-window-state`
 
 ### 🔽 System Tray
@@ -94,36 +93,39 @@ PrismOS-AI v0.5.1 is a feature release of the AI operating system that runs **en
 ### 📂 Drag & Drop File Ingest
 > Drop files straight into PrismOS-AI.
 
-- Drag any text file (.txt, .md, .json, .csv, .log) onto Intent Console
-- Automatic text extraction and ingestion into Spectrum Graph
+- Attach supported documents through the upload button or drag-and-drop surface
+- One-off document analysis chunks remain in memory and do not create persistent
+  `doc_chunk` nodes; durable Project Knowledge requires preview and approval
 - Visual drop-zone highlight with smooth animations
 
-### 🔄 Auto-Updater
-> Stay current automatically.
+### 📦 Manual Releases
+> PrismOS does not ship an in-app update client.
 
-- Built-in update checker via `tauri-plugin-updater`
-- Notification when new version is available
-- One-click update from within the app
+- If an independently verified package has been published, download it from GitHub Releases
+- Verify published checksums when available
+- Install manually, then confirm the displayed version and data restore path
 
 ### 👁️ Local Vision Engine (Multimodal)
-> See what your AI sees — 100% on-device.
+> Analyze images through the fixed-loopback private inference route.
 
 - Multimodal image understanding via llava / llama3.2-vision
 - 🖼️ Image upload button and drag-drop image support
 - 📷 Camera capture for live image analysis
 - Image preview card with remove option before sending
-- All vision processing runs entirely on-device via Ollama
+- Vision inference is fixed to loopback; the configured Ollama URL is only for model management/status
 
-### 📄 Document Analysis Engine
-> Upload PDF, DOCX, PPTX, XLSX — get AI-powered summaries.
+### 📄 Document Analysis Engine — Current Safety Boundary
+> Earlier v0.5 builds experimented with more parsers; v0.5.2 intentionally narrows the accepted formats.
 
-- **PDF** text extraction via `pdf-extract`
-- **DOCX** parsing via `docx-rs`
-- **PPTX** slide extraction via `zip` (Open XML)
-- **XLSX** spreadsheet parsing via `calamine`
+- **DOCX** bounded classic-ZIP and document-XML extraction
+- **PPTX** bounded classic-ZIP and slide-XML extraction
+- **UTF-8 text/code, CSV, and TSV** through an explicit extension allowlist
+- **PDF** parsing fails closed; convert the file to UTF-8 text before attaching it
+- **XLSX and legacy XLS** parsing fail closed; export the sheet as CSV or TSV
 - 📄 Upload button + drag-drop document support
-- Document preview card with page/word count
-- AI analyzes and summarizes document content entirely offline
+- Document preview card with remove option before sending
+- AI analysis uses fixed-loopback Ollama after the selected model is installed;
+  one-off attachments are not added to the Spectrum Graph
 
 ---
 
@@ -134,11 +136,11 @@ PrismOS-AI v0.5.1 is a feature release of the AI operating system that runs **en
                     ──────              ──────
 IPC Commands        55                  71          (+29%)
 Feature Count       20                  26          (+30%)
-Document Formats    0                   4           (NEW)
+Document Analysis   No                  Added       (boundary revised in v0.5.2)
 Vision Support      No                  Yes         (NEW)
 System Tray         No                  Yes         (NEW)
-Auto-Updater        No                  Yes         (NEW)
-Frameless Window    No                  Yes         (NEW)
+Manual Releases     Yes                 Yes         (CURRENT)
+In-App Window UI    No                  Yes         (native decorations in v0.5.2)
 ```
 
 ---
@@ -147,30 +149,30 @@ Frameless Window    No                  Yes         (NEW)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│              PrismOS-AI Desktop App (v0.5.1)             │
+│              PrismOS-AI Desktop App (v0.5.2)             │
 ├──────────────────────────────────────────────────────────┤
 │  React 18 + TypeScript 5.5            (Frontend)         │
 │  ├── Daily Dashboard      Morning brief + proactive cards │
 │  ├── ProactivePanel       Live sidebar feeds              │
 │  ├── Intent Console       NL chat + vision + documents   │
 │  ├── Spectrum Graph       7D force-directed viz          │
-│  ├── Sandbox Prisms       WASM execution sandbox         │
+│  ├── Action Policy        Policy + process-local HMAC    │
 │  ├── Spectral Timeline    Time-based graph history       │
 │  └── Settings & Security  Config + security status       │
-├─────────────────── 83 Tauri IPC Commands ──────────────────┤
-│  Rust 1.82+ Backend                (17 Modules)          │
+├────────────────── 100 registered Tauri commands ───────────┤
+│  Rust 1.95.0 Backend (pinned toolchain)                  │
 │  ├── spectrum_graph.rs    SQLite knowledge store          │
 │  ├── ollama_bridge.rs     LLM + vision inference         │
-│  ├── sandbox_prism.rs     wasmtime WASM runtime          │
-│  ├── agents/              8 AI agents (incl. Keepers)    │
+│  ├── sandbox_prism.rs     Policy gate + bookkeeping      │
+│  ├── agents/              Sequential bounded goal loop   │
 │  ├── you_port.rs          Encrypted sync/export          │
 │  ├── audit_log.rs         SHA-256 hash chain             │
-│  ├── model_verify.rs      LLM integrity checking         │
-│  ├── secure_enclave.rs    Hardware security module        │
-│  ├── file_indexer.rs      RAG file watching              │
-│  └── whisper_engine.rs    Audio transcription            │
+│  ├── model_verify.rs      Advisory model metadata check  │
+│  ├── private_vault.rs     Encrypted recovery candidate   │
+│  ├── file_indexer.rs      Disabled legacy watcher source │
+│  └── whisper_engine.rs    Prototype; no real transcription│
 └──────────────────────────────────────────────────────────┘
-        ↓ Everything runs locally. Nothing phones home. ↓
+        ↓ Private inference is fixed loopback; management/download egress is explicit. ↓
 ```
 
 ---
@@ -179,13 +181,13 @@ Frameless Window    No                  Yes         (NEW)
 
 | # | Layer | What It Does |
 |:-:|-------|-------------|
-| 1 | **HMAC-SHA256** | Every agent action is cryptographically signed |
-| 2 | **Allow-lists** | Only whitelisted operations can execute |
-| 3 | **WASM Sandbox** | Code runs in `wasmtime` with memory/CPU limits |
+| 1 | **Process-local HMAC-SHA256** | Ephemeral modeled action-policy records are authenticated within the process; this is not persistent signing or attestation |
+| 2 | **Allow-lists** | Only recognized modeled operations can be approved |
+| 3 | **Native Action Policy** | Modeled actions are classified and recorded; arbitrary code is not executed |
 | 4 | **Anomaly Detection** | Statistical monitoring flags unusual patterns |
-| 5 | **Auto-Rollback** | Automatic checkpoint restoration on failure |
-| 6 | **Encryption at Rest** | AES-256-GCM + HMAC for stored state |
-| 7 | **Audit Hash Chain** | SHA-256 chain — tamper one entry, break the chain |
+| 5 | **Checkpoint Bookkeeping** | Records policy state; it is not generic database or filesystem rollback |
+| 6 | **Encrypted Exports** | Portable exports and Private Vault packages are encrypted; the live SQLite database is plaintext at rest |
+| 7 | **Audit Hash Chain** | Detects modification of retained prior lines; it does not prevent deletion or prove completeness |
 
 ---
 
@@ -193,11 +195,11 @@ Frameless Window    No                  Yes         (NEW)
 
 | Feature | Description |
 |---------|-----------|
-| 🎤 Whisper.cpp | Local audio transcription via Whisper |
-| 🧩 Plugin Marketplace | Community-built extensions |
-| 🧠 Federated Learning | Privacy-preserving model updates |
-| 📱 Mobile Companion | React Native companion app |
-| 🔗 P2P Sync | Device-to-device, no central server |
+| 🎤 Local transcription | Future evaluation; real Whisper transcription is unavailable in v0.5.2 |
+| 🧩 Plugin Marketplace | Design proposal only; no loader or marketplace is implemented |
+| 🧠 Federated Learning | Research only; no autonomous personal-data training or model promotion |
+| 📱 Mobile Companion | Planning only; no verified mobile release is represented here |
+| 🔗 P2P Sync | Research only; current cross-device sync uses an encrypted transfer file |
 
 ---
 
@@ -211,7 +213,7 @@ npm install
 npm run tauri dev
 ```
 
-**You'll need:** Node.js 18+ · Rust 1.82+ · Ollama (optional — guided setup walks you through it)
+**You'll need:** Node.js 22.12+ (Node 24 LTS recommended) · Rust 1.95.0 via the checked-in toolchain · Ollama for model-backed chat and document/vision inference
 
 ---
 

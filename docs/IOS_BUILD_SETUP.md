@@ -1,6 +1,11 @@
-# iOS Build Setup Guide for PrismOS-AI
+# iOS Build Planning Guide for PrismOS-AI
 
-> Complete guide for setting up iOS builds and App Store submission
+> [!WARNING]
+> **Planning document; the current iOS target, App Store submission, and release
+> claims below have not been validated end to end.** Do not submit the sample
+> privacy or feature copy as-is. Mobile must disclose any model/voice downloads,
+> browser-provided services, or remote Ollama origin it enables. The current
+> Sandbox Prism is a native action-policy simulator, not Wasmtime/WASM isolation.
 
 ---
 
@@ -74,7 +79,7 @@ Add iOS-specific configuration:
 ```json
 {
   "productName": "PrismOS-AI",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "identifier": "com.prismos.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -110,45 +115,18 @@ Add iOS-specific configuration:
 
 ---
 
-## Step 4: Update Cargo.toml for iOS
+## Step 4: Audit Cargo dependencies for iOS
 
-### Add iOS Dependencies to `src-tauri/Cargo.toml`
+Do not copy a second `[dependencies]` table or add Wasmtime. PrismOS has no active
+Wasmtime dependency. Start from the current `src-tauri/Cargo.toml`, preserve its
+package version and crate types, and target-gate only dependencies that are genuinely
+unsupported on iOS.
 
-```toml
-[package]
-name = "prismos"
-version = "0.5.1"
-description = "PrismOS-AI — Local-First Agentic Personal AI Operating System"
-authors = ["PrismOS-AI Contributors"]
-edition = "2021"
-
-[lib]
-name = "prismos_lib"
-crate-type = ["staticlib", "cdylib", "rlib", "lib"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
-[dependencies]
-tauri = { version = "2", features = ["tray-icon", "ios"] }
-tauri-plugin-shell = "2"
-# ... rest of existing dependencies
-
-# iOS-specific dependencies
-[target.'cfg(target_os = "ios")'.dependencies]
-tauri = { version = "2", features = ["ios", "tray-icon"] }
-
-# Disable certain features on iOS (WASM, some system APIs)
-[target.'cfg(not(target_os = "ios"))'.dependencies]
-wasmtime = "27"
-xcap = "0.8"
-cpal = "0.15"
-
-[features]
-default = []
-vendored-ssl = ["openssl"]
-ios = []
-```
+In particular, review desktop tray and other desktop-only Tauri features against
+the current Tauri mobile documentation. Use
+`cargo tree --target aarch64-apple-ios` and an actual iOS build to confirm the resolved
+graph. A plausible target-specific manifest edit is not proof that the application
+works on iOS; its commands and frontend affordances also need platform gates.
 
 ---
 
@@ -238,7 +216,7 @@ Create or update `src-tauri/gen/apple/Info.plist`:
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.5.1</string>
+    <string>0.5.2</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
@@ -265,11 +243,11 @@ Create or update `src-tauri/gen/apple/Info.plist`:
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>PrismOS-AI needs microphone access for voice input (all processing stays on-device).</string>
+    <string>PrismOS-AI uses microphone access for optional voice input; the selected speech provider may use its network service.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>PrismOS-AI needs photo access to analyze images (all processing stays on-device).</string>
+    <string>PrismOS-AI uses selected photos for analysis through its configured fixed-loopback inference boundary.</string>
     <key>NSCameraUsageDescription</key>
-    <string>PrismOS-AI needs camera access to capture and analyze images (all processing stays on-device).</string>
+    <string>PrismOS-AI uses the camera only when you choose to capture an image for analysis through its fixed-loopback inference boundary.</string>
 </dict>
 </plist>
 ```
@@ -386,7 +364,7 @@ open src-tauri/gen/apple/PrismOS-AI.xcodeproj
 
 ### App Information
 
-- **Subtitle**: Local-First Agentic AI
+- **Subtitle**: Local-First Desktop Assistant
 - **Category**: Primary: Productivity, Secondary: Developer Tools
 - **Privacy Policy URL**: https://github.com/mkbhardwas12/prismos-ai/blob/main/PRIVACY.md
 - **Copyright**: © 2026 Manish Kumar
@@ -417,23 +395,29 @@ Required sizes (use Xcode Simulator + Screenshot tool):
 
 ### App Description
 
-```
-PrismOS-AI — Your Private AI Operating System
+> **Archived placeholder copy:** rewrite this only after an iOS build has been
+> tested on device and its network/privacy behavior has been measured. The text
+> below is not an approved product or App Store privacy claim.
 
-A revolutionary local-first AI assistant that runs 100% on your device.
-No cloud. No tracking. No compromise.
+```
+PrismOS-AI — Local-First Knowledge Assistant
+
+A local-first assistant for approved knowledge, private graph memory, and
+loopback model inference by default. Optional downloads and browser-provided
+speech have separate network boundaries.
 
 CORE FEATURES:
-• 8 Collaborative AI Agents working together
-• Persistent 7D Spectrum Graph memory
+• Bounded sequential plan, build, judge, and refine workflow
+• Persistent local SQLite graph memory
 • Local vision analysis for images
-• Document analysis (PDF, DOCX, PPTX, XLSX)
-• Voice input and output
-• Fully offline — your data never leaves your device
+• Bounded one-off DOCX, PPTX, and UTF-8 text/code/CSV/TSV analysis
+  (convert PDF to UTF-8 text; export XLSX and legacy .xls as CSV/TSV)
+• Platform-provided voice input and output where supported
+• Approval-gated local Project Knowledge
 
 PRIVACY FIRST:
-All AI processing happens locally using on-device models.
-Zero telemetry. Zero cloud dependencies. Your data is yours alone.
+Core prompts use loopback Ollama by default and telemetry is not included.
+Model downloads, platform speech, and explicit sharing can use the network.
 
 REQUIREMENTS:
 • iOS 13.0 or later
@@ -444,20 +428,23 @@ REQUIREMENTS:
 ### Keywords (max 100 chars)
 
 ```
-AI,privacy,local,knowledge,assistant,offline,graph,agentic,personal
+AI,privacy,local,knowledge,assistant,offline,graph,personal
 ```
 
 ### What's New (Release Notes)
 
+> **Placeholder only:** there is no verified initial iOS release represented by
+> this draft.
+
 ```
-PrismOS-AI v0.5.1 — Initial iOS Release
+PrismOS-AI v0.5.2 — Placeholder iOS Release Notes
 
 Features:
-• 8 collaborative AI agents
-• 7D Spectrum Graph knowledge memory
+• Bounded sequential model workflow
+• Persistent local SQLite graph memory
 • Local vision and document analysis
-• Voice input and output
-• Fully offline, 100% private
+• Platform voice where supported, with a disclosed network boundary
+• Approval-gated Project Knowledge and encrypted private-vault backup
 
 Note: Some desktop features are still in development for iOS.
 ```
@@ -472,13 +459,18 @@ Note: Some desktop features are still in development for iOS.
 
 **Notes for Reviewer:**
 
+> **Do not submit these notes unchanged.** They contain historical offline and
+> feature assumptions that must be replaced with observed behavior from the
+> release candidate.
+
 ```
-PrismOS-AI is a local-first AI operating system.
+PrismOS-AI is a local-first desktop assistant with bounded sequential workflows;
+this mobile planning document does not establish an iOS release.
 
 IMPORTANT FOR TESTING:
-1. App requires compatible AI models to function
-2. On first launch, the app will guide you through setup
-3. All AI processing happens on-device — no external servers
+1. Validate model availability and execution on the exact iOS artifact
+2. Validate the first-launch flow and every requested permission
+3. Measure loopback, model-download, speech-provider, and sharing network behavior
 
 DEMO INSTRUCTIONS:
 1. Launch app
@@ -490,9 +482,9 @@ DEMO INSTRUCTIONS:
 NO TEST ACCOUNT NEEDED — app has no login system.
 
 PRIVACY:
-• Zero network calls to external APIs
-• All data stored locally
-• No telemetry, no analytics, no tracking
+• Do not claim zero egress from this planning document
+• Document local storage, backup, and deletion behavior from the tested artifact
+• Verify every bundled SDK before declaring telemetry, analytics, or tracking absent
 ```
 
 ---
@@ -502,8 +494,8 @@ PRIVACY:
 1. Complete all required fields in App Store Connect
 2. Add build from TestFlight
 3. Answer App Privacy questionnaire:
-   - Data Collection: None
-   - Tracking: No
+   - Answer from the tested release candidate and every bundled SDK; this draft
+     does not establish "Data Collection: None" or "Tracking: No"
 4. Submit for Review
 5. Expected review time: 24-48 hours
 
@@ -559,8 +551,8 @@ cd ../../..
 **Features not working on iOS**
 
 Some desktop features may not work on iOS:
-- WASM sandbox (limited on iOS)
-- Screen capture (requires permission)
+- Native Sandbox Prism policy simulation still does not provide code isolation
+- Screen capture (unavailable in the current source build; no iOS artifact is security-qualified here)
 - File indexer (limited file system access)
 
 These are expected limitations and should be documented in App Store description.
@@ -592,7 +584,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.18.1
           cache: 'npm'
 
       - name: Setup Rust
@@ -675,6 +667,6 @@ After iOS app is live:
 
 ---
 
-**PrismOS-AI on iOS** — Your private AI in your pocket
+**PrismOS-AI iOS planning reference** — not a verified iOS release
 
 Questions? Open an issue on GitHub or contact the maintainer.

@@ -1,4 +1,4 @@
-// PrismOS-AI Sandbox Panel — Prism Execution & Rollback UI
+// PrismOS-AI Action Policy Panel — bounded evaluation and bookkeeping UI
 
 import { useState, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -12,8 +12,6 @@ export default memo(function SandboxPanel() {
   const [activePrisms, setActivePrisms] = useState<Prism[]>([]);
   const [results, setResults] = useState<(PrismResult & { _key: number })[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [exportData, setExportData] = useState("");
-  const [exportResult, setExportResult] = useState<string | null>(null);
   const [nextKey, setNextKey] = useState(0);
 
   const handleCreatePrism = useCallback(async () => {
@@ -24,7 +22,6 @@ export default memo(function SandboxPanel() {
       });
       const prism: Prism = JSON.parse(result);
       setActivePrisms((prev) => [...prev, prism]);
-      setPrismName("");
     } catch (e) {
       console.error("Failed to create prism:", e);
     }
@@ -34,23 +31,27 @@ export default memo(function SandboxPanel() {
     if (!prismName.trim() || !task.trim()) return;
     setIsExecuting(true);
     try {
-      const result = await invoke<string>("execute_in_sandbox", {
+      const responseJson = await invoke<string>("execute_in_sandbox", {
         action: task,
-        agentId: prismName || "default",
+        name: prismName,
       });
-      const prismResult: PrismResult = JSON.parse(result);
+      const response: { result: PrismResult; prism: Prism } = JSON.parse(responseJson);
+      const prismResult = response.result;
+      setActivePrisms((prev) =>
+        prev.map((prism) => (prism.id === response.prism.id ? response.prism : prism)),
+      );
       setResults((prev) => [...prev, { ...prismResult, _key: nextKey }]);
       setNextKey((k) => k + 1);
       setTask("");
     } catch (e) {
-      console.error("Sandbox execution failed:", e);
+      console.error("Action policy evaluation failed:", e);
       setResults((prev) => [
         ...prev,
         {
           success: false,
-          output: `Execution error: ${e}`,
+          output: `Evaluation error: ${e}`,
           side_effects: [],
-          sandbox_protected: true,
+          sandbox_protected: false,
           action_signature: "",
           rollback_explanation: null,
           wasm_isolated: false,
@@ -71,14 +72,17 @@ export default memo(function SandboxPanel() {
       const result = await invoke<string>("rollback_sandbox", {
         name: prismName,
       });
-      const checkpoint = JSON.parse(result);
+      const response: { checkpoint: { state_hash?: string }; prism: Prism } = JSON.parse(result);
+      setActivePrisms((prev) =>
+        prev.map((prism) => (prism.id === response.prism.id ? response.prism : prism)),
+      );
       setResults((prev) => [
         ...prev,
         {
           success: true,
-          output: `Rolled back. Checkpoint: ${checkpoint?.state_hash?.slice(0, 16) ?? "none"}...`,
+          output: `Prism bookkeeping marked rolled back. No generic host-state undo was performed. Checkpoint record: ${response.checkpoint?.state_hash?.slice(0, 16) ?? "none"}...`,
           side_effects: [],
-          sandbox_protected: true,
+          sandbox_protected: false,
           action_signature: "",
           rollback_explanation: null,
           wasm_isolated: false,
@@ -93,24 +97,16 @@ export default memo(function SandboxPanel() {
     }
   }, [prismName]);
 
-  const handleExport = useCallback(async () => {
-    if (!exportData.trim()) return;
-    try {
-      const result = await invoke<string>("export_you_port", {
-        data: exportData,
-      });
-      setExportResult(result);
-    } catch (e) {
-      console.error("Export failed:", e);
-    }
-  }, [exportData]);
+  const selectedPrismExists = activePrisms.some(
+    (prism) => prism.name === prismName.trim(),
+  );
 
   return (
     <>
       <div className="main-header">
-        <h2>🔒 Sandbox Prisms</h2>
+        <h2>🔒 Action Policies</h2>
         <div className="graph-stats">
-          <span className="stat-badge">{activePrisms.length} prisms</span>
+          <span className="stat-badge">{activePrisms.length} policy records</span>
         </div>
       </div>
 
@@ -119,8 +115,8 @@ export default memo(function SandboxPanel() {
         {activePrisms.length === 0 && results.length === 0 && (
           <div className="sandbox-guidance">
             <div className="sandbox-guidance-icon">🛡️</div>
-            <h3>What are Sandbox Prisms?</h3>
-            <p>Sandbox Prisms let AI agents execute actions in <strong>isolated environments</strong> with automatic cryptographic checkpoints. If anything goes wrong, changes are instantly rolled back.</p>
+            <h3>What are Action Policies?</h3>
+            <p>Action Policies run supported action descriptions through <strong>bounded allow-list, risk, and anomaly checks</strong>. Checkpoints record policy state; they are not a generic undo system.</p>
             <div className="sandbox-guidance-steps">
               <div className="sandbox-guidance-step">
                 <span className="sandbox-step-num">1</span>
@@ -128,11 +124,11 @@ export default memo(function SandboxPanel() {
               </div>
               <div className="sandbox-guidance-step">
                 <span className="sandbox-step-num">2</span>
-                <span>Describe a task to execute safely</span>
+                <span>Describe an action for the policy simulator</span>
               </div>
               <div className="sandbox-guidance-step">
                 <span className="sandbox-step-num">3</span>
-                <span>Click Execute — if it fails, Rollback undoes everything</span>
+                <span>Click Evaluate — a rollback marks Prism bookkeeping only</span>
               </div>
             </div>
           </div>
@@ -140,13 +136,13 @@ export default memo(function SandboxPanel() {
 
         {/* Prism Controls */}
         <div className="sandbox-section">
-          <h3><img src={prismosIcon} alt="" className="header-icon" /> Execution Sandbox</h3>
+          <h3><img src={prismosIcon} alt="" className="header-icon" /> Action Policy Simulator</h3>
           <p className="section-desc">
-            Sandboxed execution environments with cryptographic checkpoints and
-            automatic rollback on failure.
+            Bounded policy checks with process-local authenticated records
+            and checkpoint bookkeeping. No arbitrary code runner or generic undo.
           </p>
 
-          <div className="sandbox-form" role="form" aria-label="Sandbox execution">
+          <div className="sandbox-form" role="form" aria-label="Action policy evaluation">
             <label htmlFor="prism-name" className="sr-only">Prism name</label>
             <input
               id="prism-name"
@@ -159,7 +155,7 @@ export default memo(function SandboxPanel() {
             <textarea
               id="sandbox-task"
               className="form-textarea"
-              placeholder="Task to execute in sandbox..."
+              placeholder="Action description to evaluate..."
               value={task}
               onChange={(e) => setTask(e.target.value)}
               rows={3}
@@ -168,23 +164,23 @@ export default memo(function SandboxPanel() {
               <button
                 className="toolbar-btn primary"
                 onClick={handleCreatePrism}
-                disabled={!prismName.trim()}
+                disabled={!prismName.trim() || selectedPrismExists}
               >
                 Create Prism
               </button>
               <button
                 className="toolbar-btn primary"
                 onClick={handleExecute}
-                disabled={isExecuting || !task.trim()}
+                disabled={isExecuting || !task.trim() || !selectedPrismExists}
               >
-                {isExecuting ? "Executing..." : "▶ Execute"}
+                {isExecuting ? "Evaluating..." : "▶ Evaluate"}
               </button>
               <button
                 className="toolbar-btn"
                 onClick={handleRollback}
-                disabled={!prismName.trim()}
+                disabled={!selectedPrismExists}
               >
-                ⏪ Rollback
+                ⏪ Mark Rolled Back
               </button>
             </div>
           </div>
@@ -193,7 +189,7 @@ export default memo(function SandboxPanel() {
         {/* Results */}
         {results.length > 0 && (
           <div className="sandbox-section">
-            <h3>Execution Results</h3>
+            <h3>Policy Results</h3>
             <div className="results-list">
               {results.map((r) => (
                 <div
@@ -241,43 +237,6 @@ export default memo(function SandboxPanel() {
           </div>
         )}
 
-        {/* You-Port Export */}
-        <div className="sandbox-section">
-          <h3>📦 You-Port Export</h3>
-          <p className="section-desc">
-            Securely export data with SHA-256 integrity verification for
-            device-to-device handoff.
-          </p>
-          <label htmlFor="youport-data" className="sr-only">Data to export</label>
-          <textarea
-            id="youport-data"
-            className="form-textarea"
-            placeholder="Data to export..."
-            value={exportData}
-            onChange={(e) => setExportData(e.target.value)}
-            rows={3}
-          />
-          <button
-            className="toolbar-btn primary"
-            onClick={handleExport}
-            disabled={!exportData.trim()}
-            style={{ marginTop: 8 }}
-          >
-            Export Package
-          </button>
-          {exportResult && (
-            <div className="result-card success" style={{ marginTop: 12 }}>
-              <div className="result-header">
-                <span className="result-status">✅ Package Created</span>
-              </div>
-              <div className="result-output" style={{ fontSize: 11 }}>
-                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                  {exportResult}
-                </pre>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </>
   );

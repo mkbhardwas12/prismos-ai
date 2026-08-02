@@ -17,15 +17,14 @@ use walkdir::WalkDir;
 
 /// Supported text-based file extensions for indexing
 const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "txt", "md", "json", "csv", "log", "toml", "yaml", "yml",
-    "rs", "py", "js", "ts", "tsx", "jsx", "html", "css",
-    "sh", "bat", "ps1", "cfg", "ini", "xml", "sql",
+    "txt", "md", "json", "csv", "log", "toml", "yaml", "yml", "rs", "py", "js", "ts", "tsx", "jsx",
+    "html", "css", "sh", "bat", "ps1", "cfg", "ini", "xml", "sql",
 ];
 
 /// Maximum file size to index (1 MB)
 const MAX_FILE_SIZE: u64 = 1_048_576;
 
-/// Maximum content length to store per node (truncate long files)
+/// Maximum content length to store per node (Unicode scalar values; truncate long files)
 const MAX_CONTENT_LENGTH: usize = 4096;
 
 /// An indexed file record
@@ -76,7 +75,11 @@ impl FileIndexer {
     pub fn status(&self) -> IndexerStatus {
         IndexerStatus {
             running: self.watcher.is_some(),
-            watch_paths: self.watch_paths.iter().map(|p| p.display().to_string()).collect(),
+            watch_paths: self
+                .watch_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect(),
             indexed_count: self.indexed_files.len(),
             last_scan: None,
         }
@@ -163,15 +166,19 @@ impl FileIndexer {
 
     /// Index a single file — extract content and create an IndexedFile record
     pub fn index_file(&mut self, path: &Path) -> Result<IndexedFile, String> {
-        let metadata = std::fs::metadata(path)
-            .map_err(|e| format!("Cannot read file metadata: {}", e))?;
+        let metadata =
+            std::fs::metadata(path).map_err(|e| format!("Cannot read file metadata: {}", e))?;
 
         if metadata.len() > MAX_FILE_SIZE {
-            return Err(format!("File too large: {} bytes (max {})", metadata.len(), MAX_FILE_SIZE));
+            return Err(format!(
+                "File too large: {} bytes (max {})",
+                metadata.len(),
+                MAX_FILE_SIZE
+            ));
         }
 
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Cannot read file: {}", e))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("Cannot read file: {}", e))?;
 
         let filename = path
             .file_name()
@@ -183,8 +190,10 @@ impl FileIndexer {
             .unwrap_or_default();
 
         // Truncate content for storage
-        let content_preview = if content.len() > MAX_CONTENT_LENGTH {
-            format!("{}…\n[truncated — {} chars total]", &content[..MAX_CONTENT_LENGTH], content.len())
+        let content_chars = content.chars().count();
+        let content_preview = if content_chars > MAX_CONTENT_LENGTH {
+            let preview: String = content.chars().take(MAX_CONTENT_LENGTH).collect();
+            format!("{}…\n[truncated — {} chars total]", preview, content_chars)
         } else {
             content.clone()
         };
@@ -193,9 +202,11 @@ impl FileIndexer {
             .modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_default())
+            .map(|d| {
+                chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default()
+            })
             .unwrap_or_default();
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -211,23 +222,29 @@ impl FileIndexer {
             indexed_at: now,
         };
 
-        self.indexed_files.insert(path.to_path_buf(), indexed.clone());
+        self.indexed_files
+            .insert(path.to_path_buf(), indexed.clone());
         Ok(indexed)
+    }
+
+    /// Attach the persistent graph node created for an indexed path.
+    pub fn set_node_id(&mut self, path: &Path, node_id: String) {
+        if let Some(file) = self.indexed_files.get_mut(path) {
+            file.node_id = Some(node_id);
+        }
     }
 
     /// Generate Spectrum Graph node content from an indexed file
     pub fn file_to_node_content(file: &IndexedFile) -> (String, String, String) {
-        let label = format!("📄 {}", file.filename);
+        // Include the canonical display path so same-named files in different
+        // folders cannot collide and merge unrelated content.
+        let label = format!("📄 {}", file.path);
         let node_type = "document".to_string();
 
         // Create a structured content summary
         let content = format!(
             "Local file: {}\nPath: {}\nSize: {} bytes\nLast modified: {}\n\n---\n{}",
-            file.filename,
-            file.path,
-            file.size_bytes,
-            file.last_modified,
-            file.content_preview
+            file.filename, file.path, file.size_bytes, file.last_modified, file.content_preview
         );
 
         (label, content, node_type)

@@ -1,8 +1,9 @@
 // PrismOS-AI Intent Input — Natural Language Input with Voice + Vision Support
 //
 // Supports typed, voice, image drag-drop, and camera capture input.
-// All processing stays local — no data leaves your device.
-// Vision powered by local multimodal models (llava, llama3.2-vision).
+// Input surface for local-first chat. Private inference uses the fixed-loopback
+// client route; optional browser/integration features have separate boundaries.
+// Vision requires a compatible model on that loopback route.
 
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type DragEvent, type ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -13,7 +14,14 @@ import "./IntentInput.css";
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif"];
 
 /** Document extensions we accept for text extraction & analysis */
-const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "xls", "txt", "md", "csv", "json", "rtf"];
+const DOCUMENT_EXTENSIONS = [
+  "docx", "pptx", "txt", "md", "markdown", "csv", "tsv",
+  "json", "rtf", "xml", "html", "htm", "yaml", "yml", "toml", "ini", "cfg",
+  "conf", "log", "rs", "py", "js", "ts", "tsx", "jsx", "java", "c", "cpp",
+  "h", "hpp", "go", "rb", "php", "swift", "kt", "scala", "sh", "bash", "zsh",
+  "sql", "r", "lua", "dart", "css", "scss", "sass", "less", "gitignore",
+  "dockerfile", "makefile",
+];
 
 /** Maximum file size in bytes (25 MB) — keeps memory & performance safe */
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
@@ -31,14 +39,51 @@ function isDocumentFile(name: string): boolean {
   return DOCUMENT_EXTENSIONS.includes(ext);
 }
 
+function disabledParserMessage(name: string): string | null {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "pdf") {
+    return "⚠️ PDF extraction is disabled until it can run in a resource-isolated parser. Convert the PDF to UTF-8 text first.";
+  }
+  if (ext === "xls") {
+    return "⚠️ Legacy XLS extraction is disabled. Export the sheet as CSV or TSV first.";
+  }
+  if (ext === "xlsx") {
+    return "⚠️ XLSX extraction is disabled until it can run in a resource-isolated parser. Export the sheet as CSV or TSV first.";
+  }
+  return null;
+}
+
+/** Never load conventional secret/config/key files into a chat attachment. */
+export function isSensitiveAttachmentName(name: string): boolean {
+  const baseName = name.split(/[\\/]/).pop()?.trim().toLowerCase() ?? "";
+  const ext = baseName.includes(".") ? baseName.split(".").pop() ?? "" : "";
+  const environmentFile = baseName === ".env"
+    || baseName.startsWith(".env.")
+    || baseName.startsWith(".env-")
+    || ext === "env";
+  const exactSensitiveNames = new Set([
+    ".netrc", ".npmrc", ".pypirc", ".git-credentials", "credentials", "secrets",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+  ]);
+  const sensitivePrefix = [
+    "credentials.", "secrets.", "service-account.", "service_account.",
+    "id_rsa.", "id_dsa.", "id_ecdsa.", "id_ed25519.",
+  ].some((prefix) => baseName.startsWith(prefix));
+  const sensitiveExtensions = new Set([
+    "key", "pem", "p12", "pfx", "ppk", "jks", "keystore", "kdbx",
+  ]);
+  return environmentFile
+    || exactSensitiveNames.has(baseName)
+    || sensitivePrefix
+    || sensitiveExtensions.has(ext);
+}
+
 /** Get emoji icon for document type */
 function getDocIcon(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   switch (ext) {
-    case "pdf": return "📕";
     case "docx": case "doc": return "📘";
     case "pptx": case "ppt": return "📙";
-    case "xlsx": case "xls": return "📗";
     case "csv": return "📊";
     case "md": return "📝";
     default: return "📄";
@@ -51,7 +96,6 @@ interface IntentInputProps {
   voiceEnabled?: boolean;
   pendingIntent?: string;
   onPendingConsumed?: () => void;
-  onScreenRead?: (prompt?: string) => Promise<void>;
 }
 
 export default function IntentInput({
@@ -60,11 +104,9 @@ export default function IntentInput({
   voiceEnabled = true,
   pendingIntent,
   onPendingConsumed,
-  onScreenRead,
 }: IntentInputProps) {
   const [input, setInput] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
-  const [droppedFileName, setDroppedFileName] = useState<string | null>(null);
   // ── Vision state (Phase 5.5) ──
   const [attachedImage, setAttachedImage] = useState<string | null>(null); // base64
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null); // data URL for preview
@@ -73,10 +115,8 @@ export default function IntentInput({
   // ── Document state (Phase 5.5) ──
   const [attachedDocument, setAttachedDocument] = useState<string | null>(null); // extracted text
   const [documentName, setDocumentName] = useState<string | null>(null);
-  const [documentMeta, setDocumentMeta] = useState<string | null>(null); // e.g. "PDF | 5 pages"
+  const [documentMeta, setDocumentMeta] = useState<string | null>(null); // e.g. "DOCX | 900 words"
   const [isExtractingDoc, setIsExtractingDoc] = useState(false);
-  // ── Screen reading state (Phase 7) ──
-  const [isReadingScreen, setIsReadingScreen] = useState(false);
   // ── Attach menu state ──
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
@@ -143,63 +183,31 @@ export default function IntentInput({
     setDocumentMeta(null);
   }
 
-  /** Attach a document by extracting its text via Rust backend */
-  async function attachDocumentFromPath(filePath: string, fileName: string) {
-    setIsExtractingDoc(true);
-    setDocumentName(fileName);
-    setDocumentMeta("Extracting...");
-    try {
-      const text: string = await invoke("extract_file_text", { path: filePath });
-      setAttachedDocument(text);
-      // Parse metadata from the header line [Document: ... | Type: ... | ...]
-      const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
-      setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${fileName.split('.').pop()?.toUpperCase()} document`);
-    } catch (err) {
-      console.error("Document extraction error:", err);
-      setDocumentMeta(null);
-      setDocumentName(null);
-      setAttachedDocument(null);
-      // Show error in input as fallback
-      setInput((prev) => prev + `\n⚠️ Could not extract text from ${fileName}: ${err}`);
-    } finally {
-      setIsExtractingDoc(false);
-    }
-  }
-
-  /** Attach a document from a File object — sends binary files to Rust for proper extraction */
+  /** Attach a document from bytes selected by the user. No arbitrary path IPC. */
   async function attachDocumentFromFile(file: File) {
+    if (isSensitiveAttachmentName(file.name) || !isDocumentFile(file.name)) {
+      setInput((prev) => prev + "\n⚠️ This file type cannot be attached for document analysis.");
+      return;
+    }
     setIsExtractingDoc(true);
     setDocumentName(file.name);
     setDocumentMeta("Extracting...");
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || "";
-      const binaryFormats = ["pdf", "docx", "pptx", "xlsx", "xls"];
-
-      if (binaryFormats.includes(ext)) {
-        // Binary formats (PDF/DOCX/PPTX/XLSX): read as ArrayBuffer → base64 → send to Rust
-        const arrayBuffer = await file.arrayBuffer();
-        const uint8 = new Uint8Array(arrayBuffer);
-        // Convert to base64 in chunks to avoid call stack overflow on large files
-        let binary = "";
-        const chunkSize = 32768;
-        for (let i = 0; i < uint8.length; i += chunkSize) {
-          binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
-        }
-        const base64 = btoa(binary);
-        const text: string = await invoke("extract_document_from_bytes", {
-          data: base64,
-          fileName: file.name,
-        });
-        setAttachedDocument(text);
-        const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
-        setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${ext.toUpperCase()} document`);
-      } else {
-        // Text formats: read as UTF-8 text directly
-        const text = await file.text();
-        const prefixed = `[File: ${file.name}]\n${text}`;
-        setAttachedDocument(prefixed);
-        setDocumentMeta(`${ext.toUpperCase()} | ${Math.round(text.length / 1024)}KB`);
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = "";
+      const chunkSize = 32768;
+      for (let i = 0; i < uint8.length; i += chunkSize) {
+        binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
       }
+      const text: string = await invoke("extract_document_from_bytes", {
+        data: btoa(binary),
+        fileName: file.name,
+      });
+      setAttachedDocument(text);
+      const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
+      setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${ext.toUpperCase()} document`);
     } catch (err) {
       console.error("Document extraction error:", err);
       clearAttachedDocument();
@@ -207,13 +215,6 @@ export default function IntentInput({
     } finally {
       setIsExtractingDoc(false);
     }
-  }
-
-  /** Attach an image from a base64 string */
-  function attachImageBase64(base64: string, name: string) {
-    setAttachedImage(base64);
-    setImagePreviewUrl(`data:image/png;base64,${base64}`);
-    setImageName(name);
   }
 
   /** Read a File object as base64 and attach it */
@@ -322,13 +323,19 @@ export default function IntentInput({
   async function handleDocFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!checkFileSize(file)) { e.target.value = ""; return; }
-    const filePath = (file as File & { path?: string }).path;
-    if (filePath) {
-      await attachDocumentFromPath(filePath, file.name);
-    } else {
-      await attachDocumentFromFile(file);
+    const disabledMessage = disabledParserMessage(file.name);
+    if (disabledMessage) {
+      setInput((prev) => `${prev}\n${disabledMessage}`);
+      e.target.value = "";
+      return;
     }
+    if (isSensitiveAttachmentName(file.name) || !isDocumentFile(file.name)) {
+      setInput((prev) => prev + "\n⚠️ Sensitive or unsupported files cannot be attached for document analysis.");
+      e.target.value = "";
+      return;
+    }
+    if (!checkFileSize(file)) { e.target.value = ""; return; }
+    await attachDocumentFromFile(file);
     if (!input.trim()) {
       setInput("Summarize this document.");
     }
@@ -374,6 +381,17 @@ export default function IntentInput({
     const file = files[0];
     const fileName = file.name;
 
+    const disabledMessage = disabledParserMessage(fileName);
+    if (disabledMessage) {
+      setInput((prev) => `${prev}\n${disabledMessage}`);
+      return;
+    }
+
+    if (isSensitiveAttachmentName(fileName)) {
+      setInput((prev) => prev + "\n⚠️ Sensitive environment, credential, or private-key files cannot be attached.");
+      return;
+    }
+
     // ── File size guard ──
     if (file.size > MAX_FILE_SIZE_BYTES) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
@@ -383,19 +401,7 @@ export default function IntentInput({
 
     // ── Image files → attach for vision analysis ──
     if (isImageFile(fileName)) {
-      const filePath = (file as File & { path?: string }).path;
-      if (filePath) {
-        // Tauri desktop: read image via Rust backend
-        try {
-          const base64: string = await invoke("read_image_as_base64", { path: filePath });
-          attachImageBase64(base64, fileName);
-        } catch (err) {
-          console.error("Image read error:", err);
-        }
-      } else {
-        // Browser fallback: read via FileReader
-        attachImageFromFile(file);
-      }
+      attachImageFromFile(file);
       if (!input.trim()) {
         setInput("Describe this image in detail.");
       }
@@ -404,52 +410,14 @@ export default function IntentInput({
 
     // ── Document files → attach for analysis (Phase 5.5) ──
     if (isDocumentFile(fileName)) {
-      const filePath = (file as File & { path?: string }).path;
-      if (filePath) {
-        await attachDocumentFromPath(filePath, fileName);
-      } else {
-        await attachDocumentFromFile(file);
-      }
+      await attachDocumentFromFile(file);
       if (!input.trim()) {
         setInput("Summarize this document.");
       }
       return;
     }
 
-    // ── Other text files → extract content inline (existing behavior) ──
-    setDroppedFileName(fileName);
-
-    try {
-      const filePath = (file as File & { path?: string }).path;
-
-      if (filePath) {
-        const text: string = await invoke("extract_file_text", { path: filePath });
-        const currentInput = input.trim();
-        const newInput = currentInput
-          ? `${currentInput}\n\n${text}`
-          : text;
-        setInput(newInput);
-        autoResize();
-      } else {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const text = reader.result as string;
-          const prefixed = `[File: ${fileName}]\n${text}`;
-          const currentInput = input.trim();
-          const newInput = currentInput
-            ? `${currentInput}\n\n${prefixed}`
-            : prefixed;
-          setInput(newInput);
-          autoResize();
-        };
-        reader.readAsText(file);
-      }
-    } catch (err) {
-      console.error("File drop error:", err);
-      setDroppedFileName(null);
-    }
-
-    setTimeout(() => setDroppedFileName(null), 4000);
+    setInput((prev) => prev + "\n⚠️ Unsupported file type. Use a supported image, document, or text/code file.");
   }, [input]);
 
   return (
@@ -467,21 +435,13 @@ export default function IntentInput({
         </div>
       )}
 
-      {/* Dropped file indicator */}
-      {droppedFileName && (
-        <div className="dropped-file-badge" role="status">
-          <span>📎 {droppedFileName}</span>
-          <button onClick={() => setDroppedFileName(null)} aria-label="Remove file">×</button>
-        </div>
-      )}
-
       {/* ── Attached Image Preview (Phase 5.5 — Local Vision) ── */}
       {imagePreviewUrl && (
         <div className="vision-preview" role="status">
           <img src={imagePreviewUrl} alt={imageName ?? "Attached image"} className="vision-preview-img" />
           <div className="vision-preview-info">
             <span className="vision-preview-name">🖼️ {imageName}</span>
-            <span className="vision-preview-hint">Will analyze with local vision model</span>
+            <span className="vision-preview-hint">Will analyze through the fixed-loopback vision route</span>
           </div>
           <button
             className="vision-preview-remove"
@@ -546,7 +506,7 @@ export default function IntentInput({
       <input
         ref={docFileInputRef}
         type="file"
-        accept=".pdf,.docx,.pptx,.xlsx,.xls,.txt,.md,.csv,.json,.rtf"
+        accept=".docx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf"
         style={{ display: "none" }}
         onChange={handleDocFileSelect}
       />
@@ -559,7 +519,7 @@ export default function IntentInput({
           placeholder={
             voice.isListening
               ? "🎙️ Listening… speak your intent"
-              : "Ask me anything — I'll process it privately on your device…"
+              : "Ask me anything — core inference uses the local loopback route…"
           }
           value={voice.isListening && voice.interimTranscript ? voice.interimTranscript : input}
           onChange={(e) => {
@@ -604,28 +564,6 @@ export default function IntentInput({
 
           {attachMenuOpen && (
             <div className="intent-attach-menu" role="menu" aria-label="Attachment options">
-              {onScreenRead && (
-                <button
-                  className="attach-menu-item attach-menu-screen"
-                  role="menuitem"
-                  onClick={async () => {
-                    setAttachMenuOpen(false);
-                    setIsReadingScreen(true);
-                    try {
-                      await onScreenRead(input.trim() || undefined);
-                    } finally {
-                      setIsReadingScreen(false);
-                    }
-                  }}
-                  disabled={isProcessing || isReadingScreen}
-                >
-                  <span className="attach-menu-icon">🖥️</span>
-                  <div className="attach-menu-label">
-                    <span className="attach-menu-title">Read Screen</span>
-                    <span className="attach-menu-hint">AI sees what you see — 100% local</span>
-                  </div>
-                </button>
-              )}
               <button
                 className="attach-menu-item"
                 role="menuitem"
@@ -635,7 +573,7 @@ export default function IntentInput({
                 <span className="attach-menu-icon">📄</span>
                 <div className="attach-menu-label">
                   <span className="attach-menu-title">Document</span>
-                  <span className="attach-menu-hint">PDF, DOCX, PPTX, XLSX</span>
+                  <span className="attach-menu-hint">DOCX, PPTX, text, CSV</span>
                 </div>
               </button>
               <button
@@ -676,14 +614,6 @@ export default function IntentInput({
         </button>
       </div>
 
-      {/* Screen reading indicator */}
-      {isReadingScreen && (
-        <div className="screen-reading-bar" role="status" aria-live="polite">
-          <span className="screen-reading-pulse">🖥️</span>
-          <span className="screen-reading-text">Reading your screen... analyzing with local vision model</span>
-        </div>
-      )}
-
       {/* Voice listening indicator */}
       {voice.isListening && (
         <div className="voice-listening-bar" role="status" aria-live="polite">
@@ -698,7 +628,7 @@ export default function IntentInput({
       <div className="intent-hint">
         <span className="intent-hint-keys">Enter ↵ send · Shift+Enter ↵ newline</span>
         <span className="intent-hint-sep">·</span>
-        <span>📎 Attach files (max {MAX_FILE_SIZE_LABEL}) · 🎙️ Voice · 100% local</span>
+        <span>📎 Attach files (max {MAX_FILE_SIZE_LABEL}) · 🎙️ Voice · local-first defaults</span>
       </div>
     </div>
   );

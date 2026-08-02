@@ -1,438 +1,209 @@
 # PrismOS-AI
 
-> **Open the lid, ask, close the lid. Your AI runs on your laptop — zero bytes leave the machine.**
+> Local-first chat, retrieval, and personal knowledge for work that should stay under your control.
 
-Drop a PDF onto PrismOS-AI and ask *"what changed in this contract vs. last week's draft?"* Eight local agents read it, debate the answer, and write the result to a knowledge graph that grows with every conversation. Works on a plane. Works at 30,000 feet. Works with the Wi-Fi off.
-
-<!-- Animated SVG hero — renders inline on GitHub, no GIF/video needed.
-     A full screen-capture demo can replace this once recorded — see docs/DEMO_RECORDING.md. -->
-<p align="center">
-  <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">
-    <img src="docs/media/prismos-demo.gif" width="880" alt="PrismOS-AI demo — ask anything locally, eight agents debate, knowledge graph grows, all offline" />
-  </a>
-  <br/>
-  <sub>
-    <a href="docs/media/prismos-demo.mp4">▶ 1280×720 MP4 (with voiceover)</a> ·
-    <a href="docs/screenshots/hero.svg">animated SVG fallback</a> ·
-    <a href="docs/screenshots/">all stills</a>
-  </sub>
-</p>
-
-<p align="center">
-  <a href="docs/media/stream-demo.mp4">
-    <img src="docs/media/stream-demo.gif" width="640" alt="Live streaming demo — real Ollama response token-by-token" />
-  </a>
-  &nbsp;
-  <a href="docs/media/brain-wrapped-loop.mp4">
-    <img src="docs/media/brain-wrapped-loop.gif" width="220" alt="Brain Wrapped preview loop" />
-  </a>
-  <br/>
-  <sub>
-    <b>Left:</b> live capture of a real Ollama stream via <code>prismos-cli</code> ·
-    <b>Right:</b> Brain Wrapped preview (Spotify-Wrapped, but for how you think)
-  </sub>
-</p>
-
-```bash
-# One line:
-curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
-```
+PrismOS-AI is a Tauri desktop application that connects to Ollama, retrieves relevant local context, and runs a bounded answer-quality loop. Core chat uses a loopback-only Ollama endpoint by default and can work without internet access after Ollama and a model are installed.
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.6.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Tests](https://img.shields.io/badge/tests-499%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
-[![Brain Wrapped](https://img.shields.io/badge/%E2%9C%A8-Brain%20Wrapped-ff6ec7)](#-brain-wrapped--cognitive-fingerprint-new-in-v060)
-[![Models](https://img.shields.io/badge/models-15%20supported-blueviolet)](src/lib/modelRegistry.ts)
-[![Offline](https://img.shields.io/badge/offline-100%25-success)](#)
-[![Egress](https://img.shields.io/badge/cloud%20egress-0%20bytes-success)](#)
+[![Ollama](https://img.shields.io/badge/inference-Ollama%20(local)-blueviolet)](https://ollama.com)
 
-> **Hermes is your cloud agent. PrismOS is your offline cofounder.**
-> Cloud agents are great when you're on Wi-Fi and OK paying per token. PrismOS-AI is for the work that should never leave your laptop: contracts, codebases, journals, half-formed ideas. Open the lid, get an answer, close the lid.
+## Status at a glance
 
-### How PrismOS-AI is different
+| Area | Current behavior |
+|---|---|
+| Chat and reasoning | Retrieval followed by a bounded, sequential `plan → build → judge → refine` loop for eligible requests |
+| Models | Routes among models already installed in Ollama; calls are sequential, not a parallel model council |
+| Project knowledge | Metadata preview, explicit approval, bounded content indexing, likely-secret redaction, source citations, atomic refresh, and source-scoped Forget |
+| Private data | SQLite knowledge and audit data remain in the local app-data directory; the live database is not encrypted at rest by PrismOS |
+| Portable transfer | Authenticated encrypted graph export and passphrase-encrypted cross-device sync; managed project excerpts are intentionally excluded |
+| Full-database recovery tooling | Settings UI, passphrase-encrypted export, validated restore staging, and restore-before-SQLite startup swap are implemented; a real clean-profile restore drill is still required before reliance |
+| Action safety | Native action policy with allow-lists, anomaly checks, process-local authenticated records, and bookkeeping checkpoints; this is not WASM or OS-level process isolation |
+| Self-improvement | Synthetic smoke validation only. Personal-data harvest/full training is disabled pending dataset consent, secret/PII review, a private output destination, and a cross-process lock |
+| Internet research | Not implemented. PrismOS does not crawl or silently ingest the internet |
+| Updates | Manual release installation; there is no active in-app auto-updater |
 
-| | Cloud agents (Hermes / GPT / Claude) | **PrismOS-AI** |
-|---|---|---|
-| Where it runs | Someone else's GPU | Your laptop |
-| Data egress | Every prompt + reply | Zero bytes |
-| Works on a plane | No | Yes |
-| Per-token cost | Yes | None |
-| Memory | Session window | Persistent 7D knowledge graph |
-| Multi-agent | Tool calls in one model | 8 specialised agents, formal debate |
-| Plugins | Vendor catalog | Local skills + WASM sandbox |
+For the public/private boundary, backup design, restore procedure, research provenance, and model-orchestration roadmap, read [Private Knowledge Architecture](docs/PRIVATE_KNOWLEDGE_ARCHITECTURE.md).
 
----
+## Architecture
 
-**What's inside:** a local-first agentic AI built with Tauri 2.0 + React 18 + Rust. Eight collaborative agents — Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper — work through a LangGraph debate pipeline and persist everything to a 7-dimensional Spectrum Graph (SQLite, 14 tables). Other things in the box: Brain Wrapped (a Spotify-Wrapped-style story of how *you* think), an adaptive personality engine, multi-band reasoning, recurring-pattern discovery, predicted knowledge connections, 15 curated 2025-2026 models with hardware-aware recommendations, smart routing to vision/code models, local vision + document RAG, a global Ctrl+Space hotkey, and a defense-in-depth security stack (AES-256-GCM, WASM isolation, HMAC, tamper-evident audit chain, Secure Enclave key derivation).
-
----
-
-## 📑 Table of Contents
-
-- [Core Features](#-core-features-v051)
-- [Architecture](#%EF%B8%8F-architecture)
-- [Demo Video](#-demo-video)
-- [Quick Start](#-quick-start)
-- [Configuration](#-configuration)
-- [Testing](#-testing)
-- [Project Structure](#-project-structure)
-- [Security Model](#-security-model)
-- [Skills & Plugins](#-skills--plugins-draft)
-- [Contributing](#-contributing)
-- [Tech Stack](#%EF%B8%8F-tech-stack)
-- [Roadmap](#%EF%B8%8F-roadmap)
-- [Project Stats](#-project-stats)
-
-<details>
-<summary><strong>📸 More Screenshots</strong> (click to expand)</summary>
-<br />
-
-| Spectrum Graph | Spectrum Explorer |
-|:-:|:-:|
-| <img src="docs/screenshots/spectrum-graph.png" width="400" alt="Spectrum Graph — force-directed knowledge visualization" /> | <img src="docs/screenshots/Spectrum-Explorer.png" width="400" alt="Spectrum Explorer — browse and search nodes" /> |
-
-| Sandbox Prisms | Spectral Timeline |
-|:-:|:-:|
-| <img src="docs/screenshots/Sandbox-Prisms.png" width="400" alt="Sandbox Prisms — WASM-isolated execution" /> | <img src="docs/screenshots/Spectral-Timeline.png" width="400" alt="Spectral Timeline — knowledge evolution over time" /> |
-
-| Voice Input | Security Audit Log |
-|:-:|:-:|
-| *Screenshot coming soon — speak your intents via local voice engine* | *Screenshot coming soon — tamper-proof SHA-256 hash chain audit trail* |
-
-</details>
-
----
-
-## ✨ Core Features (v0.5.2)
-
-| Feature | Description |
-|---------|-------------|
-| **Refractive Core** | Intent processing pipeline with intent transparency |
-| **Spectrum Graph** | Persistent multi-dimensional knowledge graph with edge prophecy |
-| **8 AI Agents** | Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper |
-| **LangGraph Debates** | Multi-agent debate with formal consensus voting |
-| **Sandbox Prism** | WASM-isolated execution with per-agent allow-lists + auto-rollback |
-| **Cognitive Imprint** | Adaptive 5-axis personality engine (depth, creativity, formality, technical, examples) |
-| **Cognitive Drift** | Weekly snapshots track how your thinking style evolves over time |
-| **Thought Currents** | Discovers recurring patterns, seasonal cycles, and thought chains in your queries |
-| **Edge Prophecy** | Predicts knowledge connections using Jaccard similarity + co-access patterns |
-| **Refraction Journal** | Tracks which reasoning bands you use, finds blind spots, measures growth |
-| **Domain Detection** | Learns your professional domain (Medical, Engineering, Science, Legal, Finance, etc.) |
-| **Model Performance Tracker** | Tracks latency + satisfaction per model × domain for data-driven recommendations |
-| **Model Registry** | 15 curated 2025-2026 models with hardware-aware auto-recommendations |
-| **Smart Router** | Auto-swaps to specialized models for code/vision tasks, reverts after |
-| **Intent Transparency** | "Why this response?" — shows detected query type, reasoning band, agents involved |
-| **Daily Dashboard** | Unified morning-brief with Cognitive Drift, Thought Currents, Refraction Journal cards |
-| **ProactivePanel** | Permanent collapsible sidebar with live calendar, email, finance, graph feeds |
-| **Email Keeper** | AI agent for IMAP email monitoring, summaries, and smart categorization |
-| **Calendar Keeper** | AI agent for .ics calendar awareness, scheduling, and conflict detection |
-| **Finance Keeper** | AI agent for portfolio tracking, market alerts, and financial insights |
-| **You-Port** | AES-256-GCM encrypted state migration with device-bound keys |
-| **Secure Enclave** | Platform-specific key derivation (TPM 2.0 / macOS SE / Linux TPM / software fallback) |
-| **Audit Log** | Tamper-evident SHA-256 hash chain with genesis entry for all critical operations |
-| **Voice I/O** | Hybrid local voice engine (cpal audio capture + Web Speech API fallback) |
-| **Local Vision** | Multimodal image analysis via vision models — drag-drop or camera capture |
-| **Document RAG** | Intelligent chunking + TF-IDF retrieval for PDF, DOCX, PPTX, XLSX |
-| **Background Omnipresence** | Ctrl+Space global hotkey — PrismOS pops up over any app |
-| **Spectral Timeline** | Time-series view of knowledge evolution |
-| **Multi-Window** | Open Spectrum Graph in a separate window |
-| **Onboarding Wizard** | Multi-step first-run setup experience *(Phase 3)* |
-| **Model Hub** | Browse, download & manage Ollama models in-app *(Phase 3)* |
-| **Spectrum Theming** | Dynamic themes driven by Spectrum Graph spectral properties *(Phase 3)* |
-| **Framer Motion Polish** | Smooth page transitions, card animations, stagger effects *(Phase 3)* |
-| **Global Hotkey** | `Ctrl+Space` / `Cmd+Space` to instantly summon the app *(Phase 3)* |
-| **Intent Templates** | Pre-built templates for common workflows *(Phase 3)* |
-| **Spotlight Overlay** | macOS Spotlight-style command palette with graph search *(Phase 4)* |
-| **Local Voice Engine** | cpal-based microphone capture + Whisper model download infra *(Phase 4)* |
-| **Local File Indexer (RAG)** | Watches `~/Documents/PrismDocs`, auto-ingests into Spectrum Graph *(Phase 4)* |
-| **Frameless Window** | Custom title bar with native window controls + drag region *(Phase 5)* |
-| **System Tray** | Minimize to tray, click to restore — agents stay resident *(Phase 5)* |
-| **Drag & Drop File Ingest** | Drop files into Intent Input — auto-extracts text content *(Phase 5)* |
-| **Auto-Updater** | Seamless OTA updates via GitHub Releases *(Phase 5)* |
-| **Local Vision** | Multimodal image analysis via llava/llama3.2-vision — drag-drop or camera capture *(Phase 5.5)* |
-| **Document Analysis** | Upload PDF, DOCX, PPTX, XLSX for AI-powered summaries & analysis — text extracted locally *(Phase 5.5)* |
-| **Smart Model Routing** | Auto-swaps to vision model (llama3.2-vision/llava) when image attached, reverts after *(Phase 6)* |
-| **Document RAG** | Intelligent chunking + TF-IDF retrieval for large documents instead of naive truncation *(Phase 6)* |
-| **Background Omnipresence** | `Alt+Space` global hotkey — PrismOS pops up over any app, always-on-top *(Phase 6)* |
-| **Tiered Model Catalog** | Curated model recommendations: Text, Vision & Power User tiers with one-click install *(Phase 6)* |
-
-Everything runs offline. All inference via local [Ollama](https://ollama.com) models.
-
----
-
-## 🏗️ Architecture
-
-<p align="center">
-  <img src="docs/diagrams/architecture-overview.svg" width="800" alt="PrismOS-AI System Architecture — v0.5.1" />
-</p>
-
-> **4 Layers** — React Frontend (23 components) → 85 Tauri IPC Commands → Rust Backend (8 AI Agents, 22 Modules) → SQLite + Local Ollama LLM (15 supported models)
-
-See [docs/diagrams/](docs/diagrams/) for more SVG diagrams (data flow, security model, refractive pipeline, spectral dimensions, and more).
-
----
-
-## 🎬 Demo Video
-
-> *30-second walkthrough — from first launch to proactive suggestions*
-
-[![PrismOS-AI Demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube)](https://youtube.com)
-
-<!-- Replace the link above with your unlisted YouTube URL when the demo is recorded -->
-
----
-
-## 🚀 Quick Start
-
-### One-line install (macOS + Linux)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
+```mermaid
+flowchart LR
+    UI["React UI"] --> IPC["Typed Tauri IPC"]
+    IPC --> WF["Retrieval + sequential goal loop"]
+    WF --> OL["Loopback Ollama"]
+    WF --> DB[("Local SQLite graph")]
+    SRC["Approved local project"] -->|"preview, approve, bounded read"| WF
+    DB --> PORT["Portable encrypted export"]
+    DB -.-> VAULT["Full private vault backend"]
 ```
 
-### One-line install (Windows · PowerShell)
+The workflow labels several deterministic roles—Orchestrator, Memory Keeper, Tool Smith, Sentinel, debate, and consensus—but those labels do not mean that eight independent language models are running. The actual model work is performed by configured Ollama calls. Planner, builder, and critic calls pass through the same typed inference boundary and run in order.
 
-```powershell
-irm https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.ps1 | iex
-```
+Some Ollama models can return a separate reasoning field. PrismOS requests it only when the installed model reports the `thinking` capability, then discards the raw trace. User-facing documents and explanations should present concise rationale, assumptions, citations, and verification—not claim to expose a model's hidden chain of thought. See [Ollama thinking](https://docs.ollama.com/capabilities/thinking).
 
-Both installers detect your OS/arch, download the latest signed release, and bootstrap Ollama with a sensible default model (`qwen3:4b`) if it isn't already on your machine. Per-user install on Windows — **no admin required**. Safe to re-run; nothing is ever overwritten without asking. Read the scripts first if you'd like: [`scripts/install.sh`](scripts/install.sh) · [`scripts/install.ps1`](scripts/install.ps1).
+## Current capabilities
 
-### CLI mode (no GUI required)
+- Fixed-loopback Ollama chat with bounded responses, capability-aware routing, and hardware-aware model-fit suggestions.
+- Hybrid SQLite/FTS retrieval with bounded graph expansion and recent conversation context.
+- Approval-gated Project Knowledge for allowlisted UTF-8 text/code files, with stable source IDs and `Source: <source-id>/<relative-path>` citations.
+- Bounded one-off DOCX, PPTX, and allowlisted UTF-8 text/code extraction—including CSV/TSV—with ephemeral chunking and retrieval. PDF extraction is disabled until it can be resource-isolated; convert PDFs to UTF-8 text. XLSX and legacy `.xls` fail closed before parsing; export spreadsheets as CSV/TSV.
+- Spectrum Graph memory, response feedback, cognitive-profile views, and model-performance tracking.
+- Local vision when a compatible Ollama vision model is installed.
+- Authenticated encrypted You-Port export/sync packages.
+- Tamper-evident audit chaining for critical local operations.
+- Explicit optional integrations with their own network boundaries.
 
-For headless / dev use, there's a tiny standalone CLI that talks straight to your local Ollama daemon:
+Project knowledge is retrieved as untrusted source material, not as instructions. A scan never follows symlinks, rejects overly broad roots, skips common secret/vendor/build paths, applies size/depth/count limits, and requires a fresh approval if a candidate file changes before indexing. See [Project Knowledge](docs/PROJECT_KNOWLEDGE.md).
+
+## Privacy and backup boundary
+
+The concise source-behavior notice is in [PRIVACY.md](PRIVACY.md). The architecture and
+recovery details below are operational guidance, not a platform certification.
+
+This repository is public source code. Personal prompts, project excerpts, trend data, feedback, databases, audit logs, keys, model adapters, and backup packages do not belong in it. [`.gitignore`](.gitignore) blocks common private artifacts, including databases, keys, flywheel outputs, and `*.prismos-vault`, but ignore rules are only a guardrail—not encryption or access control.
+
+| Package | Scope | Keying | Intended use |
+|---|---|---|---|
+| Device-bound graph export | Portable graph nodes and edges; excludes managed project excerpts | Local device secret | Same-installation backup or handoff |
+| Passphrase sync package | Portable graph snapshot; excludes managed project excerpts | User passphrase | Cross-device preview and merge |
+| Private vault | Complete SQLite database and optional audit log, including private project-derived data | User passphrase | Full-database replacement candidate; complete a clean-profile restore drill before relying on it |
+
+Even encrypted backups are private. Keep the vault and passphrase in separate places. Do not commit either backup packages or secrets to this public repository. If Git is deliberately used for encrypted off-site redundancy, use a separate private repository, commit ciphertext only, and accept that Git still exposes filenames, timestamps, repository membership, and durable history. GitHub's guidance explains why removing leaked secrets or private data from history is difficult: [Removing sensitive data from a repository](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
+
+## Quick start
+
+### Requirements
+
+- Node.js and npm
+- Rust toolchain
+- Ollama with at least one local model
+- Platform prerequisites required by Tauri 2
 
 ```bash
+git clone https://github.com/mkbhardwas12/prismos-ai.git
+cd prismos-ai
+npm ci
+ollama pull qwen3:4b
+npm run tauri dev
+```
+
+Review any installer script before running it. Prebuilt packages, when published,
+are available from [GitHub Releases](https://github.com/mkbhardwas12/prismos-ai/releases/latest),
+but install only an independently verified package whose source revision, checksum,
+publisher signature, and macOS notarization (when applicable) match the release
+evidence. The current candidate workflow does not publish trusted installers, and
+upgrades are manual.
+
+### CLI
+
+The standalone CLI talks directly to Ollama and does not run the complete GUI retrieval/workflow pipeline.
+
+```bash
+cd src-tauri
 cargo build --release --bin prismos-cli
-./target/release/prismos-cli ask "explain WASM sandboxing in one paragraph"
-cat notes.md | ./target/release/prismos-cli ask --stdin --model qwen3:4b
-./target/release/prismos-cli models    # list locally-pulled models
-./target/release/prismos-cli health    # check the daemon
+./target/release/prismos-cli ask "summarize the capability boundaries"
+./target/release/prismos-cli models
+./target/release/prismos-cli health
 ```
 
-Set `PRISMOS_MODEL` / `PRISMOS_OLLAMA_URL` to change defaults. The full agent-debate experience still lives in the GUI; the CLI is the "quick check" surface.
+## Configuration
 
-### Download pre-built installers
+Private inference is fixed to `http://localhost:11434`. The editable Ollama URL is used only for explicit model-management and status operations. Non-loopback management origins require both `PRISMOS_ALLOW_REMOTE_OLLAMA=1` and HTTPS; credentials, paths, queries, fragments, proxies, and redirects are rejected. Chat prompts, retrieved project context, documents, and attached images are not sent to that configurable management origin. The loopback HTTP process is not mutually authenticated by PrismOS, so OS-account and local-process integrity remain part of the trust boundary. Screen capture is unavailable in this source build; no platform artifact is security-qualified until it passes the release checklist.
 
-Pre-built installers are also available on the [Releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest):
+Relevant settings:
 
-- **Windows**: `.msi` or `.exe` installer
-- **macOS**: `.dmg` (Apple Silicon & Intel)
-- **Linux**: `.deb` or `.AppImage`
+| Setting | Default | Meaning |
+|---|---|---|
+| Ollama management URL | `http://localhost:11434` | Status plus explicit model list/pull/delete operations; private inference remains fixed loopback |
+| Model | `qwen3:4b` | Default model identifier; the current Ollama tag is a thinking build, and PrismOS discards its raw reasoning trace |
+| Max tokens | `2048` | Response output budget |
+| Theme | `dark` | User-interface theme |
 
----
+Use **Settings → Project Knowledge** to preview and approve a project. The first phase reads metadata only; file contents are read only after approval. A portable export deliberately omits the managed excerpts, so forgetting a source and restoring a portable graph cannot silently recreate them.
 
-## 🔧 Configuration
+## Reasoning and multi-model behavior
 
-PrismOS-AI uses [Ollama](https://ollama.com/) for local LLM inference. The default configuration:
+For open-ended eligible requests, PrismOS currently:
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Ollama URL | `http://localhost:11434` | API endpoint for local Ollama |
-| Default Model | `qwen3:4b` | Model used for inference (2025 default — better than Llama 3.2 at same size) |
-| Theme | `dark` | UI theme (`dark` / `light`) |
-| Max Tokens | `2048` | Max response length |
+1. Derives bounded acceptance criteria.
+2. Builds one answer candidate.
+3. Applies the Sentinel gate and judges the candidate against the criteria.
+4. Refines sequentially when the score improves and the iteration budget remains.
+5. Returns the best accepted or best-so-far candidate with workflow metadata.
 
-All settings are configurable in the Settings panel (⚙️) within the app. The Ollama URL constant is centralized in:
-- **Frontend**: [`src/lib/config.ts`](src/lib/config.ts)
-- **Backend**: [`src-tauri/src/ollama_bridge.rs`](src-tauri/src/ollama_bridge.rs) (`DEFAULT_OLLAMA_URL`)
+The planner or critic may route to a different installed reasoning model, but each inference is awaited before the next begins. Ollama can support concurrent requests when hardware and configuration permit, but PrismOS does not yet expose that as a parallel model council. See [Ollama FAQ](https://docs.ollama.com/faq) and [tool calling](https://docs.ollama.com/capabilities/tool-calling).
 
----
+## Action-policy security model
 
-## 🧪 Testing
+| Control | What it does | Important limit |
+|---|---|---|
+| Tiered allow-list | Classifies modeled actions as safe, moderate, or restricted | Does not sandbox arbitrary third-party code |
+| Anomaly checks | Flags action bursts, excessive actions, and tier escalation | Heuristic policy signal, not malware detection |
+| Process-local HMAC action records | Detects modification of ephemeral policy records within the same process | Not persistent signing, an external authorization service, or hardware attestation |
+| Checkpoints | Record policy state around moderate actions | Not a generic rollback of files, databases, email, or network side effects |
+| Audit hash chain | Makes prior audit-line changes detectable | Does not prevent deletion or replace an external backup |
+| AES-256-GCM packages | Authenticates and encrypts exported data | Live SQLite data remains plaintext at rest |
+| Loopback inference policy | Fixes private chat, document, project, and image inference to the loopback Ollama origin | The loopback daemon is not mutually authenticated; model management/downloads and platform speech have separate egress boundaries |
 
-**478 tests passing** — 151 frontend (Vitest + React Testing Library) + 327 backend (cargo test)
+There is no active wasmtime dependency and no claim of WASM isolation. Do not run untrusted binaries, scripts, plugins, or model tools on the assumption that PrismOS contains them.
+
+## Self-improvement flywheel
+
+The source tree includes an experimental flywheel, but only synthetic smoke
+validation is currently permitted. It must not read personal feedback or Project
+Knowledge. Full personal-data harvesting and LoRA training are disabled until the
+operator can review and consent to the exact dataset, remove secrets/PII, select a
+private output destination, and rely on an OS-backed cross-process lock. Smoke-model
+weights or dependencies may still be downloaded when not cached.
+
+This is not autonomous self-training. PrismOS does not train from your chats,
+promote weights, or replace the default model. Ollama can import supported models
+and adapters, but training requires a separately reviewed training stack; see
+[Ollama import](https://docs.ollama.com/import), [Modelfile](https://docs.ollama.com/modelfile), and [Hugging Face PEFT LoRA](https://huggingface.co/docs/peft/main/conceptual_guides/lora).
+
+## Internet research status
+
+PrismOS currently has no general web-search or crawling pipeline. A safe research feature must be explicit, query-scoped, provenance-preserving, and isolated from instructions found in retrieved pages. It must record source URL, retrieval time, content hash, and applicable license/usage constraints. Robots rules matter for automated retrieval but do not grant copyright permission; see [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html).
+
+Until that boundary ships, import or approve local source material and verify citations yourself. Do not describe local model knowledge as a current internet check.
+
+## Testing
 
 ```bash
-# Frontend unit tests (151 tests)
-npx vitest run
+npm exec tsc -- --noEmit
+npm test -- --run
+npm run build
 
-# TypeScript type-check (0 errors)
-npx tsc --noEmit
-
-# Rust backend tests (327 tests)
-cd src-tauri && cargo test
-
-# Rust lint (clippy)
-cd src-tauri && cargo clippy
+cd src-tauri
+cargo check --locked --lib
+cargo test --locked --lib
 ```
 
-CI runs automatically on every push and PR via [GitHub Actions](.github/workflows/ci.yml).
+CI runs on pushes and pull requests through [GitHub Actions](.github/workflows/ci.yml). Test totals change as the project evolves, so this README does not use a static passing-test count.
 
----
+## Repository map
 
-## 📁 Project Structure
-
-```
-prismos-ai/
-├── src/                          # React 18 + TypeScript frontend
-│   ├── components/               # 23 UI components
-│   │   ├── MainView.tsx           # Primary view container with IntentInput + transparency bar
-│   │   ├── IntentInput.tsx        # NL chat input with vision + document upload
-│   │   ├── SpectrumGraphView.tsx  # Force-directed 7D knowledge graph + Edge Prophecy
-│   │   ├── SpectrumExplorer.tsx   # Browse and search graph nodes
-│   │   ├── SandboxPanel.tsx       # WASM sandbox prisms dashboard
-│   │   ├── SpectralTimeline.tsx   # Time-series knowledge history
-│   │   ├── DailyDashboard.tsx     # Morning brief + Cognitive Drift + Thought Currents + Refraction Journal
-│   │   ├── DailyBrief.tsx         # Morning brief data card
-│   │   ├── CognitiveDriftCard.tsx # Weekly cognitive profile evolution tracker
-│   │   ├── ThoughtCurrentsCard.tsx # Recurring pattern discovery + thought chain detection
-│   │   ├── RefractionJournal.tsx  # Reasoning band distribution + blind spot analysis
-│   │   ├── DomainInsights.tsx     # Professional domain profile visualization
-│   │   ├── ProactivePanel.tsx     # Collapsible sidebar with live feeds
-│   │   ├── SettingsPanel.tsx      # App configuration + security status + accordion sections
-│   │   ├── TitleBar.tsx           # Custom frameless window controls
-│   │   ├── Sidebar.tsx            # Navigation with subtitles + version badge
-│   │   ├── OnboardingWizard.tsx   # First-run setup with hardware-aware model recommendations
-│   │   ├── SpotlightOverlay.tsx   # Ctrl+Space command palette overlay
-│   │   ├── ActiveAgents.tsx       # Agent status display
-│   │   ├── DailySuggestions.tsx   # Context-aware suggestion cards
-│   │   ├── SuggestionCard.tsx     # Individual suggestion card widget
-│   │   └── ErrorBoundary.tsx      # React error boundary wrapper
-│   ├── lib/                      # Core logic
-│   │   ├── agents.ts             # Agent framework definitions
-│   │   ├── ollama.ts             # Streaming LLM client
-│   │   ├── modelRegistry.ts      # Single source of truth — 15 curated models with capabilities
-│   │   ├── suggestions.ts        # Proactive suggestions engine
-│   │   └── config.ts             # Centralized configuration
-│   ├── hooks/                    # React hooks
-│   │   ├── useChat.ts            # Chat state management + processing timer
-│   │   ├── useOllama.ts          # Ollama connection hook
-│   │   ├── useSuggestions.ts     # Suggestion lifecycle hook
-│   │   └── useVoice.ts           # Voice input hook
-│   └── test/                     # 151 frontend tests (Vitest)
-├── src-tauri/                    # Rust backend (Tauri 2.0)
-│   └── src/
-│       ├── lib.rs                # 85 IPC commands + app bootstrap
-│       ├── spectrum_graph.rs     # SQLite 7D knowledge store (14 tables, 40+ methods)
-│       ├── refractive_core.rs    # Intent → agent pipeline + domain detection integration
-│       ├── sandbox_prism.rs      # WASM runtime (wasmtime 27) + HMAC signing + allow-lists
-│       ├── ollama_bridge.rs      # LLM + vision streaming
-│       ├── smart_router.rs       # Auto model switching (vision + code routing)
-│       ├── cognitive_profile.rs  # Cognitive Imprint — adaptive 5-axis personality engine
-│       ├── thought_currents.rs   # Temporal pattern analysis (recurring cycles, thought chains)
-│       ├── domain_detector.rs    # Professional domain classification (9 domains, 200+ keywords)
-│       ├── model_tracker.rs      # Per-model × per-domain performance tracking
-│       ├── doc_chunker.rs        # Document RAG + TF-IDF
-│       ├── you_port.rs           # AES-256-GCM encrypted export + cross-device sync
-│       ├── audit_log.rs          # SHA-256 tamper-evident hash chain
-│       ├── secure_enclave.rs     # Platform-specific key derivation (TPM/SE/software)
-│       ├── model_verify.rs       # Model integrity verification (SHA-256)
-│       ├── intent_lens.rs        # Intent parsing + entity extraction
-│       ├── whisper_engine.rs     # Local voice engine
-│       ├── file_indexer.rs       # Local RAG file watcher
-│       ├── email_keeper.rs       # Read-only IMAP email summaries
-│       ├── calendar_keeper.rs    # Local .ics calendar integration
-│       ├── finance_keeper.rs     # Portfolio tracking
-│       ├── agents/               # LangGraph multi-agent DAG
-│       │   ├── mod.rs            # DAG: Orchestrator→[Reasoner,ToolSmith,MemKeeper]→Sentinel→Consensus
-│       │   ├── graph.rs          # Agent graph execution engine
-│       │   ├── langgraph_workflow.rs  # Workflow orchestration
-│       │   ├── messages.rs       # Inter-agent message protocol
-│       │   └── nodes.rs          # Individual agent node implementations
-│       └── bin/
-│           └── prismos_cli.rs    # Headless CLI (prismos-cli)
-├── docs/                         # Architecture diagrams + screenshots
-├── .github/workflows/            # CI + Release Build (cross-platform)
-├── package.json                  # v0.5.2
-└── README.md                     # ← You are here
+```text
+src/                         React/TypeScript user interface
+src-tauri/src/lib.rs         Tauri command surface and application bootstrap
+src-tauri/src/agents/        Planner, builder, critic, policy, and workflow code
+src-tauri/src/spectrum_graph.rs
+                             SQLite graph, retrieval, migrations, and backups
+src-tauri/src/project_knowledge.rs
+                             Approval-gated local project ingestion
+src-tauri/src/you_port.rs    Portable encrypted export and sync formats
+src-tauri/src/private_vault.rs
+                             Encrypted full-database recovery backend
+src-tauri/src/sandbox_prism.rs
+                             Native action-policy simulator and audit records
+src-tauri/src/flywheel.rs    Synthetic smoke launcher; personal full mode disabled
+docs/                        Design, operations, and security documentation
+tools/                       Local development and verification utilities
 ```
 
----
+## Contributing
 
-## 🔒 Security Model
+Read [CONTRIBUTING.md](CONTRIBUTING.md), preserve the public/private boundary, and avoid capability claims that are stronger than the code. Security-relevant changes should include negative tests and explicit failure behavior.
 
-PrismOS-AI implements **defense-in-depth** with a layered security architecture:
-
-| Layer | Technology | Status |
-|-------|-----------|--------|
-| **WASM Sandbox Isolation** | Every agent action runs inside a wasmtime container with memory limits (1–16 MB) and CPU fuel metering | ✅ Enforced |
-| **HMAC-SHA256 Signing** | All actions cryptographically signed with per-prism salt via Secure Enclave | ✅ Active |
-| **3-Tier Allow-List** | Operations classified as Safe / Moderate / Restricted with per-agent permission sets | ✅ Enforced |
-| **Anomaly Detection** | Detects injection attempts, abuse loops, and tier escalation attacks in real-time | ✅ Active |
-| **Auto-Rollback** | Anomalous actions automatically reverted with plain-English explanation | ✅ Active |
-| **Tamper-Evident Audit Chain** | SHA-256 hash chain with genesis entry — logs all critical operations (intent, export, import, sync, clear) | ✅ Active |
-| **Secure Enclave** | Platform-specific key derivation (TPM 2.0 on Windows, Secure Enclave on macOS, TPM on Linux, software fallback) | ✅ Active |
-| **AES-256-GCM Encryption** | All exported/synced state encrypted with device-bound keys | ✅ Active |
-| **Content Security Policy** | Locked to `self` + local Ollama only — no external network access | ✅ Active |
-| **Minimal Capabilities** | Tauri permissions follow principle of least privilege | ✅ Configured |
-| **Model Integrity Verification** | SHA-256 checking against known-good model registry | ✅ Active |
-
-See [docs/diagrams/security-model.svg](docs/diagrams/security-model.svg) for the full security flow.
-
----
-
-## 🧩 Skills & Plugins (draft)
-
-PrismOS-AI is designed to be extended. A *skill* is a folder with a `SKILL.md` (instructions for both the user and the model) and a `manifest.json` (capabilities, triggers, sandbox limits). Skills run inside the same WASM Sandbox Prism as the built-in agents, with the same 3-tier allow-list and audit-chain guarantees.
-
-The full spec — manifest schema, lifecycle, security model, and how it lines up with the emerging `agentskills.io` / Anthropic Skills conventions — is in [`docs/SKILLS.md`](docs/SKILLS.md). It's an open draft (v0.1). Comments + PRs welcome before the v0.7 implementation lands.
-
----
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and contribution guidelines.
-
----
-
-## �️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Desktop Shell** | [Tauri 2.0](https://v2.tauri.app/) — lightweight native wrapper |
-| **Frontend** | React 18 · TypeScript 5.5 · Vite 5.4 · Framer Motion |
-| **Backend** | Rust (edition 2021) · SQLite (rusqlite) · wasmtime 27 |
-| **LLM Inference** | [Ollama](https://ollama.com/) — 100% local, no cloud |
-| **Audio Capture** | cpal 0.15 (cross-platform) · hound 3.5 (WAV encoding) |
-| **File Watching** | notify 6.1 · walkdir 2 |
-| **Security** | AES-256-GCM · HMAC-SHA256 · WASM sandboxing |
-| **CI/CD** | GitHub Actions — TypeScript check, Vitest, cargo check/clippy/test, release builds |
-| **Platforms** | Windows (.msi/.exe) · macOS (.dmg) · Linux (.deb/.AppImage) · Android (.apk) |
-
----
-
-## 🗺️ Roadmap
-
-| Version | Status | Highlights |
-|---------|--------|-----------|
-| **v0.1.0-alpha** | ✅ Done | Spectrum Graph, Refractive Core, 5 agents, Sandbox Prism, You-Port, Ollama |
-| **v0.2.0** | ✅ Done | WASM sandbox, Voice I/O, Multi-Window, Timeline, LangGraph debates, Merge/Diff, Accessibility |
-| **v0.2.1** | ✅ Done | 65 tests, CI/CD, config centralization, streaming progress bars, docs polish |
-| **v0.3.0** | ✅ Done | Onboarding wizard, Model Hub, Spectrum Theming, Framer Motion, Global Hotkey, Intent Templates |
-| **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
-| **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
-| **v0.5.1** | ✅ Done | Smart Model Routing, Document RAG, Background Omnipresence (Ctrl+Space), Tiered Model Catalog |
-| **v0.5.2** | ✅ Current | Self-Learning (Cognitive Drift, Thought Currents, Edge Prophecy, Refraction Journal), Domain Detection, Model Registry (15 models), Model Tracker, Smart Router code routing, Security Hardening (sandbox enforcement, audit logging, WASM validation fix), Intent Transparency, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, 478 tests |
-| **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, GPU VRAM detection |
-| **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
-
----
-
-## 📊 Project Stats
-
-- **22 Rust modules** (+5 agent sub-modules) — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, Smart Router, Doc Chunker, Cognitive Profile, Thought Currents, Domain Detector, Model Tracker, Email Keeper, Calendar Keeper, Finance Keeper, Agents (mod · graph · langgraph_workflow · messages · nodes)
-- **478 tests passing** — 151 frontend (Vitest + React Testing Library) + 327 backend (cargo test)
-- **85 Tauri IPC commands** — full frontend↔backend communication
-- **23 React components** — MainView, IntentInput, SpectrumGraphView, SpectrumExplorer, SandboxPanel, SpectralTimeline, DailyDashboard, DailyBrief, CognitiveDriftCard, ThoughtCurrentsCard, RefractionJournal, DomainInsights, ProactivePanel, SettingsPanel, TitleBar, Sidebar, OnboardingWizard, SpotlightOverlay, ActiveAgents, DailySuggestions, SuggestionCard, ErrorBoundary
-- **15 curated AI models** — from Qwen 3, Phi-4, Gemma 3, Llama 3.2, DeepSeek R1/V3, Mistral (essential/recommended/power/edge tiers)
-- **14 SQLite tables** — nodes, edges, intent_log, feedback, response_feedback, cognitive_profile, cognitive_timeline, dismissed_predictions, refraction_log, agent_memory, domain_profile, model_performance, proactive_suggestions, good_examples
-- **Zero cloud dependencies** — everything runs on your machine
-
----
-
-## 📜 License & IP
-
-Released under the **MIT License** — free for personal, educational, and commercial use within the terms of that license. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
-
----
-
-<p align="center">
-  <strong>PrismOS-AI v0.5.2</strong> — Your mind, your machine, your OS.<br />
-  Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
-  <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
-</p>
+PrismOS-AI is released under the [MIT License](LICENSE).

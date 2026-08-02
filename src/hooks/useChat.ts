@@ -2,30 +2,179 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
+import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest, TextBackend } from "../types";
 import { detectDocRequest, generateDocument } from "../lib/docGen";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
+import { DEFAULT_MODEL } from "../lib/config";
 
 interface UseChatOptions {
   settings: AppSettings;
   onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
-  clearLiveSteps: () => void;
+  clearLiveSteps: (taskId?: string) => void;
   voiceEnabled: boolean;
   voiceSpeak: (text: string) => void;
   refreshSuggestions: (input: string, msgId: string) => Promise<void>;
 }
 
+export const MAX_REFRACT_REQUEST_ID_BYTES = 128;
+
+const REFRACT_REQUEST_ID_PATTERN = /[A-Za-z0-9][A-Za-z0-9._:-]*/;
+
+export interface RefractIntentInvokeArgs extends Record<string, unknown> {
+  input: string;
+  model: string;
+  requestId: string;
+}
+
+export type RefractCommandInvoker = (
+  command: "refract_intent",
+  args: RefractIntentInvokeArgs,
+) => Promise<string>;
+
+export interface RefractRetryOptions {
+  retries?: number;
+  retryDelayMs?: number;
+  /** Caller-supplied logical request identity for activity correlation. */
+  requestId?: string;
+  requestIdFactory?: () => string;
+}
+
+export type RefractFailureKind =
+  | "unavailable"
+  | "admission"
+  | "policy"
+  | "integrity"
+  | "timeout"
+  | "cancelled"
+  | "protocol"
+  | "transport";
+
+export interface RefractCommandFailure {
+  schema_version: 1;
+  kind: RefractFailureKind;
+  backend: TextBackend;
+  request_id: string;
+  retryable: boolean;
+  message: string;
+}
+
+const REFRACT_FAILURE_KINDS = new Set<RefractFailureKind>([
+  "unavailable",
+  "admission",
+  "policy",
+  "integrity",
+  "timeout",
+  "cancelled",
+  "protocol",
+  "transport",
+]);
+
+/** Parse only the strict command envelope emitted by the Rust inference seam. */
+export function parseRefractCommandFailure(error: unknown): RefractCommandFailure | null {
+  if (error instanceof Error) {
+    return parseRefractCommandFailure(error.message);
+  }
+
+  let candidate: unknown = error;
+  if (typeof error === "string") {
+    try {
+      candidate = JSON.parse(error);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return null;
+  }
+  const value = candidate as Record<string, unknown>;
+  if (
+    value.schema_version !== 1
+    || typeof value.kind !== "string"
+    || !REFRACT_FAILURE_KINDS.has(value.kind as RefractFailureKind)
+    || (value.backend !== "ollama" && value.backend !== "aivm_loopback")
+    || typeof value.request_id !== "string"
+    || typeof value.retryable !== "boolean"
+    || typeof value.message !== "string"
+  ) {
+    return null;
+  }
+
+  return value as unknown as RefractCommandFailure;
+}
+
+/**
+ * Only a future, explicitly classified Ollama transport failure may retry.
+ * Native failures never retry, even if malformed input claims they are safe.
+ * Unknown/string failures also fail closed because durable deduplication is not
+ * implemented yet.
+ */
+export function shouldRetryRefractFailure(error: unknown): boolean {
+  const failure = parseRefractCommandFailure(error);
+  return failure?.backend === "ollama"
+    && failure.kind === "transport"
+    && failure.retryable === true;
+}
+
+export function isValidRefractRequestId(requestId: string): boolean {
+  const match = REFRACT_REQUEST_ID_PATTERN.exec(requestId);
+  return requestId.length >= 1
+    && requestId.length <= MAX_REFRACT_REQUEST_ID_BYTES
+    && match?.[0] === requestId;
+}
+
+export function createRefractRequestId(
+  requestIdFactory: () => string = () => crypto.randomUUID(),
+): string {
+  const requestId = requestIdFactory();
+  if (!isValidRefractRequestId(requestId)) {
+    throw new Error(
+      `Invalid request ID: expected 1..=${MAX_REFRACT_REQUEST_ID_BYTES} ASCII bytes using letters, digits, '.', '_', ':', or '-'`,
+    );
+  }
+  return requestId;
+}
+
 // Retry wrapper for API calls (up to 2 retries with exponential backoff)
-async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 2,
+  retryDelayMs = 500,
+  shouldRetry: (error: unknown) => boolean = () => true,
+): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await fn();
     } catch (e) {
-      if (attempt === retries) throw e;
-      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt === retries || !shouldRetry(e)) throw e;
+      const delay = retryDelayMs * (attempt + 1);
+      if (delay > 0) {
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
   }
   throw new Error("Unreachable");
+}
+
+/**
+ * Invoke one logical request with one caller identity. Transport retries reuse
+ * the exact same ID; this helper does not provide persistence or deduplication.
+ */
+export async function refractIntentWithRetry(
+  input: string,
+  model: string,
+  invokeCommand: RefractCommandInvoker = (command, args) => invoke<string>(command, args),
+  options: RefractRetryOptions = {},
+): Promise<string> {
+  const requestId = options.requestId !== undefined
+    ? createRefractRequestId(() => options.requestId as string)
+    : createRefractRequestId(options.requestIdFactory);
+  return withRetry(
+    () => invokeCommand("refract_intent", { input, model, requestId }),
+    options.retries,
+    options.retryDelayMs,
+    shouldRetryRefractFailure,
+  );
 }
 
 export function useChat({
@@ -117,9 +266,11 @@ export function useChat({
 
   const clearConversation = useCallback(() => {
     setMessages([]);
-  }, []);
+    clearLiveSteps();
+  }, [clearLiveSteps]);
 
   async function handleIntent(input: string, imageData?: string, documentText?: string) {
+    const activityTaskId = createRefractRequestId();
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -137,13 +288,13 @@ export function useChat({
     processingTimerRef.current = setInterval(() => {
       setProcessingElapsed(Math.floor((Date.now() - processingStartRef.current) / 1000));
     }, 1000);
-    clearLiveSteps();
+    clearLiveSteps(activityTaskId);
 
     try {
       // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
       if (documentText) {
         setProcessingPhase("Checking Ollama connection…");
-        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        const ollamaOk = await invoke<boolean>("check_local_inference_status");
         if (!ollamaOk) {
           throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
         }
@@ -152,7 +303,10 @@ export function useChat({
         const fileMatch = documentText.match(/\[File:\s*(.*?)\]/);
         const sourceName = sourceMatch?.[1] || fileMatch?.[1] || "document";
 
-        setProcessingPhase(`Chunking & indexing "${sourceName}"…`);
+        // One-off attachments are deliberately ephemeral: build a bounded RAG
+        // context in memory, send only that context to the local analyzer, and
+        // never create Spectrum Graph document-chunk nodes.
+        setProcessingPhase(`Preparing ephemeral context for "${sourceName}"…`);
         const ragJson = await invoke<string>("rag_query", {
           documentText,
           query: input,
@@ -160,24 +314,21 @@ export function useChat({
         });
         const ragResult: { context: string; chunks_used: number; total_chunks: number; source: string; rag_used: boolean } = JSON.parse(ragJson);
 
-        const docPrompt = ragResult.rag_used
-          ? `The following are the most relevant sections from "${sourceName}" (${ragResult.chunks_used}/${ragResult.total_chunks} sections retrieved via RAG):\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`
-          : `Here is a document for analysis:\n\n---\n${ragResult.context}\n---\n\nUser request: ${input}`;
-
-        const modelName = settings.defaultModel || "llama3.2";
+        const modelName = settings.defaultModel || DEFAULT_MODEL;
         setProcessingPhase(`Analyzing with ${modelName} (${ragResult.rag_used ? ragResult.chunks_used + " chunks" : "full doc"})…`);
 
-        const docResponse = await invoke<string>("query_ollama", {
-          prompt: docPrompt,
+        const docResponse = await invoke<string>("analyze_document_context", {
+          context: ragResult.context,
+          query: input,
+          source: sourceName,
           model: modelName,
-          ollamaUrl: settings.ollamaUrl || null,
           maxTokens: settings.maxTokens || 4096,
         });
 
         const ragBadge = ragResult.rag_used
           ? `RAG: ${ragResult.chunks_used}/${ragResult.total_chunks} chunks`
           : "Full document";
-        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · ${modelName} · 100% local`;
+        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · ${modelName} · ephemeral attachment · fixed loopback typed boundary`;
 
         const docMsgId = crypto.randomUUID();
         const aiMsg: Message = {
@@ -189,33 +340,35 @@ export function useChat({
         };
         setMessages((prev) => [...prev, aiMsg]);
 
-        invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
         onIntentProcessed("Document Analyst");
         await refreshSuggestions(input, docMsgId);
 
       } else if (imageData) {
         // ── Vision path: Smart Model Routing (Phase 6) ──
         setProcessingPhase("Checking Ollama connection…");
-        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        const ollamaOk = await invoke<boolean>("check_local_inference_status");
         if (!ollamaOk) {
           throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
         }
 
         setProcessingPhase("Routing to vision model…");
         const routeJson = await invoke<string>("smart_route_model", {
-          userModel: settings.defaultModel || "mistral",
+          userModel: settings.defaultModel || DEFAULT_MODEL,
           hasImage: true,
           hasDocument: false,
-          ollamaUrl: settings.ollamaUrl || null,
         });
         const route: { model: string; auto_swapped: boolean; original_model: string; reason: string; is_vision: boolean } = JSON.parse(routeJson);
+        if (!route.is_vision) {
+          throw new Error(
+            `${route.reason} Install a supported local vision model such as gemma3:4b, qwen2.5vl:7b, or llama3.2-vision, then retry.`,
+          );
+        }
 
         setProcessingPhase(`Analyzing image with ${route.model}…`);
         const response = await invoke<string>("query_ollama_vision", {
           prompt: input,
           imageData,
           model: route.model,
-          ollamaUrl: settings.ollamaUrl || null,
         });
 
         const routeBadge = route.auto_swapped
@@ -225,7 +378,7 @@ export function useChat({
         const aiMsg: Message = {
           id: crypto.randomUUID(),
           role: "ai",
-          content: response + `\n\n───\n👁️ Vision · ${routeBadge} · 100% local`,
+          content: response + `\n\n───\n👁️ Vision · ${routeBadge} · fixed loopback inference boundary`,
           timestamp: new Date(),
           agent: "Vision",
         };
@@ -278,7 +431,7 @@ export function useChat({
           const gateMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",
-            content: `🔍 Scan of **${p.project_name}** complete — metadata only, no file contents read yet.\n\nApprove below to start the **read-only** review. I will not modify, create or delete anything in the project; the only output is a report saved to Downloads.`,
+            content: `🔍 Scan of **${p.project_name}** complete — metadata only, no file contents read yet.\n\nApprove below to start the **read-only** review. I will not modify, create or delete anything in the project; the only output is a report saved in PrismOS's account-private app data outside the reviewed root.`,
             timestamp: new Date(),
             agent: "Code Reviewer",
             reviewRequest: review,
@@ -294,23 +447,28 @@ export function useChat({
         const docKind = detectDocRequest(input);
         if (docKind) {
           setProcessingPhase("Checking Ollama connection…");
-          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+          const ollamaOk = await invoke<boolean>("check_local_inference_status");
           if (!ollamaOk) {
             throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
           }
 
+          // Documents include a concise Decision Record by default; the user
+          // can opt out with phrasing like "without the rationale". Raw hidden
+          // model reasoning is never copied into the generated file.
+          const includeReasoning = !/\b(no|without|skip|hide|omit|drop)\s+(the\s+)?(reasoning|thinking|thought\s*process|rationale)\b/i.test(input);
           const attachment = await generateDocument(docKind, input, {
-            model: settings.defaultModel || "mistral",
-            ollamaUrl: settings.ollamaUrl || null,
+            model: settings.defaultModel || DEFAULT_MODEL,
             maxTokens: settings.maxTokens || 4096,
             onPhase: setProcessingPhase,
+            includeReasoning,
           });
 
           const kindLabel = docKind === "pptx" ? "PowerPoint presentation" : "Word document";
+          const reasoningNote = includeReasoning ? " It ends with a Decision Record covering choices, assumptions, and verification limits." : "";
           const aiMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",
-            content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it to your Downloads folder.\n\n───\n📎 ${docKind.toUpperCase()} · generated locally · 100% private`,
+            content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it locally.${reasoningNote}\n\n───\n📎 ${docKind.toUpperCase()} · generated on this device`,
             timestamp: new Date(),
             agent: docKind === "pptx" ? "Presentation Builder" : "Document Writer",
             attachment,
@@ -322,78 +480,89 @@ export function useChat({
         }
 
         // ── Standard text path (Refractive Core pipeline) ──
-        try {
-          const resultJson = await withRetry(() => invoke<string>("refract_intent", { input, model: settings.defaultModel || "mistral" }));
-          const result: RefractiveResult = JSON.parse(resultJson);
+        const resultJson = await refractIntentWithRetry(
+          input,
+          settings.defaultModel || DEFAULT_MODEL,
+          undefined,
+          { requestId: activityTaskId },
+        );
+        const result: RefractiveResult = JSON.parse(resultJson);
+        const actualModel = result.inference?.actual.identity_attested
+          ? result.inference.actual.model_id
+          : result.inference?.requested.model_id || settings.defaultModel || DEFAULT_MODEL;
+        const localityLabel = result.inference?.backend_offline_attested
+          ? "verified offline"
+          : result.inference
+            ? "fixed loopback · offline not attested"
+            : "local";
 
-          // Build a clean, minimal footer — no internal debug info
-          const timeSec = result.processing_time_ms
-            ? `${(result.processing_time_ms / 1000).toFixed(1)}s`
-            : "";
-          const consensusIcon = result.collaboration?.consensus_approved ? "✅" : "🛡️";
-          const metaLine = timeSec
-            ? `\n\n───\n${consensusIcon} ${timeSec} · ${settings.defaultModel || "local"} · 100% private`
-            : "";
+        // Build a clean, minimal footer — no internal debug info
+        const timeSec = result.processing_time_ms
+          ? `${(result.processing_time_ms / 1000).toFixed(1)}s`
+          : "";
+        const qualityUnapproved =
+          result.judge_graded === false ||
+          (result.judge_graded === true && result.validated !== true);
+        const consensusIcon = qualityUnapproved
+          ? "⚠️"
+          : result.collaboration?.consensus_approved
+            ? "✅"
+            : "🛡️";
+        // Goal-loop badge distinguishes a real accepted model grade from a
+        // rejected/unvalidated grade and from the availability fallback.
+        const loopBadge =
+          result.judge_graded === false
+            ? " · ⚠ unjudged best-effort"
+            : result.validated === true
+            ? ` · ✓ judged${result.iterations_used && result.iterations_used > 1 ? ` (${result.iterations_used} passes)` : ""}`
+            : result.judge_graded === true
+              ? ` · ⚠ judged but unvalidated${result.iterations_used && result.iterations_used > 1 ? ` (${result.iterations_used} passes)` : ""}`
+              : "";
+        const metaLine = timeSec
+          ? `\n\n───\n${consensusIcon} ${timeSec} · ${actualModel} · ${localityLabel}${loopBadge}`
+          : "";
 
-          const aiContent = result.response + metaLine;
-          const aiMsg: Message = {
-            id: crypto.randomUUID(),
-            role: "ai",
-            content: aiContent,
-            timestamp: new Date(),
-            agent: result.agent_used,
-            contextNodes: result.context_nodes,
-            conversationId: result.conversation_id,
-            userQuestion: input,
-            transparency: {
-              query_type: result.query_type || result.intent.intent_type || "Unknown",
-              natural_band: result.natural_band || result.agent_used || "default",
-              applied_band: result.applied_band || result.agent_used || "default",
-              context_nodes_used: result.context_nodes?.length ?? 0,
-              model_used: settings.defaultModel || "local",
-              domain_detected: result.domain_detected || "General",
-            },
-          };
-          setMessages((prev) => [...prev, aiMsg]);
+        const aiContent = result.response + metaLine;
+        const aiMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "ai",
+          content: aiContent,
+          timestamp: new Date(),
+          agent: result.agent_used,
+          contextNodes: result.context_nodes,
+          conversationId: result.conversation_id,
+          userQuestion: input,
+          transparency: {
+            query_type: result.query_type || result.intent.intent_type || "Unknown",
+            natural_band: result.natural_band || result.agent_used || "default",
+            applied_band: result.applied_band || result.agent_used || "default",
+            context_nodes_used: result.context_nodes?.length ?? 0,
+            model_used: actualModel,
+            domain_detected: result.domain_detected || "General",
+          },
+        };
+        setMessages((prev) => [...prev, aiMsg]);
 
-          if (voiceEnabled) {
-            voiceSpeak(result.response);
-          }
-
-          onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null);
-
-          // Alive Graph: auto-strengthen related edges
-          try {
-            const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
-            if (keywords.length > 0) {
-              await invoke("strengthen_related_edges", { keywords });
-            }
-          } catch { /* non-critical */ }
-
-          await refreshSuggestions(input, aiMsg.id);
-
-          // ── Prism Refraction: generate alternative perspective in background ──
-          // Non-blocking — fires after the primary response is already displayed.
-          // The alternative appears as an expandable "See another perspective" option.
-          generateRefractionAlternative(input, aiMsg.id);
-
-        } catch (e) {
-          // Fallback to legacy process_intent if refract_intent fails
-          try {
-            const response = await invoke<string>("process_intent", { input });
-            const aiMsg: Message = {
-              id: crypto.randomUUID(),
-              role: "ai",
-              content: response,
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, aiMsg]);
-            onIntentProcessed();
-            await refreshSuggestions(input, aiMsg.id);
-          } catch (fallbackErr) {
-            setMessages((prev) => [...prev, buildErrorMessage(fallbackErr, settings)]);
-          }
+        if (voiceEnabled) {
+          voiceSpeak(result.response);
         }
+
+        onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null);
+
+        // Alive Graph: auto-strengthen related edges
+        try {
+          const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+          if (keywords.length > 0) {
+            await invoke("strengthen_related_edges", { keywords });
+          }
+        } catch { /* non-critical */ }
+
+        await refreshSuggestions(input, aiMsg.id);
+
+        // ── Prism Refraction: generate alternative perspective in background ──
+        // Non-blocking — fires after the primary response is already displayed.
+        // The alternative appears as an expandable "See another perspective" option.
+        generateRefractionAlternative(input, aiMsg.id);
       }
     } catch (err) {
       setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
@@ -411,70 +580,6 @@ export function useChat({
   // Keep ref in sync so event listeners always call the latest handleIntent
   handleIntentRef.current = handleIntent;
 
-  // ── Contextual Screen Awareness (Phase 7) ──
-  // Captures the screen via Rust, sends to a local vision model, and injects
-  // the extracted context into the conversation as if the user pasted it.
-  async function handleScreenRead(userPrompt?: string) {
-    const label = userPrompt?.trim() || "Summarize what I'm looking at";
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: `🖥️ [Screen Read]\n${label}`,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsProcessing(true);
-    processingStartRef.current = Date.now();
-    setProcessingElapsed(0);
-    processingTimerRef.current = setInterval(() => {
-      setProcessingElapsed(Math.floor((Date.now() - processingStartRef.current) / 1000));
-    }, 1000);
-    clearLiveSteps();
-
-    try {
-      setProcessingPhase("Capturing screen…");
-
-      const resultJson = await invoke<string>("read_screen", {
-        prompt: label,
-        ollamaUrl: settings.ollamaUrl || null,
-      });
-
-      const result: { context: string; model: string; auto_routed: boolean } =
-        JSON.parse(resultJson);
-
-      setProcessingPhase("");
-
-      const metaLine = `\n\n───\n🖥️ Screen Read · ${result.model}${result.auto_routed ? " (auto-routed)" : ""} · 100% local`;
-      const aiMsgId = crypto.randomUUID();
-      const aiMsg: Message = {
-        id: aiMsgId,
-        role: "ai",
-        content: result.context + metaLine,
-        timestamp: new Date(),
-        agent: "Screen Reader",
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-
-      if (voiceEnabled) {
-        voiceSpeak(result.context);
-      }
-
-      onIntentProcessed("Screen Reader");
-      await refreshSuggestions(label, aiMsgId);
-    } catch (err) {
-      setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
-    } finally {
-      if (processingTimerRef.current) {
-        clearInterval(processingTimerRef.current);
-        processingTimerRef.current = null;
-      }
-      setIsProcessing(false);
-      setProcessingPhase("");
-      setProcessingElapsed(0);
-    }
-  }
-
   // ── Prism Refraction — background alternative perspective generation ──
   // After the primary response is shown, this fires a background request
   // to generate an alternative from a contrasting cognitive band.
@@ -482,7 +587,7 @@ export function useChat({
     try {
       const resultJson = await invoke<string>("generate_refraction_alternative", {
         question,
-        model: settings.defaultModel || "mistral",
+        model: settings.defaultModel || DEFAULT_MODEL,
       });
       const alt: RefractionAlternative = JSON.parse(resultJson);
       setMessages((prev) =>
@@ -521,7 +626,7 @@ export function useChat({
         response: msg.content,
         rating: ratingValue,
         contextNodes: msg.contextNodes || [],
-        model: settings.defaultModel || "mistral",
+        model: msg.transparency?.model_used || settings.defaultModel || DEFAULT_MODEL,
       });
 
       // Update local message state with feedback
@@ -554,7 +659,7 @@ export function useChat({
     processingTimerRef.current = setInterval(() => {
       setProcessingElapsed(Math.floor((Date.now() - processingStartRef.current) / 1000));
     }, 1000);
-    clearLiveSteps();
+    clearLiveSteps(review.scanId);
     setProcessingPhase(`Reviewing ${review.projectName} (read-only)…`);
 
     try {
@@ -620,7 +725,6 @@ export function useChat({
     setPendingIntent,
     conversationRef,
     handleIntent,
-    handleScreenRead,
     clearConversation,
     submitFeedback,
     selectRefractionPreference,
@@ -631,17 +735,24 @@ export function useChat({
 
 // ── Helper: build user-friendly error messages ──
 function buildErrorMessage(err: unknown, settings: AppSettings): Message {
-  const errorStr = String(err);
+  const inferenceFailure = parseRefractCommandFailure(err);
+  const errorStr = inferenceFailure?.message ?? String(err);
+  const recoveryModel = settings.defaultModel || DEFAULT_MODEL;
   const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
   const isModelError = errorStr.includes("model") || errorStr.includes("not found");
+  const isVisionModelError = errorStr.toLowerCase().includes("vision-capable model");
 
   let content: string;
-  if (isOllamaError) {
-    content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`;
+  if (inferenceFailure?.backend === "aivm_loopback") {
+    content = `⚠️ The selected storage-native model did not complete.\n\n${errorStr}\n\nNo second legacy or Ollama text-inference attempt, alternate text model, or online text service was run after this failure. Earlier embedding or retrieval work may already have used the fixed-loopback Ollama service. Your text-generation request was stopped without fallback.`;
+  } else if (isVisionModelError) {
+    content = `⚠️ No installed vision-capable model is available.\n\n${errorStr}\n\nPrismOS stopped before sending the image to a text-only model.`;
+  } else if (isOllamaError) {
+    content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${recoveryModel}\n  3. ollama serve\n\nPrivate inference always connects to:\n  http://localhost:11434\n\nThe configurable Ollama URL in Settings is only for model management/status and does not redirect private prompts. Then try your intent again.`;
   } else if (isModelError) {
-    content = `⚠️ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`;
+    content = `⚠️ Model "${recoveryModel}" not available.\n\nTo fix this:\n  1. ollama pull ${recoveryModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`;
   } else {
-    content = `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify your model is downloaded: ollama list\n  • Check Settings for the correct Ollama URL\n  • Try a simpler intent to test the connection`;
+    content = `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify http://localhost:11434/api/tags is reachable\n  • Verify your model is downloaded: ollama list\n  • Try a simpler intent to test the connection\n\nThe Settings Ollama URL controls model management/status only; private inference remains fixed to loopback.`;
   }
 
   return {

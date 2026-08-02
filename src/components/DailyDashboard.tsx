@@ -100,9 +100,9 @@ export default function DailyDashboard({
 }: DailyDashboardProps) {
   const [brief, setBrief] = useState<DailyBriefData | null>(null);
   const [suggestions, setSuggestions] = useState<ProactiveSuggestion[]>([]);
-  const [calendarFeed, setCalendarFeed] = useState<CalendarFeed | null>(null);
-  const [emailFeed, setEmailFeed] = useState<EmailFeed | null>(null);
-  const [financeFeed, setFinanceFeed] = useState<FinanceFeed | null>(null);
+  const [calendarFeed] = useState<CalendarFeed | null>(null);
+  const [emailFeed] = useState<EmailFeed | null>(null);
+  const [financeFeed] = useState<FinanceFeed | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const mountedRef = useRef(true);
@@ -136,54 +136,9 @@ export default function DailyDashboard({
       if (mountedRef.current) setSuggestions(blended);
     } catch { /* */ }
 
-    // 3. Calendar
-    try {
-      const raw = localStorage.getItem("prismos-settings");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.calendarEnabled && s.calendarPath) {
-          const json = await invoke<string>("fetch_calendar_summary", {
-            calendarPath: s.calendarPath,
-            ollamaUrl: s.ollamaUrl,
-          });
-          if (mountedRef.current) setCalendarFeed(JSON.parse(json));
-        }
-      }
-    } catch { /* */ }
-
-    // 4. Email
-    try {
-      const raw = localStorage.getItem("prismos-settings");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.emailSummaryEnabled && s.emailImapServer && s.emailUsername && s.emailPassword) {
-          const json = await invoke<string>("fetch_email_summary", {
-            imapServer: s.emailImapServer,
-            imapPort: s.emailImapPort || 993,
-            username: s.emailUsername,
-            password: s.emailPassword,
-            useTls: s.emailUseTls !== false,
-            ollamaUrl: s.ollamaUrl,
-          });
-          if (mountedRef.current) setEmailFeed(JSON.parse(json));
-        }
-      }
-    } catch { /* */ }
-
-    // 5. Finance
-    try {
-      const raw = localStorage.getItem("prismos-settings");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.financeEnabled && s.financeTickers && s.financeTickers.length > 0) {
-          const json = await invoke<string>("fetch_finance_summary", {
-            tickers: s.financeTickers,
-            ollamaUrl: s.ollamaUrl,
-          });
-          if (mountedRef.current) setFinanceFeed(JSON.parse(json));
-        }
-      }
-    } catch { /* */ }
+    // Optional network feeds remain disabled until they have explicit private
+    // configuration storage and per-feature consent. Dashboard refreshes never
+    // create email, calendar, or market-data egress in this build.
 
     if (mountedRef.current) {
       setLoading(false);
@@ -205,11 +160,11 @@ export default function DailyDashboard({
 
   // Quick link definitions
   const quickLinks = [
-    { icon: "💬", label: "Intent Console", view: "chat", desc: "Chat with AI agents" },
+    { icon: "💬", label: "Intent Console", view: "chat", desc: "Local knowledge chat" },
     { icon: "🕸️", label: "Spectrum Graph", view: "graph", desc: "Visualize knowledge" },
     { icon: "🌈", label: "Explorer", view: "spectrum", desc: "Browse all nodes" },
     { icon: "📅", label: "Timeline", view: "timeline", desc: "View history" },
-    { icon: "🔒", label: "Sandbox", view: "sandbox", desc: "Safe execution" },
+    { icon: "🔒", label: "Action Policies", view: "sandbox", desc: "Inspect policy records" },
     { icon: "⚙️", label: "Settings", view: "settings", desc: "Configure PrismOS" },
   ];
 

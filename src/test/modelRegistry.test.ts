@@ -7,6 +7,7 @@ import {
   getDefaultModel,
   getModelsByCapability,
   getBestModelFor,
+  getConservativeRamSuggestion,
   toLegacyFormat,
   toRecommendedFormat,
 } from "../lib/modelRegistry";
@@ -25,7 +26,9 @@ describe("MODEL_REGISTRY", () => {
       expect(spec.name).toBeTruthy();
       expect(spec.desc).toBeTruthy();
       expect(spec.size).toBeTruthy();
-      expect(typeof spec.ramMin).toBe("number");
+      expect(typeof spec.suggestedRamGB).toBe("number");
+      expect(typeof spec.suggestedVramGB).toBe("number");
+      expect(spec.sourceUrl).toMatch(/^https:\/\/ollama\.com\/library\//);
       expect(typeof spec.priority).toBe("number");
       expect(Array.isArray(spec.capabilities)).toBe(true);
       expect(spec.capabilities.length).toBeGreaterThan(0);
@@ -42,6 +45,20 @@ describe("MODEL_REGISTRY", () => {
       expect(MODEL_REGISTRY[i].priority).toBeGreaterThanOrEqual(MODEL_REGISTRY[i - 1].priority);
     }
   });
+
+  it("uses neutral, directly scoped capability descriptions", () => {
+    const unsupportedComparisons = /\b(?:gpt|best|better than|surpass(?:es|ed)?|superior|2x)\b/i;
+    for (const spec of MODEL_REGISTRY) {
+      expect(spec.capabilities).not.toContain("agentic");
+      expect(spec.desc).not.toMatch(unsupportedComparisons);
+    }
+  });
+
+  it("derives the long-context hint consistently from the listed context", () => {
+    for (const spec of MODEL_REGISTRY) {
+      expect(spec.capabilities.includes("long-context")).toBe(spec.context >= 32768);
+    }
+  });
 });
 
 // ─── Helper Functions ────────────────────────────────────────────────────────────
@@ -50,7 +67,7 @@ describe("getModelsForHardware", () => {
   it("returns only models that fit in the given RAM", () => {
     const models = getModelsForHardware(4);
     for (const m of models) {
-      expect(m.ramMin).toBeLessThanOrEqual(4);
+      expect(m.suggestedRamGB).toBeLessThanOrEqual(4);
     }
   });
 
@@ -58,6 +75,11 @@ describe("getModelsForHardware", () => {
     const low = getModelsForHardware(4);
     const high = getModelsForHardware(32);
     expect(high.length).toBeGreaterThanOrEqual(low.length);
+  });
+
+  it("does not treat zero discrete VRAM as a CPU incompatibility", () => {
+    const cpuOnly = getModelsForHardware(32, 0);
+    expect(cpuOnly.some((model) => model.name === "qwen3:32b")).toBe(true);
   });
 });
 
@@ -70,7 +92,21 @@ describe("getDefaultModel", () => {
 
   it("returns a model that fits in the given RAM", () => {
     const model = getDefaultModel(4);
-    expect(model.ramMin).toBeLessThanOrEqual(4);
+    expect(model.suggestedRamGB).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("getConservativeRamSuggestion", () => {
+  it("derives the former RAM tiers from reviewed registry metadata", () => {
+    expect(getConservativeRamSuggestion(8).name).toBe("qwen3:4b");
+    expect(getConservativeRamSuggestion(16).name).toBe("qwen3:8b");
+    expect(getConservativeRamSuggestion(32).name).toBe("qwen3:14b");
+  });
+
+  it("always returns a reviewed text-capable model", () => {
+    const model = getConservativeRamSuggestion(64);
+    expect(MODEL_REGISTRY).toContain(model);
+    expect(model.capabilities).toContain("text");
   });
 });
 
@@ -93,7 +129,7 @@ describe("getBestModelFor", () => {
     const model = getBestModelFor("text", 8);
     if (model) {
       expect(model.capabilities).toContain("text");
-      expect(model.ramMin).toBeLessThanOrEqual(8);
+      expect(model.suggestedRamGB).toBeLessThanOrEqual(8);
     }
   });
 });
@@ -119,7 +155,7 @@ describe("toRecommendedFormat", () => {
     expect(recommended.length).toBeGreaterThan(0);
   });
 
-  it("each entry has name, label, desc, size, and tier", () => {
+  it("each entry carries catalog display metadata", () => {
     const recommended = toRecommendedFormat();
     for (const r of recommended) {
       expect(r.name).toBeTruthy();
@@ -128,6 +164,13 @@ describe("toRecommendedFormat", () => {
       expect(r.size).toBeTruthy();
       expect(r.tier).toBeTruthy();
     }
+  });
+
+  it("carries reviewed minimum-version prerequisites into catalog suggestions", () => {
+    const recommended = toRecommendedFormat();
+    expect(recommended.find((model) => model.name === "phi4-mini")?.minOllamaVersion).toBe("0.5.13");
+    expect(recommended.find((model) => model.name === "gemma3:4b")?.minOllamaVersion).toBe("0.6.0");
+    expect(recommended.find((model) => model.name === "qwen2.5vl:7b")?.minOllamaVersion).toBe("0.7.0");
   });
 
   it("entries are sorted (same order as MODEL_REGISTRY sorted by priority)", () => {

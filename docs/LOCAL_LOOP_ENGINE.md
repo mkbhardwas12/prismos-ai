@@ -1,94 +1,119 @@
-# PrismOS Local Loop Engine — design
+# PrismOS Local Loop Engine
 
-> Turn the single-pass multi-agent pipeline into a real **plan → build → judge → refine**
-> goal loop that runs **entirely on-device** (Ollama), with explicit stopping criteria and
-> per-role model routing. Inspired by "loop engineering" (Boris Cherny / Anthropic plan-build-judge),
-> but offline — *zero bytes leave the machine*.
+> **Status (August 2026): shipped as a bounded, sequential answer-refinement
+> loop.** Planner, Reasoner, and Critic calls can use installed local models, but
+> they run one after another through the same typed inference bridge. PrismOS does
+> not currently run a true parallel multi-model Council or an autonomous
+> plan/tool/observe agent.
 
-## Why
-The current `agents/langgraph_workflow.rs` runs one pass and stops:
-`orchestrate → fan-out → debate → sentinel → consensus → execute/reject`.
-Three gaps vs. a real loop:
-1. **No iteration / no goal validation** — consensus-reject returns a canned apology (no retry).
-2. **Debate is canned** — `run_debate` emits hard-coded strings; only the Reasoner calls the LLM.
-3. **One model for all roles** — `smart_router` is not wired into the workflow.
+The loop improves a candidate response against explicit acceptance criteria:
 
-The fix unifies two ideas: a *local goal loop* + *per-role free-model routing*.
-
-## Core invariant (hard gate)
-Every new inference call goes through `ollama_bridge` → local Ollama. **No network egress.**
-The loop adds local compute/latency, never a remote call. Sentinel security veto stays absolute.
-
-## The loop
-```
-PLAN   Orchestrator decomposes intent AND emits explicit AcceptanceCriteria ("what "done" looks like")
-  ↓
-BUILD  existing fan-out (Reasoner + ToolSmith + MemoryKeeper) produces a candidate   ← reused as-is
-  ↓
-JUDGE  CriticNode (REAL llm call) scores candidate vs. AcceptanceCriteria → JudgeVerdict{pass, deficiencies[]}
-       Sentinel security review runs here too (hard veto, unchanged)
-  ↓
-  pass? ───yes──→ EXECUTE (Sandbox Prism) + persist to Spectrum Graph   ← reused
-  │
-  no, and (iter < max) and (not stuck) and (Sentinel not vetoing)
-  └──→ REFINE: feed deficiencies[] back into BUILD as additional context, iterate
+```text
+PLAN
+  Define bounded acceptance criteria.
+  Open-ended Analyze/Create/Connect intents can use a model-backed Planner;
+  simpler intents and failures use deterministic criteria.
+    ↓
+BUILD
+  The Reasoner produces a candidate from the user intent and bounded,
+  untrusted reference context.
+    ↓
+SECURITY GATE
+  Sentinel can halt the loop. A veto is final for that request.
+    ↓
+JUDGE
+  A sequential Critic call scores the candidate against the criteria and
+  returns bounded deficiencies. Invalid or unavailable judging is marked
+  ungraded instead of causing blind retries.
+    ↓
+  pass? ─── yes ──→ deterministic collaboration trace + persistence
+    │
+    no, budget remains, and score improves
+    └──────────────→ REFINE deficiencies into the next BUILD
 ```
 
-### Stopping criteria (the article's emphasis — explicit "done")
-- **Validated**: JudgeVerdict.pass == true → execute.
-- **Budget cap**: `iter >= max_iterations` (default 3) → return best-so-far, labelled "unvalidated".
-- **Stuck**: judge score does not improve between two rounds → stop (don't burn loops).
-- **Security veto**: Sentinel flags → halt immediately, never execute. (Absolute, unchanged.)
-- **Offline fallback**: Ollama unreachable → one graceful pass, no loop, honest message.
+## Bounds and stopping rules
 
-## Per-role model routing (wire `smart_router` in)
-Add a **reasoning lane** alongside the existing vision/code lanes and route by role:
+- The goal loop is enabled by default and can be disabled with
+  `PRISMOS_GOAL_LOOP=0` for a single-pass compatibility path.
+- The default budget is two attempts for ordinary intents and three for
+  Analyze/Create/Connect intents.
+- `PRISMOS_LOOP_MAX_ITERS` may set a value from 1 through 5; values outside that
+  range are ignored.
+- A passing Critic verdict stops the loop.
+- A non-improving score stops the loop and retains the best candidate seen.
+- A Sentinel veto stops immediately.
+- A first BUILD inference failure is returned as a typed failure. A later BUILD
+  failure retains the best earlier candidate.
+- If the Critic is unavailable or its response is invalid, the result is
+  explicitly ungraded and the loop stops instead of inventing validation.
 
-| Role            | Model lane        | Example (local, free)              |
-|-----------------|-------------------|------------------------------------|
-| Planner / Critic| reasoning         | deepseek-r1-distill / qwen3        |
-| Builder/Reasoner| general (or code) | llama3.3:70b / qwen2.5-coder       |
-| Vision intents  | vision            | qwen2.5-vl / llama3.2-vision       |
+These bounds limit latency and runaway retries. A model-generated grade is still
+an estimate, not proof that an answer is correct.
 
-### Memory policy on 64 GB (M5 Max) — avoid thrash
-A 70B builder (~40 GB Q4) + a 32B judge (~20 GB Q4) ≈ 60 GB — both can stay warm, tight.
-- Default: **single warm model** for plan/build/judge to avoid reloads each loop turn (fastest).
-- Escalate to a **separate reasoning judge** only for high-stakes / low-confidence answers (adaptive).
-- Set Ollama `keep_alive` per call + `OLLAMA_MAX_LOADED_MODELS` so swap behaviour is explicit, not accidental.
+## Model routing
 
-## Concrete code changes (grounded in current files)
-- `agents/langgraph_workflow.rs`
-  - New structs: `AcceptanceCriteria { checks: Vec<String> }`, `JudgeVerdict { pass: bool, score: f64, deficiencies: Vec<String>, summary: String }`,
-    `IterationRecord { attempt, candidate, verdict }`, extend `WorkflowState` with `iterations: Vec<IterationRecord>` + `max_iterations`.
-  - New `WorkflowEngine::execute_goal_loop(...)` that wraps the existing single-pass `execute(...)` as the BUILD stage and loops.
-  - Real `judge()` step (LLM critic) replacing/augmenting the canned `run_debate` (keep debate as optional flavor, demote from decision-maker).
-- `agents/nodes.rs`
-  - `PlannerNode::acceptance_criteria(&intent, ctx) -> AcceptanceCriteria` (real LLM, reasoning model).
-  - `CriticNode::judge(candidate, &criteria) -> JudgeVerdict` (real LLM, reasoning model).
-- `smart_router.rs`
-  - `REASONING_MODEL_PATTERNS` + `find_best_reasoning_model`, and `route_for_role(role, intent, available) -> RoutingDecision`.
-- `ollama_bridge.rs`
-  - Thread `keep_alive: Option<&str>` into `GenerateOptions`/`ChatOptions`; read `OLLAMA_MAX_LOADED_MODELS` from env at startup.
-- Frontend (`src/`)
-  - Extend `AgentActivityEvent` with `iteration: u32`; new phases `plan | build | judge | refine`.
-  - UI: "Refining (attempt 2/3)…" + show the judge's deficiency list live (this is the demo money-shot).
+Planner and Critic prefer an installed reasoning lane; the Reasoner uses the
+selected general, reasoning, code, or vision route for the intent. Routing can
+select different installed models for roles, but calls remain sequential. This
+avoids describing model diversity as concurrency.
 
-## Tests (keep tsc/vitest green, cargo clean)
-- loop converges to pass on a solvable intent;
-- loop respects `max_iterations` and returns best-so-far labelled unvalidated;
-- stuck-detection halts when score doesn't improve;
-- Sentinel veto halts the loop regardless of judge;
-- offline (Ollama down) path returns one graceful pass, no infinite loop;
-- `route_for_role` picks reasoning model for Planner/Critic, vision for image intents.
+Ollama endpoint admission remains a separate security boundary. All Planner,
+Reasoner, and Critic inference is fixed to `http://localhost:11434`, with proxy and
+redirect behavior disabled. `PRISMOS_ALLOW_REMOTE_OLLAMA=1` can admit a configured
+non-loopback origin only for model management and status operations; it does not
+redirect prompts, retrieved context, or loop roles away from loopback.
 
-## Rollout (phased, each independently shippable)
-1. **Routing lane** — add reasoning lane + `route_for_role` + tests. (No behaviour change yet.)
-2. **Judge** — `CriticNode::judge` real LLM verdict; surface verdict in UI; still single pass.
-3. **Loop** — `execute_goal_loop` with acceptance criteria + stopping criteria + iteration UI.
-4. **keep_alive / memory policy** — wire `keep_alive` + adaptive judge escalation; benchmark load/tok-s on M5 Max.
+## What the collaboration trace means
 
-## Risks
-- **Latency**: each loop turn = full pass + judge LLM ≈ seconds × N. Cap N=3; stream so the UI feels alive.
-- **Model thrash**: per-turn model swaps on 64 GB. Mitigate with single warm model default + adaptive escalation.
-- **Loop never converges**: stuck-detection + hard cap are mandatory, not optional.
-- **Debate vs judge confusion**: demote canned debate to cosmetic; the *judge* is the decision-maker.
+The workflow still records Orchestrator, Tool Smith, Memory Keeper, Sentinel,
+debate, and consensus stages. Today, Tool Smith and Memory Keeper proposals,
+debate statements, and consensus votes are deterministic policy/heuristic
+outputs. They should not be presented as independent LLM agents debating in
+parallel.
+
+The loop refines response text. It does not itself:
+
+- execute arbitrary shell commands or model-authored code;
+- browse or crawl the internet;
+- grant a model filesystem access;
+- train, download, promote, or roll back model weights;
+- make email, calendar, or finance commands available.
+
+Project files can enter context only through the separate approval-gated Project
+Knowledge or review flows.
+
+## Relevant implementation
+
+- `agents/langgraph_workflow.rs` owns `AcceptanceCriteria`, `JudgeVerdict`,
+  `IterationRecord`, iteration bounds, stopping rules, and workflow events.
+- `agents/nodes.rs` owns bounded Planner/Critic prompts, strict JSON parsing,
+  deterministic fallbacks, and deficiency-to-refinement formatting.
+- `inference_bridge.rs` validates typed request, route, and model identity.
+- `smart_router.rs` selects an installed role-appropriate model lane.
+- `ollama_bridge.rs` keeps private inference on fixed loopback and separately
+  validates configured model-management/status origins.
+
+## Historical design versus current implementation
+
+The original design proposed a single-pass fan-out followed by a Council of
+several models, potentially loaded concurrently. The shipped implementation took
+a narrower route: explicit criteria, one candidate at a time, one Critic grade at
+a time, and hard iteration bounds. This provides inspectable refinement without
+claiming parallel LLM orchestration.
+
+A future parallel Council would need an explicit opt-in, RAM/VRAM preflight,
+maximum candidate count, per-branch request identity, timeout/cancellation,
+queue backpressure, and a side-effect-free candidate phase. It is not part of
+the current capability set.
+
+## Verification expectations
+
+Tests should continue to cover:
+
+- bounded planner and critic parsing;
+- pass, iteration-cap, stuck, Sentinel-veto, and unavailable-model paths;
+- request/model identity propagation across Planner, Reasoner, and Critic calls;
+- prompt-injection separation for user intent, retrieved context, criteria, and
+  candidate text;
+- honest `validated` versus `ungraded` result metadata.

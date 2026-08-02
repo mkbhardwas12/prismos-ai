@@ -1,53 +1,47 @@
-// Brain Wrapped™ + Cognitive Fingerprint™ — Shareable Mind Snapshot Engine
+// Brain Wrapped™ — shareable response-preference profile snapshot
 //
-// THE INNOVATION (no prior art):
-//   Most AI tools are stateless — they have no memory of WHO you are.
-//   PrismOS already learns HOW you think (Cognitive Imprint).
-//   Brain Wrapped turns that data into a shareable, animated story —
-//   like Spotify Wrapped, but for your mind.
-//
-//   The Cognitive Fingerprint is a deterministic visual signature
-//   computed from your 5-axis cognitive profile + behavior patterns.
-//   Two people with identical thinking styles get identical fingerprints —
-//   making it both a privacy-preserving identity primitive AND a
-//   compatibility metric ("how similarly do we think?").
+//   The legacy-named CognitiveFingerprint is a deterministic visual signature
+//   computed from a 5-axis response-preference profile + interaction signals.
+//   Identical inputs get identical signatures — making it an illustrated
+//   profile-comparison signal, not a psychological assessment, unique identity,
+//   authenticator, anonymity mechanism, or privacy guarantee.
 //
 //   Everything is computed locally. Nothing leaves the device unless the
-//   user explicitly clicks "Share" — and even then, only the rendered
-//   PNG image goes out, never raw cognitive data.
+//   user explicitly clicks "Share". The PNG and share text expose derived,
+//   linkable behavioral metadata (hash prefix and archetype), not raw chat text.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::cognitive_profile::{
-    CognitiveDeltaSet, CognitiveDrift, CognitiveProfile, PredictedEdge,
-    RefractionInsights,
+    CognitiveDeltaSet, CognitiveDrift, CognitiveProfile, PredictedEdge, RefractionInsights,
 };
 
 // ─── Public Types ──────────────────────────────────────────────────────────────
 
-/// A shareable, deterministic visual signature of how you think.
-/// Computed entirely from local cognitive data — no PII, no raw text.
+/// A shareable, deterministic visualization signature of a quantized profile.
+/// It contains no raw chat text, but it is linkable derived behavioral metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CognitiveFingerprint {
     /// SHA-256 hex hash of the cognitive profile (truncated to 16 chars for display).
-    /// Identical profiles produce identical hashes — enabling compatibility scoring.
+    /// Identical profiles produce identical hashes, which permits deterministic
+    /// vector comparisons but does not establish identity or psychological similarity.
     pub hash: String,
 
     /// Five color stops (HSL) derived from profile axes — defines the visual palette.
     pub palette: Vec<String>,
 
-    /// Five SVG path coordinates forming a unique pentagon-like shape.
+    /// Five SVG path coordinates forming a deterministic pentagon-like shape.
     /// Each axis controls one vertex's distance from center.
     pub shape_points: Vec<(f64, f64)>,
 
     /// Rotation angle (radians) derived from interaction history.
     pub rotation: f64,
 
-    /// One of 12 archetypes: "The Architect", "The Explorer", "The Synthesizer", etc.
+    /// One of 12 illustrated nearest-anchor labels (legacy field name).
     pub archetype: String,
 
-    /// Short tagline for the archetype.
+    /// Short response-preference description for the illustrated label.
     pub archetype_tagline: String,
 
     /// Generation seed (hours-since-epoch / 24) — fingerprint refreshes daily as profile evolves.
@@ -58,25 +52,25 @@ pub struct CognitiveFingerprint {
 /// This is the structure exported when the user clicks "Generate My Wrapped".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrainSnapshot {
-    /// Slide 1: Cognitive Fingerprint
+    /// Slide 1: deterministic profile signature (legacy field name)
     pub fingerprint: CognitiveFingerprint,
 
     /// Slide 2: Your 5-axis profile + percentile labels
     pub profile: CognitiveProfile,
     pub axis_labels: AxisLabels,
 
-    /// Slide 3: How your mind evolved (drift over time)
+    /// Slide 3: recorded response-preference changes over time
     pub drift: Option<CognitiveDrift>,
     pub evolution_summary: String,
 
-    /// Slide 4: Top recurring themes (thought currents)
+    /// Slide 4: top recurring graph themes
     pub top_currents: Vec<CurrentSummary>,
 
-    /// Slide 5: Predictions that came true (edge prophecy hits)
+    /// Slide 5: heuristic candidate graph links (legacy prophecy field names)
     pub prophecy_count: u32,
     pub top_prophecies: Vec<PredictedEdge>,
 
-    /// Slide 6: Reasoning style breakdown (refraction band distribution)
+    /// Slide 6: response-band distribution
     pub refraction: Option<RefractionSummary>,
 
     /// Slide 7: Lifetime stats
@@ -91,11 +85,11 @@ pub struct BrainSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AxisLabels {
-    pub depth: String,           // e.g. "Deep Diver" / "Bottom Liner"
-    pub creativity: String,      // e.g. "Pattern Weaver" / "Just-the-Facts"
-    pub formality: String,       // e.g. "Professional" / "Casual"
-    pub technical_level: String, // e.g. "Expert Tier" / "Plain Speaker"
-    pub example_preference: String, // e.g. "Show-Me Type" / "Abstract Thinker"
+    pub depth: String,              // e.g. "Prefers depth" / "Prefers concise"
+    pub creativity: String,         // e.g. "Prefers connections" / "Prefers literal"
+    pub formality: String,          // e.g. "Prefers formal" / "Prefers casual"
+    pub technical_level: String,    // e.g. "Specialized Vocabulary" / "Plain Language"
+    pub example_preference: String, // e.g. "Prefers examples" / "Prefers abstraction"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,41 +117,77 @@ pub struct LifetimeStats {
     pub favorite_archetype_phrase: String,
 }
 
-/// Compatibility score between two cognitive fingerprints (0.0 – 1.0).
-/// 1.0 = identical thinking styles, 0.0 = polar opposites.
+/// Heuristic Euclidean similarity between two response-preference vectors (0.0 – 1.0).
+/// The legacy type name does not imply personality, credential, or mental similarity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatibilityScore {
     pub score: f64,
     pub axis_distances: CognitiveDeltaSet,
+    /// Neutral bucket label for the heuristic vector score.
     pub interpretation: String,
+    /// Legacy field: true only when both vectors select the same display anchor;
+    /// it does not assert a shared personality or identity.
     pub shared_archetype: bool,
 }
 
 // ─── Archetype Mapping (12 cognitive archetypes) ──────────────────────────────
 //
-// Derived from quadrant analysis of (depth, creativity) × (technical, formality).
-// Each archetype is unique to a region of the 5-D cognitive space.
+// Derived from nearest-anchor matching over the five response-preference axes.
+// These labels are illustrations, not personality or psychological conclusions.
 
 const ARCHETYPES: &[(&str, &str)] = &[
-    ("The Architect",      "Builds rigorous mental models from first principles"),
-    ("The Explorer",       "Chases curiosity across every domain it touches"),
-    ("The Synthesizer",    "Weaves disparate ideas into elegant unified theories"),
-    ("The Strategist",     "Sees three moves ahead — every conversation is a game"),
-    ("The Storyteller",    "Translates complexity into narratives that stick"),
-    ("The Specialist",     "Drills deep into one domain with surgical precision"),
-    ("The Scout",          "Surveys the terrain quickly, then picks the best path"),
-    ("The Sage",           "Pursues understanding for its own sake"),
-    ("The Maker",          "Learns by building — abstraction follows action"),
-    ("The Catalyst",       "Sparks new connections wherever attention lands"),
-    ("The Pragmatist",     "Cuts to the answer that actually ships"),
-    ("The Pattern-Seer",   "Notices the rhythm hiding in the noise"),
+    (
+        "The Architect",
+        "Often prefers structured, first-principles responses",
+    ),
+    (
+        "The Explorer",
+        "Often prefers broad, curiosity-led connections",
+    ),
+    (
+        "The Synthesizer",
+        "Often prefers explicit connections across topics",
+    ),
+    (
+        "The Strategist",
+        "Often prefers plans, tradeoffs, and next actions",
+    ),
+    (
+        "The Storyteller",
+        "Often prefers narrative explanations and examples",
+    ),
+    (
+        "The Specialist",
+        "Often prefers deep treatment of one technical topic",
+    ),
+    (
+        "The Scout",
+        "Often prefers a quick survey before choosing a path",
+    ),
+    ("The Sage", "Often prefers detailed conceptual explanations"),
+    (
+        "The Maker",
+        "Often prefers build-oriented guidance and examples",
+    ),
+    (
+        "The Catalyst",
+        "Often prefers novel connections and multiple options",
+    ),
+    (
+        "The Pragmatist",
+        "Often prefers concise, actionable answers",
+    ),
+    (
+        "The Pattern-Seer",
+        "Often prefers patterns and relationships to be explicit",
+    ),
 ];
 
 // ─── Core Generator ────────────────────────────────────────────────────────────
 
 /// Generate a deterministic cognitive fingerprint from a profile.
-/// Same input → same output. This is the secret sauce: a privacy-preserving
-/// visual identity derived purely from cognitive metadata.
+/// Same quantized input → same output. This is a visualization signature, not a
+/// unique identity, authentication token, or privacy-preserving primitive.
 pub fn generate_fingerprint(profile: &CognitiveProfile) -> CognitiveFingerprint {
     // 1. Stable hash from quantized profile values (5-decimal precision).
     //    Quantization makes the hash robust to micro-fluctuations.
@@ -175,7 +205,7 @@ pub fn generate_fingerprint(profile: &CognitiveProfile) -> CognitiveFingerprint 
     let hash = full_hash[..16].to_string();
 
     // 2. Color palette — each axis maps to a hue in HSL color space.
-    //    This produces visually distinct palettes for distinct minds.
+    //    This produces palettes derived from quantized profile values.
     let palette = vec![
         hsl_color(profile.depth * 360.0, 70.0, 55.0),
         hsl_color(profile.creativity * 360.0 + 60.0, 75.0, 60.0),
@@ -185,7 +215,7 @@ pub fn generate_fingerprint(profile: &CognitiveProfile) -> CognitiveFingerprint 
     ];
 
     // 3. Pentagon shape — each axis is a vertex, distance from center = axis value.
-    //    Produces a 5-pointed star unique to the user's profile.
+    //    Produces a 5-pointed shape for the current quantized profile.
     let axes = [
         profile.depth,
         profile.creativity,
@@ -197,8 +227,8 @@ pub fn generate_fingerprint(profile: &CognitiveProfile) -> CognitiveFingerprint 
         .iter()
         .enumerate()
         .map(|(i, &v)| {
-            let angle = (i as f64) * (2.0 * std::f64::consts::PI / 5.0)
-                - std::f64::consts::FRAC_PI_2;
+            let angle =
+                (i as f64) * (2.0 * std::f64::consts::PI / 5.0) - std::f64::consts::FRAC_PI_2;
             // Radius: a 0.5 (neutral) axis sits at ~50% of canvas;
             // strong axes push their vertex outward, weak axes pull it in.
             let r = 18.0 + v * 32.0;
@@ -208,9 +238,10 @@ pub fn generate_fingerprint(profile: &CognitiveProfile) -> CognitiveFingerprint 
 
     // 4. Rotation derived from interaction count — your fingerprint subtly
     //    spins as you engage more, like a slow watch hand.
-    let rotation = (profile.interaction_count as f64 * 0.0174).rem_euclid(2.0 * std::f64::consts::PI);
+    let rotation =
+        (profile.interaction_count as f64 * 0.0174).rem_euclid(2.0 * std::f64::consts::PI);
 
-    // 5. Archetype — quadrant lookup in (depth × creativity × technical) cube
+    // 5. Illustrated profile label — nearest anchor in the five-axis vector.
     let archetype_idx = pick_archetype_index(profile);
     let (name, tag) = ARCHETYPES[archetype_idx];
 
@@ -229,8 +260,8 @@ pub fn generate_fingerprint(profile: &CognitiveProfile) -> CognitiveFingerprint 
 }
 
 fn pick_archetype_index(p: &CognitiveProfile) -> usize {
-    // Simple but deterministic: project the 5-D vector onto archetype "anchors"
-    // and pick the closest one. Anchors are spread across the cognitive space.
+    // Deterministically compare the 5-D response-preference vector with fixed
+    // display anchors and choose the closest one.
     let me = [
         p.depth,
         p.creativity,
@@ -239,7 +270,7 @@ fn pick_archetype_index(p: &CognitiveProfile) -> usize {
         p.example_preference,
     ];
 
-    // 12 anchors, hand-tuned to match the archetype semantics.
+    // Twelve fixed display anchors. They do not model personality or identity.
     let anchors: [[f64; 5]; 12] = [
         [0.85, 0.40, 0.70, 0.85, 0.50], // Architect
         [0.55, 0.85, 0.40, 0.50, 0.65], // Explorer
@@ -292,22 +323,37 @@ fn current_day_seed() -> u64 {
 
 pub fn label_axes(p: &CognitiveProfile) -> AxisLabels {
     AxisLabels {
-        depth: tier_label(p.depth, &["Bottom Liner", "Balanced Reader", "Deep Diver"]),
+        depth: tier_label(
+            p.depth,
+            &["Prefers concise", "Balanced detail", "Prefers depth"],
+        ),
         creativity: tier_label(
             p.creativity,
-            &["Just-the-Facts", "Curious Connector", "Pattern Weaver"],
+            &[
+                "Prefers literal",
+                "Balanced connections",
+                "Prefers connections",
+            ],
         ),
         formality: tier_label(
             p.formality,
-            &["Casual Conversationalist", "Adaptive Voice", "Professional Tone"],
+            &["Prefers casual", "Balanced tone", "Prefers formal"],
         ),
         technical_level: tier_label(
             p.technical_level,
-            &["Plain Speaker", "Mixed Vocabulary", "Expert Tier"],
+            &[
+                "Plain Language",
+                "Mixed Vocabulary",
+                "Specialized Vocabulary",
+            ],
         ),
         example_preference: tier_label(
             p.example_preference,
-            &["Abstract Thinker", "Balanced Learner", "Show-Me Type"],
+            &[
+                "Prefers abstraction",
+                "Balanced examples",
+                "Prefers examples",
+            ],
         ),
     }
 }
@@ -320,13 +366,10 @@ fn tier_label(v: f64, tiers: &[&str]) -> String {
 
 // ─── Compatibility Scoring ─────────────────────────────────────────────────────
 
-/// Compute cognitive compatibility between two profiles.
-/// Useful for "Find your AI twin" social features (future) — but works
-/// today for self-comparison across time (you-now vs you-3-months-ago).
-pub fn compute_compatibility(
-    a: &CognitiveProfile,
-    b: &CognitiveProfile,
-) -> CompatibilityScore {
+/// Compute heuristic response-preference vector similarity between two profiles.
+/// This is suitable for comparing stored axis values, not people, minds,
+/// personalities, credentials, or psychological compatibility.
+pub fn compute_compatibility(a: &CognitiveProfile, b: &CognitiveProfile) -> CompatibilityScore {
     let deltas = CognitiveDeltaSet {
         depth: (a.depth - b.depth).abs(),
         creativity: (a.creativity - b.creativity).abs(),
@@ -335,7 +378,7 @@ pub fn compute_compatibility(
         example_preference: (a.example_preference - b.example_preference).abs(),
     };
 
-    // Euclidean distance in 5-D cognitive space, normalized to [0, 1].
+    // Euclidean distance in the 5-D response-preference space, normalized to [0, 1].
     // Max possible distance = sqrt(5) ≈ 2.236
     let sq = deltas.depth.powi(2)
         + deltas.creativity.powi(2)
@@ -347,12 +390,12 @@ pub fn compute_compatibility(
     let score = (1.0 - (dist / max_dist)).clamp(0.0, 1.0);
 
     let interpretation = match score {
-        s if s >= 0.92 => "Cognitive Twins — you process information almost identically",
-        s if s >= 0.80 => "Strong Resonance — you'd finish each other's sentences",
-        s if s >= 0.65 => "Compatible Minds — different lenses, similar conclusions",
-        s if s >= 0.50 => "Complementary — you balance each other's blind spots",
-        s if s >= 0.30 => "Diverging Paths — you'd benefit from each other's perspectives",
-        _ => "Polar Opposites — fascinating creative tension potential",
+        s if s >= 0.92 => "Heuristic: very high response-preference vector similarity",
+        s if s >= 0.80 => "Heuristic: high response-preference vector similarity",
+        s if s >= 0.65 => "Heuristic: moderately high response-preference vector similarity",
+        s if s >= 0.50 => "Heuristic: moderate response-preference vector similarity",
+        s if s >= 0.30 => "Heuristic: low response-preference vector similarity",
+        _ => "Heuristic: very low response-preference vector similarity",
     }
     .to_string();
 
@@ -413,7 +456,7 @@ pub fn build_snapshot(
 
 fn summarize_evolution(drift: &Option<CognitiveDrift>) -> String {
     let Some(d) = drift else {
-        return "Your cognitive profile is still calibrating — keep chatting to see your story unfold.".to_string();
+        return "The response-preference profile is still calibrating; more interactions are needed before comparing changes.".to_string();
     };
 
     let deltas = &d.deltas;
@@ -421,11 +464,15 @@ fn summarize_evolution(drift: &Option<CognitiveDrift>) -> String {
         ("depth", deltas.depth),
         ("creativity", deltas.creativity),
         ("formality", deltas.formality),
-        ("technical sharpness", deltas.technical_level),
+        ("technical vocabulary", deltas.technical_level),
         ("example preference", deltas.example_preference),
     ]
     .into_iter()
-    .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap_or(std::cmp::Ordering::Equal))
+    .max_by(|a, b| {
+        a.1.abs()
+            .partial_cmp(&b.1.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })
     .unwrap();
 
     let direction = if max.1 > 0.0 { "rose" } else { "fell" };
@@ -433,12 +480,12 @@ fn summarize_evolution(drift: &Option<CognitiveDrift>) -> String {
 
     if magnitude < 3 {
         format!(
-            "Over {} weeks your thinking style stayed remarkably consistent — a sign of cognitive maturity.",
+            "Across {} weeks, the recorded response-preference vector changed by less than 3%; this is sample consistency, not evidence of maturity or personality.",
             d.weeks_compared
         )
     } else {
         format!(
-            "Over the last {} weeks your {} {} by {}% — your mind is actively evolving.",
+            "Across the last {} weeks, the recorded {} preference signal {} by {}%.",
             d.weeks_compared, max.0, direction, magnitude
         )
     }
@@ -495,7 +542,10 @@ mod tests {
         let b_hash = generate_fingerprint(&a).hash.clone();
         a.creativity = 0.1;
         let new_hash = generate_fingerprint(&a).hash;
-        assert_ne!(b_hash, new_hash, "different profiles must produce different hashes");
+        assert_ne!(
+            b_hash, new_hash,
+            "different profiles must produce different hashes"
+        );
     }
 
     #[test]
@@ -518,6 +568,9 @@ mod tests {
         let score = compute_compatibility(&p, &p);
         assert!((score.score - 1.0).abs() < 1e-9);
         assert!(score.shared_archetype);
+        assert!(score.interpretation.contains("Heuristic:"));
+        assert!(score.interpretation.contains("response-preference vector"));
+        assert!(!score.interpretation.contains("Twin"));
     }
 
     #[test]
@@ -541,7 +594,10 @@ mod tests {
             last_updated: String::new(),
         };
         let score = compute_compatibility(&a, &b);
-        assert!(score.score < 0.05, "opposite profiles should have near-zero compatibility");
+        assert!(
+            score.score < 0.05,
+            "opposite profiles should have near-zero compatibility"
+        );
     }
 
     #[test]
@@ -582,6 +638,27 @@ mod tests {
     fn evolution_summary_handles_missing_drift() {
         let s = summarize_evolution(&None);
         assert!(s.contains("calibrating"));
+    }
+
+    #[test]
+    fn stable_evolution_summary_is_neutral_about_personality() {
+        let profile = sample_profile();
+        let drift = CognitiveDrift {
+            current: profile.clone(),
+            previous: Some(profile),
+            deltas: CognitiveDeltaSet {
+                depth: 0.01,
+                creativity: 0.0,
+                formality: 0.0,
+                technical_level: 0.0,
+                example_preference: 0.0,
+            },
+            summary: String::new(),
+            weeks_compared: 4,
+        };
+        let summary = summarize_evolution(&Some(drift));
+        assert!(summary.contains("sample consistency"));
+        assert!(summary.contains("not evidence of maturity or personality"));
     }
 
     #[test]

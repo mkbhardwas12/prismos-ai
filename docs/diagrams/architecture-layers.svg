@@ -43,28 +43,28 @@
   <rect x="60" y="65" width="780" height="60" rx="10" fill="url(#l6)" filter="url(#shadow)" opacity="0.95"/>
   <text x="80" y="92" fill="#fff" font-size="13" font-weight="700">L6</text>
   <text x="115" y="92" fill="#fff" font-size="15" font-weight="700">Intent Console</text>
-  <text x="80" y="113" fill="#e0f7ff" font-size="12">React UI · Conversation History · Graph Visualization · Settings · Export/Import</text>
+  <text x="80" y="113" fill="#e0f7ff" font-size="12">React UI · Conversation History · Graph Visualization · Settings · Vault Backup</text>
   <text x="750" y="100" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
 
-  <!-- Layer 5 — You-Port -->
+  <!-- Layer 5 — Private Data Portability -->
   <rect x="60" y="135" width="780" height="60" rx="10" fill="url(#l5)" filter="url(#shadow)" opacity="0.95"/>
   <text x="80" y="162" fill="#fff" font-size="13" font-weight="700">L5</text>
-  <text x="115" y="162" fill="#fff" font-size="15" font-weight="700">You-Port™</text>
-  <text x="80" y="183" fill="#cce5ff" font-size="12">Encrypted State Migration · Device Fingerprinting · XOR Stream Cipher · HMAC Key Derivation</text>
+  <text x="115" y="162" fill="#fff" font-size="15" font-weight="700">Private Data Portability</text>
+  <text x="80" y="183" fill="#cce5ff" font-size="12">AES-256-GCM Exports · PBKDF2 · Staged Restore · Local Plaintext SQLite Disclosed</text>
   <text x="750" y="170" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
 
-  <!-- Layer 4 — Sandbox Prisms -->
+  <!-- Layer 4 — Native Action Policy -->
   <rect x="60" y="205" width="780" height="60" rx="10" fill="url(#l4)" filter="url(#shadow)" opacity="0.95"/>
   <text x="80" y="232" fill="#fff" font-size="13" font-weight="700">L4</text>
-  <text x="115" y="232" fill="#fff" font-size="15" font-weight="700">Sandbox Prisms</text>
-  <text x="80" y="253" fill="#ffe8e0" font-size="12">HMAC-SHA256 Code Signing · Syscall Allow-Lists · Anomaly Detection · WASM Isolated · Auto-Rollback</text>
+  <text x="115" y="232" fill="#fff" font-size="15" font-weight="700">Native Action Policy</text>
+  <text x="80" y="253" fill="#ffe8e0" font-size="12">Process-Local HMAC Records · Operation Allow-Lists · Anomaly Checks · Decision Bookkeeping</text>
   <text x="750" y="240" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
 
-  <!-- Layer 3 — Agent Mesh -->
+  <!-- Layer 3 — Sequential Goal Loop -->
   <rect x="60" y="275" width="780" height="60" rx="10" fill="url(#l3)" filter="url(#shadow)" opacity="0.95"/>
   <text x="80" y="302" fill="#1a1a1a" font-size="13" font-weight="700">L3</text>
-  <text x="115" y="302" fill="#1a1a1a" font-size="15" font-weight="700">Agent Mesh</text>
-  <text x="80" y="323" fill="#3d2b00" font-size="12">LangGraph DAG · 5 Specialized Agents · Structured Messages · Voting &amp; Consensus · 6-Phase Pipeline</text>
+  <text x="115" y="302" fill="#1a1a1a" font-size="15" font-weight="700">Sequential Goal Loop</text>
+  <text x="80" y="323" fill="#3d2b00" font-size="12">5 Core Roles · Plan → Build → Judge → Refine · Bounded Iterations · Model-Backed Checks</text>
   <text x="750" y="310" fill="#1a1a1a" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
 
   <!-- Layer 2 — Refractive Core -->
@@ -78,7 +78,7 @@
   <rect x="60" y="415" width="780" height="60" rx="10" fill="url(#l1)" filter="url(#shadow)" opacity="0.95"/>
   <text x="80" y="442" fill="#0a2e1f" font-size="13" font-weight="700">L1</text>
   <text x="115" y="442" fill="#0a2e1f" font-size="15" font-weight="700">Spectrum Graph™</text>
-  <text x="80" y="463" fill="#0a3d2a" font-size="12">7-Dimensional Spectral Embeddings · Edge Scoring · Temporal Decay · SQLite Persistence</text>
+  <text x="80" y="463" fill="#0a3d2a" font-size="12">SQLite Knowledge Graph · Heuristic Retrieval · Temporal Decay · Optional Embeddings</text>
   <text x="750" y="450" fill="#0a2e1f" font-size="11" font-weight="600" text-anchor="middle" opacity="0.9">✅ DONE</text>
 
   <!-- Side arrows -->
@@ -86,5 +86,5 @@
   <text x="870" y="300" fill="#4a6a80" font-size="28" text-anchor="middle" transform="rotate(90, 870, 300)">▲  DATA  ▲</text>
 
   <!-- Footer -->
-  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">All layers fully implemented in v0.5.0</text>
+  <text x="450" y="505" text-anchor="middle" fill="#5a8aa0" font-size="11">Current v0.5.2 architecture; no code sandbox or generic automatic rollback</text>
 </svg>

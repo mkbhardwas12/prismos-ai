@@ -2,9 +2,9 @@
 //
 // When the user asks the local chatbot to "create a Word document" or "make a
 // PowerPoint", the LLM produces a structured JSON spec (title + sections/slides)
-// and this module turns it into a real Office Open XML file on disk. Everything
-// happens on-device — no network, no cloud export — preserving the offline
-// invariant. Files are written to the user's Downloads folder.
+// and this module turns it into a real Office Open XML file on disk. This renderer
+// performs no network request; inference and model-download boundaries are handled
+// separately. Files are written to the user's Downloads folder when available.
 //
 // - .docx is built with the `docx-rs` crate.
 // - .pptx is assembled directly as an Office Open XML package (a zip of XML
@@ -27,6 +27,29 @@ pub struct WordSection {
     pub bullets: Vec<String>,
 }
 
+/// Optional user-facing decision record. It contains concise rationale and a
+/// verifier verdict, never a raw hidden reasoning trace. `thinking` remains
+/// deserializable only for backward compatibility and is intentionally not
+/// rendered.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReasoningAppendix {
+    /// Short bullet points on key decisions, assumptions, and source limits.
+    #[serde(default)]
+    pub rationale: Vec<String>,
+    /// Legacy field: accepted with a strict bound, but never emitted.
+    #[serde(default)]
+    pub thinking: String,
+    /// A one-line verdict, e.g. "Judge accepted the answer (92%)".
+    #[serde(default)]
+    pub verdict: String,
+}
+
+impl ReasoningAppendix {
+    fn is_empty(&self) -> bool {
+        self.rationale.iter().all(|r| r.trim().is_empty()) && self.verdict.trim().is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WordSpec {
     #[serde(default)]
@@ -35,6 +58,9 @@ pub struct WordSpec {
     pub subtitle: String,
     #[serde(default)]
     pub sections: Vec<WordSection>,
+    /// Optional decision record (rendered as a final section).
+    #[serde(default)]
+    pub reasoning: Option<ReasoningAppendix>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +81,9 @@ pub struct DeckSpec {
     pub subtitle: String,
     #[serde(default)]
     pub slides: Vec<SlideSpec>,
+    /// Optional decision record (rendered as a final slide).
+    #[serde(default)]
+    pub reasoning: Option<ReasoningAppendix>,
 }
 
 /// Result returned to the frontend after a file is written.
@@ -63,6 +92,127 @@ pub struct GeneratedFile {
     pub path: String,
     pub filename: String,
     pub kind: String, // "docx" | "pptx"
+}
+
+pub const MAX_SPEC_JSON_BYTES: usize = 256 * 1024;
+const MAX_RENDERED_TEXT_BYTES: usize = 192 * 1024;
+
+fn check_text(value: &str, label: &str, max_bytes: usize, total: &mut usize) -> Result<(), String> {
+    if value.len() > max_bytes {
+        return Err(format!("{label} exceeds the {max_bytes}-byte limit"));
+    }
+    *total = total
+        .checked_add(value.len())
+        .ok_or_else(|| "Document text size overflow".to_string())?;
+    if *total > MAX_RENDERED_TEXT_BYTES {
+        return Err("Document content exceeds the total rendered-text limit".into());
+    }
+    Ok(())
+}
+
+fn validate_decision_record(
+    record: Option<&ReasoningAppendix>,
+    total: &mut usize,
+) -> Result<(), String> {
+    let Some(record) = record else { return Ok(()) };
+    if record.rationale.len() > 8 {
+        return Err("Decision record may contain at most 8 rationale items".into());
+    }
+    for (index, item) in record.rationale.iter().enumerate() {
+        check_text(
+            item,
+            &format!("Decision record item {}", index + 1),
+            1_000,
+            total,
+        )?;
+    }
+    check_text(&record.verdict, "Decision record verdict", 1_000, total)?;
+    // The legacy field is not rendered, but still bound before accepting an old spec.
+    if record.thinking.len() > 4_096 {
+        return Err("Legacy reasoning field exceeds the compatibility limit".into());
+    }
+    Ok(())
+}
+
+pub fn validate_word_spec(spec: &WordSpec) -> Result<(), String> {
+    if spec.title.trim().is_empty() {
+        return Err("Document title is required".into());
+    }
+    if spec.sections.is_empty() || spec.sections.len() > 12 {
+        return Err("Document must contain 1 to 12 sections".into());
+    }
+    let mut total = 0usize;
+    check_text(&spec.title, "Document title", 240, &mut total)?;
+    check_text(&spec.subtitle, "Document subtitle", 500, &mut total)?;
+    for (section_index, section) in spec.sections.iter().enumerate() {
+        if section.paragraphs.len() > 8 || section.bullets.len() > 12 {
+            return Err(format!(
+                "Section {} exceeds paragraph or bullet count limits",
+                section_index + 1
+            ));
+        }
+        check_text(
+            &section.heading,
+            &format!("Section {} heading", section_index + 1),
+            500,
+            &mut total,
+        )?;
+        for (index, paragraph) in section.paragraphs.iter().enumerate() {
+            check_text(
+                paragraph,
+                &format!("Section {} paragraph {}", section_index + 1, index + 1),
+                8_000,
+                &mut total,
+            )?;
+        }
+        for (index, bullet) in section.bullets.iter().enumerate() {
+            check_text(
+                bullet,
+                &format!("Section {} bullet {}", section_index + 1, index + 1),
+                1_000,
+                &mut total,
+            )?;
+        }
+    }
+    validate_decision_record(spec.reasoning.as_ref(), &mut total)
+}
+
+pub fn validate_deck_spec(spec: &DeckSpec) -> Result<(), String> {
+    if spec.title.trim().is_empty() {
+        return Err("Presentation title is required".into());
+    }
+    if spec.slides.is_empty() || spec.slides.len() > 12 {
+        return Err("Presentation must contain 1 to 12 content slides".into());
+    }
+    let mut total = 0usize;
+    check_text(&spec.title, "Presentation title", 240, &mut total)?;
+    check_text(&spec.subtitle, "Presentation subtitle", 500, &mut total)?;
+    for (slide_index, slide) in spec.slides.iter().enumerate() {
+        if slide.bullets.len() > 8 {
+            return Err(format!("Slide {} has more than 8 bullets", slide_index + 1));
+        }
+        check_text(
+            &slide.title,
+            &format!("Slide {} title", slide_index + 1),
+            500,
+            &mut total,
+        )?;
+        for (index, bullet) in slide.bullets.iter().enumerate() {
+            check_text(
+                bullet,
+                &format!("Slide {} bullet {}", slide_index + 1, index + 1),
+                1_000,
+                &mut total,
+            )?;
+        }
+        check_text(
+            &slide.notes,
+            &format!("Slide {} notes", slide_index + 1),
+            4_000,
+            &mut total,
+        )?;
+    }
+    validate_decision_record(spec.reasoning.as_ref(), &mut total)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -80,11 +230,21 @@ fn xml_escape(s: &str) -> String {
 fn safe_stem(title: &str, fallback: &str) -> String {
     let cleaned: String = title
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect();
     let collapsed = cleaned.split_whitespace().collect::<Vec<_>>().join("-");
     let trimmed = collapsed.trim_matches('-');
-    let stem = if trimmed.is_empty() { fallback } else { trimmed };
+    let stem = if trimmed.is_empty() {
+        fallback
+    } else {
+        trimmed
+    };
     // Keep filenames reasonable
     stem.chars().take(60).collect()
 }
@@ -97,41 +257,91 @@ fn output_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// Build a unique, non-clobbering path in the output dir for `<stem>.<ext>`.
-fn unique_path(stem: &str, ext: &str) -> PathBuf {
-    let dir = output_dir();
-    let mut candidate = dir.join(format!("{stem}.{ext}"));
-    let mut n = 2;
-    while candidate.exists() {
-        candidate = dir.join(format!("{stem}-{n}.{ext}"));
-        n += 1;
+/// Atomically reserve a unique output file. `create_new` prevents a race from
+/// turning a previously absent candidate into an overwrite or symlink target.
+fn create_unique_file_in_dir(
+    dir: &Path,
+    stem: &str,
+    ext: &str,
+) -> Result<(PathBuf, std::fs::File), String> {
+    const MAX_COLLISIONS: u32 = 10_000;
+
+    for sequence in 1..=MAX_COLLISIONS {
+        let filename = if sequence == 1 {
+            format!("{stem}.{ext}")
+        } else {
+            format!("{stem}-{sequence}.{ext}")
+        };
+        let candidate = dir.join(filename);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => return Ok((candidate, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Failed to reserve generated document '{}': {error}",
+                    candidate.display()
+                ));
+            }
+        }
     }
-    candidate
+
+    Err(format!(
+        "Could not reserve a unique generated document after {MAX_COLLISIONS} attempts"
+    ))
 }
 
 // ─── Word (.docx) ────────────────────────────────────────────────────────────
 
 /// Generate a Word document from a spec. Returns the written file's metadata.
 pub fn generate_docx(spec: &WordSpec) -> Result<GeneratedFile, String> {
+    generate_docx_in_dir(spec, &output_dir())
+}
+
+/// Generate a Word document inside an explicit, pre-created output directory.
+/// Project Review uses this to keep its sole artifact outside the approved
+/// source root instead of assuming Downloads is always disjoint.
+pub fn generate_docx_in_dir(
+    spec: &WordSpec,
+    output_directory: &Path,
+) -> Result<GeneratedFile, String> {
     use docx_rs::*;
+
+    validate_word_spec(spec)?;
+    let metadata = std::fs::symlink_metadata(output_directory)
+        .map_err(|e| format!("Could not inspect document output directory: {e}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Document output must be a real, non-symlink directory".into());
+    }
 
     let mut docx = Docx::new();
 
     // Title (centered, large, bold, dark slate)
     if !spec.title.trim().is_empty() {
         docx = docx.add_paragraph(
-            Paragraph::new()
-                .align(AlignmentType::Center)
-                .add_run(Run::new().add_text(&spec.title).bold().size(56).color("0F172A")),
+            Paragraph::new().align(AlignmentType::Center).add_run(
+                Run::new()
+                    .add_text(&spec.title)
+                    .bold()
+                    .size(56)
+                    .color("0F172A"),
+            ),
         );
     }
 
     // Subtitle (centered, medium, accent color)
     if !spec.subtitle.trim().is_empty() {
         docx = docx.add_paragraph(
-            Paragraph::new()
-                .align(AlignmentType::Center)
-                .add_run(Run::new().add_text(&spec.subtitle).italic().size(28).color("6366F1")),
+            Paragraph::new().align(AlignmentType::Center).add_run(
+                Run::new()
+                    .add_text(&spec.subtitle)
+                    .italic()
+                    .size(28)
+                    .color("6366F1"),
+            ),
         );
     }
 
@@ -143,8 +353,13 @@ pub fn generate_docx(spec: &WordSpec) -> Result<GeneratedFile, String> {
     for section in &spec.sections {
         if !section.heading.trim().is_empty() {
             docx = docx.add_paragraph(
-                Paragraph::new()
-                    .add_run(Run::new().add_text(&section.heading).bold().size(32).color("4F46E5")),
+                Paragraph::new().add_run(
+                    Run::new()
+                        .add_text(&section.heading)
+                        .bold()
+                        .size(32)
+                        .color("4F46E5"),
+                ),
             );
         }
         for para in &section.paragraphs {
@@ -160,19 +375,58 @@ pub fn generate_docx(spec: &WordSpec) -> Result<GeneratedFile, String> {
                 continue;
             }
             docx = docx.add_paragraph(
-                Paragraph::new()
-                    .add_run(Run::new().add_text(format!("▪  {bullet}")).size(24).color("334155")),
+                Paragraph::new().add_run(
+                    Run::new()
+                        .add_text(format!("▪  {bullet}"))
+                        .size(24)
+                        .color("334155"),
+                ),
             );
         }
         // Blank line between sections
         docx = docx.add_paragraph(Paragraph::new());
     }
 
-    let stem = safe_stem(&spec.title, "document");
-    let path = unique_path(&stem, "docx");
+    // ── Optional user-facing decision record ──
+    if let Some(reasoning) = spec.reasoning.as_ref().filter(|r| !r.is_empty()) {
+        docx = docx.add_paragraph(
+            Paragraph::new().add_run(
+                Run::new()
+                    .add_text("Decision Record")
+                    .bold()
+                    .size(32)
+                    .color("4F46E5"),
+            ),
+        );
+        if !reasoning.verdict.trim().is_empty() {
+            docx = docx.add_paragraph(
+                Paragraph::new().add_run(
+                    Run::new()
+                        .add_text(&reasoning.verdict)
+                        .italic()
+                        .size(24)
+                        .color("6366F1"),
+                ),
+            );
+        }
+        for point in &reasoning.rationale {
+            if point.trim().is_empty() {
+                continue;
+            }
+            docx = docx.add_paragraph(
+                Paragraph::new().add_run(
+                    Run::new()
+                        .add_text(format!("▪  {point}"))
+                        .size(24)
+                        .color("334155"),
+                ),
+            );
+        }
+        docx = docx.add_paragraph(Paragraph::new());
+    }
 
-    let file = std::fs::File::create(&path)
-        .map_err(|e| format!("Failed to create docx file: {e}"))?;
+    let stem = safe_stem(&spec.title, "document");
+    let (path, file) = create_unique_file_in_dir(output_directory, &stem, "docx")?;
     docx.build()
         .pack(file)
         .map_err(|e| format!("Failed to write docx: {e}"))?;
@@ -191,6 +445,8 @@ pub fn generate_docx(spec: &WordSpec) -> Result<GeneratedFile, String> {
 
 /// Generate a PowerPoint deck from a spec. Returns the written file's metadata.
 pub fn generate_pptx(spec: &DeckSpec) -> Result<GeneratedFile, String> {
+    validate_deck_spec(spec)?;
+
     // Assemble the slide list: an optional title slide followed by content slides.
     let mut slides: Vec<RenderSlide> = Vec::new();
     if !spec.title.trim().is_empty() {
@@ -209,14 +465,36 @@ pub fn generate_pptx(spec: &DeckSpec) -> Result<GeneratedFile, String> {
             is_title: false,
         });
     }
+
+    // ── Optional final decision-record slide ──
+    if let Some(reasoning) = spec.reasoning.as_ref().filter(|r| !r.is_empty()) {
+        let mut bullets: Vec<String> = Vec::new();
+        if !reasoning.verdict.trim().is_empty() {
+            bullets.push(reasoning.verdict.trim().to_string());
+        }
+        for point in &reasoning.rationale {
+            if !point.trim().is_empty() {
+                bullets.push(point.trim().to_string());
+            }
+        }
+        if !bullets.is_empty() {
+            slides.push(RenderSlide {
+                title: "Decision Record".to_string(),
+                subtitle: String::new(),
+                bullets: bullets.into_iter().take(8).collect(),
+                is_title: false,
+            });
+        }
+    }
+
     if slides.is_empty() {
         return Err("Presentation has no slides".to_string());
     }
 
     let stem = safe_stem(&spec.title, "presentation");
-    let path = unique_path(&stem, "pptx");
+    let (path, file) = create_unique_file_in_dir(&output_dir(), &stem, "pptx")?;
 
-    write_pptx(&path, &slides)?;
+    write_pptx(file, &slides)?;
 
     Ok(GeneratedFile {
         filename: path
@@ -236,12 +514,10 @@ struct RenderSlide {
     is_title: bool,
 }
 
-/// Write the full OOXML presentation package to `path`.
-fn write_pptx(path: &Path, slides: &[RenderSlide]) -> Result<(), String> {
+/// Write the full OOXML presentation package to an atomically reserved file.
+fn write_pptx(file: std::fs::File, slides: &[RenderSlide]) -> Result<(), String> {
     use zip::write::SimpleFileOptions;
 
-    let file = std::fs::File::create(path)
-        .map_err(|e| format!("Failed to create pptx file: {e}"))?;
     let mut zip = zip::ZipWriter::new(file);
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
@@ -275,11 +551,11 @@ fn write_pptx(path: &Path, slides: &[RenderSlide]) -> Result<(), String> {
     let total = slides.len();
     for (i, slide) in slides.iter().enumerate() {
         let idx = i + 1;
-        write(&format!("ppt/slides/slide{idx}.xml"), &slide_xml(slide, idx, total))?;
         write(
-            &format!("ppt/slides/_rels/slide{idx}.xml.rels"),
-            SLIDE_RELS,
+            &format!("ppt/slides/slide{idx}.xml"),
+            &slide_xml(slide, idx, total),
         )?;
+        write(&format!("ppt/slides/_rels/slide{idx}.xml.rels"), SLIDE_RELS)?;
     }
 
     zip.finish().map_err(|e| format!("zip finish: {e}"))?;
@@ -411,7 +687,7 @@ fn title_slide_xml(slide: &RenderSlide) -> String {
 <p:nvSpPr><p:cNvPr id="5" name="Brand"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
 <p:spPr><a:xfrm><a:off x="685800" y="6172200"/><a:ext cx="10820400" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
 <p:txBody><a:bodyPr/><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="1100" dirty="0"><a:solidFill><a:srgbClr val="C7D2FE"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>Generated locally with PrismOS-AI · 100% private</a:t></a:r></a:p>
+<a:p><a:r><a:rPr lang="en-US" sz="1100" dirty="0"><a:solidFill><a:srgbClr val="C7D2FE"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>Generated by PrismOS-AI on this device</a:t></a:r></a:p>
 </p:txBody>
 </p:sp>
 </p:spTree>
@@ -599,6 +875,7 @@ const THEME1: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
 
     #[test]
     fn safe_stem_sanitizes() {
@@ -612,6 +889,19 @@ mod tests {
     }
 
     #[test]
+    fn unique_reservation_never_overwrites_an_existing_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = directory.path().join("report.docx");
+        std::fs::write(&original, b"keep this").unwrap();
+
+        let (reserved, _file) =
+            create_unique_file_in_dir(directory.path(), "report", "docx").unwrap();
+
+        assert_eq!(reserved.file_name().unwrap(), "report-2.docx");
+        assert_eq!(std::fs::read(&original).unwrap(), b"keep this");
+    }
+
+    #[test]
     fn docx_generates_file() {
         let spec = WordSpec {
             title: "Test Doc".into(),
@@ -621,6 +911,7 @@ mod tests {
                 paragraphs: vec!["Hello world.".into()],
                 bullets: vec!["Point one".into(), "Point two".into()],
             }],
+            reasoning: None,
         };
         let out = generate_docx(&spec).expect("docx generation");
         assert!(out.path.ends_with(".docx"));
@@ -635,14 +926,65 @@ mod tests {
             title: "Deck".into(),
             subtitle: "Sub".into(),
             slides: vec![
-                SlideSpec { title: "Slide 1".into(), bullets: vec!["A".into(), "B".into()], notes: String::new() },
-                SlideSpec { title: "Slide 2".into(), bullets: vec!["C".into()], notes: String::new() },
+                SlideSpec {
+                    title: "Slide 1".into(),
+                    bullets: vec!["A".into(), "B".into()],
+                    notes: String::new(),
+                },
+                SlideSpec {
+                    title: "Slide 2".into(),
+                    bullets: vec!["C".into()],
+                    notes: String::new(),
+                },
             ],
+            reasoning: None,
         };
         let out = generate_pptx(&spec).expect("pptx generation");
         assert!(out.path.ends_with(".pptx"));
         let meta = std::fs::metadata(&out.path).expect("file exists");
         assert!(meta.len() > 0);
         let _ = std::fs::remove_file(&out.path);
+    }
+
+    #[test]
+    fn decision_record_renders_but_legacy_hidden_reasoning_does_not() {
+        // The backend accepts the structured appendix the frontend sends while
+        // ignoring the legacy hidden-reasoning field.
+        let json = r#"{
+            "title":"Report","subtitle":"S",
+            "sections":[{"heading":"H","paragraphs":["p"],"bullets":[]}],
+            "reasoning":{"rationale":["Chose 3 sections for clarity"],"thinking":"Weighed depth vs length.","verdict":"Judge accepted (90%)"}
+        }"#;
+        let spec: WordSpec = serde_json::from_str(json).expect("spec parses");
+        let r = spec.reasoning.as_ref().expect("reasoning present");
+        assert!(!r.is_empty());
+        assert_eq!(r.rationale.len(), 1);
+        assert_eq!(r.verdict, "Judge accepted (90%)");
+        let out = generate_docx(&spec).expect("docx with reasoning");
+        assert!(std::fs::metadata(&out.path).expect("exists").len() > 0);
+        {
+            let file = std::fs::File::open(&out.path).expect("open docx");
+            let mut archive = zip::ZipArchive::new(file).expect("valid docx zip");
+            let mut xml = String::new();
+            archive
+                .by_name("word/document.xml")
+                .expect("document XML")
+                .read_to_string(&mut xml)
+                .expect("read document XML");
+            assert!(xml.contains("Decision Record"));
+            assert!(xml.contains("Chose 3 sections for clarity"));
+            assert!(xml.contains("Judge accepted (90%)"));
+            assert!(!xml.contains("Weighed depth vs length"));
+        }
+        let _ = std::fs::remove_file(&out.path);
+    }
+
+    #[test]
+    fn empty_reasoning_is_treated_as_absent() {
+        let empty = ReasoningAppendix::default();
+        assert!(empty.is_empty());
+        // A spec with no reasoning field parses to None.
+        let spec: WordSpec = serde_json::from_str(r#"{"title":"T"}"#).unwrap();
+        assert!(spec.reasoning.is_none());
     }
 }

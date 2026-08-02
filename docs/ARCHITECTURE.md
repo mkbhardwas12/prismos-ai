@@ -2,144 +2,199 @@
 
 ## Overview
 
-PrismOS-AI is built as a **Tauri 2.0 desktop application** with a React frontend and a Rust backend. All processing happens locally — no data ever leaves the user's device.
+PrismOS-AI is a Tauri 2 desktop application with a React/TypeScript frontend and a
+Rust backend. Private chat, document, vision, and workflow inference is fixed to Ollama
+at `http://localhost:11434`, with persistent local SQLite memory. Configured Ollama URLs
+are limited to model management and status; they are not inference destinations. Model
+downloads and browser-provided speech services have separate network boundaries.
+PrismOS does not ship a general web crawler or internet-research agent.
 
 ## Layers
 
-### 1. Frontend (React 18 + TypeScript + Vite)
+### 1. React frontend
 
-The frontend provides the user interface and communicates with the Rust backend via Tauri's IPC bridge (`invoke` / `listen`).
+The frontend renders chat, workflow activity, graph views, document input, settings,
+security status, and the Project Knowledge approval flow. It calls the Rust backend with
+Tauri `invoke` and receives progress/activity events with `listen`.
 
-**Key Components:**
+Key surfaces include:
 
-| Component | Purpose |
-|-----------|---------|
-| `MainView` | Intent Console — natural language input, conversation, model management |
-| `Sidebar` | Navigation (7 items), graph stats, active agent indicators, ProactivePanel |
-| `DailyDashboard` | Unified morning-brief view — stats, calendar, email, finance, highlights, quick links |
-| `ProactivePanel` | Permanent collapsible sidebar panel — live calendar, email, finance, graph feeds |
-| `SpectrumGraphView` | Force-directed 2D visualization of the knowledge graph |
-| `SpectrumExplorer` | Browse, search, and manage individual nodes |
-| `ActiveAgents` | Live agent activity, Sandbox Prism badges, LangGraph trace |
-| `DailyBrief` | Morning Brief / Evening Recap summaries |
-| `IntentInput` | Text + voice + image + document input with auto-resize |
-| `SandboxPanel` | WASM sandbox inspection and rollback controls |
-| `SpectralTimeline` | Time-series view of knowledge evolution |
-| `SettingsPanel` | Configuration — model, theme, startup view, export/import, sync |
+| Surface | Responsibility |
+|---|---|
+| `MainView` / `IntentInput` | Chat, ephemeral one-off attachments, request lifecycle, and response rendering |
+| `SettingsPanel` | Models, Project Knowledge, graph import/export, integrations, and live security facts |
+| `SpectrumGraphView` / `SpectrumExplorer` | Knowledge visualization, search, and management |
+| `ActiveAgents` | Workflow-stage activity and collaboration trace |
+| `DailyDashboard` / `ProactivePanel` | Local graph-derived summaries and suggestions |
 
-**Shared Libraries:**
+### 2. Tauri IPC boundary
 
-| Module | Purpose |
-|--------|---------|
-| `lib/config.ts` | Centralized configuration constants |
-| `lib/ollama.ts` | Frontend Ollama HTTP client |
-| `lib/agents.ts` | Agent definitions, system prompts, state factory |
-| `lib/modelRegistry.ts` | Single source of truth — 15 curated AI models across 4 tiers |
-| `lib/processingTimer.ts` | Response latency measurement utility |
-| `hooks/useVoice.ts` | Web Speech API integration |
-| `hooks/useOllama.ts` | React hook for Ollama model operations |
-| `hooks/useSpectrumTheme.ts` | Dynamic Spectrum Graph theming hook |
-| `hooks/useKeyboardShortcuts.ts` | Global keyboard shortcut management |
+Commands are registered in `src-tauri/src/lib.rs`. Important groups are:
 
-### 2. IPC Bridge (Tauri 2.0)
+- chat/refractive execution and typed inference failures;
+- graph query, feedback, import/export, and maintenance;
+- metadata-only Project Knowledge scan, one-time approval/index, refresh, list, and Forget;
+- ephemeral one-off document extraction/chunking and approval-gated Project Knowledge;
+- fixed-loopback Ollama inference plus separately scoped model management/status operations;
+- sandbox, audit, model verification, and security status;
+- browser-provided speech controls and explicit model downloads;
+- private-vault export and restart-gated disaster restore.
 
-All communication between frontend and backend uses Tauri's `invoke()` for request-response and `emit()`/`listen()` for streaming events.
+Email, calendar, and finance prototypes exist in the source tree but their commands are
+intentionally not registered. There is no active in-app auto-updater.
+Legacy background file-watcher/indexer ingestion is disabled (the compatibility start
+command reports a migration error), and the bundled Whisper prototype does not provide
+real transcription. A one-off attachment is kept out of the graph unless the user
+separately approves its containing root as Project Knowledge.
 
-Key streaming events:
-- `pull-progress` — Real-time model download progress (percent, MB downloaded, status)
+Command counts change frequently, so the handler registration is the authoritative
+inventory.
 
-### 3. Backend (Rust)
+### 3. Rust orchestration and inference
 
-The Rust backend handles all data processing, storage, and AI inference.
+The Refractive Core performs this chat path sequentially:
 
-**Core Modules (22 total):**
+1. parse the intent and classify its response style/domain;
+2. retrieve pinned profile context, recent persisted conversation turns, and relevant
+   Spectrum Graph nodes;
+3. place retrieved text in an explicit untrusted-reference envelope;
+4. define bounded acceptance criteria, using a model-backed Planner for applicable
+   open-ended intents and a deterministic fallback otherwise;
+5. BUILD a candidate with the Reasoner, apply a Sentinel gate, then JUDGE it with a
+   sequential Critic call when the goal loop is enabled;
+6. feed bounded deficiencies into the next BUILD until the answer passes, progress stalls,
+   or the iteration cap is reached;
+7. run the remaining deterministic Tool Smith, Memory Keeper, debate, and consensus stages;
+8. persist the successful conversation and reinforce relevant graph relationships;
+9. return the response with context provenance, inference identity facts, and a workflow
+   trace.
 
-| Module | Purpose |
-|--------|--------|
-| `spectrum_graph.rs` | SQLite-backed 7D knowledge graph engine (14 tables) |
-| `refractive_core.rs` | Intent → agent pipeline → graph integration |
-| `sandbox_prism.rs` | WASM isolation + HMAC-SHA256 + auto-rollback |
-| `langgraph_collab.rs` | Multi-agent debate with consensus voting |
-| `ollama_bridge.rs` | Local Ollama HTTP client (streaming + batch + vision) |
-| `you_port.rs` | Encrypted state export/import (AES-GCM) |
-| `audit_log.rs` | Tamper-proof SHA-256 chained audit trail |
-| `model_verify.rs` | Model integrity verification (SHA-256) |
-| `secure_enclave.rs` | Encryption key management |
-| `smart_router.rs` | Domain-aware model routing (vision + code detection) |
-| `doc_chunker.rs` | Document chunking + TF-IDF RAG retrieval |
-| `cognitive_drift.rs` | Self-learning: topic drift pattern detection |
-| `thought_currents.rs` | Self-learning: recurring thought frequency tracking |
-| `edge_prophecy.rs` | Self-learning: predicted future graph connections |
-| `refraction_journal.rs` | Self-learning: AI reasoning step journal |
-| `domain_detector.rs` | Auto-detect domain (code/medical/legal/finance/science) |
-| `model_tracker.rs` | Per-model performance analytics + usage history |
-| `voice_engine.rs` | cpal audio capture + Whisper model infrastructure |
-| `file_indexer.rs` | Local RAG file watcher + auto-ingest |
-| `agents/` | 5 agent sub-modules (Planner, Researcher, Coder, Reviewer, Executor) |
-| `agents/langgraph_workflow.rs` | LangGraph state-machine orchestration |
+Planner, Reasoner, and Critic calls are serialized through the same typed inference bridge;
+they are not a parallel multi-model Council. Simple intents can use deterministic planning,
+and an unavailable or invalid judge produces an explicitly ungraded fallback instead of
+unbounded retry. Tool Smith, Memory Keeper, debate text, and consensus votes remain
+deterministic policy/heuristic stages. This is an answer-refinement loop, not an autonomous
+plan/tool/observe agent with independent filesystem or network authority. See
+[LOCAL_LOOP_ENGINE.md](LOCAL_LOOP_ENGINE.md).
 
-### 4. Storage
+Important backend modules:
 
-- **SQLite** — 14 tables: nodes, edges, spectra, intents, sandbox_log, merge_history, indexed_files, model_usage, domain_cache, thought_currents, edge_prophecies, refraction_journal, cognitive_drift, audit_log
-- **App Data Directory** — `{platform_app_data}/com.prismos.app/`
-- **No cloud storage** — Everything stays on-device
-- **478 tests** — 151 frontend (Vitest) + 327 backend (cargo test)
+| Module | Responsibility |
+|---|---|
+| `refractive_core.rs` | Intent processing, retrieval assembly, chat continuity, and result provenance |
+| `agents/langgraph_workflow.rs` | Sequential Planner/Reasoner/Critic loop, activity, policy review, and persistence |
+| `agents/nodes.rs` | Bounded Planner/Critic prompts and deterministic role behavior |
+| `inference_bridge.rs` | Typed target/request/result identity and local-policy validation |
+| `ollama_bridge.rs` | Fixed-loopback private inference and separate model-management origin policy |
+| `spectrum_graph.rs` | SQLite graph, hybrid retrieval, source synchronization, and feedback data |
+| `project_knowledge.rs` | Approval-gated metadata scan, filtering, redaction, and deterministic chunks |
+| `doc_chunker.rs` | Standalone document chunking and TF-IDF retrieval |
+| `sandbox_prism.rs` | Native allow-list simulation, risk tiers, authenticated records, and checkpoints |
+| `you_port.rs` | AES-256-GCM export/sync packages |
+| `private_vault.rs` | Encrypted full-database recovery candidate and restart-gated restore staging |
+| `audit_log.rs` | Tamper-evident append-only hash-chain records |
 
-## Data Flow: Intent Processing
+## Project Knowledge path
 
-<p align="center">
-  <img src="diagrams/data-flow.svg" width="650" alt="PrismOS-AI Intent Processing Data Flow" />
-</p>
-
-## Security Architecture
-
-See [diagrams/security-model.svg](diagrams/security-model.svg).
-
-Every agent action passes through the Sandbox Prism:
-
-1. **Classify** — Determine operation risk tier (1=safe, 2=moderate, 3=restricted)
-2. **Sign** — HMAC-SHA256 cryptographic signature on the action
-3. **Allow-list** — Verify operation is in the permitted category
-4. **WASM Isolate** — Execute inside wasmtime with fuel metering + memory limits
-5. **Anomaly Check** — Compare against expected patterns
-6. **Auto-Rollback** — If anomalous, revert all side effects automatically
-7. **Audit Log** — Append to tamper-proof SHA-256 chain
-
-## IPC Surface
-
-**85 Tauri commands** registered via `generate_handler!` macro. Key command groups:
-
-| Group | Commands | Examples |
-|-------|----------|----------|
-| Graph | 15+ | `add_node`, `query_graph`, `merge_graphs`, `get_spectra` |
-| Ollama | 10+ | `query_ollama`, `pull_model`, `smart_route_model`, `classify_installed_models` |
-| Agents | 8+ | `run_agent`, `run_debate`, `get_agent_state` |
-| Self-Learning | 12+ | `analyze_drift`, `detect_currents`, `predict_edges`, `record_refraction` |
-| Domain/Model | 6+ | `detect_domain`, `record_model_usage`, `get_model_stats` |
-| Security | 8+ | `run_sandbox`, `export_state`, `verify_model`, `get_audit_log` |
-| Files | 5+ | `extract_file_text`, `chunk_document`, `rag_query` |
-| Voice | 5+ | `start_recording`, `stop_recording`, `download_whisper_model` |
-
-## Self-Learning Architecture
-
-Four interconnected modules form the self-learning feedback loop:
-
-1. **Cognitive Drift** — Detects when user interests shift over time; generates `DriftVector` with magnitude/direction/confidence
-2. **Thought Currents** — Tracks recurring themes; surfaces dominant patterns with momentum scoring
-3. **Edge Prophecy** — Predicts future knowledge connections using spectral similarity + temporal patterns
-4. **Refraction Journal** — Records every reasoning step for transparency and introspection
-
-All four persist to Spectrum Graph and feed back into the Refractive Core for increasingly personalized responses.
-
-## Building
-
-```bash
-# Development
-npm run tauri dev
-
-# Production (current platform)
-npm run tauri build
-
-# Cross-platform builds are handled by GitHub Actions
-# See .github/workflows/release.yml
+```text
+folder path
+  → metadata-only bounded scan
+  → user preview and approval
+  → validated non-symlink text reads
+  → best-effort credential redaction
+  → deterministic chunks + content hashes
+  → atomic source synchronization
+  → FTS/keyword/graph/optional-vector retrieval
+  → untrusted reference envelope
+  → local Reasoner answer with Source-path guidance
 ```
+
+Refreshes preserve unchanged embeddings, invalidate changed embeddings, and delete stale
+source-owned chunks in one transaction. Forget deletes only nodes owned by the selected
+source and never modifies source files. See [PROJECT_KNOWLEDGE.md](PROJECT_KNOWLEDGE.md).
+
+One-off chat attachments use a separate ephemeral path: bounded DOCX, PPTX, and
+allowlisted UTF-8 text/code content—including CSV/TSV—is extracted, chunked, retrieved in
+memory for the current answer, and then discarded. PDF extraction fails closed until it
+can be safely resource-isolated; users must convert PDFs to UTF-8 text. XLSX and legacy
+`.xls` fail closed before parsing and must be exported as CSV/TSV. This path does not
+create `doc_chunk` graph nodes or silently promote content into Project Knowledge.
+Project Knowledge is narrower: it indexes only allowlisted UTF-8 source, documentation,
+configuration, and manifest text after preview and approval; it does not parse Office or
+PDF attachments.
+
+## Storage
+
+The Spectrum Graph uses SQLite under the platform app-data directory. Regular tables cover
+nodes/edges, intents, feedback, cognitive/profile history, agent memory, model performance,
+proactive suggestions, examples, and approved knowledge-source metadata. FTS5 adds an
+optional `nodes_fts` virtual table and triggers; retrieval degrades to the existing paths if
+FTS5 is unavailable.
+
+The live graph contains conversations and approved project excerpts and is not encrypted at
+rest. On Unix-like systems PrismOS sets the app-data directory to mode `0700` and the graph
+database to `0600`.
+
+Two encrypted export scopes are intentionally different:
+
+- You-Port portable/sync packages omit managed Project Knowledge excerpts.
+- A `.prismos-vault` recovery candidate contains a consistent full database snapshot and the
+  bounded audit log when present. Export refuses a destination inside a Git worktree. Restore validates and
+  stages the package while the app is running, then applies it before SQLite opens on the
+  next startup.
+
+The private-vault round trip has automated coverage, but a documented operator restore
+drill on a disposable app-data directory is still required before treating it as recovery
+media. Keep independent backups and the passphrase separate from the encrypted vault; never commit
+either personal data or recovery secrets to the public source repository.
+
+## Retrieval
+
+Intent retrieval combines:
+
+- SQLite FTS5/BM25 when available;
+- existing lexical matching;
+- graph relationship/path strength;
+- recency and access signals;
+- optional embeddings generated through Ollama.
+
+Embeddings are invalidated whenever node content changes. Recent conversation turns are
+included separately and treated as lower-trust continuity than versioned project sources.
+
+## Network and endpoint policy
+
+All private inference uses the fixed loopback origin `http://localhost:11434`. URL
+credentials, paths, queries, fragments, proxies, and redirects are rejected/disabled on
+that inference path. The Ollama URL shown in settings is a separate model-management and
+status boundary. `PRISMOS_ALLOW_REMOTE_OLLAMA=1` can admit a non-loopback origin for those
+operations only; it does not send prompts, attachments, retrieved project excerpts, or
+workflow role calls to that origin.
+
+Loopback is a routing boundary, not daemon attestation. PrismOS does not mutually
+authenticate the local Ollama HTTP process, so a same-account process able to impersonate
+`localhost:11434` could receive prompts. The current design therefore relies on OS-account
+and local-process integrity in addition to its URL policy.
+
+This policy does not make the whole application network-free. Explicit model downloads
+and browser-provided speech services can use the network when invoked. Real bundled
+Whisper transcription and the legacy background watcher/indexer are unavailable. Email,
+calendar, and finance commands are also unavailable, and PrismOS does not crawl or
+research the public web.
+
+## Security scope
+
+Every guarded action is classified by a native Rust policy simulator against a per-agent
+allow-list and recorded with an authenticated action record. The component does not execute
+untrusted code in Wasmtime/WASM. Its rollback command restores only the simulator's own
+checkpointed bookkeeping; it is not a generic transaction over filesystem, network, model,
+or database side effects. The audit log is tamper-evident, not tamper-proof.
+
+Retrieved files are data, never trusted instructions. Control-tag escaping and Reasoner
+rules reduce indirect prompt injection risk, but important results should still be checked
+against cited source files.
+
+## Verification
+
+Run `npx vitest run`, `npx tsc --noEmit`, `npm run build`, and `cargo test --lib` before a
+release. Exact test counts change with the source tree and should not be treated as a
+capability claim. A release checklist must also include a private-vault restore drill.

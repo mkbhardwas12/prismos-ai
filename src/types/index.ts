@@ -11,13 +11,117 @@ export interface Agent {
 // ─── Live Agent Activity Event (Phase 2 — Collaborative Agents) ────────────────
 
 /** Real-time event emitted from the Rust backend during LangGraph workflow execution */
+export type WorkflowRoleId =
+  | "orchestrator"
+  | "reasoner"
+  | "tool_smith"
+  | "memory_keeper"
+  | "sentinel";
+
+export type WorkflowLane = "general" | "reasoning" | "code";
+
+export type WorkflowVoteBasis =
+  | "workflow_complete"
+  | "critic_accepted"
+  | "best_available"
+  | "single_pass"
+  | "action_policy_clear"
+  | "action_policy_blocked"
+  | "context_available"
+  | "fresh_context"
+  | "safety_policy_clear"
+  | "safety_policy_veto";
+
+/**
+ * Structured, presentation-safe decision facts. This union deliberately has no
+ * prompt, candidate, message-content, path, identifier, or hidden-reasoning field.
+ */
+export type WorkflowDecision =
+  | {
+      kind: "work_plan";
+      query_type: "query" | "create" | "analyze" | "connect" | "system";
+      unit_count: number;
+      roles: WorkflowRoleId[];
+      context_count: number;
+    }
+  | {
+      kind: "routing";
+      lane: WorkflowLane;
+      auto_swapped: boolean;
+      reason_code: "configured_model" | "capability_match" | "requested_model_kept";
+    }
+  | {
+      kind: "criteria";
+      source: "model" | "deterministic";
+      checks: string[];
+    }
+  | {
+      kind: "judge";
+      attempt: number;
+      graded: boolean;
+      passed: boolean;
+      score_pct: number;
+      limitations: string[];
+    }
+  | {
+      kind: "review_summary";
+      rounds: number;
+      trace_items: number;
+      resolved: boolean;
+      agreement_pct: number;
+    }
+  | {
+      kind: "policy_check";
+      gate: "answer_candidate" | "final_review";
+      passed: boolean;
+      concern_count: number;
+    }
+  | {
+      kind: "vote";
+      role: WorkflowRoleId;
+      approved: boolean;
+      confidence_pct: number;
+      basis: WorkflowVoteBasis;
+    }
+  | {
+      kind: "consensus";
+      approved: boolean;
+      approve_count: number;
+      reject_count: number;
+      total: number;
+      sentinel_required: true;
+    }
+  | {
+      kind: "persistence";
+      succeeded: boolean;
+      edge_count: number;
+      conversation_stored: boolean;
+    }
+  | {
+      kind: "finalization";
+      approved: boolean;
+      validated: boolean;
+      attempts_used: number;
+      max_attempts: number;
+    };
+
 export interface AgentActivity {
+  /** Versioned, presentation-safe activity envelope. */
+  schema_version: 1;
+  /** Opaque logical request/scan identity used to reject stale events. */
+  task_id: string;
   agent: string;
   action: string;
-  /** "started" | "thinking" | "completed" */
-  status: string;
-  /** "orchestrate" | "analyze" | "debate" | "review" | "vote" | "execute" */
+  /** Legacy `thinking` and project-review `started` both mean active. */
+  status: "started" | "thinking" | "completed" | "failed";
+  /** "orchestrate" | "plan" | "analyze" | "build" | "judge" | "refine" | "debate" | "review" | "vote" | "execute" */
   phase: string;
+  /** Goal-loop attempt this event belongs to (0 = not part of an iteration). */
+  iteration?: number;
+  /** Monotonic time since the logical task began. */
+  elapsed_ms: number;
+  /** Optional safe projection of the decision made at this update. */
+  decision?: WorkflowDecision;
 }
 
 export interface SpectrumNode {
@@ -106,17 +210,83 @@ export interface RefractiveResult {
   edges_reinforced: string[];
   anticipations: string[];
   processing_time_ms: number;
-  npu_accelerated: boolean;
+  simd_accelerated: boolean;
   collaboration?: CollaborationSummary;
   conversation_id?: string;
+  /** Requested/reported Reasoner identity plus explicit attestation and receipt facts. */
+  inference?: InferenceMetadata;
   // Intent Transparency
   query_type?: string;
   natural_band?: string;
   applied_band?: string;
   domain_detected?: string;
+  // ── Goal-loop provenance (plan → build → judge → refine) ──
+  /** How many BUILD→JUDGE attempts ran this turn. */
+  iterations_used?: number;
+  /** The iteration budget for this turn. */
+  max_iterations?: number;
+  /** True only when a real LLM judge accepted the final answer against the criteria. */
+  validated?: boolean;
+  /** Final judge score in [0,1]. */
+  judge_score?: number;
+  /** True only when a valid model-critic verdict produced the final grade. */
+  judge_graded?: boolean;
+  /** Bounded verdict/fallback summary; never hidden chain-of-thought. */
+  judge_summary?: string;
+  /** Legacy compatibility field; the current runtime intentionally does not populate hidden model reasoning. */
+  reasoning_trace?: string;
+  /** The acceptance criteria the answer was judged against. */
+  acceptance_criteria?: string[];
+  /** Remaining deficiencies when the loop ended unvalidated. */
+  deficiencies?: string[];
 }
 
-// ─── LangGraph Multi-Agent Collaboration Types ─────────────────────────────────
+export type TextBackend = "ollama" | "aivm_loopback";
+export type InferenceClientRoute = "unverified_local_endpoint" | "verified_loopback" | "non_local";
+export type InferenceExecutionRoute = "device_local" | "non_local";
+export type InferenceFinishReason = "stop" | "length";
+
+export interface InferenceTarget {
+  backend: TextBackend;
+  model_id: string;
+}
+
+export interface ExecutionIdentity {
+  backend: TextBackend;
+  engine_id: string;
+  runtime_id?: string | null;
+  model_id: string;
+  identity_attested: boolean;
+}
+
+export interface InferenceReceipt {
+  receipt_id: string;
+  receipt_digest: string;
+  request_id: string;
+  engine_id: string;
+  runtime_id: string;
+  model_id: string;
+  finish_reason: InferenceFinishReason;
+  execution_route: InferenceExecutionRoute;
+  local_only: boolean;
+  egress_bytes: number;
+  verified: boolean;
+}
+
+export interface InferenceMetadata {
+  request_id: string;
+  requested: InferenceTarget;
+  actual: ExecutionIdentity;
+  /** PrismOS-to-daemon hop only; loopback is not an offline attestation. */
+  client_route: InferenceClientRoute;
+  local_only_requested: boolean;
+  backend_offline_attested: boolean;
+  duration_ms: number;
+  finish_reason?: InferenceFinishReason | null;
+  receipt?: InferenceReceipt | null;
+}
+
+// ─── Sequential workflow compatibility types ───────────────────────────────────
 
 export interface CollaborationSummary {
   session_id: string;
@@ -341,6 +511,7 @@ export interface PrismResult {
   success: boolean;
   output: string;
   side_effects: SideEffect[];
+  /** Legacy name: policy checks ran; this does not attest process/WASM isolation. */
   sandbox_protected: boolean;
   action_signature: string;
   rollback_explanation: string | null;
@@ -466,7 +637,7 @@ export interface ThoughtCurrent {
   related_intents: string[];
 }
 
-/** Predicted Edge — edge prophecy suggestion */
+/** Heuristic candidate edge; legacy prediction-shaped wire type. */
 export interface PredictedEdge {
   source_id: string;
   target_id: string;
@@ -487,7 +658,7 @@ export interface RefractionInsights {
   insights: string[];
 }
 
-/** Domain Profile — learned user domain expertise */
+/** Legacy wire name for a coarse, heuristic query-topic mix; never credentials or expertise. */
 export interface DomainProfile {
   domain_counts: Record<string, number>;
   total_queries: number;
@@ -496,7 +667,7 @@ export interface DomainProfile {
   last_updated: string;
 }
 
-/** Model Recommendation — based on historical performance */
+/** Heuristic model suggestion based on bounded local performance history. */
 export interface ModelRecommendation {
   domain: string;
   recommended_model: string;
@@ -506,7 +677,7 @@ export interface ModelRecommendation {
   comparison: string | null;
 }
 
-/** System hardware info for model recommendations */
+/** System hardware info used for static, heuristic model-fit suggestions. */
 export interface SystemInfo {
   total_ram_gb: number;
   available_ram_gb: number;
@@ -574,7 +745,7 @@ export interface BrainSnapshot {
   schema_version: number;
 }
 
-/** Cognitive compatibility score between two profiles. */
+/** Heuristic response-preference vector similarity (legacy API terminology). */
 export interface CompatibilityScore {
   score: number;
   axis_distances: CognitiveDeltaSet;

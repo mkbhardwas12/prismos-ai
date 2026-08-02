@@ -39,7 +39,7 @@
   <text x="370" y="166" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">TypeScript interfaces and type definitions</text>
 
   <text x="60" y="186" font-size="10.5" fill="#7dd3fc">└── test/</text>
-  <text x="370" y="186" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Vitest unit tests (65 tests, 7 files)</text>
+  <text x="370" y="186" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Vitest frontend unit and component tests</text>
 
   <!-- Separator -->
   <line x1="40" y1="198" x2="740" y2="198" stroke="#1e3a5f" stroke-width="0.3" stroke-dasharray="4,3"/>
@@ -53,25 +53,25 @@
   <text x="370" y="241" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Tauri command registration + app setup</text>
 
   <text x="60" y="261" font-size="10.5" fill="#6ee7b7">├── spectrum_graph.rs</text>
-  <text x="370" y="261" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">7D Spectrum Graph engine (SQLite, ~2300 LOC)</text>
+  <text x="370" y="261" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Local SQLite graph, retrieval, feedback, and source ownership</text>
 
   <text x="60" y="281" font-size="10.5" fill="#6ee7b7">├── refractive_core.rs</text>
-  <text x="370" y="281" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Intent processing pipeline (~600 LOC)</text>
+  <text x="370" y="281" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Intent, retrieval, and bounded-workflow integration</text>
 
   <text x="60" y="301" font-size="10.5" fill="#6ee7b7">├── sandbox_prism.rs</text>
-  <text x="370" y="301" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">WASM isolation + HMAC-SHA256 + rollback (~1100 LOC)</text>
+  <text x="370" y="301" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Native policy gate + process-local HMAC decision records</text>
 
   <text x="60" y="321" font-size="10.5" fill="#6ee7b7">├── ollama_bridge.rs</text>
-  <text x="370" y="321" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Local LLM client — streaming + batch</text>
+  <text x="370" y="321" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Fixed-loopback LLM client — bounded chat + generation requests</text>
 
-  <text x="60" y="341" font-size="10.5" fill="#6ee7b7">├── langgraph_collab.rs</text>
-  <text x="370" y="341" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Multi-agent debate workflow (~500 LOC)</text>
+  <text x="60" y="341" font-size="10.5" fill="#6ee7b7">├── agents/</text>
+  <text x="370" y="341" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Bounded sequential plan → build → judge → refine workflow</text>
 
   <text x="60" y="361" font-size="10.5" fill="#6ee7b7">├── you_port.rs</text>
   <text x="370" y="361" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Encrypted state migration (AES-GCM)</text>
 
   <text x="60" y="381" font-size="10.5" fill="#6ee7b7">└── audit_log.rs</text>
-  <text x="370" y="381" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Tamper-proof SHA-256 audit trail</text>
+  <text x="370" y="381" font-size="10" fill="#94a3b8" font-family="'Segoe UI', Inter, sans-serif">Tamper-evident SHA-256 audit trail</text>
 
   <!-- Separator -->
   <line x1="40" y1="393" x2="740" y2="393" stroke="#1e3a5f" stroke-width="0.3" stroke-dasharray="4,3"/>

@@ -1,6 +1,9 @@
 # PrismOS-AI Deployment Guide
 
-> Complete guide for distributing PrismOS-AI to App Stores and manual distribution
+> [!WARNING]
+> **Planning guide, not proof of production readiness.** Revalidate signing,
+> notarization/store review, permissions, browser/WebView speech providers, model
+> downloads, and all network boundaries against each exact release artifact.
 
 ---
 
@@ -94,10 +97,10 @@ tauri = { version = "2", features = ["ios"] }
   "name": "PrismOS-AI",
   "displayName": "PrismOS-AI",
   "bundleIdentifier": "com.prismos.app",
-  "version": "0.5.1",
-  "buildNumber": "1",
+  "version": "0.5.2",
+  "buildNumber": "2",
   "category": "Productivity",
-  "description": "Local-First Agentic Personal AI Operating System",
+  "description": "Local-first desktop assistant with bounded sequential workflows",
   "keywords": ["AI", "privacy", "local-first", "knowledge graph"],
   "primaryLanguage": "en-US",
   "supportedLanguages": ["en"],
@@ -173,7 +176,7 @@ npx tauri ios build --release
 
 1. **App Information**
    - Name: PrismOS-AI
-   - Subtitle: Local-First Agentic AI
+   - Subtitle: Local-First Desktop Assistant
    - Category: Productivity
    - Privacy Policy URL
 
@@ -193,23 +196,25 @@ npx tauri ios build --release
 
 5. **Description**
    ```
-   PrismOS-AI — Local-First Agentic Personal AI Operating System
+   PrismOS-AI — Local-First Desktop Assistant with Bounded Sequential Workflows
 
-   Your private AI assistant that runs 100% on your device. No cloud,
-   no tracking, no data sharing. Ever.
+   Your local-first AI assistant. Core chat uses a loopback Ollama endpoint by
+   default; optional model downloads and explicit remote features use the network.
 
    FEATURES:
-   • 8 collaborative AI agents working together
-   • Persistent 7D Spectrum Graph knowledge memory
+   • 5 core software roles in a bounded sequential workflow
+   • Persistent local SQLite graph memory with bounded retrieval
    • Local vision analysis for images
-   • Document analysis (PDF, DOCX, PPTX, XLSX)
+   • Bounded one-off DOCX, PPTX, and UTF-8 text/code/CSV/TSV analysis
+     (convert PDF to UTF-8 text; export XLSX and legacy .xls as CSV/TSV)
    • Voice input and output
-   • Fully offline — your data never leaves your device
+   • Offline-capable core after required models are installed
 
    PRIVACY FIRST:
-   All AI processing happens locally using Ollama models. Zero telemetry,
-   zero cloud dependencies. Your conversations, files, and knowledge graph
-   stay on your device.
+   Private inference is fixed to loopback Ollama and PrismOS emits no telemetry.
+   Model downloads, platform speech, and explicit remote model management have
+   separate network boundaries. Your conversations and knowledge graph remain in
+   local storage.
 
    REQUIREMENTS:
    • Ollama installed (https://ollama.com)
@@ -220,7 +225,7 @@ npx tauri ios build --release
 6. **Keywords**
    ```
    AI, privacy, local-first, knowledge graph, personal assistant,
-   offline AI, agentic, LLM, Ollama, private
+   offline AI, local-first assistant, LLM, Ollama, private
    ```
 
 7. **Support URL**
@@ -242,7 +247,7 @@ Since PrismOS requires Ollama, provide test environment setup:
 ```
 TEST ENVIRONMENT SETUP:
 1. Install Ollama from https://ollama.com
-2. Run: ollama pull llama3.2
+2. Run: ollama pull qwen3:4b
 3. Start Ollama service
 4. Launch PrismOS-AI
 
@@ -250,15 +255,17 @@ DEMO CREDENTIALS: N/A (no account system)
 
 SPECIAL NOTES:
 - App requires local Ollama installation for AI features
-- All processing happens on-device
-- No network calls to external APIs
+- Core chat uses loopback Ollama by default
+- Model acquisition and explicitly enabled remote features use the network
 ```
 
 ### Step 9: Submit for Review
 
 1. Click "Submit for Review"
 2. Answer questionnaires:
-   - **Export Compliance**: No encryption (or declare if using AES-256-GCM)
+   - **Export Compliance**: Declare the shipped cryptography accurately.
+     PrismOS uses AES-256-GCM for protected exports and Private Vault packages;
+     obtain jurisdiction-specific legal and store-review guidance.
    - **Content Rights**: You own all content
    - **Advertising Identifier**: No
 3. Wait 24-48 hours for review
@@ -322,8 +329,8 @@ android {
         applicationId "com.prismos.app"
         minSdk 26
         targetSdk 33
-        versionCode 1
-        versionName "0.5.1"
+        versionCode 2
+        versionName "0.5.2"
     }
 
     buildTypes {
@@ -415,54 +422,63 @@ adb install src-tauri/gen/android/app/build/outputs/apk/release/app-release.apk
 
 2. **App Content**
    - Privacy Policy: https://github.com/mkbhardwas12/prismos-ai/blob/main/PRIVACY.md
-   - Target audience: General audiences (no ads, no data collection)
+   - Target audience: Select only after reviewing the shipped content, privacy
+     behavior, and current Play policy (the app contains no ads)
    - Content rating: Everyone
 
 3. **Store Listing**
 
    **Short Description** (80 chars max):
    ```
-   Private AI assistant that runs 100% on your device. Local-first, no cloud.
+   Local-first AI assistant with private on-device knowledge and local chat.
    ```
 
    **Full Description** (4000 chars max):
    ```
-   PrismOS-AI — Local-First Agentic Personal AI Operating System
+   PrismOS-AI — Local-First Desktop Assistant with Bounded Sequential Workflows
 
-   Your private AI assistant that runs entirely on your device. No cloud,
-   no tracking, no data sharing. Ever.
+   Your local-first AI assistant. Core chat uses a loopback Ollama endpoint by
+   default; optional model downloads and explicit remote features use the network.
 
    ✨ KEY FEATURES
 
-   • 8 Collaborative AI Agents
-     Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, and
-     specialized Email, Calendar, and Finance keepers work together to
-     understand and respond to your requests.
+   • 5 Core Software Roles
+     Orchestrator, Memory Keeper, Reasoner, Tool Smith, and Sentinel participate
+     in a bounded sequential plan → build → judge → refine workflow. Email,
+     calendar, and finance integrations are not available in this release.
 
-   • 7D Spectrum Graph Knowledge Memory
-     Your conversations and knowledge are stored in a persistent,
-     multi-dimensional graph that grows with you.
+   • Spectrum Graph Knowledge Memory
+     Approved knowledge, successful conversations, and explicit feedback are
+     stored in a persistent local SQLite graph.
 
-   • Local Vision Analysis
-     Analyze images using local vision models (llava, llama3.2-vision).
-     No images sent to the cloud.
+   • Fixed-Loopback Vision Analysis
+     Analyze images through the loopback Ollama inference boundary. Model
+     downloads and explicitly enabled remote features still use the network.
 
-   • Document Analysis
-     Upload and analyze PDF, DOCX, PPTX, XLSX documents entirely offline.
+   • Bounded One-Off Document Analysis
+     Analyze bounded DOCX, PPTX, and allowlisted UTF-8 text/code, including
+     CSV/TSV, through the fixed-loopback core. PDF extraction is disabled until
+     it can be safely resource-isolated; convert PDFs to UTF-8 text. XLSX and
+     legacy .xls fail closed before parsing; export spreadsheets as CSV/TSV.
+     One-off attachments remain ephemeral. Project Knowledge is a separate,
+     approval-gated UTF-8 text/code index.
 
    • Voice Input & Output
-     Hands-free interaction using local speech recognition.
+     Browser/WebView speech services when supported; provider-specific network
+     behavior must be disclosed for the submitted platform.
 
-   • Fully Offline
-     All AI processing happens on-device using Ollama models. Zero telemetry.
+   • Offline-Capable Core
+     Core inference uses loopback Ollama by default after models are installed.
 
    🔒 PRIVACY FIRST
 
-   • 100% Local: All processing on your device
-   • No Cloud: Zero external API calls
-   • No Tracking: No telemetry, no analytics
+   • Local by Default: Core chat is restricted to loopback Ollama
+   • Explicit Network: Downloads, platform speech, and remote model management change the boundary
+   • No PrismOS Telemetry: No first-party analytics or application telemetry endpoint
    • No Accounts: No sign-up, no login
-   • Encrypted Storage: Your data is yours alone
+   • Recovery Candidates: Private Vault packages use authenticated encryption;
+     the live SQLite database is permission-restricted but not encrypted at rest,
+     and a clean-profile restore drill is required before reliance
 
    📋 REQUIREMENTS
 
@@ -514,17 +530,17 @@ adb install src-tauri/gen/android/app/build/outputs/apk/release/app-release.apk
 
 1. Click "Create new release"
 2. Upload `app-release.aab`
-3. Release name: `0.5.1`
+3. Release name: `0.5.2`
 4. Release notes:
    ```
-   PrismOS-AI v0.5.1 — Initial Release
+   PrismOS-AI — Placeholder Android Release Notes
 
    Features:
-   • 8 collaborative AI agents
-   • 7D Spectrum Graph knowledge memory
+   • 5 core software roles in a bounded sequential workflow
+   • Persistent local SQLite graph memory
    • Local vision and document analysis
    • Voice input and output
-   • Fully offline — 100% local processing
+   • Offline-capable core after local models are installed
 
    Requirements:
    • Ollama app for AI models
@@ -544,18 +560,21 @@ Answer truthfully:
 - **Realistic violence**: None
 - **Horror**: None
 
-Result: **Everyone** or **Everyone 10+**
+Submit accurate answers and use the rating assigned by the platform; do not
+predict or advertise a rating before review.
 
 ### Step 9: Data Safety
 
 **Data Collection:**
-- No data collected
-- No data shared with third parties
-- No data used for analytics
+- PrismOS does not include app telemetry or analytics
+- Core chat inference is restricted to loopback Ollama
+- Model downloads and explicitly enabled remote features create network egress;
+  complete the store declaration from the exact shipped build and providers
 
 **Security Practices:**
-- Data encrypted in transit: N/A (fully local)
-- Data encrypted at rest: Yes (AES-256-GCM for exports)
+- Core inference transport: fixed loopback
+- Live database: OS-account permission restricted, not encrypted at rest
+- Private Vault and supported export packages: AES-256-GCM authenticated encryption
 - Users can request data deletion: Yes (via app settings)
 
 ### Step 10: Submit for Review
@@ -612,32 +631,40 @@ flatpak-builder build-dir com.prismos.app.yml
 
 ## GitHub Releases
 
-### Automated Release Workflow
+### Manual Candidate-Artifact Workflow
 
-The project already has `.github/workflows/release.yml` configured for automated builds.
+`.github/workflows/release.yml` is a manually dispatched, read-only candidate
+builder. It does **not** run on tags, request a write token, create or modify a
+GitHub Release, sign packages, notarize macOS bundles, or publish anything.
 
-**To trigger a release:**
+Before any desktop candidate is built, the workflow requires frontend type
+checking/tests, production npm audit, Rust check/tests/lint, and a release-
+blocking Cargo audit to pass. As of 2026-08-01 the Cargo audit reports zero known
+vulnerabilities and 19 reviewed maintenance/unsound warnings. The gate compares
+their advisory ID, class, package, and version with the checked-in baseline. That
+dated result is not a waiver: any vulnerability or warning-set change stops the
+candidate until the baseline change is explicitly reviewed.
 
 ```bash
-# 1. Update version in package.json and Cargo.toml
-npm version 0.5.2
+# Dispatch from the reviewed source revision; the label affects artifact names only.
+gh workflow run release.yml -f version=v0.5.2-rc1
 
-# 2. Commit and tag
-git add .
-git commit -m "release: v0.5.2"
-git tag v0.5.2
-
-# 3. Push tag (triggers release workflow)
-git push origin v0.5.2
+# Inspect the run. A failed security gate is a stop condition, not an override cue.
+gh run list --workflow release.yml
+gh run view RUN_ID
 ```
 
-**Workflow builds:**
-- Windows: `.msi`, `.exe`
-- macOS: `.dmg` (Apple Silicon + Intel)
-- Linux: `.deb`, `.AppImage`
-- Android: `.apk`
+If every gate passes, the workflow uploads unsigned, unpublished candidates for
+Windows x64, macOS arm64/x64, and Linux x64 with 14-day retention. It does not
+currently build an Android release candidate.
 
 ### Manual GitHub Release
+
+Do not begin publication until maintainers have resolved every release-blocking
+test or audit, reproduced and clean-machine tested each candidate, completed
+platform signing/notarization, generated and reviewed SHA-256 checksums and an
+SBOM, verified install/uninstall/upgrade and Private Vault restore behavior, and
+recorded explicit human release approval.
 
 1. Go to: https://github.com/mkbhardwas12/prismos-ai/releases/new
 2. Tag: `v0.5.2`
@@ -658,15 +685,15 @@ git push origin v0.5.2
    - **Windows**: `.msi` or `.exe`
    - **macOS**: `.dmg` (Apple Silicon / Intel)
    - **Linux**: `.deb` or `.AppImage`
-   - **Android**: `.apk`
+   - **Android**: separately built, signed, and tested `.apk`/`.aab` if approved
 
    ### Requirements
    - Ollama installed with at least one model
 
    ### Installation
-   See [INSTALLATION.md](docs/INSTALLATION.md)
+   See [INSTALLATION.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/docs/INSTALLATION.md)
    ```
-5. Upload built artifacts
+5. Upload only approved signed/notarized artifacts, checksums, and the SBOM
 6. Check "Set as latest release"
 7. Publish
 
@@ -681,18 +708,21 @@ git push origin v0.5.2
 - [ ] Update version in `src-tauri/tauri.conf.json`
 - [ ] Update `CHANGELOG.md` with release notes
 - [ ] Run full test suite: `npm test && cd src-tauri && cargo test`
+- [ ] Resolve every npm/Cargo audit finding that blocks the candidate workflow
 - [ ] Build locally and test all platforms
 - [ ] Update documentation if needed
 - [ ] Update screenshots if UI changed
 
 ### Release
 
-- [ ] Tag release: `git tag vX.X.X`
-- [ ] Push tag: `git push origin vX.X.X`
-- [ ] Wait for GitHub Actions to build
-- [ ] Download and test all artifacts
-- [ ] Create GitHub Release with notes
-- [ ] Update `latest.json` for auto-updater
+- [ ] Manually dispatch the candidate-artifact workflow from the reviewed revision
+- [ ] Confirm all test, lint, and audit gates passed without waivers
+- [ ] Download and clean-machine test all unsigned candidates
+- [ ] Sign Windows/Linux deliverables and sign + notarize macOS deliverables
+- [ ] Generate and review an SBOM and SHA-256 checksums for final artifacts
+- [ ] Record explicit maintainer approval
+- [ ] Create and push the final tag; tags do not trigger or publish the workflow
+- [ ] Create the GitHub Release manually with only approved artifacts
 
 ### Post-Release
 
@@ -722,75 +752,28 @@ git push origin v0.5.2
 
 ---
 
-## Continuous Deployment
+## Release Builds and Manual Publication
 
-### GitHub Actions Setup
-
-**Automated Release on Tag:**
-
-The existing `.github/workflows/release.yml` handles:
-1. Build for all platforms
-2. Create GitHub Release
-3. Upload artifacts
-4. Generate `latest.json` for auto-updater
-
-**Manual Trigger:**
+GitHub Actions may be used only to build candidate artifacts after every test,
+lint, and dependency-audit gate passes. The workflow has `contents: read`, keeps
+checkout credentials disabled, and cannot create a release. A maintainer must
+review the workflow revision, clean-machine test candidates, complete signing
+and notarization, generate and review checksums plus an SBOM, record human
+approval, and publish the GitHub Release manually. The application has no
+in-app update client, update manifest, or automatic installation path.
 
 ```bash
-# Trigger workflow manually
-gh workflow run release.yml -f version=v0.5.2
+# Optional: dispatch the candidate-artifact workflow after inspecting it
+gh workflow run release.yml -f version=v0.5.2-rc1
+
+# Inspect the completed run and download artifacts for clean-machine testing
+gh run list --workflow release.yml
 ```
 
-### Auto-Updater Configuration
-
-**Update `src-tauri/tauri.conf.json`:**
-
-```json
-{
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/mkbhardwas12/prismos-ai/releases/latest/download/latest.json"
-      ],
-      "pubkey": "YOUR_PUBLIC_KEY_HERE"
-    }
-  }
-}
-```
-
-**Generate signing keys:**
-
-```bash
-# Generate key pair for signing updates
-npx @tauri-apps/cli generate-key
-
-# Add public key to tauri.conf.json
-# Keep private key secret (use GitHub Secrets)
-```
-
-**Create `latest.json`:**
-
-```json
-{
-  "version": "0.5.2",
-  "notes": "Release notes here",
-  "pub_date": "2026-03-04T00:00:00Z",
-  "platforms": {
-    "windows-x86_64": {
-      "signature": "...",
-      "url": "https://github.com/.../prismos_0.5.2_x64_en-US.msi.zip"
-    },
-    "darwin-aarch64": {
-      "signature": "...",
-      "url": "https://github.com/.../PrismOS-AI_0.5.2_aarch64.dmg.tar.gz"
-    },
-    "linux-x86_64": {
-      "signature": "...",
-      "url": "https://github.com/.../prismos_0.5.2_amd64.AppImage.tar.gz"
-    }
-  }
-}
-```
+Do not publish a release only because CI completed. A failed audit is a release
+blocker. Confirm source/version alignment, signatures and notarization,
+checksums/SBOM, install and uninstall behavior, the manual upgrade path, and
+Private Vault restore instructions before publication.
 
 ---
 
@@ -838,16 +821,23 @@ Include MIT License text in all distributions:
 - Android: About screen
 - Desktop: Help → About
 
-### Privacy Compliance
+### Privacy and Regulatory Review
 
-**GDPR**: No data collection = automatically compliant
+Local-first architecture and the absence of built-in telemetry can reduce data
+exposure, but they do not make a release automatically compliant with GDPR,
+CCPA/CPRA, export-control rules, app-store policies, or sector regulations.
+Before publication, review the exact shipped build, optional network features,
+data-retention behavior, privacy notices, processor relationships, user rights,
+and target jurisdictions with qualified legal and compliance professionals.
 
-**CCPA**: No data sale = automatically compliant
-
-**App Store Privacy**: Declare "No data collected"
+Complete each App Store or Play data-safety declaration from observed behavior
+of the submitted build. Do not select “No data collected” solely because core
+chat uses loopback inference; model distribution, store infrastructure, crash
+reporting, and optional remote features may change the required answers.
 
 ---
 
-**PrismOS-AI v0.5.1** — Ready for global distribution
+**PrismOS-AI v0.5.2** — Distribution planning guide; release approval remains a
+maintainer, platform-review, security-review, and jurisdiction-specific decision.
 
 Questions? Open an issue on GitHub or contact the maintainer.

@@ -1,12 +1,8 @@
-// PrismOS-AI Voice Engine — Hybrid: Local Whisper (Tauri) + Web Speech API fallback
-//
-// Phase 4: First attempts local Whisper transcription via Tauri IPC
-// (whisper.cpp running 100% on-device). Falls back to Web Speech API
-// when Whisper model is not downloaded. No audio ever leaves the device
-// when using the local engine.
+// PrismOS-AI Voice I/O — browser-provided speech recognition and synthesis.
+// Platform Web Speech implementations may use a network service. The unfinished
+// local Whisper prototype is deliberately not exposed as transcription.
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 
 // ─── TypeScript declarations for Web Speech API ────────────────────────────────
 
@@ -40,27 +36,10 @@ declare global {
   }
 }
 
-// ─── Whisper Transcription Result ──────────────────────────────────────────────
-
-interface WhisperResult {
-  text: string;
-  language: string;
-  duration_ms: number;
-  segments: { start_ms: number; end_ms: number; text: string }[];
-}
-
-interface WhisperStatus {
-  available: boolean;
-  model_loaded: boolean;
-  model_name: string | null;
-  model_path: string | null;
-  recording: boolean;
-}
-
 // ─── Voice State ───────────────────────────────────────────────────────────────
 
 export interface VoiceState {
-  /** Whether speech recognition is supported (Whisper or Web Speech API) */
+  /** Whether browser-provided speech recognition is supported */
   sttSupported: boolean;
   /** Whether the browser supports speech synthesis */
   ttsSupported: boolean;
@@ -80,7 +59,7 @@ export interface VoiceState {
   speak: (text: string) => void;
   /** Stop speaking */
   stopSpeaking: () => void;
-  /** Whether local Whisper engine is available */
+  /** Reserved compatibility flag; local Whisper transcription is unavailable */
   whisperAvailable: boolean;
 }
 
@@ -93,7 +72,7 @@ export function useVoice(
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
-  const [whisperAvailable, setWhisperAvailable] = useState(false);
+  const whisperAvailable = false;
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -103,24 +82,10 @@ export function useVoice(
     typeof window !== "undefined" &&
     !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  const sttSupported = webSpeechSupported || whisperAvailable;
+  const sttSupported = webSpeechSupported;
 
   const ttsSupported =
     typeof window !== "undefined" && !!window.speechSynthesis;
-
-  // Check Whisper availability on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const statusJson = await invoke<string>("whisper_status");
-        const status: WhisperStatus = JSON.parse(statusJson);
-        setWhisperAvailable(status.available && status.model_loaded);
-      } catch {
-        // Whisper not available (old backend, or command not registered)
-        setWhisperAvailable(false);
-      }
-    })();
-  }, []);
 
   // Initialize speech synthesis ref
   useEffect(() => {
@@ -141,36 +106,7 @@ export function useVoice(
     };
   }, []);
 
-  // ── Local Whisper transcription path ──
-  const startWhisperListening = useCallback(async () => {
-    if (!voiceEnabled) return;
-
-    setIsListening(true);
-    setInterimTranscript("🎙️ Recording (local Whisper)…");
-
-    try {
-      // Quick transcribe for 5 seconds via Tauri
-      const resultJson = await invoke<string>("quick_transcribe", { seconds: 5 });
-      const result: WhisperResult = JSON.parse(resultJson);
-
-      setInterimTranscript("");
-      if (result.text.trim()) {
-        onTranscript(result.text.trim());
-      }
-    } catch (e) {
-      console.warn("[PrismOS-AI Voice] Whisper transcription failed, falling back:", e);
-      setInterimTranscript("");
-      // Fall back to Web Speech API
-      if (webSpeechSupported) {
-        startWebSpeechListening();
-        return;
-      }
-    } finally {
-      setIsListening(false);
-    }
-  }, [voiceEnabled, onTranscript, webSpeechSupported]);
-
-  // ── Web Speech API path (fallback) ──
+  // ── Web Speech API path ──
   const startWebSpeechListening = useCallback(() => {
     if (!webSpeechSupported || !voiceEnabled) return;
 
@@ -231,14 +167,12 @@ export function useVoice(
     }
   }, [sttSupported, voiceEnabled, onTranscript]);
 
-  // ── Smart routing: prefer Whisper, fall back to Web Speech ──
+  // ── Speech input routing ──
   const startListening = useCallback(() => {
-    if (whisperAvailable) {
-      startWhisperListening();
-    } else if (webSpeechSupported) {
+    if (webSpeechSupported) {
       startWebSpeechListening();
     }
-  }, [whisperAvailable, webSpeechSupported, startWhisperListening, startWebSpeechListening]);
+  }, [webSpeechSupported, startWebSpeechListening]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {

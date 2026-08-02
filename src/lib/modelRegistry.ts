@@ -1,20 +1,33 @@
-// Model Registry — Single source of truth for all supported models
+// Model Registry — reviewed display metadata for bundled model suggestions.
+// Sizes and listed context windows were checked against official Ollama library
+// entries on 2026-08-01. Tags and artifacts can change; users should re-verify
+// compatibility with their installed Ollama version and actual hardware.
 
 export interface ModelSpec {
   name: string;
   label: string;
   desc: string;
   size: string;
-  vramMin: number;
-  ramMin: number;
+  /** Heuristic memory budget for discovery; not a compatibility guarantee. */
+  suggestedVramGB: number;
+  /** Heuristic system-memory budget for discovery; quantization/runtime matter. */
+  suggestedRamGB: number;
   context: number;
   tier: "essential" | "recommended" | "power" | "edge";
+  /** Conservative discovery hints from official family pages, not runtime attestation or benchmarks. */
   capabilities: ModelCapability[];
   license: string;
+  sourceUrl: string;
+  minOllamaVersion?: string;
   isDefault?: boolean;
   priority: number;
   releaseYear: number;
 }
+
+export type RecommendedModel = Pick<
+  ModelSpec,
+  "name" | "label" | "desc" | "size" | "tier" | "minOllamaVersion"
+>;
 
 export type ModelCapability =
   | "text"
@@ -23,7 +36,6 @@ export type ModelCapability =
   | "reasoning"
   | "multilingual"
   | "math"
-  | "agentic"
   | "long-context";
 
 export const MODEL_REGISTRY: ModelSpec[] = [
@@ -31,14 +43,15 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   {
     name: "qwen3:4b",
     label: "Qwen 3 4B",
-    desc: "🏆 New Default — better than Llama 3.2 at same size, 128K context",
+    desc: "Default compact multilingual thinking model; PrismOS discards its raw reasoning trace",
     size: "~2.5 GB",
-    vramMin: 0,
-    ramMin: 4,
-    context: 131072,
+    suggestedVramGB: 0,
+    suggestedRamGB: 4,
+    context: 262144,
     tier: "essential",
-    capabilities: ["text", "multilingual", "agentic"],
+    capabilities: ["text", "reasoning", "multilingual", "math", "long-context"],
     license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3",
     isDefault: true,
     priority: 1,
     releaseYear: 2025,
@@ -46,42 +59,47 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   {
     name: "phi4-mini",
     label: "Phi-4 Mini 3.8B",
-    desc: "Microsoft — best math/logic under 4B, MIT license",
-    size: "~2.3 GB",
-    vramMin: 0,
-    ramMin: 4,
+    desc: "Compact multilingual text model with math, reasoning, and a 128K listed context window",
+    size: "~2.5 GB",
+    suggestedVramGB: 0,
+    suggestedRamGB: 4,
     context: 131072,
     tier: "essential",
-    capabilities: ["text", "math", "reasoning"],
+    capabilities: ["text", "math", "reasoning", "multilingual", "long-context"],
     license: "MIT",
+    sourceUrl: "https://ollama.com/library/phi4-mini",
+    minOllamaVersion: "0.5.13",
     priority: 2,
     releaseYear: 2025,
   },
   {
     name: "gemma3:4b",
     label: "Gemma 3 4B",
-    desc: "Google — efficient, strong coding, fast inference",
-    size: "~2.5 GB",
-    vramMin: 0,
-    ramMin: 4,
-    context: 8192,
+    desc: "Compact multilingual vision-and-text model with a 128K listed context window",
+    size: "~3.3 GB",
+    suggestedVramGB: 0,
+    suggestedRamGB: 4,
+    context: 131072,
     tier: "essential",
-    capabilities: ["text", "code"],
+    capabilities: ["text", "vision", "multilingual", "long-context"],
     license: "Gemma",
+    sourceUrl: "https://ollama.com/library/gemma3",
+    minOllamaVersion: "0.6.0",
     priority: 3,
     releaseYear: 2025,
   },
   {
     name: "llama3.2",
     label: "Llama 3.2 3B",
-    desc: "Meta — proven reliability, 128K context, good baseline",
+    desc: "Compact text baseline with a large context window",
     size: "~2.0 GB",
-    vramMin: 0,
-    ramMin: 4,
+    suggestedVramGB: 0,
+    suggestedRamGB: 4,
     context: 131072,
     tier: "essential",
-    capabilities: ["text", "long-context"],
+    capabilities: ["text", "multilingual", "long-context"],
     license: "Llama 3.2",
+    sourceUrl: "https://ollama.com/library/llama3.2",
     priority: 4,
     releaseYear: 2024,
   },
@@ -90,100 +108,108 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   {
     name: "qwen3:8b",
     label: "Qwen 3 8B",
-    desc: "🏆 Best mid-range — surpasses Mistral 7B everywhere",
-    size: "~5 GB",
-    vramMin: 6,
-    ramMin: 8,
-    context: 131072,
+    desc: "Mid-size text, code, and multilingual model with a 40K listed context window",
+    size: "~5.2 GB",
+    suggestedVramGB: 6,
+    suggestedRamGB: 8,
+    context: 40960,
     tier: "recommended",
-    capabilities: ["text", "code", "multilingual", "agentic"],
+    capabilities: ["text", "code", "reasoning", "multilingual", "math", "long-context"],
     license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3",
     priority: 10,
     releaseYear: 2025,
   },
   {
     name: "qwen3:14b",
     label: "Qwen 3 14B",
-    desc: "🏆 Best quality/size ratio — near GPT-4 on many tasks",
-    size: "~9 GB",
-    vramMin: 10,
-    ramMin: 12,
-    context: 131072,
+    desc: "Larger text, code, reasoning, and multilingual model with a 40K listed context window",
+    size: "~9.3 GB",
+    suggestedVramGB: 10,
+    suggestedRamGB: 12,
+    context: 40960,
     tier: "recommended",
-    capabilities: ["text", "code", "reasoning", "multilingual", "agentic"],
+    capabilities: ["text", "code", "reasoning", "multilingual", "long-context"],
     license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3",
     priority: 11,
     releaseYear: 2025,
   },
   {
     name: "deepseek-r1:7b",
     label: "DeepSeek R1 7B",
-    desc: "Chain-of-thought reasoning, shows thinking process",
+    desc: "Reasoning-focused local model; PrismOS shows concise rationale, not hidden chain-of-thought",
     size: "~4.7 GB",
-    vramMin: 6,
-    ramMin: 8,
+    suggestedVramGB: 6,
+    suggestedRamGB: 8,
     context: 131072,
     tier: "recommended",
-    capabilities: ["text", "reasoning", "math"],
-    license: "DeepSeek",
+    capabilities: ["text", "reasoning", "math", "long-context"],
+    license: "MIT",
+    sourceUrl: "https://ollama.com/library/deepseek-r1",
     priority: 12,
     releaseYear: 2025,
   },
   {
     name: "mistral",
     label: "Mistral 7B",
-    desc: "Proven all-rounder, fast inference",
-    size: "~4.1 GB",
-    vramMin: 6,
-    ramMin: 8,
+    desc: "General-purpose text model with a moderate context window",
+    size: "~4.4 GB",
+    suggestedVramGB: 6,
+    suggestedRamGB: 8,
     context: 32768,
     tier: "recommended",
-    capabilities: ["text"],
+    capabilities: ["text", "long-context"],
     license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/mistral",
     priority: 13,
-    releaseYear: 2023,
+    releaseYear: 2024,
   },
 
   // ══════════ SPECIALIST MODELS ══════════
   {
     name: "qwen2.5-coder:7b",
     label: "Qwen 2.5 Coder 7B",
-    desc: "⌨️ Best code model — 2x better than CodeLlama",
+    desc: "Code-focused text model with a 32K listed context window",
     size: "~4.7 GB",
-    vramMin: 6,
-    ramMin: 8,
-    context: 131072,
-    tier: "recommended",
-    capabilities: ["code", "text"],
-    license: "Apache-2.0",
-    priority: 20,
-    releaseYear: 2025,
-  },
-  {
-    name: "qwen2-vl:7b",
-    label: "Qwen 2 VL 7B",
-    desc: "👁️ Best vision — superior OCR & image understanding",
-    size: "~5.5 GB",
-    vramMin: 6,
-    ramMin: 8,
+    suggestedVramGB: 6,
+    suggestedRamGB: 8,
     context: 32768,
     tier: "recommended",
-    capabilities: ["vision", "text"],
-    license: "Qwen",
+    capabilities: ["code", "text", "long-context"],
+    license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen2.5-coder",
+    priority: 20,
+    releaseYear: 2024,
+  },
+  {
+    name: "qwen2.5vl:7b",
+    label: "Qwen 2.5 VL 7B",
+    desc: "Vision-language model for image and text prompts with a 125K listed context window",
+    size: "~6.0 GB",
+    suggestedVramGB: 6,
+    suggestedRamGB: 8,
+    context: 128000,
+    tier: "recommended",
+    capabilities: ["vision", "text", "long-context"],
+    license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen2.5vl",
+    minOllamaVersion: "0.7.0",
     priority: 21,
     releaseYear: 2025,
   },
   {
     name: "llama3.2-vision",
     label: "Llama 3.2 Vision 11B",
-    desc: "👁️ Meta vision — proven image understanding",
-    size: "~7.9 GB",
-    vramMin: 8,
-    ramMin: 12,
+    desc: "Vision-language model for image and text prompts on larger-memory systems",
+    size: "~7.8 GB",
+    suggestedVramGB: 8,
+    suggestedRamGB: 12,
     context: 131072,
     tier: "recommended",
-    capabilities: ["vision", "text"],
+    capabilities: ["vision", "text", "long-context"],
     license: "Llama 3.2",
+    sourceUrl: "https://ollama.com/library/llama3.2-vision",
     priority: 22,
     releaseYear: 2024,
   },
@@ -192,38 +218,40 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   {
     name: "qwen3:32b",
     label: "Qwen 3 32B",
-    desc: "🔥 Near GPT-4 quality, best open model at this size",
+    desc: "Larger text, code, reasoning, math, and multilingual model with a 40K listed context window",
     size: "~20 GB",
-    vramMin: 24,
-    ramMin: 32,
-    context: 131072,
+    suggestedVramGB: 24,
+    suggestedRamGB: 32,
+    context: 40960,
     tier: "power",
     capabilities: [
       "text",
       "code",
       "reasoning",
       "multilingual",
-      "agentic",
+      "long-context",
       "math",
     ],
     license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3",
     priority: 30,
     releaseYear: 2025,
   },
   {
     // NOTE: there is no `deepseek-v3:16b` on the Ollama registry — DeepSeek-V3 only
-    // ships as 671B (won't fit consumer RAM). `deepseek-r1:32b` is the strongest
-    // DeepSeek reasoning model that fits a 64GB machine (~20GB at Q4).
+    // ships as 671B. `deepseek-r1:32b` is the registered larger-memory
+    // reasoning option here (~20GB for the listed Ollama artifact).
     name: "deepseek-r1:32b",
     label: "DeepSeek R1 32B",
-    desc: "🔥 Top-tier chain-of-thought reasoning (fits 64GB)",
+    desc: "Reasoning-oriented text, code, and math model for larger-memory systems",
     size: "~20 GB",
-    vramMin: 24,
-    ramMin: 32,
+    suggestedVramGB: 24,
+    suggestedRamGB: 32,
     context: 131072,
     tier: "power",
-    capabilities: ["text", "code", "reasoning", "math"],
+    capabilities: ["text", "code", "reasoning", "math", "long-context"],
     license: "MIT",
+    sourceUrl: "https://ollama.com/library/deepseek-r1",
     priority: 31,
     releaseYear: 2025,
   },
@@ -232,28 +260,30 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   {
     name: "qwen3:1.7b",
     label: "Qwen 3 1.7B",
-    desc: "⚡ Ultra-light — runs on 2GB RAM, surprisingly capable",
-    size: "~1.1 GB",
-    vramMin: 0,
-    ramMin: 2,
-    context: 32768,
+    desc: "Ultra-light multilingual text model with a 40K listed context window",
+    size: "~1.4 GB",
+    suggestedVramGB: 0,
+    suggestedRamGB: 2,
+    context: 40960,
     tier: "edge",
-    capabilities: ["text", "multilingual"],
+    capabilities: ["text", "reasoning", "multilingual", "math", "long-context"],
     license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3",
     priority: 40,
     releaseYear: 2025,
   },
   {
     name: "gemma2:2b",
     label: "Gemma 2 2B",
-    desc: "⚡ Google ultra-light — good for low-end hardware",
+    desc: "Ultra-light text model for constrained systems",
     size: "~1.6 GB",
-    vramMin: 0,
-    ramMin: 2,
+    suggestedVramGB: 0,
+    suggestedRamGB: 2,
     context: 8192,
     tier: "edge",
     capabilities: ["text"],
     license: "Gemma",
+    sourceUrl: "https://ollama.com/library/gemma2",
     priority: 41,
     releaseYear: 2024,
   },
@@ -261,17 +291,23 @@ export const MODEL_REGISTRY: ModelSpec[] = [
 
 // ── Helper functions ──
 
-/** Get models filtered by max RAM */
+/**
+ * Return heuristic fit suggestions for a memory budget. A zero VRAM value means
+ * CPU/unified-memory inference, not incompatibility with models that can offload
+ * to a discrete GPU. This is discovery guidance, never a hardware guarantee.
+ */
 export function getModelsForHardware(
   ramGB: number,
   vramGB: number = 0
 ): ModelSpec[] {
   return MODEL_REGISTRY.filter(
-    (m) => m.ramMin <= ramGB && (m.vramMin === 0 || m.vramMin <= vramGB)
+    (m) =>
+      m.suggestedRamGB <= ramGB &&
+      (vramGB <= 0 || m.suggestedVramGB <= vramGB)
   ).sort((a, b) => a.priority - b.priority);
 }
 
-/** Get the recommended default model for given hardware */
+/** Get the highest-priority heuristic default for a memory budget. */
 export function getDefaultModel(
   ramGB: number,
   vramGB: number = 0
@@ -285,7 +321,7 @@ export function getModelsByCapability(cap: ModelCapability): ModelSpec[] {
   return MODEL_REGISTRY.filter((m) => m.capabilities.includes(cap));
 }
 
-/** Get the best model for a specific capability given hardware constraints */
+/** Get the highest-priority registered model for a capability and hardware budget. */
 export function getBestModelFor(
   cap: ModelCapability,
   ramGB: number,
@@ -296,14 +332,34 @@ export function getBestModelFor(
   );
 }
 
+/**
+ * Pick a conservative text-model suggestion while leaving roughly half of
+ * system memory available for the OS, context/KV cache, and other processes.
+ * This is catalog guidance only, not a runtime compatibility or quality claim.
+ */
+export function getConservativeRamSuggestion(systemRamGB: number): ModelSpec {
+  const modelBudgetGB = Math.max(2, systemRamGB / 2);
+  const candidates = getModelsForHardware(modelBudgetGB).filter((model) =>
+    model.capabilities.includes("text")
+  );
+
+  return candidates.reduce<ModelSpec | undefined>((best, candidate) => {
+    if (!best) return candidate;
+    if (candidate.suggestedRamGB !== best.suggestedRamGB) {
+      return candidate.suggestedRamGB > best.suggestedRamGB ? candidate : best;
+    }
+    return candidate.priority < best.priority ? candidate : best;
+  }, undefined) ?? getDefaultModel(systemRamGB);
+}
+
 /** Convert ModelSpec to the legacy POPULAR_MODELS format for backward compatibility */
 export function toLegacyFormat(spec: ModelSpec) {
   return { name: spec.name, desc: spec.desc, size: spec.size };
 }
 
-/** Convert full registry to RECOMMENDED_MODELS format for useOllama backward compatibility */
-export function toRecommendedFormat(): { name: string; label: string; desc: string; size: string; tier: string }[] {
-  return MODEL_REGISTRY
+/** Convert full registry to RECOMMENDED_MODELS format for useOllama backward compatibility. */
+export function toRecommendedFormat(): RecommendedModel[] {
+  return [...MODEL_REGISTRY]
     .sort((a, b) => a.priority - b.priority)
     .map((spec) => ({
       name: spec.name,
@@ -311,5 +367,6 @@ export function toRecommendedFormat(): { name: string; label: string; desc: stri
       desc: spec.desc,
       size: spec.size,
       tier: spec.tier,
+      minOllamaVersion: spec.minOllamaVersion,
     }));
 }

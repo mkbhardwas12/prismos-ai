@@ -26,7 +26,7 @@
   opacity: 0.4;
 }
 
-/* Sidebar "Memory is growing" pulse */
+/* Sidebar local-memory empty-state pulse */
 .spectrum-growing-pulse {
   width: 28px;
   height: 28px;
@@ -451,7 +451,7 @@
   color: var(--color-accent);
 }
 
-/* ── Edge Prophecy Panel ── */
+/* ── Candidate Links Panel ── */
 .sg-prophecy {
   background: rgba(180, 140, 255, 0.04);
   border: 1px solid rgba(180, 140, 255, 0.12);

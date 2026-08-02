@@ -75,10 +75,9 @@ describe("Sidebar", () => {
     expect(statsSection!.textContent).toMatch(/node|edge|knowledge/i);
   });
 
-  it("shows agent activity indicators", async () => {
+  it("shows workflow-role activity indicators", async () => {
     await renderSidebar();
-    // Multiple agents may match — use getAllByText
-    const agents = screen.getAllByText(/Orchestrator|Reasoner/);
-    expect(agents.length).toBeGreaterThan(0);
+    const roles = screen.getAllByText(/Routing Stage|Reasoning Stage/);
+    expect(roles.length).toBeGreaterThan(0);
   });
 });

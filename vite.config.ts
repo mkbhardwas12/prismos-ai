@@ -1,4 +1,4 @@
-// PrismOS-AI — Local-First Agentic Personal AI Operating System
+// PrismOS-AI — local-first desktop assistant with bounded sequential workflows
 
 /// <reference types="vitest" />
 import { defineConfig, type Plugin } from "vite";

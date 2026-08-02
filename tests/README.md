@@ -7,8 +7,8 @@ PrismOS-AI has two test layers:
 
 | Layer | Language | Runner | Description |
 |-------|----------|--------|-------------|
-| **Backend (Rust)** | Rust | `cargo test` | 65 unit + integration tests for Spectrum Graph, Sandbox, You-Port, Agents |
-| **Frontend (TypeScript)** | TypeScript | `vitest run` | 97 automated unit/component tests (Vitest + React Testing Library) |
+| **Backend (Rust)** | Rust | `cargo test` | Unit and integration tests for Spectrum Graph, action policy, encrypted exports, and agents |
+| **Frontend (TypeScript)** | TypeScript | `vitest run` | Automated unit/component tests (Vitest + React Testing Library) |
 
 ---
 
@@ -22,10 +22,10 @@ cargo test
 ### What is tested:
 
 - **Spectrum Graph** — Node/edge CRUD, spectral dimension queries, graph persistence, merge/diff engine
-- **Sandbox Prisms** — HMAC verification, allow-list enforcement, rollback mechanics
+- **Native action policy** — HMAC verification, allow-list enforcement, and signed decision bookkeeping
 - **You-Port** — Encryption/decryption round-trip, HMAC integrity, device fingerprinting
 - **Refractive Core** — Intent parsing, agent routing
-- **Agents** — LangGraph DAG execution, message routing, debate rounds
+- **Agents** — Bounded sequential plan → build → judge → refine execution and message routing
 
 ---
 
@@ -46,12 +46,12 @@ Use this checklist to verify all features before a release:
 - [ ] Loading screen transitions smoothly to main view
 - [ ] You-Port auto-restore toast appears if previous session exists
 - [ ] Sidebar shows all 7 navigation items (Dashboard, Chat, Graph, Explorer, Sandbox, Timeline, Settings)
-- [ ] Version badge shows v0.5.1
+- [ ] Version badge shows the version in `package.json`
 
 #### Daily Dashboard
 - [ ] Dashboard view loads with hero greeting (time-of-day)
 - [ ] Stats strip shows nodes, today's additions, agents, health
-- [ ] Calendar, Email, Finance, Highlights, Pending, Suggestions cards render
+- [ ] Local highlights, pending topics, and suggestions render without keeper-network requests
 - [ ] Quick links grid shows all 6 view shortcuts
 - [ ] Auto-refresh triggers every 10 minutes
 - [ ] Manual refresh button works
@@ -60,7 +60,7 @@ Use this checklist to verify all features before a release:
 #### ProactivePanel
 - [ ] ProactivePanel visible in sidebar below navigation
 - [ ] Collapse/expand toggle works
-- [ ] Calendar, Email, Finance, Suggestions sections load
+- [ ] Local graph insight and suggestions sections load without keeper-network requests
 - [ ] Graph insight card shows top node
 - [ ] Collapse state persists after re-opening sidebar
 
@@ -71,8 +71,8 @@ Use this checklist to verify all features before a release:
 - [ ] Loading dots appear while processing
 - [ ] AI response appears with metadata footer
 - [ ] Agent name and processing time shown
-- [ ] LangGraph collaboration trace shown in sidebar
-- [ ] Debate panel appears when agents debate
+- [ ] Sequential workflow trace is shown in the sidebar
+- [ ] Plan → build → judge → refine stages appear in order when the goal loop runs
 - [ ] Clear button removes all messages
 - [ ] Error message shows troubleshooting steps when Ollama is offline
 
@@ -97,10 +97,10 @@ Use this checklist to verify all features before a release:
 
 #### Sandbox Prisms
 - [ ] Create Prism creates sandbox instance
-- [ ] Execute runs code in sandbox
-- [ ] Results show success/failure with badges
-- [ ] Rollback button triggers rollback
-- [ ] WASM isolation badge visible
+- [ ] Evaluate applies the bounded native action policy; it does not run arbitrary code
+- [ ] Results show allow/deny policy decisions and signed bookkeeping
+- [ ] Bookkeeping checkpoint control does not claim generic state rollback
+- [ ] Security status reports `wasm_isolation: false` and `auto_rollback: false`
 
 #### Spectral Timeline
 - [ ] Timeline loads with date-grouped events
@@ -126,7 +126,8 @@ Use this checklist to verify all features before a release:
   - [ ] Preview Merge shows diff stats and conflicts
   - [ ] Apply Merge runs merge with selected strategy
   - [ ] Strategy selector (Latest/Theirs/Ours) works
-- [ ] Version banner shows v0.5.1
+- [ ] Version banner matches `package.json`
+- [ ] Email, calendar, and finance integrations are shown as unavailable/disabled
 
 #### Frameless Window & System Tray
 - [ ] Frameless window renders with custom titlebar
@@ -151,16 +152,17 @@ Use this checklist to verify all features before a release:
 
 #### Document Analysis
 - [ ] 📄 Document upload button appears in Intent Input
-- [ ] Uploading PDF extracts text and shows preview card
 - [ ] Uploading DOCX extracts text and shows preview card
 - [ ] Uploading PPTX extracts text and shows preview card
-- [ ] Uploading XLSX extracts text and shows preview card
+- [ ] Uploading allowlisted UTF-8 text/code, CSV, or TSV shows a preview card
+- [ ] Uploading PDF fails closed with guidance to convert it to UTF-8 text
+- [ ] Uploading XLSX or legacy XLS fails closed with guidance to export CSV/TSV
 - [ ] Submitting with document sends context to AI for analysis
 - [ ] AI response summarizes/analyzes the document content
 
-#### Auto-Updater
-- [ ] App checks for updates on startup
-- [ ] Update notification appears when new version available
+#### Manual Upgrade
+- [ ] App does not claim to check for or install updates in-app
+- [ ] Installing a manually downloaded release over the prior version preserves app data
 
 #### Accessibility
 - [ ] Tab navigation moves through all interactive elements

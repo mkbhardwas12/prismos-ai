@@ -1,544 +1,225 @@
 # PrismOS-AI Release Checklist
 
-> Complete checklist for releasing new versions across all platforms
+This checklist describes the current desktop release process. It does not imply
+that a release exists, that candidate artifacts are signed, or that CI publishes
+anything.
 
----
+## Current automation boundary
 
-## Pre-Release Phase
+`.github/workflows/release.yml` is a manually dispatched candidate builder.
 
-### Code & Documentation
+- It has read-only repository permissions.
+- It does not run on tags.
+- It does not create, update, draft, or publish a GitHub Release.
+- It produces unsigned Windows, macOS, and Linux candidate artifacts with short
+  retention.
+- Its macOS candidates are not notarized.
+- It does not build Android or iOS packages.
+- PrismOS has no in-app updater or automatic installation path.
 
-- [ ] All features for this release are complete and merged
-- [ ] All tests passing (162/162):
-  ```bash
-  npm test  # 97 frontend tests
-  cd src-tauri && cargo test  # 65 backend tests
-  ```
-- [ ] No failing TypeScript checks:
-  ```bash
-  npx tsc --noEmit
-  ```
-- [ ] No Rust clippy warnings:
-  ```bash
-  cd src-tauri && cargo clippy -- -D warnings
-  ```
-- [ ] CHANGELOG.md updated with new version
-- [ ] README.md version badge updated
-- [ ] All documentation reflects new features
-- [ ] Screenshots updated if UI changed
-- [ ] Demo video updated if major UI changes
+Every candidate remains untrusted until the independent signing, notarization,
+provenance, testing, and approval gates below are complete.
 
-### Version Bumping
+## 1. Freeze and identify the candidate
 
-- [ ] Update version in `package.json`:
-  ```json
-  {
-    "version": "X.X.X"
-  }
-  ```
+- [ ] Select the exact reviewed commit; record its full SHA.
+- [ ] Confirm the worktree contains no accidental local or private files.
+- [ ] Review the complete diff from the previous release.
+- [ ] Update `CHANGELOG.md` with only verified changes.
+- [ ] Align the version in:
+  - [ ] `package.json`
+  - [ ] `src-tauri/Cargo.toml`
+  - [ ] `src-tauri/tauri.conf.json`
+- [ ] Update mobile version metadata only if a separately approved mobile release
+  is actually in scope.
+- [ ] Confirm README, security, installation, deployment, privacy, and recovery
+  documentation describe the candidate rather than a roadmap.
+- [ ] Confirm generated screenshots and videos do not contain personal data.
 
-- [ ] Update version in `src-tauri/Cargo.toml`:
-  ```toml
-  [package]
-  version = "X.X.X"
-  ```
+Do not use `git add .` as a release shortcut. Review and stage intended paths
+explicitly.
 
-- [ ] Update version in `src-tauri/tauri.conf.json`:
-  ```json
-  {
-    "version": "X.X.X"
-  }
-  ```
+## 2. Run the current full gates
 
-- [ ] Update version in `src-tauri/gen/android/app/build.gradle`:
-  ```gradle
-  defaultConfig {
-      versionCode X
-      versionName "X.X.X"
-  }
-  ```
-
-- [ ] Commit version bump:
-  ```bash
-  git add .
-  git commit -m "release: bump version to vX.X.X"
-  ```
-
-### Testing
-
-- [ ] Test desktop build locally:
-  ```bash
-  npm run tauri build
-  ```
-
-- [ ] Test Android build locally:
-  ```bash
-  npx tauri android build --apk --release
-  ```
-
-- [ ] Install and test on multiple platforms:
-  - [ ] Windows 10
-  - [ ] Windows 11
-  - [ ] macOS (Intel)
-  - [ ] macOS (Apple Silicon)
-  - [ ] Ubuntu 22.04
-  - [ ] Android 8.0+
-  - [ ] Android 13+
-
-- [ ] Test all major features:
-  - [ ] Intent Console (text input)
-  - [ ] Spectrum Graph visualization
-  - [ ] Vision analysis (image upload)
-  - [ ] Document analysis (PDF, DOCX)
-  - [ ] Voice input
-  - [ ] Settings panel
-  - [ ] You-Port export/import
-  - [ ] Global hotkey (Ctrl+Space, Alt+Space)
-  - [ ] System tray (minimize/restore)
-
-- [ ] Test with different Ollama models:
-  - [ ] llama3.2
-  - [ ] mistral
-  - [ ] llama3.2-vision
-  - [ ] deepseek-r1
-
-- [ ] Test auto-updater flow (if applicable)
-
----
-
-## Release Phase
-
-### Git Tagging
-
-- [ ] Create and push git tag:
-  ```bash
-  git tag vX.X.X
-  git push origin vX.X.X
-  ```
-
-### GitHub Actions Build
-
-- [ ] Monitor GitHub Actions workflow:
-  - https://github.com/mkbhardwas12/prismos-ai/actions
-
-- [ ] Wait for all builds to complete (10-20 minutes):
-  - [ ] Windows (.msi, .exe)
-  - [ ] macOS Apple Silicon (.dmg)
-  - [ ] macOS Intel (.dmg)
-  - [ ] Linux (.deb, .AppImage)
-  - [ ] Android (.apk)
-
-- [ ] Download and verify all artifacts
-
-### GitHub Release
-
-- [ ] Go to https://github.com/mkbhardwas12/prismos-ai/releases/new
-
-- [ ] Fill release form:
-  - **Tag**: vX.X.X (select existing tag)
-  - **Release title**: PrismOS-AI vX.X.X — [Release Name]
-  - **Description**: Use template below
-
-- [ ] Upload additional files:
-  - [ ] Android AAB (for Play Store)
-  - [ ] SHA256 checksums file
-  - [ ] Source code (auto-attached)
-
-- [ ] Check "Set as latest release"
-
-- [ ] Click "Publish release"
-
-**Release Description Template:**
-
-````markdown
-## PrismOS-AI vX.X.X — [Release Name]
-
-### 🎯 Highlights
-
-- New feature 1
-- New feature 2
-- Performance improvements
-
-### ✨ What's New
-
-**New Features:**
-- Feature description with details
-- Another feature with use case
-
-**Improvements:**
-- Performance optimization: 30% faster graph queries
-- UI polish: smoother animations
-- Better error messages
-
-**Bug Fixes:**
-- Fixed crash when importing large graphs
-- Fixed vision model detection
-- Fixed mobile layout on tablets
-
-### 📦 Downloads
-
-Choose the right installer for your platform:
-
-| Platform | Package | Installation |
-|----------|---------|--------------|
-| **Windows** | `.msi` (recommended) or `.exe` | Double-click to install |
-| **macOS Apple Silicon** | `_aarch64.dmg` | Drag to Applications |
-| **macOS Intel** | `_x64.dmg` | Drag to Applications |
-| **Linux (Debian/Ubuntu)** | `.deb` | `sudo dpkg -i prismos_*.deb` |
-| **Linux (Universal)** | `.AppImage` | `chmod +x && run` |
-| **Android** | `.apk` | Sideload or Play Store |
-
-### 📋 Requirements
-
-- **Desktop**: Windows 10+, macOS 11+, Ubuntu 20.04+ (or equivalent)
-- **Mobile**: Android 8.0+
-- **RAM**: 4GB minimum, 8GB recommended
-- **Storage**: 2GB + space for AI models
-- **Ollama**: Required for desktop (https://ollama.com)
-
-### 🚀 Quick Start
+Run these commands from a clean checkout with the locked dependency files. Do not
+copy a test count from this document: record the totals emitted by the current
+suites and the commit on which they ran.
 
 ```bash
-# 1. Install Ollama
-# Download from https://ollama.com
+npm ci
+npm exec tsc -- --noEmit
+npm test -- --run
+npm run build
+npm audit --audit-level=high
 
-# 2. Pull a model
-ollama pull llama3.2
-
-# 3. Start Ollama
-ollama serve
-
-# 4. Install PrismOS-AI
-# Download installer from this release
-
-# 5. Launch and enjoy!
+cd src-tauri
+cargo check --locked --all-targets
+cargo test --locked --lib
+cargo clippy --locked --all-targets
+cargo audit --file Cargo.lock
 ```
 
-### 📖 Documentation
-
-- **Installation Guide**: [INSTALLATION.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/docs/INSTALLATION.md)
-- **User Guide**: [COMPREHENSIVE_GUIDE.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/docs/COMPREHENSIVE_GUIDE.md)
-- **Deployment**: [DEPLOYMENT.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/docs/DEPLOYMENT.md)
-
-### 🔒 Security & Privacy
-
-- ✅ 100% local processing — no cloud
-- ✅ Zero telemetry — no tracking
-- ✅ Encrypted storage — AES-256-GCM
-- ✅ Open source — MIT License
-
-### 🧪 Testing
-
-- **162 tests** passing (97 frontend + 65 backend)
-- Tested on Windows 10/11, macOS 11-14, Ubuntu 20.04-22.04, Android 8-13
-
-### 🐛 Known Issues
-
-- Issue 1 description (if any)
-- Workaround provided
-
-### 🗺️ What's Next (vX.Y.0)
-
-- Upcoming feature 1
-- Upcoming feature 2
-- See full [roadmap](https://github.com/mkbhardwas12/prismos-ai/blob/main/README.md#roadmap)
-
-### 📝 Full Changelog
-
-See [CHANGELOG.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/CHANGELOG.md) for complete details.
-
----
-
-**Checksums (SHA256):**
-
-```
-[Include SHA256 hashes for all downloadable files]
-```
-
----
-
-Built with ❤️ by [Manish Kumar](https://github.com/mkbhardwas12)
-````
-
----
-
-## App Store Releases
-
-### iOS App Store (if applicable)
-
-- [ ] Open Xcode
-- [ ] Select target: "Any iOS Device"
-- [ ] Product → Archive
-- [ ] Wait for archive to complete
-- [ ] In Organizer:
-  - [ ] Validate App
-  - [ ] Fix any validation errors
-  - [ ] Distribute App → App Store Connect
-  - [ ] Upload
-
-- [ ] In App Store Connect:
-  - [ ] Go to My Apps → PrismOS-AI
-  - [ ] Add build to version
-  - [ ] Update "What's New" section:
-    ```
-    PrismOS-AI vX.X.X
-
-    NEW:
-    • Feature 1
-    • Feature 2
-
-    IMPROVED:
-    • Better performance
-    • UI enhancements
-
-    FIXED:
-    • Bug fixes and stability improvements
-    ```
-  - [ ] Update screenshots if needed
-  - [ ] Submit for Review
-  - [ ] Monitor review status (24-48 hours)
-
-### Android Play Store
-
-- [ ] Build signed AAB:
-  ```bash
-  npx tauri android build --aab --release -- --features vendored-ssl
-  ```
-
-- [ ] Verify signing:
-  ```bash
-  jarsigner -verify -verbose -certs \
-    src-tauri/gen/android/app/build/outputs/bundle/release/app-release.aab
-  ```
-
-- [ ] In Google Play Console:
-  - [ ] Go to Production → Releases
-  - [ ] Create new release
-  - [ ] Upload AAB
-  - [ ] Release notes:
-    ```
-    PrismOS-AI vX.X.X
-
-    NEW:
-    • Feature 1
-    • Feature 2
-
-    IMPROVED:
-    • Better performance
-    • UI enhancements
-
-    FIXED:
-    • Bug fixes and stability improvements
-
-    Full changelog: github.com/mkbhardwas12/prismos-ai/releases
-    ```
-  - [ ] Save → Review release
-  - [ ] Start rollout to Production
-  - [ ] Choose rollout percentage (start with 20%, increase over days)
-
-### Microsoft Store (optional)
-
-- [ ] Build MSIX package:
-  ```bash
-  npm run tauri build -- --target msix
-  ```
-
-- [ ] In Partner Center:
-  - [ ] Create submission
-  - [ ] Upload MSIX
-  - [ ] Update metadata
-  - [ ] Submit for certification
-
----
-
-## Post-Release Phase
-
-### Verification
-
-- [ ] Download installers from GitHub Releases
-- [ ] Test installation on clean systems:
-  - [ ] Windows (clean VM)
-  - [ ] macOS (clean VM)
-  - [ ] Linux (clean VM)
-  - [ ] Android (factory reset device)
-
-- [ ] Verify auto-updater detects new version
-- [ ] Test upgrade path from previous version
-
-### Communication
-
-- [ ] Update README.md with latest version badge
-- [ ] Post announcement in GitHub Discussions:
-  - https://github.com/mkbhardwas12/prismos-ai/discussions
-
-- [ ] Twitter/X announcement (if applicable):
-  ```
-  🎉 PrismOS-AI vX.X.X is here!
-
-  ✨ New: [Feature highlights]
-  🔒 100% local, privacy-first
-  📦 Download: [Release URL]
-
-  #LocalFirst #AI #Privacy
-  ```
-
-- [ ] Reddit post in relevant subreddits (if applicable):
-  - r/selfhosted
-  - r/opensource
-  - r/privacy
-
-- [ ] Update website (if applicable)
-
-### Monitoring
-
-- [ ] Monitor GitHub Issues for bug reports:
-  - https://github.com/mkbhardwas12/prismos-ai/issues
-
-- [ ] Monitor App Store reviews (iOS):
-  - App Store Connect → Ratings and Reviews
-
-- [ ] Monitor Play Store reviews (Android):
-  - Play Console → Reviews
-
-- [ ] Monitor crash reports:
-  - iOS: Xcode Organizer → Crashes
-  - Android: Play Console → Quality → Crashes
-
-- [ ] Set up alerts for critical issues
-
-### Analytics (Optional)
-
-- [ ] Check download stats:
-  ```bash
-  gh release view vX.X.X --json assets
-  ```
-
-- [ ] Monitor GitHub traffic:
-  - Insights → Traffic
-
-- [ ] Track star/fork growth
-
----
-
-## Hotfix Process (If Critical Bug Found)
-
-### Immediate Response
-
-- [ ] Create hotfix branch:
-  ```bash
-  git checkout -b hotfix/vX.X.Y main
-  ```
-
-- [ ] Fix critical bug
-- [ ] Add regression test
-- [ ] Test thoroughly
-- [ ] Bump patch version (X.X.Y)
-- [ ] Commit fix:
-  ```bash
-  git commit -m "fix: [Critical bug description]"
-  ```
-
-- [ ] Merge to main:
-  ```bash
-  git checkout main
-  git merge hotfix/vX.X.Y
-  ```
-
-- [ ] Tag and release:
-  ```bash
-  git tag vX.X.Y
-  git push origin vX.X.Y
-  ```
-
-- [ ] Follow same release process above
-
----
-
-## Rollback Process (If Release is Broken)
-
-### GitHub Release
-
-- [ ] Mark release as "Pre-release"
-- [ ] Add warning notice to description
-- [ ] Pin previous stable release as "Latest"
-
-### App Stores
-
-**iOS:**
-- [ ] Phased release: Pause rollout
-- [ ] Or: Remove from sale temporarily
-- [ ] Submit hotfix ASAP
-
-**Android:**
-- [ ] Halt staged rollout
-- [ ] Or: Revert to previous version
-- [ ] Submit hotfix
-
-### Communication
-
-- [ ] Post incident report in Discussions
-- [ ] Update affected users via GitHub Issues
-- [ ] Provide workaround if available
-
----
-
-## Checklist Templates by Version Type
-
-### Patch Release (X.X.Y)
-
-Focus: Bug fixes, security patches
-
-- [ ] Critical bugs fixed
-- [ ] Security vulnerabilities patched
-- [ ] Regression tests added
-- [ ] Quick release cycle (days)
-
-### Minor Release (X.Y.0)
-
-Focus: New features, improvements
-
-- [ ] New features complete and tested
-- [ ] Documentation updated
-- [ ] Marketing materials prepared
-- [ ] 2-4 week testing cycle
-
-### Major Release (X.0.0)
-
-Focus: Breaking changes, major features
-
-- [ ] Breaking changes documented
-- [ ] Migration guide written
-- [ ] Beta testing phase (2-4 weeks)
-- [ ] Marketing campaign planned
-- [ ] 4-8 week testing cycle
-
----
-
-## Resources
-
-- **GitHub Releases**: https://github.com/mkbhardwas12/prismos-ai/releases
-- **App Store Connect**: https://appstoreconnect.apple.com
-- **Play Console**: https://play.google.com/console
-- **Semantic Versioning**: https://semver.org/
-
----
-
-## Sign-Off
-
-**Release Manager**: _________________
-
-**Date**: _________________
-
-**Version**: vX.X.X
-
-**Status**: ☐ PASS  ☐ FAIL
-
-**Notes**:
-```
+- [ ] TypeScript check passed.
+- [ ] Frontend tests passed; current total recorded in release evidence.
+- [ ] Frontend production build passed.
+- [ ] npm audit passed at the release threshold; full output archived.
+- [ ] Rust check passed for all targets available in the gate environment.
+- [ ] Rust library tests passed; current total recorded in release evidence.
+- [ ] Clippy completed; every warning was reviewed and no new release-blocking
+  warning was accepted silently.
+- [ ] Cargo audit reported zero known vulnerabilities; full output archived.
+- [ ] Allowed maintenance/unsound warnings were compared with the reviewed
+  baseline and have owners or documented rationale.
+- [ ] `git diff --check` passed.
+
+Audit snapshot as of 2026-08-01: Cargo reports **zero known vulnerabilities** and
+**19 reviewed maintenance/unsound warnings**. The automated gate compares the
+advisory IDs, classes, packages, and versions with the checked-in baseline. This
+dated snapshot is not a waiver or future result; any vulnerability or unexpected
+warning-set change is a stop condition until reviewed.
+
+## 3. Exercise privacy and recovery gates
+
+- [ ] Scan tracked files, staged files, generated packages, logs, screenshots,
+  and fixtures for credentials, personal paths, project excerpts, prompts,
+  databases, keys, audit logs, adapters, and backups.
+- [ ] Confirm the public repository contains no `*.db`, SQLite sidecar,
+  `*.prismos-vault`, device key, flywheel dataset, adapter, or model weight.
+- [ ] Verify Project Knowledge requires preview and approval, rejects changed
+  candidates, and Forget remains source-scoped.
+- [ ] Verify portable graph and sync packages exclude managed project excerpts.
+- [ ] Create a Private Vault through Settings to a new non-Git destination.
+- [ ] Restore that vault into a clean disposable profile through the staged
+  restart path.
+- [ ] Verify representative conversations, knowledge sources, learned state,
+  and the audit chain after restore.
+- [ ] Verify a failed or interrupted restore fails closed and preserves or
+  recovers the prior profile as designed.
+- [ ] Confirm the passphrase never appears in UI persistence, logs, audit detail,
+  process arguments, screenshots, or release evidence.
+
+A unit-test round trip does not replace the clean-profile restore drill.
+
+## 4. Build unpublished candidate artifacts
+
+After reviewing the workflow revision, dispatch it manually from the selected
+commit or branch:
+
+```bash
+gh workflow run release.yml -f version=vX.Y.Z-rcN --ref REVIEWED_REF
+gh run list --workflow release.yml
+gh run view RUN_ID
 ```
 
----
+- [ ] Confirm the run used the intended full commit SHA.
+- [ ] Confirm preflight gates passed without hidden retries or waivers.
+- [ ] Download the Windows x64, macOS arm64/x64, and Linux x64 candidates.
+- [ ] Confirm artifact names include `UNSIGNED`.
+- [ ] Record each candidate's SHA-256 digest immediately after download.
+- [ ] Preserve workflow logs and dependency-audit output with the candidate
+  evidence.
 
-**PrismOS-AI Release Process** — Ship with confidence
+Workflow artifacts are build inputs, not release assets.
 
-Questions? See [DEPLOYMENT.md](DEPLOYMENT.md) or open an issue.
+## 5. Reproduce and clean-machine test
+
+- [ ] Reproduce each platform build from the selected source revision in a
+  controlled environment.
+- [ ] Compare outputs or document every expected non-reproducible field.
+- [ ] Install, launch, use, upgrade, and uninstall on clean supported systems.
+- [ ] Test both first-run and existing-profile behavior.
+- [ ] Confirm core inference is fixed to loopback and no public-network Ollama
+  rule is required.
+- [ ] Test the bounded sequential plan/build/judge/refine path.
+- [ ] Test document and vision paths with non-sensitive fixtures.
+- [ ] Test manual model download/delete management separately from private
+  inference.
+- [ ] Test global shortcut and tray behavior with ordinary user privileges.
+- [ ] Confirm Email, Calendar, Finance, general web research, arbitrary plugin
+  execution, automatic training, and auto-update are not advertised as shipped
+  when unavailable.
+
+Record the exact OS versions and hardware used. Do not claim an untested platform.
+
+## 6. Sign, notarize, and independently verify
+
+- [ ] Sign Windows deliverables with the approved publisher identity.
+- [ ] Verify Windows signatures on a separate clean machine.
+- [ ] Sign macOS application bundles and disk images with the approved identity.
+- [ ] Submit macOS artifacts for notarization, wait for success, and staple the
+  accepted ticket where applicable.
+- [ ] Verify macOS signature, hardened-runtime/notarization status, and Gatekeeper
+  assessment on the final downloaded artifact.
+- [ ] Apply the approved Linux package-signing/provenance process for each
+  distribution channel.
+- [ ] Recompute SHA-256 digests after signing/notarization.
+- [ ] Generate and review an SBOM for the final artifacts.
+- [ ] Have someone other than the builder verify source revision, signatures,
+  notarization, checksums, SBOM, and package contents.
+
+Never instruct users to bypass SmartScreen, Gatekeeper, quarantine, or Android
+unknown-source protection for an unsigned candidate.
+
+## 7. Approve and publish manually
+
+Only after every prior gate passes:
+
+- [ ] Record release-manager and independent-verifier approval.
+- [ ] Create and push the final tag from the reviewed commit. Remember: the tag
+  does not trigger the candidate workflow.
+- [ ] Create the GitHub Release manually.
+- [ ] Upload only the final signed/notarized/tested artifacts, final checksums,
+  SBOM, and accurate release notes.
+- [ ] Describe optional network boundaries and the plaintext live SQLite store.
+- [ ] State the exact tested platforms; omit unsupported mobile packages.
+- [ ] Verify every uploaded asset by downloading it again and checking digest,
+  signature, notarization, and package contents.
+- [ ] Publish only after this second verification.
+
+Do not click **Publish release** merely because GitHub Actions succeeded.
+
+## 8. Post-release checks
+
+- [ ] Install the downloaded public assets once more on clean systems.
+- [ ] Test the documented manual upgrade from the previous approved release.
+- [ ] Confirm the displayed version and release notes match the binaries.
+- [ ] Confirm no updater check or update manifest was introduced.
+- [ ] Monitor private security reports and public issue reports.
+- [ ] Preserve release evidence according to the project retention policy.
+- [ ] If an issue is discovered, stop distribution, mark the release appropriately,
+  and point users to the last independently verified release.
+
+## Hotfix and rollback
+
+A hotfix repeats every applicable gate. Urgency does not authorize skipping
+dependency audits, private-data review, clean-profile vault restore, signing,
+notarization, or independent verification.
+
+If a published release is unsafe:
+
+- [ ] Mark it as a pre-release or remove it from “Latest” as appropriate.
+- [ ] Add a clear warning without publishing exploit details prematurely.
+- [ ] Restore the previous independently verified release as the recommended
+  version.
+- [ ] Pause any separately managed store rollout.
+- [ ] Prepare a tested hotfix and publish a post-incident report.
+
+## Sign-off
+
+```text
+Version:
+Commit SHA:
+Candidate workflow run:
+Frontend test total/result:
+Rust test total/result:
+npm audit result:
+Cargo audit vulnerabilities/warnings:
+Private Vault drill result:
+Clean-machine matrix:
+Signing/notarization evidence:
+Checksum/SBOM evidence:
+Release manager:
+Independent verifier:
+Decision: PASS / FAIL
+Date:
+```

@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, OllamaModel } from "../types";
 import { toRecommendedFormat } from "../lib/modelRegistry";
-import { resolveDefaultModel } from "../lib/config";
+import { DEFAULT_MODEL, isReviewedModel, modelMatches, resolveDefaultModel } from "../lib/config";
 
 // ── Tiered model catalog — derived from centralized Model Registry ──
 export const RECOMMENDED_MODELS = toRecommendedFormat();
@@ -58,19 +58,37 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
     }
     (async () => {
       try {
-        const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
+        const result = await invoke<string>("list_local_inference_models");
         const parsed = JSON.parse(result);
         const list: OllamaModel[] = Array.isArray(parsed) ? parsed : [];
         setAvailableModels(list);
         setHasModels(list.length > 0);
 
         const names = list.map((m) => m.name);
+        const savedModel = settings.defaultModel.trim();
+        if (names.length === 0) {
+          // With no inventory there is nothing to run yet. Preserve a reviewed
+          // catalog choice as the intended pull target, but do not keep a stale
+          // arbitrary tag that the setup button would blindly try to download.
+          if (!savedModel || !isReviewedModel(savedModel)) {
+            setModelWarning(savedModel
+              ? `"${savedModel}" is not in the reviewed model catalog — reset to "${DEFAULT_MODEL}" before download.`
+              : null);
+            if (settings.defaultModel !== DEFAULT_MODEL) {
+              onSettingsChange({ ...settings, defaultModel: DEFAULT_MODEL });
+            }
+          } else {
+            setModelWarning(null);
+          }
+          return;
+        }
+
         const { model, fellBack } = resolveDefaultModel(settings.defaultModel, names);
         if (model && fellBack) {
           // Genuine stale setting — warn and switch to an installed model.
           setModelWarning(
             `"${settings.defaultModel}" isn't installed — switched to "${model}". ` +
-            `Run \`ollama pull ${settings.defaultModel}\` or pick a model in Settings.`
+            "Pick another installed model in Settings or download a reviewed catalog model."
           );
           onSettingsChange({ ...settings, defaultModel: model });
         } else if (model && model !== settings.defaultModel) {
@@ -93,13 +111,13 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
     if (!ollamaConnected || !modelDropdownOpen) return;
     (async () => {
       try {
-        const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
+        const result = await invoke<string>("list_local_inference_models");
         setAvailableModels(JSON.parse(result));
       } catch {
         setAvailableModels([]);
       }
     })();
-  }, [ollamaConnected, modelDropdownOpen, settings.ollamaUrl]);
+  }, [ollamaConnected, modelDropdownOpen]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -139,12 +157,15 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
     );
 
     try {
-      const result = await invoke<string>("pull_ollama_model", { model: modelName, ollamaUrl: settings.ollamaUrl });
+      const result = await invoke<string>("pull_ollama_model", { model: modelName });
       setPullProgress(`✅ ${result}`);
       setPullPercent(100);
-      const listResult = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-      setAvailableModels(JSON.parse(listResult));
-      onSettingsChange({ ...settings, defaultModel: modelName });
+      const listResult = await invoke<string>("list_local_inference_models");
+      const localModels: OllamaModel[] = JSON.parse(listResult);
+      setAvailableModels(localModels);
+      const installed = localModels.find((item) => modelMatches(modelName, item.name));
+      if (!installed) throw new Error("The model was not found on the fixed local inference endpoint after download.");
+      onSettingsChange({ ...settings, defaultModel: installed.name });
       setTimeout(() => { setPullingModel(null); setPullProgress(null); setPullPercent(0); }, 2000);
     } catch (e) {
       setPullProgress(`❌ ${String(e)}`);
@@ -163,7 +184,7 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         try {
-          const connected = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
+          const connected = await invoke<boolean>("check_local_inference_status");
           if (connected) {
             setLaunchStatus("✅ Ollama is running!");
             break;
@@ -180,25 +201,35 @@ export function useOllama({ ollamaConnected, settings, onSettingsChange }: UseOl
   const handleRetryConnection = useCallback(async () => {
     setIsRetrying(true);
     try {
-      await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
+      await invoke<boolean>("check_local_inference_status");
     } catch { /* ignore */ }
     setTimeout(() => setIsRetrying(false), 2000);
   }, []);
 
   const handlePullModel = useCallback(async () => {
-    const model = settings.defaultModel || "llama3.2";
+    const configuredModel = settings.defaultModel.trim();
+    const model = configuredModel && isReviewedModel(configuredModel)
+      ? configuredModel
+      : DEFAULT_MODEL;
     setIsPulling(true);
     setPullStatus(`Pulling ${model}... this may take a few minutes`);
     try {
-      const result = await invoke<string>("pull_ollama_model", { model, ollamaUrl: settings.ollamaUrl });
+      const result = await invoke<string>("pull_ollama_model", { model });
+      const listResult = await invoke<string>("list_local_inference_models");
+      const localModels: OllamaModel[] = JSON.parse(listResult);
+      setAvailableModels(localModels);
+      setHasModels(localModels.length > 0);
+      const installed = localModels.find((item) => modelMatches(model, item.name));
+      if (installed && installed.name !== settings.defaultModel) {
+        onSettingsChange({ ...settings, defaultModel: installed.name });
+      }
       setPullStatus(`✅ ${result}`);
-      setHasModels(true);
     } catch (e) {
       setPullStatus(`❌ ${String(e)}`);
     } finally {
       setIsPulling(false);
     }
-  }, [settings.defaultModel]);
+  }, [settings, onSettingsChange]);
 
   return {
     // Model dropdown

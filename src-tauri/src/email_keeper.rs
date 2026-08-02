@@ -1,17 +1,18 @@
-// Email Keeper — Read-Only, Sandbox-Isolated Email Summary Agent
+// Email Keeper prototype — unavailable in the current command registry
 //
-// The Email Keeper connects to a user's IMAP mailbox in READ-ONLY mode,
-// fetches subject lines and sender names of unread emails, then summarizes
-// them locally via Ollama. Raw email content NEVER leaves the sandbox:
+// This dormant module can connect to a configured IMAP server and fetch envelope
+// metadata. Activating it would create explicit network egress to that server.
+// Its read-only IMAP selection and action-policy records are not OS isolation,
+// and a loopback Ollama hop would not attest the daemon's later behavior.
 //
-//   1. IMAP LOGIN (read-only, local network only)
+//   1. IMAP LOGIN over the user-configured network destination
 //   2. Fetch unread ENVELOPE data (subject + from — no body by default)
-//   3. Pass envelope metadata through Sandbox Prism
-//   4. LLM summarizes locally via Ollama
+//   3. Apply the native action-policy bookkeeping checks
+//   4. Optionally summarize through fixed-loopback Ollama
 //   5. Return structured summary (counts + categories + action items)
 //
-// No email content is ever sent to the cloud. No email is modified or deleted.
-// The user must explicitly enable this feature in Settings.
+// No email/calendar/finance IPC command is registered in the current build.
+// Any future activation requires a reviewed credential, consent, and egress UI.
 
 use serde::{Deserialize, Serialize};
 
@@ -217,13 +218,29 @@ pub fn fetch_unread_envelopes(config: &EmailConfig) -> Result<EmailSummary, Stri
     let mut categories = std::collections::HashMap::new();
     for env in &recent_unread {
         let lower = format!("{} {}", env.from, env.subject).to_lowercase();
-        let cat = if lower.contains("newsletter") || lower.contains("unsubscribe") || lower.contains("digest") {
+        let cat = if lower.contains("newsletter")
+            || lower.contains("unsubscribe")
+            || lower.contains("digest")
+        {
             "newsletter"
-        } else if lower.contains("invoice") || lower.contains("receipt") || lower.contains("payment") || lower.contains("order") {
+        } else if lower.contains("invoice")
+            || lower.contains("receipt")
+            || lower.contains("payment")
+            || lower.contains("order")
+        {
             "transactions"
-        } else if lower.contains("calendar") || lower.contains("meeting") || lower.contains("invite") || lower.contains("rsvp") {
+        } else if lower.contains("calendar")
+            || lower.contains("meeting")
+            || lower.contains("invite")
+            || lower.contains("rsvp")
+        {
             "calendar"
-        } else if lower.contains("github") || lower.contains("gitlab") || lower.contains("jira") || lower.contains("slack") || lower.contains("ci/cd") {
+        } else if lower.contains("github")
+            || lower.contains("gitlab")
+            || lower.contains("jira")
+            || lower.contains("slack")
+            || lower.contains("ci/cd")
+        {
             "dev-tools"
         } else {
             "personal"
@@ -251,7 +268,7 @@ pub fn fetch_unread_envelopes(config: &EmailConfig) -> Result<EmailSummary, Stri
 /// Only subject lines and sender names are included — never email bodies.
 pub fn build_summary_prompt(summary: &EmailSummary) -> String {
     let mut prompt = format!(
-        "You are a private email assistant running 100% locally. \
+        "You are a private email assistant in a local-first application. \
          The user has {} unread email(s). Summarize them concisely in 2-3 sentences. \
          Group by importance: urgent items first, then informational. \
          Here are the sender names and subject lines (no email bodies):\n\n",
@@ -277,7 +294,7 @@ pub fn build_summary_prompt(summary: &EmailSummary) -> String {
     prompt.push_str(
         "\nRespond with a brief, friendly summary. \
          Start with the count, then highlight anything that looks urgent or important. \
-         Keep it under 100 words."
+         Keep it under 100 words.",
     );
 
     prompt
@@ -289,7 +306,11 @@ pub fn fallback_summary(summary: &EmailSummary) -> String {
         return "📭 No unread emails — inbox zero!".into();
     }
 
-    let mut parts = vec![format!("📬 {} unread email{}", summary.unread_count, if summary.unread_count == 1 { "" } else { "s" })];
+    let mut parts = vec![format!(
+        "📬 {} unread email{}",
+        summary.unread_count,
+        if summary.unread_count == 1 { "" } else { "s" }
+    )];
 
     if !summary.categories.is_empty() {
         let cats: Vec<String> = summary
@@ -408,9 +429,21 @@ mod tests {
         let s = EmailSummary {
             unread_count: 3,
             recent_unread: vec![
-                EmailEnvelope { from: "GitHub".into(), subject: "PR merged".into(), date: "".into() },
-                EmailEnvelope { from: "Store".into(), subject: "Your invoice".into(), date: "".into() },
-                EmailEnvelope { from: "News".into(), subject: "Weekly newsletter".into(), date: "".into() },
+                EmailEnvelope {
+                    from: "GitHub".into(),
+                    subject: "PR merged".into(),
+                    date: "".into(),
+                },
+                EmailEnvelope {
+                    from: "Store".into(),
+                    subject: "Your invoice".into(),
+                    date: "".into(),
+                },
+                EmailEnvelope {
+                    from: "News".into(),
+                    subject: "Weekly newsletter".into(),
+                    date: "".into(),
+                },
             ],
             ai_summary: None,
             categories: std::collections::HashMap::new(),
@@ -421,10 +454,15 @@ mod tests {
         let mut categories = std::collections::HashMap::new();
         for env in &s.recent_unread {
             let lower = format!("{} {}", env.from, env.subject).to_lowercase();
-            let cat = if lower.contains("newsletter") { "newsletter" }
-                else if lower.contains("invoice") { "transactions" }
-                else if lower.contains("github") { "dev-tools" }
-                else { "personal" };
+            let cat = if lower.contains("newsletter") {
+                "newsletter"
+            } else if lower.contains("invoice") {
+                "transactions"
+            } else if lower.contains("github") {
+                "dev-tools"
+            } else {
+                "personal"
+            };
             *categories.entry(cat.to_string()).or_insert(0) += 1;
         }
         assert_eq!(categories.get("dev-tools"), Some(&1));

@@ -3,8 +3,8 @@
 match the colors and layout of src/components/BrainWrapped.{tsx,css}. Then
 ffmpeg stitches them into a 14-second GIF and MP4.
 
-This is a *preview*. It uses representative sample data — the live React
-component renders identical layouts from the real Cognitive Imprint.
+This is an illustrated preview made only from synthetic public sample data. The
+live React component uses the owner's local profile and may render differently.
 """
 from __future__ import annotations
 import math
@@ -78,7 +78,7 @@ def base(tag: str) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     fw = font(18, bold=True)
     d.text((50, H - 60), "PrismOS-AI", font=fw, fill=TEXT)
     fwm = font(14)
-    d.text((W - 280, H - 56), "prismos.ai · local · private",
+    d.text((W - 330, H - 56), "SYNTHETIC PUBLIC PREVIEW",
            font=fwm, fill=TEXT_MUTE)
     return img, d
 
@@ -89,11 +89,11 @@ def center_text(d, text, y, size, bold=False, fill=TEXT):
     d.text(((W - tw) // 2, y), text, font=f, fill=fill)
 
 def slide_1_fingerprint():
-    img, d = base("SLIDE 1 · YOUR COGNITIVE FINGERPRINT")
-    center_text(d, "This is your mind.", 200, 80, bold=True)
-    center_text(d, "Computed from how you think, not what you said.",
+    img, d = base("SLIDE 1 · SYNTHETIC PROFILE SIGNATURE")
+    center_text(d, "An illustrated preference signature.", 200, 58, bold=True)
+    center_text(d, "Derived from synthetic interaction-profile signals.",
                 310, 24, fill=TEXT_MUTE)
-    center_text(d, "Mathematically unique to you.",
+    center_text(d, "Deterministic visualization — not a unique identity.",
                 345, 24, fill=TEXT_MUTE)
     # fingerprint polygon
     cx, cy = W // 2, 760
@@ -118,15 +118,15 @@ def slide_1_fingerprint():
         d.ellipse([x - 8, y - 8, x + 8, y + 8], fill=c + (255,))
     # hash
     f = font(16)
-    d.text((cx - 230, 1180), "FINGERPRINT",
+    d.text((cx - 230, 1180), "PROFILE SIGNATURE",
            font=font(14, bold=True), fill=TEXT_MUTE)
     d.text((cx - 230, 1205), "f9-3a-7c-be-21-5d-04-91-cc-7e",
            font=font(20, bold=True), fill=TEXT)
     img.save(OUT_DIR / "slide_1.png")
 
 def slide_2_archetype():
-    img, d = base("SLIDE 2 · YOUR ARCHETYPE")
-    center_text(d, "PrismOS classified your thinking as…",
+    img, d = base("SLIDE 2 · SYNTHETIC ARCHETYPE")
+    center_text(d, "Example archetype mapped from synthetic profile signals:",
                 240, 26, fill=TEXT_MUTE)
     center_text(d, "The Cartographer", 360, 110, bold=True,
                 fill=PALETTE[1])
@@ -145,8 +145,8 @@ def slide_2_archetype():
     img.save(OUT_DIR / "slide_2.png")
 
 def slide_3_axes():
-    img, d = base("SLIDE 3 · YOUR FIVE AXES")
-    center_text(d, "How your mind is wired.", 200, 60, bold=True)
+    img, d = base("SLIDE 3 · SYNTHETIC PREFERENCE AXES")
+    center_text(d, "Illustrated preference axes.", 200, 60, bold=True)
     axes = [
         ("CURIOSITY",   0.84, PALETTE[0]),
         ("RIGOR",       0.71, PALETTE[1]),
@@ -169,8 +169,8 @@ def slide_3_axes():
     img.save(OUT_DIR / "slide_3.png")
 
 def slide_4_evolution():
-    img, d = base("SLIDE 4 · HOW YOU EVOLVED")
-    center_text(d, "Your mind, by the month.", 200, 56, bold=True)
+    img, d = base("SLIDE 4 · SYNTHETIC PROFILE TREND")
+    center_text(d, "Synthetic preference trend by month.", 200, 48, bold=True)
     center_text(d, "Curiosity climbed. Rigor steadied.",
                 300, 24, fill=TEXT_MUTE)
     # multi-line chart
@@ -211,7 +211,7 @@ def slide_4_evolution():
     img.save(OUT_DIR / "slide_4.png")
 
 def slide_5_currents():
-    img, d = base("SLIDE 5 · YOUR THOUGHT CURRENTS")
+    img, d = base("SLIDE 5 · RECURRING GRAPH PATTERNS")
     center_text(d, "Patterns that keep coming back.", 200, 52, bold=True)
     currents = [
         ("Tuesday morning ⟶ deep reading",    78, PALETTE[0]),
@@ -232,10 +232,10 @@ def slide_5_currents():
     img.save(OUT_DIR / "slide_5.png")
 
 def slide_6_prophecies():
-    img, d = base("SLIDE 6 · EDGE PROPHECIES")
-    center_text(d, "Connections you'll probably make next.",
+    img, d = base("SLIDE 6 · SYNTHETIC CANDIDATE LINKS")
+    center_text(d, "Candidate graph links from a heuristic.",
                 200, 44, bold=True)
-    center_text(d, "Predicted by the graph, not the cloud.",
+    center_text(d, "Illustrated from synthetic graph signals.",
                 280, 22, fill=TEXT_MUTE)
     edges = [
         ("contract clauses", "negotiation tactics", 0.91),
@@ -250,23 +250,24 @@ def slide_6_prophecies():
         d.line([(140 + 280, y + 14), (W - 480 - 20, y + 14)],
                fill=(255, 255, 255, 110), width=2)
         d.text((W - 220, y),
-               f"{int(score*100)}% likely",
+               f"{int(score*100)}% score",
                font=font(18, bold=True), fill=TEXT_MUTE)
         y += 110
     img.save(OUT_DIR / "slide_6.png")
 
 def slide_7_stats():
-    img, d = base("SLIDE 7 · YOUR YEAR IN NUMBERS")
+    img, d = base("SLIDE 7 · SYNTHETIC PROFILE BY NUMBERS")
     center_text(d, "1,247", 280, 200, bold=True, fill=PALETTE[0])
     center_text(d, "conversations", 510, 28, fill=TEXT_MUTE)
 
     center_text(d, "4,892", 640, 140, bold=True, fill=PALETTE[1])
     center_text(d, "nodes in your graph", 820, 26, fill=TEXT_MUTE)
 
-    center_text(d, "0 bytes", 920, 110, bold=True, fill=PALETTE[3])
-    center_text(d, "sent to the cloud", 1080, 26, fill=TEXT_MUTE)
+    center_text(d, "LOCAL-FIRST", 930, 88, bold=True, fill=PALETTE[3])
+    center_text(d, "fixed-loopback inference · optional egress disclosed",
+                1055, 24, fill=TEXT_MUTE)
 
-    center_text(d, "share your wrapped  —  PrismOS-AI",
+    center_text(d, "export intentionally · sharing creates egress",
                 1200, 18, bold=True, fill=TEXT)
     img.save(OUT_DIR / "slide_7.png")
 

@@ -1,16 +1,19 @@
-// Whisper Engine — 100% Local Voice Capture + Transcription Pipeline
+// Whisper Engine — Local-First Voice Capture + Transcription Pipeline
 //
 // Provides true offline speech-to-text by:
 //   1. Recording audio with cpal (cross-platform audio capture)
 //   2. Saving as 16kHz mono WAV with hound
 //   3. Sending audio to local Ollama for transcription (multimodal models)
 //
-// No audio data ever leaves the device. Audio is captured, processed,
-// and transcribed entirely on the local machine.
+// The default Ollama origin is loopback. Explicit remote Ollama opt-in changes
+// the audio privacy boundary; browser speech fallbacks may have separate terms.
 
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 /// Result of a whisper transcription
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,9 +27,9 @@ pub struct TranscriptionResult {
 /// Whisper model size options (for future whisper.cpp integration)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WhisperModelSize {
-    Tiny,    // ~75 MB, fastest
-    Base,    // ~150 MB, good balance
-    Small,   // ~500 MB, better quality
+    Tiny,  // ~75 MB, fastest
+    Base,  // ~150 MB, good balance
+    Small, // ~500 MB, better quality
 }
 
 impl WhisperModelSize {
@@ -97,7 +100,12 @@ pub async fn download_model(
 ) -> Result<PathBuf, String> {
     let model_path = models_dir(app_dir).join(size.filename());
 
-    if model_path.exists() && model_path.metadata().map(|m| m.len() > 1024).unwrap_or(false) {
+    if model_path.exists()
+        && model_path
+            .metadata()
+            .map(|m| m.len() > 1024)
+            .unwrap_or(false)
+    {
         progress_callback(100.0, "Model already downloaded".to_string());
         return Ok(model_path);
     }
@@ -144,7 +152,9 @@ pub async fn download_model(
         }
     }
 
-    file.flush().await.map_err(|e| format!("Flush error: {}", e))?;
+    file.flush()
+        .await
+        .map_err(|e| format!("Flush error: {}", e))?;
     drop(file);
 
     tokio::fs::rename(&temp_path, &model_path)
@@ -157,10 +167,7 @@ pub async fn download_model(
 
 /// Record audio from the default input device and save as 16kHz mono WAV.
 /// Recording stops when `stop_flag` is set to true.
-pub fn record_audio(
-    app_dir: &Path,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<PathBuf, String> {
+pub fn record_audio(app_dir: &Path, stop_flag: Arc<AtomicBool>) -> Result<PathBuf, String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     let host = cpal::default_host();
@@ -193,7 +200,9 @@ pub fn record_audio(
         )
         .map_err(|e| format!("Failed to build audio stream: {}", e))?;
 
-    stream.play().map_err(|e| format!("Failed to start recording: {}", e))?;
+    stream
+        .play()
+        .map_err(|e| format!("Failed to start recording: {}", e))?;
 
     while !stop_flag.load(Ordering::Relaxed) {
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -201,7 +210,10 @@ pub fn record_audio(
 
     drop(stream);
 
-    let raw_samples = samples.lock().map_err(|e| format!("Lock error: {}", e))?.clone();
+    let raw_samples = samples
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?
+        .clone();
 
     if raw_samples.is_empty() {
         return Err("No audio recorded".to_string());
@@ -250,9 +262,13 @@ pub fn record_audio(
 
     for sample in &resampled {
         let s = (*sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-        writer.write_sample(s).map_err(|e| format!("WAV write error: {}", e))?;
+        writer
+            .write_sample(s)
+            .map_err(|e| format!("WAV write error: {}", e))?;
     }
-    writer.finalize().map_err(|e| format!("WAV finalize error: {}", e))?;
+    writer
+        .finalize()
+        .map_err(|e| format!("WAV finalize error: {}", e))?;
 
     Ok(wav_path)
 }

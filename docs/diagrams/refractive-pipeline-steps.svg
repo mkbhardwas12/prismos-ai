@@ -50,63 +50,63 @@
   <!-- Arrow -->
   <line x1="390" y1="255" x2="390" y2="269" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
 
-  <!-- Step 3: AGENT SELECTION -->
+  <!-- Step 3: PLAN -->
   <rect x="80" y="274" width="620" height="48" rx="10" fill="#0d2535" stroke="#2a9d8f" stroke-width="1.5" filter="url(#rpShadow)"/>
   <circle cx="120" cy="298" r="14" fill="#2a9d8f" opacity="0.9"/>
   <text x="120" y="303" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">3</text>
-  <text x="150" y="295" fill="#2a9d8f" font-size="13" font-weight="700">AGENT SELECTION</text>
-  <text x="150" y="312" fill="#7ac4b8" font-size="11">Route intent to the best-matching agent(s)</text>
+  <text x="150" y="295" fill="#2a9d8f" font-size="13" font-weight="700">PLAN</text>
+  <text x="150" y="312" fill="#7ac4b8" font-size="11">Derive bounded acceptance criteria for eligible requests</text>
 
   <!-- Arrow -->
   <line x1="390" y1="322" x2="390" y2="336" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
 
-  <!-- Step 4: MULTI-AGENT COLLABORATION -->
+  <!-- Step 4: BUILD -->
   <rect x="80" y="341" width="620" height="48" rx="10" fill="#0d2535" stroke="#e9c46a" stroke-width="1.5" filter="url(#rpShadow)"/>
   <circle cx="120" cy="365" r="14" fill="#e9c46a" opacity="0.9"/>
   <text x="120" y="370" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="700">4</text>
-  <text x="150" y="362" fill="#e9c46a" font-size="13" font-weight="700">MULTI-AGENT COLLABORATION</text>
-  <text x="150" y="379" fill="#c4a84a" font-size="11">5 specialized agents discuss, debate, and refine</text>
+  <text x="150" y="362" fill="#e9c46a" font-size="13" font-weight="700">BUILD</text>
+  <text x="150" y="379" fill="#c4a84a" font-size="11">Generate one candidate through the typed inference bridge</text>
 
   <!-- Arrow -->
   <line x1="390" y1="389" x2="390" y2="403" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
 
-  <!-- Step 5: CONSENSUS -->
+  <!-- Step 5: POLICY GATE AND JUDGE -->
   <rect x="80" y="408" width="620" height="48" rx="10" fill="#0d2535" stroke="#f4a261" stroke-width="1.5" filter="url(#rpShadow)"/>
   <circle cx="120" cy="432" r="14" fill="#f4a261" opacity="0.9"/>
   <text x="120" y="437" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">5</text>
-  <text x="150" y="429" fill="#f4a261" font-size="13" font-weight="700">CONSENSUS</text>
-  <text x="150" y="446" fill="#c48a51" font-size="11">Voting engine + agreement scoring across agents</text>
+  <text x="150" y="429" fill="#f4a261" font-size="13" font-weight="700">POLICY GATE + JUDGE</text>
+  <text x="150" y="446" fill="#c48a51" font-size="11">Sentinel may veto; Critic scores against the plan</text>
 
   <!-- Arrow -->
   <line x1="390" y1="456" x2="390" y2="470" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
 
-  <!-- Step 6: RESPONSE GENERATION -->
+  <!-- Step 6: REFINE OR SELECT -->
   <rect x="80" y="475" width="620" height="48" rx="10" fill="#0d2535" stroke="#e76f51" stroke-width="1.5" filter="url(#rpShadow)"/>
   <circle cx="120" cy="499" r="14" fill="#e76f51" opacity="0.9"/>
   <text x="120" y="504" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">6</text>
-  <text x="150" y="496" fill="#e76f51" font-size="13" font-weight="700">RESPONSE GENERATION</text>
-  <text x="150" y="513" fill="#c46a51" font-size="11">Context-rich answer via local Ollama LLM</text>
+  <text x="150" y="496" fill="#e76f51" font-size="13" font-weight="700">REFINE OR SELECT</text>
+  <text x="150" y="513" fill="#c46a51" font-size="11">Retry sequentially within bounds or keep best-so-far</text>
 
   <!-- Arrow -->
   <line x1="390" y1="523" x2="390" y2="537" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
 
-  <!-- Step 7: GRAPH REINFORCEMENT -->
+  <!-- Step 7: RETURN ANSWER AND TRACE -->
   <rect x="80" y="542" width="620" height="48" rx="10" fill="#0d2535" stroke="#06d6a0" stroke-width="1.5" filter="url(#rpShadow)"/>
   <circle cx="120" cy="566" r="14" fill="#06d6a0" opacity="0.9"/>
   <text x="120" y="571" text-anchor="middle" fill="#0a2e1f" font-size="12" font-weight="700">7</text>
-  <text x="150" y="563" fill="#06d6a0" font-size="13" font-weight="700">GRAPH REINFORCEMENT</text>
-  <text x="150" y="580" fill="#06b888" font-size="11">Strengthen relevant edges and node weights</text>
+  <text x="150" y="563" fill="#06d6a0" font-size="13" font-weight="700">RETURN ANSWER + TRACE</text>
+  <text x="150" y="580" fill="#06b888" font-size="11">Present answer, citations, uncertainty, and workflow metadata</text>
 
   <!-- Arrow -->
   <line x1="390" y1="590" x2="390" y2="604" stroke="#5a8aa0" stroke-width="2" marker-end="url(#rpArrow)"/>
 
-  <!-- Step 8: ANTICIPATION -->
+  <!-- Step 8: CONTROLLED LOCAL MEMORY UPDATE -->
   <rect x="80" y="609" width="620" height="48" rx="10" fill="#0d2535" stroke="#0077b6" stroke-width="1.5" filter="url(#rpShadow)"/>
   <circle cx="120" cy="633" r="14" fill="#0077b6" opacity="0.9"/>
   <text x="120" y="638" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">8</text>
-  <text x="150" y="630" fill="#0077b6" font-size="13" font-weight="700">ANTICIPATION</text>
-  <text x="150" y="647" fill="#5a8aa0" font-size="11">Predict next user needs before they ask</text>
+  <text x="150" y="630" fill="#0077b6" font-size="13" font-weight="700">CONTROLLED LOCAL MEMORY UPDATE</text>
+  <text x="150" y="647" fill="#5a8aa0" font-size="11">Persist only allowed state under source-ownership rules</text>
 
   <!-- Footer -->
-  <text x="390" y="674" text-anchor="middle" fill="#4a7a90" font-size="10">Closed-Loop Feedback · Every response strengthens the graph for future interactions</text>
+  <text x="390" y="674" text-anchor="middle" fill="#4a7a90" font-size="10">Sequential and bounded · deterministic role traces are not parallel model agents</text>
 </svg>

@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    ACTIVE AGENTS PANEL — PrismOS-AI
-   Includes: Agent cards, Sandbox/WASM badges, LangGraph Collaboration,
+   Includes: Agent cards, action-policy/local-model badges, LangGraph Collaboration,
    LangGraph Debate, Agent status bar
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -120,7 +120,7 @@
   line-height: 1.4;
 }
 
-/* ── WASM Isolation Badge ── */
+/* ── Local model boundary badge (legacy class names retained for styling) ── */
 .wasm-isolation-badge {
   display: flex;
   align-items: flex-start;

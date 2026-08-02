@@ -6,7 +6,15 @@ import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
 import DomainInsights from "./DomainInsights";
 import prismosIcon from "../assets/prismos-icon.svg";
+import { chooseModelAfterRemoval, DEFAULT_MODEL, modelMatches } from "../lib/config";
+import { getConservativeRamSuggestion, MODEL_REGISTRY } from "../lib/modelRegistry";
 import "./SettingsPanel.css";
+
+const MAX_PORTABLE_PACKAGE_BYTES = 128 * 1024 * 1024;
+const QUICK_PULL_MODELS = [...MODEL_REGISTRY]
+  .filter((model) => model.capabilities.includes("text") && model.tier !== "power")
+  .sort((a, b) => a.priority - b.priority)
+  .slice(0, 6);
 
 interface SecurityStatus {
   enclave: {
@@ -27,6 +35,49 @@ interface SecurityStatus {
   auto_rollback: boolean;
   encrypted_storage: boolean;
   local_only: boolean;
+  private_inference_client_fixed_loopback?: boolean;
+}
+
+interface KnowledgeScanPreview {
+  scan_id: string;
+  source_id: string;
+  project_name: string;
+  root_path: string;
+  total_files_seen: number;
+  candidate_files: number;
+  candidate_paths: string[];
+  total_candidate_bytes: number;
+  skipped_sensitive_files: number;
+  skipped_dirs: string[];
+  truncated: boolean;
+}
+
+interface KnowledgeSource {
+  id: string;
+  name: string;
+  root_path: string;
+  file_count: number;
+  chunk_count: number;
+  bytes_indexed: number;
+  skipped_files: number;
+  error_count: number;
+  status: string;
+  last_indexed: string;
+}
+
+function formatKnowledgeBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function parseModelList(raw: string): OllamaModel[] {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) ? value as OllamaModel[] : [];
+  } catch {
+    return [];
+  }
 }
 
 interface SettingsPanelProps {
@@ -46,7 +97,10 @@ export default function SettingsPanel({
   onGraphCleared,
   showToast,
 }: SettingsPanelProps) {
+  // Models on the editable management endpoint (list/pull/delete only).
   const [models, setModels] = useState<OllamaModel[]>([]);
+  // Models on fixed loopback; only these may be selected for private inference.
+  const [localInferenceModels, setLocalInferenceModels] = useState<OllamaModel[]>([]);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -70,11 +124,26 @@ export default function SettingsPanel({
   const [syncResult, setSyncResult] = useState<CrossDeviceMergeResult | null>(null);
   const [syncFileContent, setSyncFileContent] = useState<string | null>(null);
 
+  // ── Full private-vault disaster recovery (kept in memory only) ──
+  const [vaultPath, setVaultPath] = useState("");
+  const [vaultPassphrase, setVaultPassphrase] = useState("");
+  const [vaultPassphraseConfirm, setVaultPassphraseConfirm] = useState("");
+  const [vaultRestoreConfirmation, setVaultRestoreConfirmation] = useState("");
+  const [vaultBusy, setVaultBusy] = useState<"export" | "restore" | null>(null);
+
   // ── Security status (live from backend) ──
   const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
   const [securityLoading, setSecurityLoading] = useState(false);
+  const [securityError, setSecurityError] = useState(false);
   const [modelVerification, setModelVerification] = useState<string | null>(null);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["ollama", "hub"]));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["ollama", "hub", "knowledge"]));
+
+  // ── Approved project knowledge sources ──
+  const [knowledgePath, setKnowledgePath] = useState("");
+  const [knowledgePreview, setKnowledgePreview] = useState<KnowledgeScanPreview | null>(null);
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([]);
+  const [knowledgeBusy, setKnowledgeBusy] = useState<"scan" | "index" | "forget" | null>(null);
+  const [forgetKnowledgeId, setForgetKnowledgeId] = useState<string | null>(null);
 
   const toggleSection = useCallback((key: string) => {
     setExpandedSections((prev) => {
@@ -91,23 +160,25 @@ export default function SettingsPanel({
       try {
         const result = await invoke<string>("get_security_status");
         setSecurityStatus(JSON.parse(result));
+        setSecurityError(false);
       } catch {
-        // Fallback — backend may not be ready yet
+        setSecurityStatus(null);
+        setSecurityError(true);
       } finally {
         setSecurityLoading(false);
       }
     })();
   }, []);
 
-  const handleVerifyModel = useCallback(async () => {
-    const model = settings.defaultModel || "llama3.2";
-    setModelVerification("Verifying...");
+  const handleInspectModelMetadata = useCallback(async () => {
+    const model = settings.defaultModel || DEFAULT_MODEL;
+    setModelVerification("Classifying self-reported model metadata heuristically...");
     try {
-      const result = await invoke<string>("verify_model", { model });
+      const result = await invoke<string>("inspect_model_metadata", { model });
       const parsed = JSON.parse(result);
-      setModelVerification(`${parsed.status === "Verified" ? "✅" : parsed.status === "Suspicious" ? "⚠️" : "ℹ️"} ${parsed.details}`);
+      setModelVerification(`${parsed.status === "Mismatch" ? "⚠️" : "ℹ️"} ${parsed.details}`);
     } catch (e) {
-      setModelVerification(`❌ Verification failed: ${e}`);
+      setModelVerification(`❌ Metadata inspection failed: ${e}`);
     }
   }, [settings.defaultModel]);
 
@@ -121,17 +192,142 @@ export default function SettingsPanel({
     setTimeout(() => setStatusMessage(null), 5000);
   }, [showToast]);
 
+  const loadKnowledgeSources = useCallback(async () => {
+    try {
+      const raw = await invoke<string>("list_project_knowledge_sources");
+      const parsed: unknown = JSON.parse(raw);
+      setKnowledgeSources(Array.isArray(parsed) ? parsed as KnowledgeSource[] : []);
+    } catch {
+      setKnowledgeSources([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadKnowledgeSources();
+  }, [loadKnowledgeSources]);
+
+  const scanKnowledgePath = useCallback(async (path: string) => {
+    if (!path.trim()) return;
+    setKnowledgeBusy("scan");
+    try {
+      if (knowledgePreview) {
+        await invoke("cancel_project_knowledge_scan", { scanId: knowledgePreview.scan_id });
+        setKnowledgePreview(null);
+      }
+      const raw = await invoke<string>("scan_project_knowledge", { path: path.trim() });
+      const parsed = JSON.parse(raw) as Partial<KnowledgeScanPreview>;
+      if (
+        typeof parsed.scan_id !== "string" ||
+        typeof parsed.source_id !== "string" ||
+        typeof parsed.project_name !== "string" ||
+        typeof parsed.root_path !== "string"
+      ) {
+        throw new Error("Backend returned an invalid knowledge preview");
+      }
+      const preview: KnowledgeScanPreview = {
+        scan_id: parsed.scan_id,
+        source_id: parsed.source_id,
+        project_name: parsed.project_name,
+        root_path: parsed.root_path,
+        total_files_seen: Number(parsed.total_files_seen) || 0,
+        candidate_files: Number(parsed.candidate_files) || 0,
+        candidate_paths: Array.isArray(parsed.candidate_paths)
+          ? parsed.candidate_paths.filter((path): path is string => typeof path === "string")
+          : [],
+        total_candidate_bytes: Number(parsed.total_candidate_bytes) || 0,
+        skipped_sensitive_files: Number(parsed.skipped_sensitive_files) || 0,
+        skipped_dirs: Array.isArray(parsed.skipped_dirs)
+          ? parsed.skipped_dirs.filter((path): path is string => typeof path === "string")
+          : [],
+        truncated: parsed.truncated === true,
+      };
+      setKnowledgePreview(preview);
+      setKnowledgePath(preview.root_path);
+      showStatus(`Metadata scan ready: ${preview.candidate_files} candidate text files. Review the paths before approval.`, "info");
+    } catch (e) {
+      showStatus(`Project scan failed: ${e}`, "error");
+    } finally {
+      setKnowledgeBusy(null);
+    }
+  }, [knowledgePreview, showStatus]);
+
+  const handleApproveKnowledge = useCallback(async () => {
+    if (!knowledgePreview) return;
+    setKnowledgeBusy("index");
+    try {
+      const raw = await invoke<string>("index_project_knowledge", {
+        scanId: knowledgePreview.scan_id,
+      });
+      const result = JSON.parse(raw) as { source?: KnowledgeSource; errors?: string[] };
+      const source = result.source;
+      showStatus(
+        source
+          ? `Indexed ${source.file_count} files into ${source.chunk_count} cited knowledge chunks.`
+          : "Project knowledge indexed.",
+        "success",
+      );
+      setKnowledgePreview(null);
+      await loadKnowledgeSources();
+      onGraphCleared?.();
+    } catch (e) {
+      // Approval tokens are one-time and are consumed before file reads begin.
+      setKnowledgePreview(null);
+      showStatus(`Knowledge indexing failed: ${e}`, "error");
+    } finally {
+      setKnowledgeBusy(null);
+    }
+  }, [knowledgePreview, loadKnowledgeSources, onGraphCleared, showStatus]);
+
+  const handleCancelKnowledge = useCallback(async () => {
+    if (!knowledgePreview) return;
+    try {
+      await invoke("cancel_project_knowledge_scan", { scanId: knowledgePreview.scan_id });
+    } catch { /* one-time scan state will expire with the app */ }
+    setKnowledgePreview(null);
+  }, [knowledgePreview]);
+
+  const handleForgetKnowledge = useCallback(async (source: KnowledgeSource) => {
+    if (forgetKnowledgeId !== source.id) {
+      setForgetKnowledgeId(source.id);
+      return;
+    }
+    setKnowledgeBusy("forget");
+    try {
+      await invoke<string>("forget_project_knowledge_source", {
+        sourceId: source.id,
+        confirmation: `FORGET:${source.id}`,
+      });
+      setForgetKnowledgeId(null);
+      showStatus(`Forgot ${source.name} and its owned knowledge chunks. Source files were untouched.`, "success");
+      await loadKnowledgeSources();
+      onGraphCleared?.();
+    } catch (e) {
+      showStatus(`Could not forget source: ${e}`, "error");
+    } finally {
+      setKnowledgeBusy(null);
+    }
+  }, [forgetKnowledgeId, loadKnowledgeSources, onGraphCleared, showStatus]);
+
   // ── Load available Ollama models ──
   const loadModels = useCallback(async () => {
-    try {
-      const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-      const parsed: OllamaModel[] = JSON.parse(result);
-      setModels(parsed);
-      setModelsLoaded(true);
-    } catch {
-      setModels([]);
-      setModelsLoaded(true);
-    }
+    const [managementResult, localResult] = await Promise.allSettled([
+      invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl }),
+      invoke<string>("list_local_inference_models"),
+    ]);
+    const managementModels = managementResult.status === "fulfilled"
+      ? parseModelList(managementResult.value)
+      : [];
+    const localModels = localResult.status === "fulfilled"
+      ? parseModelList(localResult.value)
+      : [];
+    setModels(managementModels);
+    setLocalInferenceModels(localModels);
+    setModelsLoaded(true);
+    return { managementModels, localModels };
+  }, [settings.ollamaUrl]);
+
+  useEffect(() => {
+    setModelsLoaded(false);
   }, [settings.ollamaUrl]);
 
   // Auto-load models when Ollama is connected
@@ -148,7 +344,7 @@ export default function SettingsPanel({
     setPullProgress({ status: "Starting download…", percent: 0 });
     try {
       const result = await invoke<string>("pull_ollama_model", {
-        modelName: name,
+        model: name,
         ollamaUrl: settings.ollamaUrl,
       });
       showStatus(`✅ ${result}`, "success");
@@ -169,11 +365,15 @@ export default function SettingsPanel({
         modelName: name,
         ollamaUrl: settings.ollamaUrl,
       });
-      showStatus(`🗑️ ${result}`, "success");
-      await loadModels();
-      // If deleted model was the default, clear it
-      if (settings.defaultModel === name) {
-        onSettingsChange({ ...settings, defaultModel: "" });
+      const { localModels } = await loadModels();
+      const removedActiveModel = modelMatches(settings.defaultModel, name)
+        && !localModels.some((model) => modelMatches(settings.defaultModel, model.name));
+      if (removedActiveModel) {
+        const nextModel = chooseModelAfterRemoval(localModels.map((model) => model.name));
+        onSettingsChange({ ...settings, defaultModel: nextModel });
+        showStatus(`🗑️ ${result} Selected "${nextModel}" for local inference.`, "success");
+      } else {
+        showStatus(`🗑️ ${result}`, "success");
       }
     } catch (e) {
       showStatus(`❌ Delete failed: ${e}`, "error");
@@ -225,7 +425,13 @@ export default function SettingsPanel({
         const file = (e.target as HTMLInputElement).files?.[0];
         if (!file) { setImporting(false); return; }
         try {
+          if (file.size > MAX_PORTABLE_PACKAGE_BYTES) {
+            throw new Error(`Package exceeds the ${MAX_PORTABLE_PACKAGE_BYTES}-byte import limit`);
+          }
           const text = await file.text();
+          if (text.length > MAX_PORTABLE_PACKAGE_BYTES) {
+            throw new Error(`Package exceeds the ${MAX_PORTABLE_PACKAGE_BYTES}-byte import limit`);
+          }
           const result = await invoke<string>("import_graph", { packageJson: text });
           const parsed = JSON.parse(result);
           if (parsed.success) {
@@ -259,7 +465,10 @@ export default function SettingsPanel({
     try {
       const result = await invoke<string>("clear_graph");
       const parsed = JSON.parse(result);
-      showStatus(`🗑️ ${parsed.message}`, "success");
+      showStatus(
+        `${parsed.success ? "🗑️" : "⚠️"} ${parsed.message}`,
+        parsed.success ? "success" : "error",
+      );
       setConfirmClear(false);
       if (onGraphCleared) onGraphCleared();
     } catch (e) {
@@ -269,10 +478,78 @@ export default function SettingsPanel({
     }
   }, [confirmClear, showStatus, onGraphCleared]);
 
+  const handleExportPrivateVault = useCallback(async () => {
+    if (!vaultPath.trim()) {
+      showStatus("⚠️ Enter a full destination path outside every Git repository", "error");
+      return;
+    }
+    if (vaultPassphrase.length < 16) {
+      showStatus("⚠️ Private-vault passphrases must contain at least 16 characters", "error");
+      return;
+    }
+    if (vaultPassphrase !== vaultPassphraseConfirm) {
+      showStatus("⚠️ Private-vault passphrases do not match", "error");
+      return;
+    }
+    setVaultBusy("export");
+    try {
+      const raw = await invoke<string>("export_private_vault", {
+        destination: vaultPath.trim(),
+        passphrase: vaultPassphrase,
+      });
+      const result = JSON.parse(raw) as { message: string; package_bytes: number };
+      showStatus(
+        `✅ ${result.message} (${formatKnowledgeBytes(result.package_bytes)})`,
+        "success",
+      );
+      setVaultPassphrase("");
+      setVaultPassphraseConfirm("");
+    } catch (error) {
+      showStatus(`❌ Private-vault export failed: ${error}`, "error");
+    } finally {
+      setVaultBusy(null);
+    }
+  }, [vaultPath, vaultPassphrase, vaultPassphraseConfirm, showStatus]);
+
+  const handleStagePrivateVaultRestore = useCallback(async () => {
+    if (!vaultPath.trim()) {
+      showStatus("⚠️ Enter the full path to a .prismos-vault file", "error");
+      return;
+    }
+    if (vaultPassphrase.length < 16) {
+      showStatus("⚠️ Enter the 16+ character passphrase used for this vault", "error");
+      return;
+    }
+    if (vaultRestoreConfirmation !== "RESTORE MY PRIVATE PRISMOS VAULT") {
+      showStatus("⚠️ Type the exact restore confirmation phrase", "error");
+      return;
+    }
+    setVaultBusy("restore");
+    try {
+      const raw = await invoke<string>("stage_private_vault_restore", {
+        packagePath: vaultPath.trim(),
+        passphrase: vaultPassphrase,
+        confirmation: vaultRestoreConfirmation,
+      });
+      const result = JSON.parse(raw) as { message: string; restart_required: boolean };
+      showStatus(
+        `✅ ${result.message}${result.restart_required ? " Quit and reopen PrismOS to apply it." : ""}`,
+        "success",
+      );
+      setVaultPassphrase("");
+      setVaultPassphraseConfirm("");
+      setVaultRestoreConfirmation("");
+    } catch (error) {
+      showStatus(`❌ Private-vault restore was not staged: ${error}`, "error");
+    } finally {
+      setVaultBusy(null);
+    }
+  }, [vaultPath, vaultPassphrase, vaultRestoreConfirmation, showStatus]);
+
   // ── Export Sync Package (passphrase-encrypted, portable) ──
   const handleExportSync = useCallback(async () => {
-    if (!syncPassphrase || syncPassphrase.length < 4) {
-      showStatus("⚠️ Enter a passphrase (min 4 characters) for sync encryption", "error");
+    if (!syncPassphrase || syncPassphrase.length < 12) {
+      showStatus("⚠️ Enter a passphrase with at least 12 characters for sync encryption", "error");
       return;
     }
     setSyncExporting(true);
@@ -304,7 +581,13 @@ export default function SettingsPanel({
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       try {
+        if (file.size > MAX_PORTABLE_PACKAGE_BYTES) {
+          throw new Error(`Package exceeds the ${MAX_PORTABLE_PACKAGE_BYTES}-byte import limit`);
+        }
         const text = await file.text();
+        if (text.length > MAX_PORTABLE_PACKAGE_BYTES) {
+          throw new Error(`Package exceeds the ${MAX_PORTABLE_PACKAGE_BYTES}-byte import limit`);
+        }
         setSyncFileContent(text);
         setSyncPreview(null);
         setSyncResult(null);
@@ -322,8 +605,8 @@ export default function SettingsPanel({
       showStatus("⚠️ Load a sync file first", "error");
       return;
     }
-    if (!syncPassphrase || syncPassphrase.length < 4) {
-      showStatus("⚠️ Enter the passphrase used to encrypt this file", "error");
+    if (!syncPassphrase || syncPassphrase.length < 12) {
+      showStatus("⚠️ Enter the 12+ character passphrase used to encrypt this file", "error");
       return;
     }
     setSyncPreviewing(true);
@@ -350,8 +633,8 @@ export default function SettingsPanel({
       showStatus("⚠️ Load a sync file first", "error");
       return;
     }
-    if (!syncPassphrase) {
-      showStatus("⚠️ Enter the passphrase", "error");
+    if (!syncPassphrase || syncPassphrase.length < 12) {
+      showStatus("⚠️ Enter the 12+ character passphrase", "error");
       return;
     }
     setSyncImporting(true);
@@ -380,13 +663,17 @@ export default function SettingsPanel({
     document.documentElement.setAttribute("data-theme", next);
   }, [settings.theme]);
 
+  const selectedLocalModelName = localInferenceModels.find((model) =>
+    modelMatches(settings.defaultModel, model.name)
+  )?.name ?? "";
+
   return (
     <>
       <div className="main-header">
         <h2>⚙️ Settings</h2>
         <div className="ollama-status">
           <span className={`status-dot ${ollamaConnected ? "connected" : ""}`} />
-          {ollamaConnected ? "Connected" : "Offline"}
+          {ollamaConnected ? "Local inference connected" : "Local inference offline"}
         </div>
       </div>
 
@@ -406,32 +693,44 @@ export default function SettingsPanel({
           </h3>
           {expandedSections.has("ollama") && (<>
           <div className="settings-item">
-            <label>Ollama URL</label>
+            <label>Ollama Management URL</label>
             <input
               className="settings-input"
               value={settings.ollamaUrl}
+              maxLength={2048}
               onChange={(e) => update("ollamaUrl", e.target.value)}
             />
           </div>
+          <div className="settings-hint">
+            Used only for explicit management list/pull/delete actions. Chat, Project
+            Knowledge, documents, and images always use the fixed loopback inference
+            boundary. Remote management also requires
+            PRISMOS_ALLOW_REMOTE_OLLAMA=1.
+          </div>
           <div className="settings-item">
-            <label>Default Model</label>
+            <label>Default Local Inference Model</label>
             <div className="settings-model-row">
-              <input
+              <select
                 className="settings-input"
-                value={settings.defaultModel}
+                value={selectedLocalModelName}
                 onChange={(e) => update("defaultModel", e.target.value)}
-                placeholder="llama3.2 (recommended), mistral, llava..."
-              />
+                disabled={localInferenceModels.length === 0}
+              >
+                <option value="" disabled>Select a model installed on loopback</option>
+                {localInferenceModels.map((model) => (
+                  <option key={model.name} value={model.name}>{model.name}</option>
+                ))}
+              </select>
               <button className="settings-btn settings-btn-sm" onClick={loadModels}>
                 {modelsLoaded ? "↻ Refresh" : "Load Models"}
               </button>
             </div>
-            {modelsLoaded && models.length > 0 && (
+            {modelsLoaded && localInferenceModels.length > 0 && (
               <div className="settings-model-list">
-                {models.map((m) => (
+                {localInferenceModels.map((m) => (
                   <button
                     key={m.name}
-                    className={`settings-model-tag ${settings.defaultModel === m.name ? "active" : ""}`}
+                    className={`settings-model-tag ${modelMatches(settings.defaultModel, m.name) ? "active" : ""}`}
                     onClick={() => update("defaultModel", m.name)}
                   >
                     {m.name}
@@ -439,18 +738,19 @@ export default function SettingsPanel({
                 ))}
               </div>
             )}
-            {modelsLoaded && models.length === 0 && (
-              <div className="settings-hint">No models found. Run: ollama pull llama3.2</div>
+            {modelsLoaded && localInferenceModels.length === 0 && (
+              <div className="settings-hint">No chat-capable completion model found on fixed loopback. Run: ollama pull {DEFAULT_MODEL}</div>
             )}
           </div>
           <div className="settings-item">
-            <label>Max Tokens</label>
+            <label>Document &amp; Vision Output Limit</label>
             <input
               className="settings-input"
               type="number"
               value={settings.maxTokens}
               onChange={(e) => update("maxTokens", parseInt(e.target.value) || 2048)}
             />
+            <div className="settings-hint">Applies to direct document, image, and generated-artifact calls. Normal chat uses bounded workflow budgets.</div>
           </div>
           </>)}
         </div>
@@ -463,15 +763,21 @@ export default function SettingsPanel({
           </h3>
           {expandedSections.has("hub") && (<>
           <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
-            Browse, download, and manage your local AI models. All models run entirely on your machine.
+            Browse, download, and manage models through the selected Ollama management endpoint.
+            Only models also present on fixed loopback can be selected for private inference.
+            PrismOS does not attest where a separately configured management daemon executes.
           </div>
 
           {/* Installed models */}
           {models.length > 0 && (
             <div className="settings-model-hub-list">
               <div className="settings-model-hub-label">Installed Models</div>
-              {models.map((m) => (
-                <div key={m.name} className={`settings-model-hub-item ${settings.defaultModel === m.name ? "active" : ""}`}>
+              {models.map((m) => {
+                const localMatch = localInferenceModels.find((local) => modelMatches(local.name, m.name));
+                const availableLocally = !!localMatch;
+                const isActive = !!localMatch && modelMatches(settings.defaultModel, localMatch.name);
+                return (
+                <div key={m.name} className={`settings-model-hub-item ${isActive ? "active" : ""}`}>
                   <div className="model-hub-item-info">
                     <span className="model-hub-item-name">{m.name}</span>
                     {m.size && <span className="model-hub-item-size">{(m.size / 1e9).toFixed(1)} GB</span>}
@@ -479,11 +785,12 @@ export default function SettingsPanel({
                   </div>
                   <div className="model-hub-item-actions">
                     <button
-                      className={`settings-btn settings-btn-sm ${settings.defaultModel === m.name ? "settings-btn-primary" : ""}`}
-                      onClick={() => update("defaultModel", m.name)}
-                      title="Set as default model"
+                      className={`settings-btn settings-btn-sm ${isActive ? "settings-btn-primary" : ""}`}
+                      onClick={() => localMatch && update("defaultModel", localMatch.name)}
+                      disabled={!availableLocally}
+                      title={availableLocally ? "Set as the fixed-loopback inference model" : "This model exists only on the management endpoint"}
                     >
-                      {settings.defaultModel === m.name ? "✅ Active" : "Use"}
+                      {availableLocally ? (isActive ? "✅ Active" : "Use locally") : "Management only"}
                     </button>
                     <button
                       className="settings-btn settings-btn-sm settings-btn-danger"
@@ -495,7 +802,7 @@ export default function SettingsPanel({
                     </button>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           )}
 
@@ -506,6 +813,7 @@ export default function SettingsPanel({
               <input
                 className="settings-input"
                 value={modelToPull}
+                maxLength={200}
                 onChange={(e) => setModelToPull(e.target.value)}
                 placeholder="e.g. llama3.2, mistral, codellama:7b"
                 disabled={!!pullingModel}
@@ -535,17 +843,23 @@ export default function SettingsPanel({
           <div className="settings-model-hub-quick">
             <div className="settings-model-hub-label">Quick Pull</div>
             <div className="settings-model-hub-quick-chips">
-              {["llama3.2", "llama3.2-vision", "mistral", "llava", "deepseek-r1:1.5b", "qwen2.5"].map((name) => {
-                const isInstalled = models.some((m) => m.name.startsWith(name.split(":")[0]));
+              {QUICK_PULL_MODELS.map((model) => {
+                const isInstalled = models.some((installed) => modelMatches(model.name, installed.name));
+                const prerequisite = model.minOllamaVersion
+                  ? ` Catalog prerequisite: Ollama ${model.minOllamaVersion}+; installed version is not checked.`
+                  : "";
                 return (
                   <button
-                    key={name}
+                    key={model.name}
                     className={`settings-model-quick-chip ${isInstalled ? "installed" : ""}`}
-                    onClick={() => !isInstalled && handlePullModel(name)}
+                    onClick={() => !isInstalled && handlePullModel(model.name)}
                     disabled={!!pullingModel || isInstalled}
-                    title={isInstalled ? "Already installed" : `Pull ${name}`}
+                    title={`${isInstalled ? "Already installed." : `Pull ${model.name}.`}${prerequisite}`}
                   >
-                    {isInstalled ? "✅" : "📥"} {name}
+                    {isInstalled ? "✅" : "📥"} {model.name}
+                    {model.minOllamaVersion && (
+                      <small> · requires Ollama {model.minOllamaVersion}+ (version not checked)</small>
+                    )}
                   </button>
                 );
               })}
@@ -561,10 +875,10 @@ export default function SettingsPanel({
           </>)}
         </div>
 
-        {/* ── Domain Insights + Recommend Best Model ── */}
+        {/* ── Query-topic mix + heuristic model suggestion ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("domain")}>
-            🧭 Domain Intelligence
+            🧭 Query Topic Mix
             <span className={`settings-group-chevron${expandedSections.has("domain") ? " settings-group-chevron--open" : ""}`}>▸</span>
           </h3>
           {expandedSections.has("domain") && (<>
@@ -579,21 +893,140 @@ export default function SettingsPanel({
                   const recRaw = await invoke<string>("get_model_recommendations");
                   const recs = JSON.parse(recRaw);
                   if (recs.length > 0) {
-                    showToast?.(`Recommended: ${recs[0].recommended_model} — ${recs[0].comparison || `Best for ${recs[0].domain}`}`);
+                    const rec = recs[0];
+                    showToast?.(
+                      `Heuristic suggestion from ${rec.sample_count} local samples: ${rec.recommended_model} ` +
+                      `(${Math.round(rec.satisfaction_rate * 100)}% recorded positive feedback, ${Math.round(rec.avg_latency_ms)} ms average). Verify on your workload.`
+                    );
                   } else {
-                    // Fallback: recommend based on RAM
+                    // Fallback: a static RAM fit, not a quality benchmark.
                     const ram = info.total_ram_gb || 8;
-                    const rec = ram >= 32 ? "qwen3:14b" : ram >= 16 ? "qwen3:8b" : "qwen3:4b";
-                    showToast?.(`Based on ${ram.toFixed(0)}GB RAM: try ${rec}`);
+                    const rec = getConservativeRamSuggestion(ram);
+                    showToast?.(`Heuristic RAM fit for ${ram.toFixed(0)}GB: try ${rec.name}, then verify quality and latency on your workload.`);
                   }
                 } catch {
-                  showToast?.("Could not generate recommendations yet — keep using PrismOS!");
+                  showToast?.("No heuristic model suggestion is available yet.");
                 }
               }}
             >
-              🎯 Recommend Best Model
+              🎯 Suggest a Model (Heuristic)
             </button>
           </div>
+          </>)}
+        </div>
+
+        {/* ── Project Knowledge — approved, cited local sources ── */}
+        <div className="settings-group">
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("knowledge")}>
+            🧠 Project Knowledge
+            <span className={`settings-group-chevron${expandedSections.has("knowledge") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("knowledge") && (<>
+            <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
+              Add an approved project or projects folder. PrismOS skips common secret/key files,
+              vendor/build folders, binaries, symlinks, and oversized files; applies heuristic,
+              best-effort literal-credential redaction; stores source-tagged chunks in the local
+              SQLite graph; and replaces stale chunks on refresh. Redaction cannot guarantee that
+              every secret or regulated value is detected.
+            </div>
+            <div className="settings-item">
+              <label>Project Folder</label>
+              <div className="settings-model-row">
+                <input
+                  className="settings-input"
+                  value={knowledgePath}
+                  onChange={(e) => setKnowledgePath(e.target.value)}
+                  placeholder="/Users/you/Documents/my-project"
+                  disabled={knowledgeBusy !== null || knowledgePreview !== null}
+                />
+                <button
+                  className="settings-btn settings-btn-primary"
+                  onClick={() => scanKnowledgePath(knowledgePath)}
+                  disabled={!knowledgePath.trim() || knowledgeBusy !== null}
+                >
+                  {knowledgeBusy === "scan" ? "Scanning metadata…" : "Scan"}
+                </button>
+              </div>
+            </div>
+
+            {knowledgePreview && (
+              <div className="knowledge-preview">
+                <div className="knowledge-preview-title">Approval required · {knowledgePreview.project_name}</div>
+                <div className="knowledge-preview-root" title={knowledgePreview.root_path}>
+                  Approved root: {knowledgePreview.root_path}
+                </div>
+                <div className="knowledge-preview-grid">
+                  <span>{knowledgePreview.candidate_files} candidate text files</span>
+                  <span>{formatKnowledgeBytes(knowledgePreview.total_candidate_bytes)}</span>
+                  <span>{knowledgePreview.skipped_sensitive_files} sensitive excluded</span>
+                  <span>{knowledgePreview.skipped_dirs.length} ignored folders</span>
+                </div>
+                <div className="settings-hint">
+                  Metadata only so far—no file content has been read. Approving reads this bounded set in read-only mode,
+                  redacts likely literal credentials on a best-effort basis, and writes source-tagged chunks to the
+                  account-private local graph. The live graph is not encrypted at rest by PrismOS, and later answers can
+                  send retrieved excerpts to the fixed-loopback Ollama daemon.
+                  {knowledgePreview.truncated && " The source exceeded a safety budget. Choose a narrower root; incomplete scans cannot replace existing knowledge."}
+                </div>
+                <details className="knowledge-candidates">
+                  <summary>
+                    Review candidate paths ({Math.min(knowledgePreview.candidate_paths.length, 100)} shown)
+                  </summary>
+                  <ul>
+                    {knowledgePreview.candidate_paths.map((path) => <li key={path}>{path}</li>)}
+                  </ul>
+                </details>
+                <div className="settings-actions">
+                  <button
+                    className="settings-btn settings-btn-primary"
+                    onClick={handleApproveKnowledge}
+                    disabled={knowledgeBusy !== null || knowledgePreview.truncated}
+                  >
+                    {knowledgeBusy === "index" ? "Indexing…" : "Approve & Index"}
+                  </button>
+                  <button className="settings-btn" onClick={handleCancelKnowledge} disabled={knowledgeBusy !== null}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="knowledge-sources">
+              <div className="settings-model-hub-label">
+                Active Sources · {knowledgeSources.length}
+              </div>
+              {knowledgeSources.length === 0 ? (
+                <div className="settings-hint">No project sources indexed yet.</div>
+              ) : knowledgeSources.map((source) => (
+                <div className="knowledge-source" key={source.id}>
+                  <div className="knowledge-source-main">
+                    <strong>{source.name}</strong>
+                    <span title={source.root_path}>{source.root_path}</span>
+                    <small>
+                      {source.file_count} files · {source.chunk_count} chunks · {formatKnowledgeBytes(source.bytes_indexed)}
+                      {source.error_count > 0 ? ` · ${source.error_count} read errors` : ""}
+                    </small>
+                  </div>
+                  <div className="knowledge-source-actions">
+                    <button
+                      className="settings-btn settings-btn-sm"
+                      onClick={() => { setKnowledgePath(source.root_path); scanKnowledgePath(source.root_path); }}
+                      disabled={knowledgeBusy !== null || knowledgePreview !== null}
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      className={`settings-btn settings-btn-sm ${forgetKnowledgeId === source.id ? "settings-btn-danger-confirm" : "settings-btn-danger"}`}
+                      onClick={() => handleForgetKnowledge(source)}
+                      disabled={knowledgeBusy !== null || knowledgePreview !== null}
+                      title="Removes only PrismOS-owned chunks; source files are never touched"
+                    >
+                      {forgetKnowledgeId === source.id ? "Confirm Forget" : "Forget"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </>)}
         </div>
 
@@ -630,14 +1063,104 @@ export default function SettingsPanel({
             <button
               className={`settings-btn ${confirmClear ? "settings-btn-danger-confirm" : "settings-btn-danger"}`}
               onClick={handleClearGraph}
-              disabled={clearing || graphStats.nodes === 0}
+              disabled={clearing}
             >
-              {clearing ? "⏳ Clearing..." : confirmClear ? "⚠️ Click again to confirm" : "🗑️ Clear Graph"}
+              {clearing ? "⏳ Clearing..." : confirmClear ? "⚠️ Permanently clear all learned data" : "🗑️ Clear All Data"}
             </button>
           </div>
           <div className="settings-hint">
-            Export uses You-Port end-to-end encryption (AES-256-GCM authenticated encryption).
-            Files are device-bound and cannot be read on other devices.
+            Export uses You-Port AES-256-GCM authenticated file encryption.
+            Device-bound exports omit regenerable Project Knowledge excerpts and source
+            approvals; re-approve and index those roots on the restored device.
+            Clear All Data also removes stored prompts, response feedback, profiles, learned state,
+            pending in-app restores, pending scans, and any legacy plaintext graph export. It cannot
+            delete encrypted exports or Private Vault files you saved elsewhere, nor your original projects.
+          </div>
+          </>)}
+        </div>
+
+        {/* ── Encrypted full-database recovery candidate ── */}
+        <div className="settings-group">
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("vault")}>
+            🔐 Private Vault Backup & Restore
+            <span className={`settings-group-chevron${expandedSections.has("vault") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("vault") && (<>
+          <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
+            A Private Vault is designed as a full-database recovery copy: it includes managed
+            Project Knowledge and the audit log when present. It is passphrase-encrypted, but the backend still
+            refuses to create it inside any Git worktree. Create it on a separate encrypted
+            drive; if you later copy only the ciphertext into a private backup repository,
+            verify that repository is private first and never store the passphrase beside it.
+            Complete a clean-profile restore drill before relying on any vault as recovery media,
+            and keep an independent backup until that drill passes.
+          </div>
+          <div className="settings-item">
+            <label>Vault File Path</label>
+            <input
+              className="settings-input"
+              value={vaultPath}
+              onChange={(event) => setVaultPath(event.target.value)}
+              placeholder="Full path ending in .prismos-vault"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+          <div className="settings-item">
+            <label>Vault Passphrase</label>
+            <input
+              className="settings-input"
+              type="password"
+              value={vaultPassphrase}
+              onChange={(event) => setVaultPassphrase(event.target.value)}
+              placeholder="At least 16 characters"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="settings-item">
+            <label>Repeat Passphrase (export)</label>
+            <input
+              className="settings-input"
+              type="password"
+              value={vaultPassphraseConfirm}
+              onChange={(event) => setVaultPassphraseConfirm(event.target.value)}
+              placeholder="Repeat before creating a new vault"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="settings-actions">
+            <button
+              className="settings-btn settings-btn-primary"
+              onClick={handleExportPrivateVault}
+              disabled={vaultBusy !== null}
+            >
+              {vaultBusy === "export" ? "⏳ Creating Vault…" : "🔐 Create Full Vault"}
+            </button>
+          </div>
+          <div className="settings-item">
+            <label>Exact Confirmation (restore only)</label>
+            <input
+              className="settings-input"
+              value={vaultRestoreConfirmation}
+              onChange={(event) => setVaultRestoreConfirmation(event.target.value)}
+              placeholder="RESTORE MY PRIVATE PRISMOS VAULT"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+          <div className="settings-actions">
+            <button
+              className="settings-btn settings-btn-danger"
+              onClick={handleStagePrivateVaultRestore}
+              disabled={vaultBusy !== null}
+            >
+              {vaultBusy === "restore" ? "⏳ Validating Vault…" : "Stage Full Restore"}
+            </button>
+          </div>
+          <div className="settings-hint">
+            Restore decrypts and validates the complete database first, then stages an atomic
+            startup swap. It does not change the running graph. After staging, quit and reopen
+            PrismOS; startup fails closed if the protected swap cannot be completed safely.
           </div>
           </>)}
         </div>
@@ -650,8 +1173,8 @@ export default function SettingsPanel({
           </h3>
           {expandedSections.has("sync") && (<>
           <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
-            Sync your Spectrum Graph between devices using a shared passphrase.
-            Files are encrypted — the same passphrase must be used on both devices.
+            Transfer an encrypted Spectrum Graph file between devices, then preview and apply
+            a merge locally. The same passphrase must be entered on both devices.
           </div>
 
           {/* Passphrase */}
@@ -660,7 +1183,7 @@ export default function SettingsPanel({
             <input
               className="settings-input"
               type="password"
-              placeholder="Shared passphrase (min 4 chars)…"
+              placeholder="Shared passphrase (min 12 chars)…"
               value={syncPassphrase}
               onChange={(e) => setSyncPassphrase(e.target.value)}
             />
@@ -699,7 +1222,7 @@ export default function SettingsPanel({
             <button
               className="settings-btn settings-btn-primary"
               onClick={handleExportSync}
-              disabled={syncExporting || graphStats.nodes === 0 || syncPassphrase.length < 4}
+              disabled={syncExporting || graphStats.nodes === 0 || syncPassphrase.length < 12}
             >
               {syncExporting ? "⏳ Exporting..." : "📤 Export Sync Package"}
             </button>
@@ -721,14 +1244,14 @@ export default function SettingsPanel({
                 <button
                   className="settings-btn settings-btn-secondary"
                   onClick={handlePreviewMerge}
-                  disabled={syncPreviewing || syncPassphrase.length < 4}
+                  disabled={syncPreviewing || syncPassphrase.length < 12}
                 >
                   {syncPreviewing ? "⏳ Analyzing..." : "🔍 Preview Merge"}
                 </button>
                 <button
                   className="settings-btn settings-btn-primary"
                   onClick={handleApplyMerge}
-                  disabled={syncImporting || syncPassphrase.length < 4}
+                  disabled={syncImporting || syncPassphrase.length < 12}
                 >
                   {syncImporting ? "⏳ Merging..." : "🔀 Apply Merge"}
                 </button>
@@ -898,8 +1421,10 @@ export default function SettingsPanel({
             </div>
           </div>
           <div className="settings-hint">
-            Voice uses Web Speech API — all processing stays in your browser.
-            No audio is sent to any server.
+            Voice input can use the browser-provided Web Speech API. Its privacy
+            behavior depends on the operating system/browser. Local Whisper
+            transcription is not implemented in this build, so disable voice input
+            when audio must remain strictly on-device.
           </div>
           </>)}
         </div>
@@ -915,18 +1440,17 @@ export default function SettingsPanel({
             <label>Allow Email Summary</label>
             <div className="settings-theme-toggle">
               <button
-                className={`settings-theme-btn ${settings.emailSummaryEnabled ? "active" : ""}`}
-                onClick={() => update("emailSummaryEnabled", !settings.emailSummaryEnabled)}
+                className="settings-theme-btn"
+                disabled
+                aria-disabled="true"
               >
-                {settings.emailSummaryEnabled ? "✅ Enabled" : "Off"}
+                Unavailable in this build
               </button>
             </div>
           </div>
           <div className="settings-hint">
-            When enabled, PrismOS connects to your IMAP mailbox in <strong>read-only</strong> mode
-            to summarize unread email subject lines. No email content is ever stored, sent to the cloud,
-            or leaves the Sandbox Prism. Credentials stay in memory only. Configure your IMAP
-            server details below after enabling.
+            Disabled until PrismOS has OS-keychain credential storage and an explicit model-endpoint
+            disclosure. Legacy WebView-stored IMAP credentials are removed during startup migration.
           </div>
           </>)}
         </div>
@@ -942,18 +1466,17 @@ export default function SettingsPanel({
             <label>Allow Calendar Summary</label>
             <div className="settings-theme-toggle">
               <button
-                className={`settings-theme-btn ${settings.calendarEnabled ? "active" : ""}`}
-                onClick={() => update("calendarEnabled", !settings.calendarEnabled)}
+                className="settings-theme-btn"
+                disabled
+                aria-disabled="true"
               >
-                {settings.calendarEnabled ? "✅ Enabled" : "Off"}
+                Unavailable in this build
               </button>
             </div>
           </div>
           <div className="settings-hint">
-            When enabled, PrismOS reads local <strong>.ics</strong> calendar files in <strong>read-only</strong> mode
-            to show today's events, detect conflicts, and suggest free time blocks.
-            No calendar data is ever modified, sent to the cloud, or leaves the Sandbox Prism.
-            Point this to your exported .ics file or calendar directory.
+            Disabled until calendar roots use the same explicit, one-time approval and path-binding
+            protections as Project Knowledge. No calendar path is read from localStorage.
           </div>
           </>)}
         </div>
@@ -969,17 +1492,17 @@ export default function SettingsPanel({
             <label>Allow Portfolio Tracking</label>
             <div className="settings-theme-toggle">
               <button
-                className={`settings-theme-btn ${settings.financeEnabled ? "active" : ""}`}
-                onClick={() => update("financeEnabled", !settings.financeEnabled)}
+                className="settings-theme-btn"
+                disabled
+                aria-disabled="true"
               >
-                {settings.financeEnabled ? "✅ Enabled" : "Off"}
+                Unavailable in this build
               </button>
             </div>
           </div>
           <div className="settings-hint">
-            When enabled, PrismOS fetches <strong>public market data</strong> for your ticker watchlist.
-            No trades are executed, no financial accounts are accessed, and no API keys are required.
-            Add your ticker symbols (e.g. AAPL, GOOG, TSLA) below after enabling.
+            Disabled until the ticker watchlist has an explicit private storage and network-consent
+            workflow. No market-data network command is exposed in the current build.
           </div>
           </>)}
         </div>
@@ -994,57 +1517,75 @@ export default function SettingsPanel({
           {securityLoading ? (
             <div className="settings-hint">Loading security status…</div>
           ) : (
+          <>
+          {securityError && (
+            <div className="settings-hint settings-warning">
+              Live security status is unavailable. Protections below are shown as unverified.
+            </div>
+          )}
           <div className="security-status-grid">
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">{securityStatus?.local_only === true ? "✅" : "⚠️"}</span>
               <div className="security-check-info">
                 <span className="security-check-label">Local Processing</span>
-                <span className="security-check-desc">All AI runs on your device via Ollama — nothing sent to the cloud</span>
+                <span className="security-check-desc">
+                  {securityStatus?.local_only === true
+                    ? "Inference is restricted to loopback Ollama endpoints; proxies and redirects are disabled"
+                    : securityStatus?.local_only === false
+                    ? "The fixed loopback inference policy could not be confirmed; stop before sending private prompts"
+                    : "Live endpoint policy could not be verified"}
+                </span>
               </div>
             </div>
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">{securityStatus?.sandbox_active === true ? "✅" : "⚠️"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">WASM Sandbox</span>
-                <span className="security-check-desc">Agent code runs in isolated WebAssembly containers with strict limits</span>
+                <span className="security-check-label">Action Policy</span>
+                <span className="security-check-desc">{securityStatus?.sandbox_active === true ? "Supported action descriptions use allow-lists, risk tiers, anomaly checks, and bounded records; arbitrary code is not executed" : "Action-policy status is inactive or unverified"}</span>
               </div>
             </div>
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">{securityStatus?.hmac_signing === true ? "✅" : "⚠️"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">HMAC Code Signing</span>
-                <span className="security-check-desc">Every agent action is cryptographically signed and verified</span>
+                <span className="security-check-label">HMAC Action Records</span>
+                <span className="security-check-desc">{securityStatus?.hmac_signing === true ? "Ephemeral sandbox records use a process-local HMAC; this is not code signing or hardware attestation" : "Action-record authentication is inactive or unverified"}</span>
               </div>
             </div>
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">{securityStatus?.auto_rollback === true ? "✅" : "ℹ️"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">Auto-Rollback</span>
-                <span className="security-check-desc">Unsafe changes are automatically reversed with checkpoint recovery</span>
+                <span className="security-check-label">Rollback Boundary</span>
+                <span className="security-check-desc">{securityStatus?.auto_rollback === true ? "Verified rollback is active" : "Rejected guarded actions are marked in Prism bookkeeping; filesystem, network, and arbitrary database side effects are not generically undone"}</span>
               </div>
             </div>
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">{securityStatus?.encrypted_storage ? "✅" : "⚠️"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">Encrypted Storage</span>
-                <span className="security-check-desc">Graph data encrypted with AES-256-GCM authenticated encryption, device-bound</span>
+                <span className="security-check-label">Storage Protection</span>
+                <span className="security-check-desc">
+                  {securityStatus?.encrypted_storage
+                    ? "Graph data is encrypted at rest"
+                    : securityStatus?.encrypted_storage === false
+                    ? "Graph files are account-private but not encrypted at rest; exported You-Port packages use AES-256-GCM"
+                    : "Storage protection status could not be verified"}
+                </span>
               </div>
             </div>
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">{securityStatus?.private_inference_client_fixed_loopback === true ? "✅" : "⚠️"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">Zero Cloud Dependency</span>
-                <span className="security-check-desc">Works fully offline — no accounts, no telemetry, no external APIs</span>
+                <span className="security-check-label">Private Inference Client Route</span>
+                <span className="security-check-desc">Chat/document/vision requests are fixed to loopback; PrismOS does not attest the separately installed daemon's identity, execution location, or later egress</span>
               </div>
             </div>
             <div className="security-check">
               <span className="security-check-icon">{securityStatus?.enclave?.hardware_available ? "🔐" : "🔑"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">Secure Enclave</span>
+                <span className="security-check-label">Key Derivation</span>
                 <span className="security-check-desc">
                   {securityStatus?.enclave
-                    ? `${securityStatus.enclave.hardware_available ? "Hardware-backed" : "Software"}: ${securityStatus.enclave.backend.replace(/([A-Z])/g, ' $1').trim()} · Key: ${securityStatus.enclave.key_fingerprint}`
-                    : "Initializing…"}
+                    ? `${securityStatus.enclave.hardware_available ? "Platform hardware indicator detected; software-derived key" : "Software-derived machine key"}: ${securityStatus.enclave.backend.replace(/([A-Z])/g, ' $1').trim()} · Fingerprint: ${securityStatus.enclave.key_fingerprint}`
+                    : "Key derivation status could not be verified"}
                 </span>
               </div>
             </div>
@@ -1055,26 +1596,32 @@ export default function SettingsPanel({
                 <span className="security-check-desc">
                   {securityStatus?.audit_chain
                     ? `${securityStatus.audit_chain.entries} entries · Chain ${securityStatus.audit_chain.valid ? "verified ✓" : "BROKEN ✗"}`
-                    : "Initializing…"}
+                    : "Audit-chain status could not be verified"}
                 </span>
               </div>
             </div>
           </div>
+          </>
           )}
-          {/* Model Verification */}
+          {/* Heuristic model metadata inspection */}
           <div className="settings-item" style={{ marginTop: "0.75rem" }}>
-            <label>Model Verification</label>
+            <label>Heuristic Model Metadata Compatibility</label>
             <div className="settings-model-row">
-              <button className="settings-btn settings-btn-sm" onClick={handleVerifyModel} disabled={!ollamaConnected}>
-                🔍 Verify {settings.defaultModel || "model"}
+              <button className="settings-btn settings-btn-sm" onClick={handleInspectModelMetadata} disabled={!ollamaConnected}>
+                🔍 Inspect {settings.defaultModel || DEFAULT_MODEL}
               </button>
             </div>
             {modelVerification && (
               <div className="settings-hint" style={{ marginTop: "0.5rem" }}>{modelVerification}</div>
             )}
+            <div className="settings-hint" style={{ marginTop: "0.5rem" }}>
+              This classifies metadata reported by the local Ollama daemon. It does not hash model
+              bytes, verify a publisher signature, attest the daemon, or establish model safety.
+            </div>
           </div>
           <div className="settings-hint">
-            All protections are always active. PrismOS-AI is designed with security-by-default — no configuration needed.
+            Core protections are enabled by default. Review warnings above before enabling
+            a remote Ollama management endpoint or an integration that uses the network.
           </div>
           </>)}
         </div>
@@ -1093,7 +1640,7 @@ export default function SettingsPanel({
               <span className="settings-version-number">v0.5.2</span>
             </div>
             <div className="settings-version-badges">
-              <span className="settings-badge-local">100% Local</span>
+              <span className="settings-badge-local">Local-First</span>
             </div>
           </div>
           <div className="settings-item">
@@ -1109,12 +1656,13 @@ export default function SettingsPanel({
             />
           </div>
           <div className="settings-item">
-            <label>Agent Pipeline</label>
+            <label>Reasoning Workflow</label>
             <input
               className="settings-input"
-              value="Orchestrator → Memory Keeper → Reasoner → Tool Smith → Sentinel"
+              value="Route → plan → build → judge → optional refine (bounded, sequential)"
               readOnly
             />
+            <div className="settings-hint">Named workflow roles and heuristic votes are trace labels, not five independently running AI agents.</div>
           </div>
           <div className="settings-item">
             <label>Encryption</label>
@@ -1131,10 +1679,11 @@ export default function SettingsPanel({
           </h3>
           {expandedSections.has("about") && (<>
           <p className="settings-about-text">
-            PrismOS-AI is a local-first agentic personal AI operating system. All
-            data stays on your device. Powered by Ollama for local LLM
-            inference and a multi-agent Refractive Core architecture with
-            persistent Spectrum Graph memory.
+            PrismOS-AI is a local-first desktop assistant with bounded sequential workflows.
+            Core inference uses a fixed loopback Ollama client route and graph memory stays
+            in local app data; optional network integrations and explicitly enabled remote
+            Ollama management endpoints have different privacy boundaries. Powered
+            by Ollama and a Refractive Core pipeline with persistent Spectrum Graph memory.
           </p>
           <p className="settings-about-legal">
             © 2026 PrismOS-AI Contributors. Released under the MIT License.

@@ -9,8 +9,8 @@ Thank you for your interest in contributing to PrismOS-AI! This document provide
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| [Node.js](https://nodejs.org/) | ≥ 18 | Frontend build tooling |
-| [Rust](https://rustup.rs/) | ≥ 1.75 | Tauri backend |
+| [Node.js](https://nodejs.org/) | ≥ 22.12 (Node 24 LTS recommended) | Frontend build tooling |
+| [Rust](https://rustup.rs/) | 1.95.0 (pinned by `rust-toolchain.toml`) | Tauri backend |
 | [Ollama](https://ollama.com/) | Latest | Local LLM inference |
 
 ### Getting Started

@@ -248,8 +248,15 @@ pub fn build_summary_prompt(summary: &FinanceSummary) -> String {
         let arrow = if q.is_up() { "▲" } else { "▼" };
         lines.push(format!(
             "  {} ({}) — ${:.2} {} {:.2} ({:+.1}%) | Day range ${:.2}–${:.2} | Vol {}",
-            q.symbol, q.name, q.price, arrow, q.change.abs(), q.change_percent,
-            q.low, q.high, q.volume
+            q.symbol,
+            q.name,
+            q.price,
+            arrow,
+            q.change.abs(),
+            q.change_percent,
+            q.low,
+            q.high,
+            q.volume
         ));
     }
 
@@ -270,7 +277,11 @@ pub fn fallback_summary(summary: &FinanceSummary) -> String {
         return "No tickers in your watchlist yet. Add some in Settings → Finance.".into();
     }
 
-    let successful: Vec<&TickerQuote> = summary.quotes.iter().filter(|q| q.fetch_error.is_none()).collect();
+    let successful: Vec<&TickerQuote> = summary
+        .quotes
+        .iter()
+        .filter(|q| q.fetch_error.is_none())
+        .collect();
 
     if successful.is_empty() {
         return format!(
@@ -280,11 +291,20 @@ pub fn fallback_summary(summary: &FinanceSummary) -> String {
     }
 
     let mut parts = Vec::new();
-    parts.push(format!("Tracking {} ticker(s) as of {}.", successful.len(), summary.fetched_at));
+    parts.push(format!(
+        "Tracking {} ticker(s) as of {}.",
+        successful.len(),
+        summary.fetched_at
+    ));
 
     // Top movers
     let mut sorted = successful.clone();
-    sorted.sort_by(|a, b| b.change_percent.abs().partial_cmp(&a.change_percent.abs()).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(|a, b| {
+        b.change_percent
+            .abs()
+            .partial_cmp(&a.change_percent.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     for q in sorted.iter().take(5) {
         let arrow = if q.is_up() { "📈" } else { "📉" };
@@ -334,7 +354,9 @@ mod tests {
 
     #[test]
     fn test_config_valid() {
-        let config = FinanceConfig { tickers: vec!["AAPL".into(), "GOOG".into()] };
+        let config = FinanceConfig {
+            tickers: vec!["AAPL".into(), "GOOG".into()],
+        };
         assert!(config.is_valid());
     }
 
@@ -346,7 +368,9 @@ mod tests {
 
     #[test]
     fn test_config_blank_ticker_invalid() {
-        let config = FinanceConfig { tickers: vec!["".into()] };
+        let config = FinanceConfig {
+            tickers: vec!["".into()],
+        };
         assert!(!config.is_valid());
     }
 

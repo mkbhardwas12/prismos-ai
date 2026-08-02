@@ -27,7 +27,6 @@ PrismOS incorporates the following open-source components:
   • React 18 — MIT License — https://react.dev
   • Rust — MIT/Apache-2.0 — https://www.rust-lang.org
   • Ollama — MIT License — https://ollama.com
-  • wasmtime — Apache-2.0 — https://wasmtime.dev
   • rusqlite — MIT License — https://github.com/rusqlite/rusqlite
   • aes-gcm — MIT/Apache-2.0 — https://github.com/RustCrypto/AEADs
   • react-force-graph-2d — MIT License — https://github.com/vasturiano/react-force-graph

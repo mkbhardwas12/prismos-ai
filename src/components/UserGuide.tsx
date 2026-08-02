@@ -58,7 +58,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
             {activeSection === "getting-started" && (
               <div className="guide-section">
                 <h3>🚀 Getting Started</h3>
-                <p>PrismOS-AI is a <strong>local-first AI operating system</strong> that runs entirely on your device. No cloud, no data sharing, no subscriptions.</p>
+                <p>PrismOS-AI is a <strong>local-first desktop assistant with bounded sequential workflows</strong>. Private chat, document, and attached-image inference use the fixed-loopback Ollama client route. The configurable Ollama URL and <code>PRISMOS_ALLOW_REMOTE_OLLAMA</code> apply only to model management/status; they never reroute private prompts. Screen capture is unavailable in this source build. No platform release is described as security-qualified unless its exact artifact has completed the release checklist.</p>
 
                 <div className="guide-card highlight">
                   <h4>💻 System Requirements</h4>
@@ -76,7 +76,8 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                   </table>
                   <p style={{ marginTop: "10px", fontSize: "12px" }}>
                     <strong>Model sizes vs RAM:</strong> Small models (2-3B) need ~4 GB RAM. Medium models (7B) need ~8 GB. Large models (13B+) need 16+ GB. 
-                    A GPU with 6GB+ VRAM will make responses 5-10× faster but is not required — CPU-only works fine.
+                    A compatible GPU can improve inference speed, but the gain depends on the model,
+                    quantization, backend, memory bandwidth, drivers, and hardware. CPU-only operation is supported.
                   </p>
                 </div>
 
@@ -96,12 +97,12 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>Step 3 — Start Chatting</h4>
-                  <p>Type any intent in the input bar at the bottom. PrismOS-AI will route it through its <strong>Refractive Core</strong> pipeline — analyzing, selecting the best agent, and building knowledge in your Spectrum Graph.</p>
+                  <p>Type any intent in the input bar at the bottom. PrismOS-AI routes it through its <strong>Refractive Core</strong> pipeline and can persist successful conversations in your Spectrum Graph. One-off document attachments are analyzed ephemerally and are not auto-ingested; durable project context requires the separate Project Knowledge preview and approval flow.</p>
                 </div>
 
                 <div className="guide-card highlight">
                   <h4>🔒 Your Privacy</h4>
-                  <p>Everything runs locally. Your conversations, data, and knowledge graph never leave your computer. PrismOS-AI uses AES-256-GCM authenticated encryption for all stored data.</p>
+                  <p>Private inference is fixed to <code>http://localhost:11434</code>. A configured remote management URL can list, pull, delete, or check models only when explicitly enabled; it cannot receive chat or attachment prompts. Model downloads and browser-provided speech may use the network. The live SQLite graph is account-private but not encrypted at rest; encrypted export packages protect portable copies.</p>
                 </div>
               </div>
             )}
@@ -112,7 +113,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>💬 Intent Console</h4>
-                  <p>Your main conversation view. Type natural language intents and PrismOS-AI intelligently routes them to the best agent. The AI learns from each interaction, building your personal knowledge graph.</p>
+                  <p>Your main conversation view. Type natural language intents and PrismOS-AI routes them through its bounded sequential workflow. Successful conversations and explicit feedback can improve future retrieval; this is graph memory, not autonomous model retraining.</p>
                 </div>
 
                 <div className="guide-card">
@@ -126,8 +127,8 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 </div>
 
                 <div className="guide-card">
-                  <h4>🔒 Sandbox Prisms</h4>
-                  <p>Execute code and actions in WASM-isolated sandboxes with cryptographic signing. Every action is auditable with HMAC-SHA256 verification.</p>
+                  <h4>🔒 Action Policies</h4>
+                  <p>Evaluate supported action descriptions through bounded allow-list, risk, and anomaly checks. This is not an arbitrary code runner; process-local HMAC tags make in-process action records tamper-evident, not hardware-attested.</p>
                 </div>
 
                 <div className="guide-card">
@@ -136,18 +137,18 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 </div>
 
                 <div className="guide-card">
-                  <h4>🔄 You-Port</h4>
-                  <p>Export your entire state (encrypted) to move between devices. Supports multi-device sync with conflict resolution strategies (latest-wins, theirs, ours).</p>
+                  <h4>🔄 Encrypted Portability</h4>
+                  <p><strong>Export Graph</strong> creates a device-bound package that can be reopened only while the original PrismOS device secret remains available; it is not a cross-device or disaster-recovery backup. <strong>Multi-Device Sync</strong> uses a shared passphrase for cross-device graph preview and merge. Both formats omit approved Project Knowledge excerpts. <strong>Private Vault Backup &amp; Restore</strong> creates a passphrase-encrypted full-database recovery candidate; prove it with a clean-profile restore drill before relying on it.</p>
                 </div>
 
                 <div className="guide-card">
-                  <h4>🤖 Multi-Agent Collaboration</h4>
-                  <p>PrismOS-AI can coordinate multiple AI agents working together on complex tasks. View agent activity, collaboration traces, and debate panels in real time.</p>
+                  <h4>🤖 Sequential Reasoning Workflow</h4>
+                  <p>PrismOS-AI runs a plan, draft, judge, and refinement loop around the selected model through fixed-loopback inference, with deterministic routing, policy, voting, memory, and trace stages. The activity panel shows that sequential workflow trace.</p>
                 </div>
 
                 <div className="guide-card">
-                  <h4>🎤 Voice Input/Output</h4>
-                  <p>Enable voice input and text-to-speech output in Settings. Speak your intents naturally and hear responses read aloud.</p>
+                  <h4>🎤 Browser Speech &amp; Text-to-Speech</h4>
+                  <p>Browser/WebView speech recognition and text-to-speech may be available depending on the platform and can have provider-specific network behavior. Real bundled Whisper transcription is not available in this release.</p>
                 </div>
               </div>
             )}
@@ -159,10 +160,10 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                 <div className="guide-card">
                   <h4>Choose the Right Model</h4>
                   <ul>
-                    <li><strong>Fast responses:</strong> Use Llama 3.2 (3B) or Gemma 2 (2B) — lightweight and quick</li>
-                    <li><strong>Best quality:</strong> Use Llama 3.1 (8B) or Mistral (7B) — more detailed answers</li>
-                    <li><strong>Code tasks:</strong> Use Code Llama — specialized for programming</li>
-                    <li><strong>Reasoning:</strong> Use DeepSeek R1 — chain-of-thought reasoning</li>
+                    <li><strong>Lower resource use:</strong> Start with a smaller registered model, then measure latency on your hardware</li>
+                    <li><strong>Larger models:</strong> Try a model that fits your RAM, then verify answer quality and latency on your own tasks</li>
+                    <li><strong>Code tasks:</strong> Try Qwen 2.5 Coder or another installed code-oriented model and verify its output</li>
+                    <li><strong>Reasoning:</strong> Use a supported reasoning model for difficult planning and verification; PrismOS shows concise rationale, not hidden chain-of-thought</li>
                   </ul>
                 </div>
 
@@ -184,12 +185,12 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>Build Your Knowledge Graph</h4>
-                  <p>Regular usage builds a richer Spectrum Graph. Visit the Spectrum Explorer to see your knowledge network grow. The more you use PrismOS-AI, the smarter it gets about your interests.</p>
+                  <p>Regular usage can build a richer Spectrum Graph. Visit the Spectrum Explorer to inspect the stored relationships. Additional history may improve retrieval relevance, but it does not retrain the model or guarantee better answers.</p>
                 </div>
 
                 <div className="guide-card">
                   <h4>Back Up Your Data</h4>
-                  <p>Use <strong>Settings → Export Graph</strong> regularly to create encrypted backups. Use <strong>You-Port</strong> to sync between devices.</p>
+                  <p>Use <strong>Settings → Private Vault Backup &amp; Restore</strong> to create an encrypted full-database recovery candidate, then complete a clean-profile restore drill before relying on it. <strong>Export Graph</strong> is device-bound, while <strong>Multi-Device Sync</strong> is the passphrase-based cross-device graph format. Keep independent backups and the original project folders so sources can also be recovered independently.</p>
                 </div>
               </div>
             )}
@@ -212,7 +213,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                   </div>
                   <div className="guide-shortcut-row">
                     <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>4</kbd></span>
-                    <span>Sandbox Prisms</span>
+                    <span>Action Policies</span>
                   </div>
                   <div className="guide-shortcut-row">
                     <span className="guide-keys"><kbd>Ctrl</kbd> + <kbd>5</kbd></span>
@@ -245,7 +246,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>Does my data go to the cloud?</h4>
-                  <p><strong>No.</strong> Everything stays on your device. PrismOS-AI never sends your data anywhere. All AI processing happens locally using Ollama.</p>
+                  <p><strong>Private inference is fixed to loopback Ollama.</strong> Model downloads, browser speech services, synthetic flywheel smoke validation, explicit Brain Wrapped sharing, and enabled remote model-management operations can use the network. Full personal-data training is disabled. The configured management URL never receives private prompts. Email, calendar, and finance commands are unavailable in this build until their private configuration and consent boundaries ship.</p>
                 </div>
 
                 <div className="guide-card">
@@ -255,19 +256,19 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                     <li>Use a smaller model (Llama 3.2 at 3B is very fast)</li>
                     <li>Lower the Max Tokens slider in the model dropdown</li>
                     <li>Close other heavy applications to free up RAM</li>
-                    <li>An NVIDIA GPU with 6GB+ VRAM will make responses 5-10× faster</li>
+                    <li>A compatible GPU can improve inference speed; results vary by model, quantization, backend, drivers, and hardware</li>
                     <li>Minimum: 8 GB RAM + 4-core CPU. Recommended: 16 GB RAM + dedicated GPU</li>
                   </ul>
                 </div>
 
                 <div className="guide-card">
                   <h4>Can I use my own models?</h4>
-                  <p>Yes! Any model available in Ollama works with PrismOS-AI. You can also create custom Modelfiles. Just pull the model via <code>ollama pull model-name</code> and it will appear in the model selector.</p>
+                  <p>Models reported by the fixed-loopback Ollama daemon can appear in PrismOS-AI, but compatibility depends on model capabilities, context limits, and the installed Ollama version. Custom Modelfiles are not trusted or verified automatically; inspect their source and test them with non-sensitive prompts first.</p>
                 </div>
 
                 <div className="guide-card">
                   <h4>How do I move my data to another computer?</h4>
-                  <p>Go to <strong>Settings → You-Port</strong> to export an encrypted package. Import it on your other device. You can also use <strong>Multi-Device Sync</strong> for more advanced merge strategies.</p>
+                  <p>Use <strong>Settings → Multi-Device Sync</strong> with the same passphrase on both computers to preview and merge the portable graph. Re-approve Project Knowledge folders on the destination because sync omits their excerpts. For a full-database recovery candidate rather than a graph merge, use a <strong>Private Vault</strong> and run the documented restore drill; do not use the device-bound <strong>Export Graph</strong> package for cross-device transfer.</p>
                 </div>
 
                 <div className="guide-card">
@@ -289,10 +290,10 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
 
                 <div className="guide-card">
                   <h4>🔷 About PrismOS-AI</h4>
-                  <p><strong>Version:</strong> 0.5.0</p>
-                  <p><strong>Released:</strong> March 3, 2026</p>
+                  <p><strong>Version:</strong> 0.5.2 source tree</p>
+                  <p><strong>Source audit:</strong> August 1, 2026</p>
                   <p><strong>GitHub:</strong> github.com/mkbhardwas12/prismos-ai</p>
-                  <p>PrismOS-AI is a local-first AI operating system built on a physics-inspired 7-dimensional knowledge graph. It processes your intents through multi-agent collaboration — all running 100% offline on your own hardware.</p>
+                  <p>PrismOS-AI is a local-first desktop assistant built around a SQLite knowledge graph, heuristic retrieval signals, and bounded sequential workflows. One LLM Reasoner is surrounded by deterministic orchestration, memory, policy, and judging stages. Private inference uses a fixed loopback Ollama client route; the configurable endpoint and remote-origin environment opt-in are only for status and explicit model management.</p>
                 </div>
 
                 <div className="guide-card">
@@ -303,7 +304,7 @@ export default function UserGuide({ open, onClose }: UserGuideProps) {
                     <li><strong>Rust</strong> — Backend, graph engine &amp; security</li>
                     <li><strong>Ollama</strong> — Local AI model serving</li>
                     <li><strong>SQLite</strong> — Persistent knowledge storage</li>
-                    <li><strong>wasmtime</strong> — WASM sandbox isolation</li>
+                    <li><strong>Sandbox policy</strong> — bounded allow-list, risk, and anomaly checks</li>
                   </ul>
                 </div>
               </div>

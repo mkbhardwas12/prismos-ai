@@ -32,9 +32,9 @@ describe("DomainInsights", () => {
       render(<DomainInsights />);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Keep asking questions/)).toBeInTheDocument();
+      expect(screen.getByText(/After five classified queries/)).toBeInTheDocument();
     });
-    expect(screen.getByText(/3\/5 queries analyzed/)).toBeInTheDocument();
+    expect(screen.getByText(/3\/5 queries observed/)).toBeInTheDocument();
   });
 
   it("shows primary domain when enough queries", async () => {
@@ -44,7 +44,7 @@ describe("DomainInsights", () => {
     });
     await waitFor(() => {
       expect(screen.getAllByText("Software & Engineering").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText(/75% confidence/)).toBeInTheDocument();
+      expect(screen.getByText(/60% of classified queries/)).toBeInTheDocument();
     });
   });
 
@@ -55,26 +55,39 @@ describe("DomainInsights", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("qwen2.5-coder:7b")).toBeInTheDocument();
-      expect(screen.getByText(/we recommend/)).toBeInTheDocument();
+      expect(screen.getByText(/Model suggestion for recurring/)).toBeInTheDocument();
     });
   });
 
-  it("hides recommended model when confidence < 0.3", async () => {
+  it("hides the model suggestion when the primary topic share is below 30%", async () => {
     vi.mocked(invoke).mockResolvedValue(
-      mockDomainProfile({ confidence: 0.2 })
+      mockDomainProfile({
+        primary_domain: "Engineering",
+        domain_counts: {
+          Engineering: 2,
+          Science: 2,
+          Legal: 2,
+          Medical: 2,
+          Finance: 2,
+        },
+      })
     );
     await act(async () => {
       render(<DomainInsights />);
     });
     await waitFor(() => {
-      expect(screen.getAllByText("Software & Engineering").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/Software & Engineering/).length).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.queryByText(/we recommend/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Model suggestion for recurring/)).not.toBeInTheDocument();
   });
 
   it("hides recommended model when domain is General", async () => {
     vi.mocked(invoke).mockResolvedValue(
-      mockDomainProfile({ primary_domain: "General", confidence: 0.8 })
+      mockDomainProfile({
+        primary_domain: "General",
+        confidence: 0.8,
+        domain_counts: { General: 20 },
+      })
     );
     await act(async () => {
       render(<DomainInsights />);
@@ -82,7 +95,7 @@ describe("DomainInsights", () => {
     await waitFor(() => {
       expect(screen.getAllByText("General").length).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.queryByText(/we recommend/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Model suggestion for recurring/)).not.toBeInTheDocument();
   });
 
   it("renders domain distribution bars", async () => {
@@ -121,9 +134,20 @@ describe("DomainInsights", () => {
     await waitFor(() => {
       // profile is null after error, and !profile is true, but total_queries check:
       // the component returns null when loading, and shows empty state when !profile
-      // Actually: if(!profile || profile.total_queries < 5) shows the Domain Expertise card
+      // A null profile shows the neutral Query Topic Mix empty state.
       // But if profile is null, we still get the card. Let's just check it renders safely.
-      expect(screen.queryByText(/Keep asking questions/)).toBeInTheDocument();
+      expect(screen.queryByText(/After five classified queries/)).toBeInTheDocument();
     });
+  });
+
+  it("states that topic classification does not infer credentials", async () => {
+    vi.mocked(invoke).mockResolvedValue(mockDomainProfile());
+    await act(async () => {
+      render(<DomainInsights />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/does not infer profession/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Domain Expertise/i)).not.toBeInTheDocument();
   });
 });

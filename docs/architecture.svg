@@ -50,8 +50,8 @@
 
   <!-- ═══ Layer 3: Refractive Core ═══ -->
   <rect x="60" y="255" width="780" height="135" rx="10" fill="#0d2535" fill-opacity="0.4" stroke="#48cae4" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="450" y="280" text-anchor="middle" font-size="14" font-weight="600" fill="#90e0ef">Refractive Core — NPU-Accelerated Multi-Agent Orchestration</text>
-  <text x="450" y="297" text-anchor="middle" font-size="10" fill="#64748b">Closed-Loop Feedback · SIMD Scoring · LangGraph Agent Spawning</text>
+  <text x="450" y="280" text-anchor="middle" font-size="14" font-weight="600" fill="#90e0ef">Refractive Core — Bounded Sequential Orchestration</text>
+  <text x="450" y="297" text-anchor="middle" font-size="10" fill="#64748b">Plan → Build → Judge → Refine · Bounded Iterations · SIMD Scoring</text>
 
   <!-- Agent boxes -->
   <rect x="85" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#0077b6" stroke-width="1"/>
@@ -71,8 +71,8 @@
 
   <rect x="520" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#2a9d8f" stroke-width="1"/>
   <text x="585" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#7ec8e3">Tool Smith</text>
-  <text x="585" y="352" text-anchor="middle" font-size="9" fill="#64748b">Sandboxed execution</text>
-  <text x="585" y="366" text-anchor="middle" font-size="9" fill="#64748b">in Prism containers</text>
+  <text x="585" y="352" text-anchor="middle" font-size="9" fill="#64748b">Native action policy</text>
+  <text x="585" y="366" text-anchor="middle" font-size="9" fill="#64748b">gate &amp; process-local HMAC</text>
 
   <rect x="665" y="310" width="130" height="65" rx="8" fill="url(#agentGrad)" stroke="#2a9d8f" stroke-width="1"/>
   <text x="730" y="335" text-anchor="middle" font-size="11" font-weight="600" fill="#7ec8e3">Sentinel</text>
@@ -86,21 +86,21 @@
   <rect x="60" y="410" width="780" height="80" rx="10" fill="#0c4a6e" fill-opacity="0.3" stroke="#06b6d4" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="450" y="438" text-anchor="middle" font-size="14" font-weight="600" fill="#67e8f9">Spectrum Graph — Multi-Layered Knowledge Engine</text>
   <text x="450" y="458" text-anchor="middle" font-size="11" fill="#94a3b8">SQLite Relational · Dynamic Intent Weights · Temporal Decay · Anticipatory Needs</text>
-  <text x="450" y="478" text-anchor="middle" font-size="10" fill="#64748b">4 Tables: nodes · edges · intent_log · feedback | Closed-Loop EMA Momentum</text>
+  <text x="450" y="478" text-anchor="middle" font-size="10" fill="#64748b">Core records: nodes · edges · intent_log · feedback | Explicit-feedback EMA weights</text>
 
   <!-- Arrow down -->
   <polygon points="450,495 440,505 460,505" fill="url(#arrowGrad)"/>
 
   <!-- ═══ Layer 5: Sandbox + You-Port ═══ -->
   <rect x="60" y="510" width="375" height="75" rx="10" fill="#14532d" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="247" y="538" text-anchor="middle" font-size="13" font-weight="600" fill="#6ee7b7">Sandbox Prisms</text>
-  <text x="247" y="556" text-anchor="middle" font-size="11" fill="#94a3b8">WASM + Crypto Checkpoints</text>
-  <text x="247" y="573" text-anchor="middle" font-size="11" fill="#94a3b8">Auto-rollback · Side-effect Tracking</text>
+  <text x="247" y="538" text-anchor="middle" font-size="13" font-weight="600" fill="#6ee7b7">Native Action Policy</text>
+  <text x="247" y="556" text-anchor="middle" font-size="11" fill="#94a3b8">Allow-lists · Process-Local HMAC Records</text>
+  <text x="247" y="573" text-anchor="middle" font-size="11" fill="#94a3b8">Decision Bookkeeping · No Code Sandbox</text>
 
   <rect x="465" y="510" width="375" height="75" rx="10" fill="#7c2d12" fill-opacity="0.3" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="652" y="538" text-anchor="middle" font-size="13" font-weight="600" fill="#fcd34d">You-Port</text>
-  <text x="652" y="556" text-anchor="middle" font-size="11" fill="#94a3b8">Encrypted State Transfer</text>
-  <text x="652" y="573" text-anchor="middle" font-size="11" fill="#94a3b8">SHA-256 Integrity · Base64 Encoding</text>
+  <text x="652" y="538" text-anchor="middle" font-size="13" font-weight="600" fill="#fcd34d">Private Vault</text>
+  <text x="652" y="556" text-anchor="middle" font-size="11" fill="#94a3b8">AES-256-GCM Recovery Candidate</text>
+  <text x="652" y="573" text-anchor="middle" font-size="11" fill="#94a3b8">Validated Staging · Restart Restore</text>
 
   <!-- Arrow down -->
   <polygon points="450,590 440,600 460,600" fill="url(#arrowGrad)"/>
@@ -108,12 +108,12 @@
   <!-- ═══ Layer 6: Ollama ═══ -->
   <rect x="120" y="605" width="660" height="65" rx="10" fill="#0d2535" fill-opacity="0.6" stroke="#e76f51" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="450" y="632" text-anchor="middle" font-size="14" font-weight="600" fill="#f4a261">Ollama — Local LLM Inference</text>
-  <text x="450" y="654" text-anchor="middle" font-size="12" fill="#94a3b8">mistral · llama3 · phi3 · codellama · gemma2 · llava · llama3.2-vision — 100% On-Device</text>
+  <text x="450" y="654" text-anchor="middle" font-size="12" fill="#94a3b8">Private inference fixed to loopback · Remote opt-in is management-only</text>
 
   <!-- Side labels -->
   <text x="25" y="305" text-anchor="middle" font-size="9" fill="#4b5563" transform="rotate(-90,25,305)" letter-spacing="1">RUST BACKEND</text>
   <text x="880" y="305" text-anchor="middle" font-size="9" fill="#4b5563" transform="rotate(90,880,305)" letter-spacing="1">TAURI 2.0 IPC</text>
 
   <!-- Footer -->
-  <text x="450" y="700" text-anchor="middle" font-size="10" fill="#475569">Local-First · No Cloud · No Telemetry</text>
+  <text x="450" y="700" text-anchor="middle" font-size="10" fill="#475569">Local-First Core · Explicit Network Boundaries · No PrismOS Telemetry</text>
 </svg>

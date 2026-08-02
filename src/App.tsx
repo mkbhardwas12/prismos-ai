@@ -1,6 +1,6 @@
 // PrismOS-AI — Main Application Shell
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -11,6 +11,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import SpectrumExplorer from "./components/SpectrumExplorer";
 import SpectrumGraphView from "./components/SpectrumGraphView";
 import SandboxPanel from "./components/SandboxPanel";
+import ResearchPanel from "./components/ResearchPanel";
 import SpectralTimeline from "./components/SpectralTimeline";
 import DailyDashboard from "./components/DailyDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -18,10 +19,11 @@ import OnboardingWizard from "./components/OnboardingWizard";
 import SpotlightOverlay from "./components/SpotlightOverlay";
 import BrainWrapped from "./components/BrainWrapped";
 import { DEFAULT_SETTINGS } from "./lib/config";
+import { normalizeAgentActivity } from "./lib/agentActivity";
 import prismosIcon from "./assets/prismos-icon.svg";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "./types";
 
-type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard";
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard" | "research";
 
 /** Time-aware daily greeting based on hour of day */
 function getDailyGreeting(): string {
@@ -40,7 +42,7 @@ function App() {
   // ─── Multi-window: detect route hash to open a specific view ──
   const initialView = (() => {
     const hash = window.location.hash.replace("#", "");
-    const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline", "dashboard"];
+    const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline", "dashboard", "research"];
     if (validViews.includes(hash as View)) return hash as View;
     // Check for defaultView from settings
     try {
@@ -65,6 +67,7 @@ function App() {
   const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
   const [lastDebate, setLastDebate] = useState<DebateSummary | null>(null);
   const [liveAgentSteps, setLiveAgentSteps] = useState<AgentActivity[]>([]);
+  const activeActivityTaskRef = useRef<string | null>(null);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [startupSuggestions, setStartupSuggestions] = useState<ProactiveSuggestion[]>([]);
@@ -95,11 +98,16 @@ function App() {
           maxTokens: parsed.maxTokens ?? DEFAULT_SETTINGS.maxTokens,
           voiceInputEnabled: parsed.voiceInputEnabled ?? DEFAULT_SETTINGS.voiceInputEnabled,
           voiceOutputEnabled: parsed.voiceOutputEnabled ?? DEFAULT_SETTINGS.voiceOutputEnabled,
-          emailSummaryEnabled: parsed.emailSummaryEnabled ?? DEFAULT_SETTINGS.emailSummaryEnabled,
-          calendarEnabled: parsed.calendarEnabled ?? DEFAULT_SETTINGS.calendarEnabled,
-          financeEnabled: parsed.financeEnabled ?? DEFAULT_SETTINGS.financeEnabled,
+          // These integrations are intentionally disabled until their secrets,
+          // approved paths, and network disclosures have a non-WebView store.
+          // Rewriting the safe shape below also removes legacy plaintext IMAP
+          // credentials from localStorage during upgrade.
+          emailSummaryEnabled: false,
+          calendarEnabled: false,
+          financeEnabled: false,
           defaultView: parsed.defaultView ?? DEFAULT_SETTINGS.defaultView,
         };
+        localStorage.setItem("prismos-settings", JSON.stringify(merged));
         // Apply saved theme immediately
         document.documentElement.setAttribute("data-theme", merged.theme);
         return merged;
@@ -149,12 +157,12 @@ function App() {
 
   const checkOllama = useCallback(async () => {
     try {
-      const connected = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
+      const connected = await invoke<boolean>("check_local_inference_status");
       setOllamaConnected(connected);
     } catch {
       setOllamaConnected(false);
     }
-  }, [settings.ollamaUrl]);
+  }, []);
 
   // Fast reconnect probe while offline: the 30s baseline poll leaves the badge
   // saying "Offline" long after `ollama serve` comes up. While disconnected,
@@ -200,8 +208,8 @@ function App() {
     loadGraphStats();
     // Signal the SpectrumGraphView to re-fetch
     setGraphRefreshKey((k) => k + 1);
-    // Phase 2: keep live steps visible briefly, then clear
-    setTimeout(() => setLiveAgentSteps([]), 4000);
+    // Keep the completed decision trace in memory for inspection. Starting a
+    // new request, clearing the conversation, or dismissing the trace clears it.
   }, [loadAgents, loadNodes, loadGraphStats]);
 
   useEffect(() => {
@@ -218,28 +226,6 @@ function App() {
         setLoadingStatus("Checking Ollama...");
         await checkOllama();
 
-        // ── You-Port: Auto-restore previous session ──
-        setLoadingStatus("Checking saved state...");
-        try {
-          const hasSaved = await invoke<boolean>("has_saved_state");
-          if (hasSaved) {
-            setLoadingStatus("Restoring session...");
-            const resultJson = await invoke<string>("load_state");
-            const result: HandoffResult = JSON.parse(resultJson);
-            if (result.success) {
-              setToast({
-                message: `🔐 Restored from last session — ${result.nodes_count} nodes, ${result.edges_count} edges`,
-                visible: true,
-              });
-              await loadNodes();
-              await loadGraphStats();
-              setGraphRefreshKey((k) => k + 1);
-            }
-          }
-        } catch (e) {
-          console.error("You-Port restore failed:", e);
-        }
-
         setLoadingStatus("Ready!");
 
         // P1: Fetch proactive suggestions on startup (non-blocking)
@@ -253,21 +239,12 @@ function App() {
       }
     })();
 
-    // ── You-Port: Auto-save state on app close ──
-    const handleBeforeUnload = () => {
-      invoke("save_state").catch((e: unknown) =>
-        console.error("You-Port save failed:", e)
-      );
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
     const ollamaInterval = setInterval(checkOllama, 30000);
     // P2: Background proactive refresh every 5 minutes (daily proactive mode)
     const proactiveInterval = setInterval(fetchProactiveSuggestions, 5 * 60 * 1000);
     return () => {
       clearInterval(ollamaInterval);
       clearInterval(proactiveInterval);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [loadAgents, loadNodes, loadGraphStats, checkOllama, fetchProactiveSuggestions]);
 
@@ -282,18 +259,26 @@ function App() {
   // ── Phase 2: Listen for real-time agent-activity events from Rust backend ──
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
-    listen<AgentActivity>("agent-activity", (event) => {
-      setLiveAgentSteps((prev) => [...prev, event.payload]);
+    let disposed = false;
+    listen<unknown>("agent-activity", (event) => {
+      const activity = normalizeAgentActivity(event.payload);
+      if (!activity || activity.task_id !== activeActivityTaskRef.current) return;
+      // Keep a bounded event history. The activity feed coalesces these events
+      // into one live row per role and labels the retained count explicitly.
+      setLiveAgentSteps((prev) => [...prev, activity].slice(-120));
     }).then((fn) => {
-      unlistenFn = fn;
+      if (disposed) fn();
+      else unlistenFn = fn;
     });
     return () => {
+      disposed = true;
       if (unlistenFn) unlistenFn();
     };
   }, []);
 
   // Callback for MainView to clear live steps when starting a new intent
-  const clearLiveSteps = useCallback(() => {
+  const clearLiveSteps = useCallback((taskId?: string) => {
+    activeActivityTaskRef.current = taskId ?? null;
     setLiveAgentSteps([]);
   }, []);
 
@@ -355,7 +340,7 @@ function App() {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
-      const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline", "dashboard"];
+      const validViews: View[] = ["chat", "settings", "spectrum", "sandbox", "graph", "timeline", "dashboard", "research"];
       if (validViews.includes(detail as View)) {
         setView(detail as View);
       }
@@ -391,6 +376,8 @@ function App() {
         );
       case "sandbox":
         return <SandboxPanel />;
+      case "research":
+        return <ResearchPanel />;
       case "settings":
         return (
           <SettingsPanel

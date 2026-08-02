@@ -76,9 +76,9 @@ export default function ProactivePanel({
 }: ProactivePanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [suggestions, setSuggestions] = useState<ProactiveSuggestion[]>([]);
-  const [calendarFeed, setCalendarFeed] = useState<CalendarFeed | null>(null);
-  const [emailFeed, setEmailFeed] = useState<EmailFeed | null>(null);
-  const [financeFeed, setFinanceFeed] = useState<FinanceFeed | null>(null);
+  const [calendarFeed] = useState<CalendarFeed | null>(null);
+  const [emailFeed] = useState<EmailFeed | null>(null);
+  const [financeFeed] = useState<FinanceFeed | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -108,54 +108,8 @@ export default function ProactivePanel({
       }
     } catch { /* fallback to empty */ }
 
-    // 2. Calendar feed (if enabled)
-    try {
-      const raw = localStorage.getItem("prismos-settings");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.calendarEnabled && s.calendarPath) {
-          const json = await invoke<string>("fetch_calendar_summary", {
-            calendarPath: s.calendarPath,
-            ollamaUrl: s.ollamaUrl,
-          });
-          if (mountedRef.current) setCalendarFeed(JSON.parse(json));
-        }
-      }
-    } catch { /* non-critical */ }
-
-    // 3. Email feed (if enabled)
-    try {
-      const raw = localStorage.getItem("prismos-settings");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.emailSummaryEnabled && s.emailImapServer && s.emailUsername && s.emailPassword) {
-          const json = await invoke<string>("fetch_email_summary", {
-            imapServer: s.emailImapServer,
-            imapPort: s.emailImapPort || 993,
-            username: s.emailUsername,
-            password: s.emailPassword,
-            useTls: s.emailUseTls !== false,
-            ollamaUrl: s.ollamaUrl,
-          });
-          if (mountedRef.current) setEmailFeed(JSON.parse(json));
-        }
-      }
-    } catch { /* non-critical */ }
-
-    // 4. Finance feed (if enabled)
-    try {
-      const raw = localStorage.getItem("prismos-settings");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.financeEnabled && s.financeTickers && s.financeTickers.length > 0) {
-          const json = await invoke<string>("fetch_finance_summary", {
-            tickers: s.financeTickers,
-            ollamaUrl: s.ollamaUrl,
-          });
-          if (mountedRef.current) setFinanceFeed(JSON.parse(json));
-        }
-      }
-    } catch { /* non-critical */ }
+    // Optional email/calendar/market feeds never run from this background
+    // refresh in this build. Each requires a future explicit consent boundary.
 
     if (mountedRef.current) {
       setLastRefresh(new Date());

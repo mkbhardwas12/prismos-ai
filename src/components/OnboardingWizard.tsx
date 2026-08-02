@@ -29,7 +29,7 @@ const POPULAR_MODELS = MODEL_REGISTRY
     desc: `${m.isDefault ? "🏆 Recommended — " : ""}${m.desc}`,
     size: m.size,
     capabilities: m.capabilities,
-    ramMin: m.ramMin,
+    suggestedRamGB: m.suggestedRamGB,
   }));
 
 export default function OnboardingWizard({
@@ -50,12 +50,12 @@ export default function OnboardingWizard({
   const checkOllama = useCallback(async () => {
     setChecking(true);
     try {
-      const ok = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl });
+      const ok = await invoke<boolean>("check_local_inference_status");
       setOllamaOk(ok);
       if (ok) {
         // Also load available models
         try {
-          const result = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
+          const result = await invoke<string>("list_local_inference_models");
           setModels(JSON.parse(result));
         } catch { /* ignore */ }
         setTimeout(() => setStep(2), 600);
@@ -65,7 +65,7 @@ export default function OnboardingWizard({
     } finally {
       setChecking(false);
     }
-  }, [settings.ollamaUrl]);
+  }, []);
 
   useEffect(() => {
     // Auto-check on mount
@@ -78,16 +78,15 @@ export default function OnboardingWizard({
     setPullProgress("Starting download…");
     try {
       const result = await invoke<string>("pull_ollama_model", {
-        modelName: selectedModel,
-        ollamaUrl: settings.ollamaUrl,
+        model: selectedModel,
       });
+      const listResult = await invoke<string>("list_local_inference_models");
+      const localModels: OllamaModel[] = JSON.parse(listResult);
+      setModels(localModels);
+      const installed = localModels.find((item) => item.name === selectedModel || item.name === `${selectedModel}:latest`);
+      if (!installed) throw new Error("Downloaded model is not present on the private local inference endpoint.");
+      onSettingsChange({ ...settings, defaultModel: installed.name });
       setPullProgress(`✅ ${result}`);
-      onSettingsChange({ ...settings, defaultModel: selectedModel });
-      // Refresh model list
-      try {
-        const listResult = await invoke<string>("list_ollama_models", { ollamaUrl: settings.ollamaUrl });
-        setModels(JSON.parse(listResult));
-      } catch { /* ignore */ }
       setTimeout(() => setStep(3), 800);
     } catch (e) {
       setPullProgress(`❌ Failed: ${e}`);
@@ -96,7 +95,10 @@ export default function OnboardingWizard({
     }
   }, [selectedModel, settings, onSettingsChange]);
 
-  const hasModel = models.some((m) => m.name.startsWith(selectedModel));
+  const installedSelection = models.find((model) =>
+    model.name === selectedModel || model.name === `${selectedModel}:latest`
+  );
+  const hasModel = Boolean(installedSelection);
 
   const handleFinish = useCallback(() => {
     localStorage.setItem("prismos-onboarding-done", "true");
@@ -130,26 +132,44 @@ export default function OnboardingWizard({
             <h2>Step 1 — Connect to Ollama</h2>
             <p>
               PrismOS-AI uses <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a> for
-              100% local AI inference. Make sure it's running on your machine.
+              private inference through a fixed <code>http://localhost:11434</code> client route.
+              This setup check does not use the editable model-management URL.
             </p>
 
             <div className="onboarding-url-row">
-              <label>Ollama URL</label>
+              <label htmlFor="onboarding-private-inference-url">Private inference URL</label>
               <input
+                id="onboarding-private-inference-url"
+                type="text"
+                value="http://localhost:11434"
+                className="onboarding-input"
+                readOnly
+              />
+            </div>
+
+            <div className="onboarding-url-row">
+              <label htmlFor="onboarding-management-url">Model management URL</label>
+              <input
+                id="onboarding-management-url"
                 type="text"
                 value={settings.ollamaUrl}
                 onChange={(e) => onSettingsChange({ ...settings, ollamaUrl: e.target.value })}
                 className="onboarding-input"
               />
             </div>
+            <p>
+              The management URL is saved for explicit status and model-management operations only;
+              it cannot redirect chat, document, image, or Project Knowledge prompts. A non-loopback
+              management origin also requires the documented environment opt-in and HTTPS.
+            </p>
 
             <div className="onboarding-status">
               {checking ? (
                 <span className="status-checking">🔄 Checking connection…</span>
               ) : ollamaOk ? (
-                <span className="status-ok">✅ Ollama is running!</span>
+                <span className="status-ok">✅ Fixed-loopback Ollama is running!</span>
               ) : (
-                <span className="status-fail">❌ Ollama not detected — make sure it's running</span>
+                <span className="status-fail">❌ Fixed-loopback Ollama not detected — make sure it is running locally</span>
               )}
             </div>
 
@@ -193,6 +213,10 @@ export default function OnboardingWizard({
 
             <div className="onboarding-popular">
               <div className="onboarding-section-label">Recommended Models</div>
+              <p className="onboarding-model-note">
+                Static Ollama catalog suggestions with heuristic memory budgets; verify the tag,
+                license, runtime version, and performance on your hardware before sensitive use.
+              </p>
               <div className="onboarding-model-grid">
                 {POPULAR_MODELS.map((m) => (
                   <button
@@ -229,7 +253,7 @@ export default function OnboardingWizard({
                 <button
                   className="onboarding-btn primary"
                   onClick={() => {
-                    onSettingsChange({ ...settings, defaultModel: selectedModel });
+                    onSettingsChange({ ...settings, defaultModel: installedSelection!.name });
                     setStep(3);
                   }}
                 >
@@ -250,8 +274,8 @@ export default function OnboardingWizard({
             <div className="onboarding-step-icon">🚀</div>
             <h2>Step 3 — Try Your First Intent</h2>
             <p>
-              PrismOS-AI uses <strong>intents</strong> — natural language commands that five AI agents
-              collaborate on. Try one of these or write your own:
+              PrismOS-AI turns an <strong>intent</strong> into one or more bounded, sequential
+              model calls—such as plan, build, judge, and optional refine. Try one of these or write your own:
             </p>
 
             <div className="onboarding-intent-chips">

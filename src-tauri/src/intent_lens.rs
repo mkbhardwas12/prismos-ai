@@ -38,30 +38,38 @@ impl IntentLens {
 
     /// Classify intent type using keyword-based heuristics
     fn classify_intent(&self, lower: &str) -> IntentType {
-        // Query patterns
-        let query_kw = [
-            "search", "find", "what", "how", "why", "when", "where", "who",
-            "tell me", "explain", "describe", "show", "look up", "?",
-        ];
         // Create patterns
         let create_kw = [
-            "create", "make", "new", "add", "write", "build", "generate",
-            "compose", "draft", "start",
+            "create", "make", "new", "add", "write", "build", "generate", "compose", "draft",
+            "start",
         ];
         // Analyze patterns
         let analyze_kw = [
-            "analyze", "compare", "review", "evaluate", "assess", "examine",
-            "summarize", "break down", "investigate",
+            "analyze",
+            "compare",
+            "review",
+            "evaluate",
+            "assess",
+            "examine",
+            "summarize",
+            "break down",
+            "investigate",
         ];
         // Connect patterns
         let connect_kw = [
-            "connect", "link", "relate", "merge", "combine", "associate",
-            "map", "join", "correlate",
+            "connect",
+            "link",
+            "relate",
+            "merge",
+            "combine",
+            "associate",
+            "map",
+            "join",
+            "correlate",
         ];
         // System patterns
         let system_kw = [
-            "settings", "config", "system", "status", "version", "help",
-            "reset", "clear", "update",
+            "settings", "config", "system", "status", "version", "help", "reset", "clear", "update",
         ];
 
         if system_kw.iter().any(|k| lower.contains(k)) {
@@ -72,8 +80,6 @@ impl IntentLens {
             IntentType::Analyze
         } else if connect_kw.iter().any(|k| lower.contains(k)) {
             IntentType::Connect
-        } else if query_kw.iter().any(|k| lower.contains(k)) {
-            IntentType::Query
         } else {
             IntentType::Query // Default to query
         }
@@ -84,17 +90,15 @@ impl IntentLens {
     /// individual stop-word-filtered tokens.
     fn extract_entities(&self, input: &str) -> Vec<String> {
         let stop_words: &[&str] = &[
-            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-            "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "shall", "can", "need", "dare", "ought",
-            "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
-            "as", "into", "about", "like", "through", "after", "over", "between",
-            "out", "against", "during", "without", "before", "under", "around",
-            "among", "i", "me", "my", "we", "our", "you", "your", "it", "its",
-            "this", "that", "these", "those", "what", "how", "please", "and",
-            "or", "but", "not", "so", "if", "then", "than", "up", "just", "also",
-            "tell", "give", "show", "help", "make", "let", "get", "know", "think",
-            "want", "see", "look", "some", "any", "all", "each", "every", "more",
+            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has",
+            "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+            "shall", "can", "need", "dare", "ought", "used", "to", "of", "in", "for", "on", "with",
+            "at", "by", "from", "as", "into", "about", "like", "through", "after", "over",
+            "between", "out", "against", "during", "without", "before", "under", "around", "among",
+            "i", "me", "my", "we", "our", "you", "your", "it", "its", "this", "that", "these",
+            "those", "what", "how", "please", "and", "or", "but", "not", "so", "if", "then",
+            "than", "up", "just", "also", "tell", "give", "show", "help", "make", "let", "get",
+            "know", "think", "want", "see", "look", "some", "any", "all", "each", "every", "more",
             "much", "many", "very", "really", "here", "there", "when", "where",
         ];
 
@@ -127,15 +131,19 @@ impl IntentLens {
                 }
 
                 // Allow connector words mid-phrase
-                let is_connector = ["of", "and", "for", "in", "the", "to", "with"].contains(&next_lower.as_str());
-                let is_significant = next_lower.len() >= 3 && !stop_words.contains(&next_lower.as_str());
+                let is_connector =
+                    ["of", "and", "for", "in", "the", "to", "with"].contains(&next_lower.as_str());
+                let is_significant =
+                    next_lower.len() >= 3 && !stop_words.contains(&next_lower.as_str());
 
                 if is_significant {
                     phrase_parts.push(next_clean.to_string());
                     j += 1;
                 } else if is_connector && j + 1 < words.len() {
                     // Peek ahead: only include connector if followed by significant word
-                    let after = words[j + 1].trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+                    let after = words[j + 1]
+                        .trim_matches(|c: char| !c.is_alphanumeric())
+                        .to_lowercase();
                     if after.len() >= 3 && !stop_words.contains(&after.as_str()) {
                         phrase_parts.push(next_clean.to_string());
                         j += 1;

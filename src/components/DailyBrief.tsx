@@ -124,9 +124,9 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
   const [error, setError] = useState(false);
   const [graphSuggestions, setGraphSuggestions] = useState<ProactiveSuggestion[]>([]);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
-  const [emailSummary, setEmailSummary] = useState<EmailSummaryData | null>(null);
-  const [calendarSummary, setCalendarSummary] = useState<CalendarSummaryData | null>(null);
-  const [financeSummary, setFinanceSummary] = useState<FinanceSummaryData | null>(null);
+  const [emailSummary] = useState<EmailSummaryData | null>(null);
+  const [calendarSummary] = useState<CalendarSummaryData | null>(null);
+  const [financeSummary] = useState<FinanceSummaryData | null>(null);
 
   const { emoji, greeting, period } = getGreeting();
   const isMorning = period === "morning" || period === "night";
@@ -154,60 +154,9 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
         setGraphSuggestions(generateGraphSuggestions([], []));
       }
 
-      // Fetch email summary if enabled in settings (credentials from localStorage)
-      try {
-        const settingsRaw = localStorage.getItem("prismos-settings");
-        if (settingsRaw) {
-          const s = JSON.parse(settingsRaw);
-          if (s.emailSummaryEnabled && s.emailImapServer && s.emailUsername && s.emailPassword) {
-            const emailJson = await invoke<string>("fetch_email_summary", {
-              imapServer: s.emailImapServer,
-              imapPort: s.emailImapPort || 993,
-              username: s.emailUsername,
-              password: s.emailPassword,
-              useTls: s.emailUseTls !== false,
-              ollamaUrl: s.ollamaUrl,
-            });
-            setEmailSummary(JSON.parse(emailJson));
-          }
-        }
-      } catch (e) {
-        console.warn("Email summary fetch failed (non-critical):", e);
-      }
-
-      // Fetch calendar summary if enabled in settings
-      try {
-        const settingsRaw = localStorage.getItem("prismos-settings");
-        if (settingsRaw) {
-          const s = JSON.parse(settingsRaw);
-          if (s.calendarEnabled && s.calendarPath) {
-            const calJson = await invoke<string>("fetch_calendar_summary", {
-              calendarPath: s.calendarPath,
-              ollamaUrl: s.ollamaUrl,
-            });
-            setCalendarSummary(JSON.parse(calJson));
-          }
-        }
-      } catch (e) {
-        console.warn("Calendar summary fetch failed (non-critical):", e);
-      }
-
-      // Fetch finance summary if enabled in settings
-      try {
-        const settingsRaw = localStorage.getItem("prismos-settings");
-        if (settingsRaw) {
-          const s = JSON.parse(settingsRaw);
-          if (s.financeEnabled && s.financeTickers && s.financeTickers.length > 0) {
-            const finJson = await invoke<string>("fetch_finance_summary", {
-              tickers: s.financeTickers,
-              ollamaUrl: s.ollamaUrl,
-            });
-            setFinanceSummary(JSON.parse(finJson));
-          }
-        }
-      } catch (e) {
-        console.warn("Finance summary fetch failed (non-critical):", e);
-      }
+      // Email, calendar, and market-data feeds are intentionally not refreshed
+      // in the background until each has private configuration storage and an
+      // explicit network-consent workflow.
     } catch (e) {
       console.error("Failed to load daily brief:", e);
       setError(true);

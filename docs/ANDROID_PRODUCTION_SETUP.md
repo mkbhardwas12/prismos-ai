@@ -1,6 +1,11 @@
 # Android Production Setup for PrismOS-AI
 
-> Complete guide for preparing Android builds for Google Play Store release
+> [!WARNING]
+> **Planning document; the current Android target, Google Play submission, and
+> release claims below have not been validated end to end.** Do not submit the
+> sample privacy or store copy as-is. Revalidate browser/WebView speech behavior,
+> model downloads, permissions, signing, and every network boundary for the exact
+> artifact and target OS.
 
 ---
 
@@ -115,8 +120,8 @@ android {
         applicationId "com.prismos.app"
         minSdk 26
         targetSdk 33
-        versionCode 1
-        versionName "0.5.1"
+        versionCode 2
+        versionName "0.5.2"
 
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
@@ -425,42 +430,52 @@ Content:
 ```
 Privacy Policy for PrismOS-AI
 
-Last updated: March 2026
+Last updated: August 1, 2026
 
-PrismOS-AI is a local-first application. We collect NO data.
+The canonical source notice is the linked PRIVACY.md file. This abbreviated
+planning excerpt does not replace exact-artifact review.
 
-DATA COLLECTION: None
-- We do not collect, store, or transmit any personal data
-- All AI processing happens on your device
-- No analytics, no telemetry, no tracking
+PrismOS-AI is a local-first application. The app does not include analytics,
+advertising, or telemetry. Core chat inference is restricted to a fixed-loopback
+Ollama endpoint.
 
-DATA SHARING: None
-- We do not share any data with third parties
-- Your conversations, files, and knowledge graph never leave your device
+NETWORK BOUNDARY
+- Model downloads require network access
+- Explicitly enabled remote features may transmit data to the selected provider
+- Store, operating-system, and distribution services may process their own data
+- Confirm these statements against the exact submitted build and providers
+
+LOCAL DATA
+- Conversations and the knowledge graph are stored in the app's local database
+- The live database is permission-restricted but is not encrypted at rest
+- Private Vault recovery candidates use authenticated encryption and require a clean-profile restore drill before reliance
 
 PERMISSIONS:
-- Internet: Required only for local Ollama connection (localhost)
-- Microphone: For voice input (processed locally)
-- Storage: For document analysis (processed locally)
-- Camera: For image capture (processed locally)
+- Internet: Loopback Ollama, model downloads, platform speech, and explicit remote-management opt-in
+- Microphone: Optional browser/WebView speech input; provider network behavior varies
+- Storage: User-selected attachments; analysis uses the documented parser and inference boundaries
+- Camera: User-initiated image capture; analysis uses fixed-loopback inference
 
 CONTACT: https://github.com/mkbhardwas12/prismos-ai/issues
 
-Your data is yours alone.
+Review this notice for every release and target jurisdiction; local-first design
+does not by itself establish legal or app-store compliance.
 ```
 
 ### Data Safety Section
 
-**Data Collection**: No
-
-**Data Sharing**: No
+**Data Collection / Sharing**: Determine from the exact submitted build,
+configured providers, store SDKs, crash reporting, model downloads, and optional
+remote features. Do not answer “No” solely because core chat is loopback.
 
 **Security Practices**:
-- ✅ Data encrypted in transit: N/A (local only)
-- ✅ Data encrypted at rest: Yes (AES-256-GCM)
+- ✅ Core inference transport: fixed loopback
+- ⚠️ Live database: permission-restricted, not encrypted at rest
+- ⚠️ Private Vault recovery candidates: AES-256-GCM authenticated encryption; clean-profile restore drill required before reliance
 - ✅ Users can request data deletion: Yes (via app settings)
-- ✅ Committed to Google Play Families Policy: Yes
-- ✅ Independent security review: No
+- ⚠️ Google Play Families Policy: Review applicability and verify every
+  requirement before making a declaration
+- ⚠️ Independent security review: not represented by this planning guide
 
 ### App Content
 
@@ -473,11 +488,13 @@ Your data is yours alone.
 **COVID-19 Contact Tracing**: No
 
 **Data Safety Declarations**:
-- No data collected
 - No ads
+- Determine collection and sharing answers from the exact submitted build and
+  every configured provider; core loopback inference is not sufficient evidence
+  for a blanket “No data collected” declaration
 
 **Content Rating**:
-Complete questionnaire (should receive "Everyone" rating)
+Complete the questionnaire accurately; Google Play determines the rating.
 
 ---
 
@@ -492,42 +509,53 @@ PrismOS-AI
 
 **Short description** (max 80 chars):
 ```
-Private AI assistant. 100% local. No cloud. Your data stays on your device.
+Local-first AI with fixed-loopback chat and encrypted recovery exports.
 ```
 
 **Full description** (max 4000 chars):
 ```
-PrismOS-AI — Local-First Agentic Personal AI Operating System
+PrismOS-AI — Local-First Desktop Assistant with Bounded Sequential Workflows
 
-Your private AI assistant that runs entirely on your device. No cloud, no tracking, no data sharing. Ever.
+Your local-first AI assistant. Core chat uses fixed-loopback Ollama; model
+downloads and explicitly enabled remote features use the network.
 
 ✨ KEY FEATURES
 
-• 8 Collaborative AI Agents
-  Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, and specialized Email, Calendar, and Finance keepers work together to understand and respond to your requests.
+• 5 Core Software Roles
+  Orchestrator, Memory Keeper, Reasoner, Tool Smith, and Sentinel participate in
+  a bounded sequential plan → build → judge → refine workflow. Email, Calendar,
+  and Finance integrations are not active in this release.
 
-• 7D Spectrum Graph Knowledge Memory
-  Your conversations and knowledge are stored in a persistent, multi-dimensional graph that grows with you.
+• Spectrum Graph Knowledge Memory
+  Approved knowledge, successful conversations, and explicit feedback are stored in a persistent local SQLite graph.
 
-• Local Vision Analysis
-  Analyze images using local vision models. No images sent to the cloud.
+• Fixed-Loopback Vision Analysis
+  Analyze images through the loopback Ollama inference boundary.
 
-• Document Analysis
-  Upload and analyze PDF, DOCX, PPTX, XLSX documents entirely offline.
+• Bounded One-Off Document Analysis
+  Analyze bounded DOCX, PPTX, and allowlisted UTF-8 text/code, including
+  CSV/TSV, through the fixed-loopback core. PDF extraction is disabled until
+  it can be safely resource-isolated; convert PDFs to UTF-8 text. XLSX and
+  legacy .xls fail closed before parsing; export spreadsheets as CSV/TSV.
+  One-off attachments remain ephemeral. Project Knowledge is a separate,
+  approval-gated UTF-8 text/code index.
 
 • Voice Input & Output
-  Hands-free interaction using local speech recognition.
+  Browser/WebView speech services when supported; provider-specific network
+  behavior must be disclosed for the submitted platform.
 
-• Fully Offline
-  All AI processing happens on-device. Zero telemetry. Zero external servers.
+• Offline-Capable Core
+  After required models are installed, core inference uses fixed-loopback Ollama.
 
 🔒 PRIVACY FIRST
 
-• 100% Local: All processing on your device
-• No Cloud: Zero external API calls
-• No Tracking: No telemetry, no analytics
+• Local-First Core: Chat inference is restricted to fixed loopback
+• Explicit Egress: Downloads, platform speech, and remote model management change the boundary
+• No PrismOS Telemetry: No first-party analytics or application telemetry endpoint
 • No Accounts: No sign-up, no login
-• Encrypted Storage: Your data is yours alone
+• Recovery Candidates: Private Vault packages use authenticated encryption; the
+  live SQLite database is not encrypted at rest, and a clean-profile restore drill
+  is required before reliance
 
 📋 REQUIREMENTS
 
@@ -541,7 +569,7 @@ MIT License - https://github.com/mkbhardwas12/prismos-ai
 
 ⚠️ IMPORTANT NOTE
 
-Android version currently has experimental functionality. Full Ollama integration is in development. Desktop version has complete feature set.
+Android functionality remains experimental and has not been validated end to end. Desktop is the primary implemented target, with limitations documented in the README, security policy, and release guidance.
 
 📧 SUPPORT
 
@@ -584,7 +612,7 @@ convert icons/icon.png -resize 512x512 playstore-icon.png
 
 **Template:**
 - Background: Gradient or solid color matching brand
-- Text: "PrismOS-AI — Local-First AI OS"
+- Text: "PrismOS-AI — Local-First Desktop Assistant"
 - Visual: App screenshot or icon
 
 ### Screenshots
@@ -624,7 +652,7 @@ convert icons/icon.png -resize 512x512 playstore-icon.png
 4. Add release notes:
 
 ```
-PrismOS-AI v0.5.1 — Internal Test Build
+PrismOS-AI v0.5.2 — Internal Test Build
 
 Features to test:
 • Intent Console input and response
@@ -646,6 +674,10 @@ Please report bugs via GitHub Issues.
 
 ### Production Track
 
+> **Placeholder only:** this repository does not document a verified Android
+> production release. Replace the text below only after testing the exact signed
+> artifact, providers, permissions, privacy behavior, and restore workflow.
+
 After testing is complete:
 
 1. Play Console → Production
@@ -654,22 +686,23 @@ After testing is complete:
 4. Release notes:
 
 ```
-PrismOS-AI v0.5.1 — Initial Release
+PrismOS-AI — Placeholder Android Release Notes
 
-Your private AI operating system that runs entirely on your device.
+Local-first AI with fixed-loopback core inference.
 
 NEW:
-• 8 collaborative AI agents
-• 7D Spectrum Graph knowledge memory
-• Local vision and document analysis
+• 5 core software roles in a bounded sequential workflow
+• Persistent local SQLite graph memory
+• Fixed-loopback vision and document analysis
 • Voice input and output
-• Fully offline — zero cloud dependencies
+• Offline-capable core after required models are installed
 
 PRIVACY:
-• 100% local processing
-• No data collection
-• No telemetry
-• Your data never leaves your device
+• Core chat restricted to fixed loopback
+• Optional downloads and remote features have explicit egress
+• No first-party PrismOS application telemetry
+• Encrypted Private Vault recovery candidates; live database is not encrypted at
+  rest, and a clean-profile restore drill is required before reliance
 
 REQUIREMENTS:
 • Android 8.0+
@@ -748,7 +781,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.18.1
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

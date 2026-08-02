@@ -39,12 +39,12 @@
 
   <!-- Title -->
   <text x="480" y="38" text-anchor="middle" font-size="20" font-weight="800" fill="url(#titleGrad)" filter="url(#glow)">PrismOS-AI — System Architecture</text>
-  <text x="480" y="56" text-anchor="middle" font-size="11" fill="#64748b" font-weight="500">v0.5.1 · 100% Local-First</text>
+  <text x="480" y="56" text-anchor="middle" font-size="11" fill="#64748b" font-weight="500">v0.5.2 · Local-First Core · Explicit Network Boundaries</text>
 
   <!-- ═══ FRONTEND LAYER ═══ -->
   <rect x="30" y="72" width="900" height="158" rx="12" fill="#0f172a" stroke="#06b6d4" stroke-width="1.3" filter="url(#s)"/>
   <text x="50" y="93" font-size="12" font-weight="700" fill="#06b6d4" letter-spacing="1.8">FRONTEND</text>
-  <text x="870" y="93" text-anchor="end" font-size="10" fill="#64748b">React 18 · TypeScript 5.5 · Vite 5.4 · 18 Components</text>
+  <text x="870" y="93" text-anchor="end" font-size="10" fill="#64748b">React 18.3 · TypeScript 5.5 · Vite 8.2</text>
 
   <!-- Row 1: Core Views -->
   <rect x="50" y="106" width="128" height="42" rx="8" fill="#164e63" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.8"/>
@@ -53,11 +53,11 @@
 
   <rect x="188" y="106" width="128" height="42" rx="8" fill="#164e63" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.8"/>
   <text x="252" y="124" text-anchor="middle" font-size="10" font-weight="700" fill="#a5f3fc">Spectrum Graph</text>
-  <text x="252" y="138" text-anchor="middle" font-size="8" fill="#64748b">7D Force-Directed Viz</text>
+  <text x="252" y="138" text-anchor="middle" font-size="8" fill="#64748b">Force-Directed Graph Viz</text>
 
   <rect x="326" y="106" width="118" height="42" rx="8" fill="#164e63" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.8"/>
-  <text x="385" y="124" text-anchor="middle" font-size="10" font-weight="700" fill="#a5f3fc">Sandbox Prisms</text>
-  <text x="385" y="138" text-anchor="middle" font-size="8" fill="#64748b">WASM Execution</text>
+  <text x="385" y="124" text-anchor="middle" font-size="10" font-weight="700" fill="#a5f3fc">Action Policy</text>
+  <text x="385" y="138" text-anchor="middle" font-size="8" fill="#64748b">Native Policy Records</text>
 
   <rect x="454" y="106" width="118" height="42" rx="8" fill="#164e63" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.8"/>
   <text x="513" y="124" text-anchor="middle" font-size="10" font-weight="700" fill="#a5f3fc">Timeline</text>
@@ -69,7 +69,7 @@
 
   <rect x="730" y="106" width="180" height="42" rx="8" fill="#164e63" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.8"/>
   <text x="820" y="124" text-anchor="middle" font-size="10" font-weight="700" fill="#a5f3fc">ProactivePanel</text>
-  <text x="820" y="138" text-anchor="middle" font-size="8" fill="#64748b">Live Sidebar Feeds</text>
+  <text x="820" y="138" text-anchor="middle" font-size="8" fill="#64748b">Local Graph Insights</text>
 
   <!-- Row 2: Phase 3-5 Features -->
   <rect x="50" y="158" width="115" height="32" rx="6" fill="#312e81" fill-opacity="0.3" stroke="#a78bfa" stroke-width="0.6"/>
@@ -97,38 +97,38 @@
   <!-- Arrows down from frontend -->
   <polygon points="440,230 480,244 520,230" fill="#06b6d4" opacity="0.4"/>
   <rect x="140" y="244" width="680" height="30" rx="7" fill="#1e293b" stroke="#475569" stroke-width="0.8"/>
-  <text x="480" y="264" text-anchor="middle" font-size="12" font-weight="600" fill="#94a3b8">83 Tauri 2.0 IPC Commands — invoke() · emit() · listen()</text>
+  <text x="480" y="264" text-anchor="middle" font-size="12" font-weight="600" fill="#94a3b8">Typed Tauri 2.0 IPC Boundary — invoke() · emit() · listen()</text>
   <!-- Arrows down to backend -->
   <polygon points="440,274 480,290 520,274" fill="#10b981" opacity="0.4"/>
 
   <!-- ═══ RUST BACKEND LAYER ═══ -->
   <rect x="30" y="290" width="900" height="250" rx="12" fill="#0f172a" stroke="#10b981" stroke-width="1.3" filter="url(#s)"/>
   <text x="50" y="312" font-size="12" font-weight="700" fill="#10b981" letter-spacing="1.8">RUST BACKEND</text>
-  <text x="870" y="312" text-anchor="end" font-size="10" fill="#64748b">17 Modules · Edition 2021 · Async Tokio</text>
+  <text x="870" y="312" text-anchor="end" font-size="10" fill="#64748b">Rust · Edition 2021 · Async Tokio</text>
 
   <!-- Core Engine Boxes -->
   <rect x="50" y="325" width="265" height="65" rx="9" fill="#064e3b" fill-opacity="0.35" stroke="#34d399" stroke-width="0.9"/>
   <text x="182" y="348" text-anchor="middle" font-size="13" font-weight="700" fill="#6ee7b7">Refractive Core™</text>
-  <text x="182" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">Intent → 8-Agent Pipeline → Graph → Response</text>
-  <text x="182" y="378" text-anchor="middle" font-size="8" fill="#64748b">refractive_core.rs · langgraph_collab.rs</text>
+  <text x="182" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">Intent → Sequential Goal Loop → Graph → Response</text>
+  <text x="182" y="378" text-anchor="middle" font-size="8" fill="#64748b">refractive_core.rs · agents/langgraph_workflow.rs</text>
 
   <rect x="325" y="325" width="200" height="65" rx="9" fill="#7c2d12" fill-opacity="0.3" stroke="#f59e0b" stroke-width="0.9"/>
   <text x="425" y="348" text-anchor="middle" font-size="13" font-weight="700" fill="#fcd34d">Ollama Bridge</text>
-  <text x="425" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">LLM + Vision Streaming</text>
+  <text x="425" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">LLM + Vision Requests</text>
   <text x="425" y="378" text-anchor="middle" font-size="8" fill="#64748b">ollama_bridge.rs · smart_router.rs</text>
 
   <rect x="535" y="325" width="180" height="65" rx="9" fill="#1e1b4b" fill-opacity="0.4" stroke="#818cf8" stroke-width="0.9"/>
   <text x="625" y="348" text-anchor="middle" font-size="13" font-weight="700" fill="#a5b4fc">Security Layer</text>
-  <text x="625" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">7-Layer Defense-in-Depth</text>
-  <text x="625" y="378" text-anchor="middle" font-size="8" fill="#64748b">audit_log.rs · secure_enclave.rs</text>
+  <text x="625" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">Policy · Audit · Encrypted Exports</text>
+  <text x="625" y="378" text-anchor="middle" font-size="8" fill="#64748b">audit_log.rs · private_vault.rs</text>
 
   <rect x="725" y="325" width="185" height="65" rx="9" fill="#0e7490" fill-opacity="0.3" stroke="#22d3ee" stroke-width="0.9"/>
-  <text x="817" y="348" text-anchor="middle" font-size="13" font-weight="700" fill="#67e8f9">Document RAG</text>
-  <text x="817" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">Chunking + TF-IDF Retrieval</text>
-  <text x="817" y="378" text-anchor="middle" font-size="8" fill="#64748b">doc_chunker.rs · file_indexer.rs</text>
+  <text x="817" y="348" text-anchor="middle" font-size="13" font-weight="700" fill="#67e8f9">Attachment RAG</text>
+  <text x="817" y="363" text-anchor="middle" font-size="9" fill="#94a3b8">DOCX/PPTX + UTF-8/CSV/TSV</text>
+  <text x="817" y="378" text-anchor="middle" font-size="8" fill="#64748b">doc_chunker.rs · lib.rs</text>
 
-  <!-- 8 Agents Row -->
-  <text x="50" y="410" font-size="10" font-weight="700" fill="#38bdf8" letter-spacing="1">8 AI AGENTS</text>
+  <!-- Five core roles plus sequential workflow stages -->
+  <text x="50" y="410" font-size="10" font-weight="700" fill="#38bdf8" letter-spacing="1">5 CORE ROLES + SEQUENTIAL WORKFLOW STAGES</text>
 
   <rect x="50" y="418" width="100" height="40" rx="6" fill="#0c4a6e" fill-opacity="0.4" stroke="#38bdf8" stroke-width="0.7"/>
   <text x="100" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#7dd3fc">Orchestrator</text>
@@ -144,39 +144,39 @@
 
   <rect x="364" y="418" width="90" height="40" rx="6" fill="#0c4a6e" fill-opacity="0.4" stroke="#38bdf8" stroke-width="0.7"/>
   <text x="409" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#7dd3fc">ToolSmith</text>
-  <text x="409" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">WASM sandbox</text>
+  <text x="409" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Policy checks</text>
 
   <rect x="462" y="418" width="90" height="40" rx="6" fill="#0c4a6e" fill-opacity="0.4" stroke="#38bdf8" stroke-width="0.7"/>
   <text x="507" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#7dd3fc">Sentinel</text>
   <text x="507" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Security guard</text>
 
   <rect x="560" y="418" width="110" height="40" rx="6" fill="#312e81" fill-opacity="0.4" stroke="#a78bfa" stroke-width="0.7"/>
-  <text x="615" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#c4b5fd">EmailKeeper</text>
-  <text x="615" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Inbox monitoring</text>
+  <text x="615" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#c4b5fd">Plan Stage</text>
+  <text x="615" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Set criteria</text>
 
   <rect x="678" y="418" width="118" height="40" rx="6" fill="#312e81" fill-opacity="0.4" stroke="#a78bfa" stroke-width="0.7"/>
-  <text x="737" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#c4b5fd">CalendarKeeper</text>
-  <text x="737" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Schedule awareness</text>
+  <text x="737" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#c4b5fd">Build Stage</text>
+  <text x="737" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Draft answer</text>
 
   <rect x="804" y="418" width="106" height="40" rx="6" fill="#312e81" fill-opacity="0.4" stroke="#a78bfa" stroke-width="0.7"/>
-  <text x="857" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#c4b5fd">FinanceKeeper</text>
-  <text x="857" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Portfolio tracking</text>
+  <text x="857" y="435" text-anchor="middle" font-size="9" font-weight="700" fill="#c4b5fd">Judge / Refine</text>
+  <text x="857" y="450" text-anchor="middle" font-size="7.5" fill="#64748b">Bounded loop</text>
 
   <!-- Sub-systems row -->
   <rect x="50" y="470" width="180" height="30" rx="6" fill="#0e7490" fill-opacity="0.2" stroke="#22d3ee" stroke-width="0.6"/>
-  <text x="140" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#67e8f9">Spectrum Graph™ (7D)</text>
+  <text x="140" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#67e8f9">Spectrum Graph™</text>
 
   <rect x="240" y="470" width="160" height="30" rx="6" fill="#166534" fill-opacity="0.2" stroke="#22c55e" stroke-width="0.6"/>
-  <text x="320" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#86efac">Sandbox Prism™</text>
+  <text x="320" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#86efac">Action Policy</text>
 
   <rect x="410" y="470" width="160" height="30" rx="6" fill="#78350f" fill-opacity="0.2" stroke="#fbbf24" stroke-width="0.6"/>
-  <text x="490" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#fde68a">You-Port™ (AES-GCM)</text>
+  <text x="490" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#fde68a">Private Vault (AES-GCM)</text>
 
   <rect x="580" y="470" width="155" height="30" rx="6" fill="#312e81" fill-opacity="0.2" stroke="#a78bfa" stroke-width="0.6"/>
   <text x="657" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#c4b5fd">Anomaly Detection</text>
 
   <rect x="745" y="470" width="165" height="30" rx="6" fill="#881337" fill-opacity="0.2" stroke="#fb7185" stroke-width="0.6"/>
-  <text x="827" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#fda4af">Consensus Voting</text>
+  <text x="827" y="490" text-anchor="middle" font-size="10" font-weight="600" fill="#fda4af">Bounded Iterations</text>
 
   <!-- Arrow down to storage -->
   <polygon points="440,540 480,556 520,540" fill="#475569" opacity="0.4"/>
@@ -185,36 +185,36 @@
   <rect x="30" y="556" width="440" height="60" rx="10" fill="#0f172a" stroke="#06b6d4" stroke-width="1" filter="url(#s)"/>
   <text x="50" y="577" font-size="11" font-weight="700" fill="#06b6d4" letter-spacing="1.2">STORAGE</text>
   <text x="250" y="593" text-anchor="middle" font-size="10" fill="#94a3b8">SQLite — nodes · edges · intent_log · spectra · audit_chain</text>
-  <text x="250" y="607" text-anchor="middle" font-size="8.5" fill="#64748b">App Data: {platform}/com.prismos.app/</text>
+  <text x="250" y="607" text-anchor="middle" font-size="8.5" fill="#64748b">Live SQLite is local plaintext; encrypted vault export is separate</text>
 
   <rect x="490" y="556" width="440" height="60" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-width="1" filter="url(#s)"/>
   <text x="510" y="577" font-size="11" font-weight="700" fill="#f59e0b" letter-spacing="1.2">LOCAL LLM</text>
-  <text x="710" y="593" text-anchor="middle" font-size="10" fill="#94a3b8">Ollama — llama3.2 · llava · qwen2-vl · mistral</text>
-  <text x="710" y="607" text-anchor="middle" font-size="8.5" fill="#64748b">100% on-device · http://localhost:11434 · Smart Model Routing</text>
+  <text x="710" y="593" text-anchor="middle" font-size="10" fill="#94a3b8">Ollama — qwen3 · llama3.2 · qwen2.5vl · mistral</text>
+  <text x="710" y="607" text-anchor="middle" font-size="8.5" fill="#64748b">Private inference fixed to loopback · remote opt-in is management-only</text>
 
   <!-- ═══ FOOTER BADGES ═══ -->
   <rect x="60" y="636" width="108" height="24" rx="12" fill="#064e3b" fill-opacity="0.5" stroke="#10b981" stroke-width="0.6"/>
-  <text x="114" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#6ee7b7">100% Local-First</text>
+  <text x="114" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#6ee7b7">Local-First Core</text>
 
   <rect x="180" y="636" width="95" height="24" rx="12" fill="#1e1b4b" fill-opacity="0.5" stroke="#818cf8" stroke-width="0.6"/>
-  <text x="227" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#c4b5fd">No Cloud</text>
+  <text x="227" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#c4b5fd">Explicit Egress</text>
 
 
   <rect x="404" y="636" width="110" height="24" rx="12" fill="#0c4a6e" fill-opacity="0.5" stroke="#22d3ee" stroke-width="0.6"/>
-  <text x="459" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#67e8f9">No Telemetry</text>
+  <text x="459" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#67e8f9">No App Telemetry</text>
 
   <rect x="526" y="636" width="90" height="24" rx="12" fill="#312e81" fill-opacity="0.5" stroke="#a78bfa" stroke-width="0.6"/>
-  <text x="571" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#c4b5fd">162 Tests</text>
+  <text x="571" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#c4b5fd">Automated Tests</text>
 
   <rect x="628" y="636" width="110" height="24" rx="12" fill="#064e3b" fill-opacity="0.5" stroke="#10b981" stroke-width="0.6"/>
-  <text x="683" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#6ee7b7">83 IPC Cmds</text>
+  <text x="683" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#6ee7b7">Typed IPC</text>
 
   <rect x="750" y="636" width="110" height="24" rx="12" fill="#881337" fill-opacity="0.5" stroke="#fb7185" stroke-width="0.6"/>
-  <text x="805" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#fda4af">7 Security Layers</text>
+  <text x="805" y="652" text-anchor="middle" font-size="9" font-weight="600" fill="#fda4af">5 Core Roles</text>
 
   <!-- Phase summary -->
-  <text x="480" y="686" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="600">Phases 1–7 · Vision · Document RAG · Alt+Space Omnipresence · Daily Dashboard · 5-Agent LangGraph DAG + 3 Keepers</text>
+  <text x="480" y="686" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="600">Vision · Bounded Attachments · Text/Code Project Knowledge · Private Vault · Sequential Plan → Build → Judge → Refine</text>
 
   <!-- Copyright -->
-  <text x="480" y="708" text-anchor="middle" font-size="9" fill="#475569">© 2026 Manish Kumar · PrismOS-AI v0.5.1 · MIT License</text>
+  <text x="480" y="708" text-anchor="middle" font-size="9" fill="#475569">© 2026 Manish Kumar · PrismOS-AI v0.5.2 · MIT License</text>
 </svg>

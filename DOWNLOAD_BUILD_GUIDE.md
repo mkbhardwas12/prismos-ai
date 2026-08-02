@@ -1,14 +1,21 @@
 # PrismOS-AI Download & Build Guide
 
-> Complete guide for downloading pre-built packages or building from source
+> Build from reviewed source, or install only independently verified release packages
 
 ---
 
 ## Quick Start for Users
 
-### Option 1: Download Pre-Built Packages (Recommended)
+### Option 1: Install a verified release package
 
-**Latest Release**: Visit [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+The current GitHub Actions workflow is manually dispatched and produces
+**unsigned, unnotarized, unpublished candidate artifacts** for maintainer testing.
+It does not create a GitHub Release. Do not treat a workflow artifact as a trusted
+installer.
+
+Use the [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+only when the exact package has an independently verified source revision, SHA-256
+digest, platform publisher signature, and—on macOS—notarization result.
 
 | Platform | Package | Installation |
 |----------|---------|--------------|
@@ -16,14 +23,14 @@
 | **macOS** | `.dmg` | Drag to Applications folder |
 | **Linux (Debian/Ubuntu)** | `.deb` | `sudo dpkg -i prismos_*.deb` |
 | **Linux (Universal)** | `.AppImage` | `chmod +x *.AppImage && ./prismos_*.AppImage` |
-| **Android** | `.apk` | Install via file manager (enable "Unknown sources") |
+| **Android** | Not produced by the candidate workflow | Developer build only until a separately signed/tested release exists |
 
 ### Option 2: Install via Package Managers
 
-**Coming Soon:**
-- Homebrew (macOS): `brew install --cask prismos-ai`
-- Snap (Linux): `snap install prismos-ai`
-- Chocolatey (Windows): `choco install prismos-ai`
+No package-manager channel is currently published by this source tree. Do not run
+an assumed Homebrew, Snap, or Chocolatey recipe. Treat any future recipe as a
+separate distributor until its source, maintainer, package digest, and signature
+have been verified.
 
 ---
 
@@ -48,17 +55,11 @@
 - macOS 11 Big Sur or later
 - Ubuntu 20.04+ / Debian 11+ / Fedora 35+ / Arch Linux
 
-### Mobile (Android)
+### Mobile status
 
-**Minimum:**
-- Android 8.0 (API 26)
-- 2 GB RAM
-- 1 GB free storage
-
-**Recommended:**
-- Android 10+
-- 4 GB RAM
-- 4 GB free storage
+Android and iOS are not built by the current manual desktop candidate workflow and
+are not advertised as supported prebuilt releases. Mobile builds remain developer
+experiments until separately signed, provenance-linked artifacts pass device testing.
 
 ### iOS (Coming Soon)
 
@@ -76,78 +77,57 @@
 
 **Method 1: MSI Installer (Recommended)**
 
-1. Download `PrismOS-AI_X.X.X_x64_en-US.msi`
-2. Double-click the file
-3. Click "Next" through the wizard
-4. Choose installation folder (default: `C:\Program Files\PrismOS-AI`)
-5. Click "Install" (may require administrator privileges)
-6. Click "Finish" when complete
-7. Launch from Start Menu
+1. Download an approved `PrismOS-AI_X.X.X_x64_en-US.msi`
+2. Verify its published SHA-256 digest and Windows publisher signature
+3. Double-click the verified file
+4. Click "Next" through the wizard
+5. Choose installation folder
+6. Approve elevation only if the reviewed installer requires it for that scope
+7. Click "Finish" and launch from Start Menu
 
 **Method 2: EXE Installer**
 
-1. Download `PrismOS-AI_X.X.X_x64-setup.exe`
-2. Run the installer
-3. Follow on-screen instructions
-4. Launch after installation
+1. Download an approved `PrismOS-AI_X.X.X_x64-setup.exe`
+2. Verify its published SHA-256 digest and Windows publisher signature
+3. Run the verified installer
+4. Follow on-screen instructions and launch after installation
 
 **Post-Installation:**
 
-Install Ollama:
-```powershell
-# Download Ollama from https://ollama.com/download
-# Or use winget:
-winget install Ollama.Ollama
-
-# Pull a model:
-ollama pull llama3.2
-```
+Install Ollama from its reviewed official distribution, then pull the configured
+default model with `ollama pull qwen3:4b`.
 
 ### macOS
 
 **Installation:**
 
-1. Download `PrismOS-AI_X.X.X_aarch64.dmg` (Apple Silicon) or `_x64.dmg` (Intel)
-2. Open the DMG file
-3. Drag PrismOS-AI icon to Applications folder
-4. Eject the DMG
-5. Launch from Applications or Spotlight (⌘+Space → "PrismOS")
+1. Download an approved `PrismOS-AI_X.X.X_aarch64.dmg` (Apple Silicon) or `_x64.dmg` (Intel)
+2. Verify its published SHA-256 digest, code signature, and notarization result
+3. Open the verified DMG file
+4. Drag PrismOS-AI icon to Applications folder
+5. Eject the DMG and launch from Applications or Spotlight
 
-**First Launch:**
-
-macOS may show "PrismOS-AI cannot be opened because it is from an unidentified developer":
-
-1. Right-click (or Control+click) on PrismOS-AI
-2. Select "Open"
-3. Click "Open" in the dialog
-
-Or remove quarantine flag:
-```bash
-sudo xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
-```
+**First launch:** Do not remove quarantine metadata or bypass Gatekeeper. The current
+candidate artifacts are unsigned and unnotarized. If an alleged release fails
+signature/notarization checks, stop, delete it, and obtain a verified package or build
+from reviewed source.
 
 **Post-Installation:**
 
-```bash
-# Install Ollama
-brew install ollama
-
-# Or download from https://ollama.com/download
-
-# Pull a model
-ollama pull llama3.2
-```
+Install Ollama from its reviewed official distribution, then pull the configured
+default model with `ollama pull qwen3:4b`.
 
 ### Linux
 
 **Debian/Ubuntu (.deb)**
 
-```bash
-# Download the .deb file
-wget https://github.com/mkbhardwas12/prismos-ai/releases/download/vX.X.X/prismos_X.X.X_amd64.deb
+After downloading an approved package and its release evidence, verify its
+publisher/provenance and run the published checksum procedure. Only then install
+the already verified local file:
 
-# Install
-sudo dpkg -i prismos_X.X.X_amd64.deb
+```bash
+sha256sum -c SHA256SUMS
+sudo dpkg -i ./prismos_X.X.X_amd64.deb
 
 # Install missing dependencies (if any)
 sudo apt-get install -f
@@ -158,14 +138,11 @@ prismos
 
 **Universal (.AppImage)**
 
+After the same provenance, signature, and checksum verification:
+
 ```bash
-# Download AppImage
-wget https://github.com/mkbhardwas12/prismos-ai/releases/download/vX.X.X/PrismOS-AI_X.X.X_amd64.AppImage
-
-# Make executable
+sha256sum -c SHA256SUMS
 chmod +x PrismOS-AI_X.X.X_amd64.AppImage
-
-# Run
 ./PrismOS-AI_X.X.X_amd64.AppImage
 ```
 
@@ -177,7 +154,7 @@ cat > ~/.local/share/applications/prismos-ai.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=PrismOS-AI
-Comment=Local-First Agentic Personal AI Operating System
+Comment=Local-first desktop assistant with bounded sequential workflows
 Exec=/path/to/PrismOS-AI_X.X.X_amd64.AppImage
 Icon=prismos
 Terminal=false
@@ -191,39 +168,20 @@ update-desktop-database ~/.local/share/applications
 **Post-Installation:**
 
 ```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+# Install Ollama from the official distribution after reviewing its current
+# publisher, package or install script, and available digest/signature information:
+# https://ollama.com/download
 
 # Pull a model
 ollama pull llama3.2
 ```
 
-### Android
+### Mobile developer status
 
-**Installation:**
-
-1. Download `prismos-android-vX.X.X.apk`
-2. On your device, go to Settings → Security
-3. Enable "Install from unknown sources" or "Allow from this source"
-4. Open Downloads folder
-5. Tap the APK file
-6. Tap "Install"
-7. Tap "Open" when complete
-
-**Via ADB (for developers):**
-
-```bash
-# Connect device via USB
-adb devices
-
-# Install APK
-adb install prismos-android-vX.X.X.apk
-
-# Launch app
-adb shell am start -n com.prismos.app/.MainActivity
-```
-
-**Note**: Android version has limited functionality. Full Ollama integration is experimental.
+There is no approved prebuilt Android or iOS package in the current candidate
+workflow. This guide intentionally provides no unknown-source APK installation or
+mobile release-build shortcut. Mobile experiments need a separately reviewed build,
+signing, provenance, privacy, and device-test process before distribution.
 
 ---
 
@@ -233,8 +191,11 @@ adb shell am start -n com.prismos.app/.MainActivity
 
 Install these tools first:
 
-1. **Node.js** (≥ 18): https://nodejs.org/
-2. **Rust** (≥ 1.75): https://rustup.rs/
+1. **Node.js** (≥ 22.12; Node 24 LTS recommended): https://nodejs.org/
+2. **Rust** (version selected by `rust-toolchain.toml`): obtain `rustup` from
+   [rustup.rs](https://rustup.rs/) after reviewing the official download,
+   publisher, and available checksum/signature guidance. Do not pipe a mutable
+   network response directly into a shell.
 3. **Ollama**: https://ollama.com/
 4. **Platform-specific tools**:
 
@@ -280,8 +241,8 @@ cd prismos-ai
 ### Install Dependencies
 
 ```bash
-# Install Node.js dependencies
-npm install
+# Install the locked Node.js dependency graph
+npm ci
 
 # Verify Rust installation
 rustc --version
@@ -294,8 +255,10 @@ cargo --version
 # Start Ollama server (in separate terminal)
 ollama serve
 
-# Pull required models
-ollama pull llama3.2
+# Pull the configured default model
+ollama pull qwen3:4b
+
+# Optional: install a compatible vision model only if image analysis is needed
 ollama pull llama3.2-vision
 ```
 
@@ -342,39 +305,12 @@ npm run tauri build
 
 *Times vary based on hardware. SSD and multi-core processors help significantly.*
 
-### Build Android from Source
+### Mobile builds
 
-```bash
-# Prerequisites
-export ANDROID_HOME=$HOME/Android/Sdk
-export NDK_HOME=$ANDROID_HOME/ndk/29.0.13846066
-
-# Add Android Rust targets
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-
-# Initialize Android project
-npx tauri android init
-
-# Build APK
-npx tauri android build --apk -- --features vendored-ssl
-
-# Output: src-tauri/gen/android/app/build/outputs/apk/release/app-release.apk
-```
-
-### Build iOS from Source (macOS only)
-
-See [iOS_BUILD_SETUP.md](docs/IOS_BUILD_SETUP.md) for complete instructions.
-
-```bash
-# Add iOS targets
-rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
-
-# Initialize iOS project
-npx tauri ios init
-
-# Build for iOS
-npx tauri ios build --release
-```
+Mobile packaging is outside this desktop guide. Generated Tauri configuration alone
+does not establish a supported Android or iOS build. Treat the existing mobile notes
+as design references until a separately reviewed, signed, and device-tested process
+is documented.
 
 ---
 
@@ -398,11 +334,10 @@ cd src-tauri
 cargo clippy
 ```
 
-### Test Coverage
+### Test inventory
 
-The project includes **162 tests**:
-- 97 frontend tests (Vitest + React Testing Library)
-- 65 backend tests (Cargo)
+Do not rely on a frozen test count. Run the complete current suites and record the
+totals and revision in the candidate evidence.
 
 ---
 
@@ -416,11 +351,12 @@ The project includes **162 tests**:
 ```
 
 **"command not found: cargo"**
-```bash
-# Install Rust from https://rustup.rs/
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-```
+
+Download the platform-appropriate `rustup` installer from
+[rustup.rs](https://rustup.rs/), inspect and verify it using the current official
+publisher/checksum guidance, then run it explicitly. Do not pipe a mutable network
+response into a shell. Reopen the terminal and confirm `rustc --version` and
+`cargo --version`.
 
 **"Ollama connection failed"**
 ```bash
@@ -470,10 +406,10 @@ npm run tauri build
 
 ### Runtime Errors
 
-**"Model 'llama3.2' not found"**
+**"Model 'qwen3:4b' not found"**
 ```bash
 # Pull the model
-ollama pull llama3.2
+ollama pull qwen3:4b
 
 # List installed models
 ollama list
@@ -486,10 +422,10 @@ chmod +x PrismOS-AI_*.AppImage
 ```
 
 **"App is damaged" (macOS)**
-```bash
-# Remove quarantine flag
-sudo xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
-```
+
+Do not remove quarantine metadata to force the app open. Verify the digest, signature,
+notarization, and source revision. If any check is absent or fails, delete the package
+and build from reviewed source or obtain an independently verified release.
 
 ---
 
@@ -502,7 +438,7 @@ PrismOS-AI uses these defaults:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Ollama URL | `http://localhost:11434` | Local Ollama server |
-| Default Model | `llama3.2` | Text generation model |
+| Default Model | `qwen3:4b` | Text generation model |
 | Theme | `dark` | UI theme |
 | Max Tokens | `2048` | Response length limit |
 
@@ -516,9 +452,9 @@ PrismOS-AI uses these defaults:
 
 **Files:**
 
-- `spectrum.db`: SQLite database (knowledge graph)
-- `settings.json`: User preferences
-- `audit.log`: Security audit trail
+- `spectrum_graph.db`: SQLite knowledge and learned-state database
+- `prismos-audit.log`: Tamper-evident audit chain
+- Webview-local settings: user-interface preferences (not a portable backup)
 
 ### Environment Variables
 
@@ -537,31 +473,15 @@ export NODE_ENV=development
 
 ## Updating
 
-### Auto-Update (Desktop)
+PrismOS-AI does not ship an in-app updater. Releases are installed manually:
 
-PrismOS-AI includes auto-updater:
+1. Download only an approved installer from the project's GitHub Releases page.
+2. Verify its published SHA-256 digest, publisher signature, source revision, and
+   macOS notarization where applicable.
+3. Close PrismOS-AI and install the release over the existing application.
+4. Restart and confirm the displayed version. Application data is stored separately from the executable, but keep independently verified recovery media before any upgrade; a Private Vault must pass a clean-profile restore drill before reliance.
 
-1. Help → Check for Updates
-2. Click "Download" if update available
-3. Restart when prompted
-
-### Manual Update
-
-1. Download latest release from GitHub
-2. Install over existing installation
-3. Your data is preserved (stored separately)
-
-### Update via Package Manager
-
-**Homebrew (macOS):**
-```bash
-brew upgrade --cask prismos-ai
-```
-
-**Snap (Linux):**
-```bash
-snap refresh prismos-ai
-```
+Package-manager recipes are supported only when an independently maintained package exists; the source tree does not publish or control a Homebrew cask or Snap channel.
 
 ---
 
@@ -578,21 +498,21 @@ Or use the uninstaller:
 C:\Program Files\PrismOS-AI\uninstall.exe
 ```
 
-**Remove Data:**
-```powershell
-Remove-Item -Recurse "$env:APPDATA\com.prismos.app"
-```
+Uninstalling the application does not intentionally erase the private profile.
+Before removing profile data, create and clean-profile-test a Private Vault, close
+PrismOS, and move the exact resolved app-data directory to an offline holding
+location. Delete that held copy only after confirming the backup and retention
+decision; never paste a recursive deletion command from a generic guide.
 
 ### macOS
 
 1. Drag PrismOS-AI from Applications to Trash
 2. Empty Trash
 
-**Remove Data:**
-```bash
-rm -rf ~/Library/Application\ Support/com.prismos.app
-rm -rf ~/Library/Caches/com.prismos.app
-```
+The private profile is separate from the application bundle. Preserve and verify a
+Private Vault before moving the exact resolved app-data directory to an offline
+holding location. Do not recursively delete it while diagnosing, migrating, or
+validating a restore.
 
 ### Linux
 
@@ -602,20 +522,11 @@ sudo apt-get remove prismos
 ```
 
 **AppImage:**
-```bash
-rm PrismOS-AI_*.AppImage
-rm -rf ~/.local/share/com.prismos.app
-```
+Remove only the exact verified AppImage pathname; do not use a broad wildcard.
 
-### Android
-
-1. Long-press app icon
-2. Tap "Uninstall"
-3. Confirm
-
-Or via Settings:
-1. Settings → Apps → PrismOS-AI
-2. Tap "Uninstall"
+Keep the Linux private profile until a Private Vault has been verified in a clean
+profile and the retention decision is explicit. Mobile uninstall guidance is omitted
+because no supported mobile release is currently distributed.
 
 ---
 
@@ -653,7 +564,7 @@ After installation:
 
 ---
 
-**PrismOS-AI v0.5.1** — Your mind, your machine, your OS.
+**PrismOS-AI v0.5.2** — Your work, your machine, your control.
 
 Built with by [Manish Kumar](https://github.com/mkbhardwas12)
 
@@ -661,7 +572,7 @@ Built with by [Manish Kumar](https://github.com/mkbhardwas12)
 
 ## Quick Links
 
-- [📥 Download Latest Release](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+- [📥 Verify Available Releases](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 - [📖 Documentation](docs/)
 - [🐛 Report Bug](https://github.com/mkbhardwas12/prismos-ai/issues/new)
 - [💡 Request Feature](https://github.com/mkbhardwas12/prismos-ai/issues/new)

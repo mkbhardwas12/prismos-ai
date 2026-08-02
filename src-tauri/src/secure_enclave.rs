@@ -1,18 +1,12 @@
-// PrismOS-AI Secure Enclave — Hardware Security Module Abstraction
+// PrismOS-AI machine-derived software key helper (legacy module name).
 //
-// Provides a hardware-backed key derivation layer for PrismOS-AI cryptographic
-// operations. Attempts to use platform-specific hardware security:
-//   - Windows: TPM 2.0 via platform identity
-//   - macOS: Secure Enclave fingerprint
-//   - Linux: TPM device presence check
+// The current key is software-derived from account/machine identifiers and a
+// PrismOS domain separator. It is not generated, sealed, or stored by a TPM,
+// Secure Enclave, OS keychain, or hardware security API. This helper is status
+// telemetry only in the current build; Action Policy HMAC records use a separate
+// process-random key and recovery packages use their documented passphrase keys.
 //
-// Falls back to a strong software-derived key using machine-specific entropy
-// (hostname, OS, architecture, boot time) combined with PrismOS-AI-specific salt.
-//
-// The enclave key strengthens existing HMAC signing without replacing
-// the current Sandbox Prism or You-Port encryption.
-//
-// All data stays local. No telemetry. No cloud dependency.
+// This module itself performs no network requests.
 
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -35,23 +29,23 @@ const KEY_SIZE: usize = 32; // 256-bit key
 /// Which hardware backend is providing the key
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EnclaveBackend {
-    /// Windows TPM 2.0 detected
+    /// Legacy serialized variant; no hardware key API is used.
     WindowsTpm,
-    /// macOS Secure Enclave detected
+    /// Legacy serialized variant; no hardware key API is used.
     MacSecureEnclave,
-    /// Linux TPM device detected
+    /// Legacy serialized variant; no hardware key API is used.
     LinuxTpm,
-    /// No hardware module — using strong software key
+    /// Current implementation: software-derived machine/account key.
     SoftwareFallback,
 }
 
 impl EnclaveBackend {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::WindowsTpm => "Windows TPM 2.0",
-            Self::MacSecureEnclave => "macOS Secure Enclave",
-            Self::LinuxTpm => "Linux TPM 2.0",
-            Self::SoftwareFallback => "Software Key (HMAC-SHA256)",
+            Self::WindowsTpm => "Legacy Windows hardware indicator (not sealed)",
+            Self::MacSecureEnclave => "Legacy macOS hardware indicator (not sealed)",
+            Self::LinuxTpm => "Legacy Linux hardware indicator (not sealed)",
+            Self::SoftwareFallback => "Software-derived key (HMAC-SHA256)",
         }
     }
 
@@ -77,142 +71,12 @@ pub struct SecureEnclave {
     key: [u8; KEY_SIZE],
 }
 impl SecureEnclave {
-    /// Initialize the secure enclave, probing for hardware security modules.
+    /// Initialize the software-derived helper. Hardware presence is deliberately
+    /// not presented as hardware-backed key storage.
     pub fn new() -> Self {
-        let (backend, hardware_entropy) = Self::probe_hardware();
-
-        // Derive the key from hardware entropy + machine identity + salt
-        let key = Self::derive_key(&hardware_entropy);
-
+        let backend = EnclaveBackend::SoftwareFallback;
+        let key = Self::derive_key(&Self::get_machine_entropy());
         SecureEnclave { backend, key }
-    }
-
-    /// Probe for hardware security modules on the current platform.
-    /// Returns the detected backend and any hardware-specific entropy.
-    fn probe_hardware() -> (EnclaveBackend, Vec<u8>) {
-        // Windows: Check for TPM 2.0
-        #[cfg(target_os = "windows")]
-        {
-            if Self::detect_windows_tpm() {
-                let entropy = Self::get_windows_tpm_entropy();
-                return (EnclaveBackend::WindowsTpm, entropy);
-            }
-        }
-
-        // macOS: Check for Secure Enclave
-        #[cfg(target_os = "macos")]
-        {
-            if Self::detect_macos_secure_enclave() {
-                let entropy = Self::get_macos_enclave_entropy();
-                return (EnclaveBackend::MacSecureEnclave, entropy);
-            }
-        }
-
-        // Linux: Check for TPM device
-        #[cfg(target_os = "linux")]
-        {
-            if Self::detect_linux_tpm() {
-                let entropy = Self::get_linux_tpm_entropy();
-                return (EnclaveBackend::LinuxTpm, entropy);
-            }
-        }
-
-        // Fallback: Strong software key from machine identity
-        let entropy = Self::get_machine_entropy();
-        (EnclaveBackend::SoftwareFallback, entropy)
-    }
-
-    // ── Windows TPM Detection ──
-
-    #[cfg(target_os = "windows")]
-    fn detect_windows_tpm() -> bool {
-        // Check if TPM 2.0 is available via WMI/registry
-        // The TPM base services are at HKLM\SYSTEM\CurrentControlSet\Services\TPM
-        use std::process::Command;
-        Command::new("powershell")
-            .args(["-Command", "Get-Tpm | Select-Object -ExpandProperty TpmPresent"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().eq_ignore_ascii_case("true"))
-            .unwrap_or(false)
-    }
-
-    #[cfg(target_os = "windows")]
-    fn get_windows_tpm_entropy() -> Vec<u8> {
-        // Use machine GUID as TPM-backed identity (available when TPM is present)
-        use std::process::Command;
-        let output = Command::new("powershell")
-            .args(["-Command", "(Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography' -Name 'MachineGuid').MachineGuid"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default();
-
-        let mut entropy = Self::get_machine_entropy();
-        entropy.extend_from_slice(b"TPM:");
-        entropy.extend_from_slice(output.as_bytes());
-        entropy
-    }
-
-    // ── macOS Secure Enclave Detection ──
-
-    #[cfg(target_os = "macos")]
-    fn detect_macos_secure_enclave() -> bool {
-        // Check for Secure Enclave by looking for the SEP (Secure Enclave Processor)
-        // Available on Apple Silicon and T2 Macs
-        use std::process::Command;
-        Command::new("system_profiler")
-            .args(["SPiBridgeDataType"])
-            .output()
-            .map(|o| {
-                let out = String::from_utf8_lossy(&o.stdout);
-                out.contains("T2") || out.contains("Apple")
-            })
-            .unwrap_or(false)
-            || std::path::Path::new("/usr/libexec/seputil").exists()
-    }
-
-    #[cfg(target_os = "macos")]
-    fn get_macos_enclave_entropy() -> Vec<u8> {
-        // Use hardware UUID as Secure Enclave-backed identity
-        use std::process::Command;
-        let output = Command::new("ioreg")
-            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-            .output()
-            .map(|o| {
-                let out = String::from_utf8_lossy(&o.stdout).to_string();
-                out.lines()
-                    .find(|l| l.contains("IOPlatformUUID"))
-                    .map(|l| l.split('=').last().unwrap_or("").trim().trim_matches('"').to_string())
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default();
-
-        let mut entropy = Self::get_machine_entropy();
-        entropy.extend_from_slice(b"SEP:");
-        entropy.extend_from_slice(output.as_bytes());
-        entropy
-    }
-
-    // ── Linux TPM Detection ──
-
-    #[cfg(target_os = "linux")]
-    fn detect_linux_tpm() -> bool {
-        // Check for TPM character device
-        std::path::Path::new("/dev/tpm0").exists()
-            || std::path::Path::new("/dev/tpmrm0").exists()
-    }
-
-    #[cfg(target_os = "linux")]
-    fn get_linux_tpm_entropy() -> Vec<u8> {
-        // Use machine-id as TPM-backed identity
-        let machine_id = std::fs::read_to_string("/etc/machine-id")
-            .unwrap_or_default()
-            .trim()
-            .to_string();
-
-        let mut entropy = Self::get_machine_entropy();
-        entropy.extend_from_slice(b"TPM:");
-        entropy.extend_from_slice(machine_id.as_bytes());
-        entropy
     }
 
     // ── Machine Entropy (Software Fallback) ──
@@ -261,8 +125,7 @@ impl SecureEnclave {
 
     /// Derive a 256-bit key from entropy using HMAC-SHA256.
     fn derive_key(entropy: &[u8]) -> [u8; KEY_SIZE] {
-        let mut mac = HmacSha256::new_from_slice(ENCLAVE_SALT)
-            .expect("HMAC key length is valid");
+        let mut mac = HmacSha256::new_from_slice(ENCLAVE_SALT).expect("HMAC key length is valid");
         mac.update(entropy);
         mac.update(b"PrismOS-KeyDerivation-v1");
 
@@ -280,7 +143,11 @@ impl SecureEnclave {
 
     /// Get a fingerprint of the key (first 8 bytes, hex-encoded) for display
     pub fn key_fingerprint(&self) -> String {
-        self.key.iter().take(8).map(|b| format!("{:02x}", b)).collect()
+        self.key
+            .iter()
+            .take(8)
+            .map(|b| format!("{:02x}", b))
+            .collect()
     }
 
     /// Get the current enclave status
@@ -292,14 +159,7 @@ impl SecureEnclave {
             std::env::consts::FAMILY
         );
 
-        let details = if self.backend.is_hardware() {
-            format!(
-                "Hardware security module detected: {}. Key derived from hardware-backed entropy + machine identity.",
-                self.backend.label()
-            )
-        } else {
-            "No hardware security module detected. Using strong software key derived from machine-specific entropy (hostname, OS, architecture, user identity) via HMAC-SHA256.".to_string()
-        };
+        let details = "Software-derived machine/account key. It is not hardware-sealed, not stored in an OS keychain, and not an attestation primitive.".to_string();
 
         EnclaveStatus {
             backend: self.backend.clone(),
@@ -313,8 +173,7 @@ impl SecureEnclave {
     /// Sign arbitrary data using the enclave key (HMAC-SHA256)
     #[allow(dead_code)]
     pub fn sign(&self, data: &[u8]) -> Vec<u8> {
-        let mut mac = HmacSha256::new_from_slice(&self.key)
-            .expect("HMAC key length is valid");
+        let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC key length is valid");
         mac.update(data);
         mac.finalize().into_bytes().to_vec()
     }
@@ -322,8 +181,7 @@ impl SecureEnclave {
     /// Verify a signature against the enclave key
     #[allow(dead_code)]
     pub fn verify(&self, data: &[u8], signature: &[u8]) -> bool {
-        let mut mac = HmacSha256::new_from_slice(&self.key)
-            .expect("HMAC key length is valid");
+        let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC key length is valid");
         mac.update(data);
         mac.verify_slice(signature).is_ok()
     }
@@ -344,6 +202,7 @@ mod tests {
     fn test_enclave_init() {
         let enclave = SecureEnclave::new();
         let status = enclave.status();
+        assert!(!status.hardware_available);
         assert!(!status.key_fingerprint.is_empty());
         assert!(!status.platform.is_empty());
         println!("Backend: {:?}", status.backend);

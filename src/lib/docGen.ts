@@ -2,7 +2,8 @@
 //
 // Detects when the user asks the chatbot to create a document/presentation,
 // asks the local model for a structured JSON spec, then hands it to the Rust
-// backend which writes a real .docx / .pptx to the Downloads folder. 100% local.
+// backend which writes a real .docx / .pptx to the Downloads folder through the
+// fixed loopback inference route.
 
 import { invoke } from "@tauri-apps/api/core";
 import type { GeneratedAttachment } from "../types";
@@ -36,40 +37,6 @@ export function detectDocRequest(input: string): DocKind | null {
   return null;
 }
 
-/** Build the system-style prompt that makes the model emit a strict JSON spec. */
-function specPrompt(kind: DocKind, input: string): string {
-  if (kind === "pptx") {
-    return [
-      "You are a presentation generator. Based on the user request below, output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
-      "",
-      `User request: "${input}"`,
-      "",
-      "JSON schema:",
-      '{"title":"string","subtitle":"string","slides":[{"title":"string","bullets":["string"]}]}',
-      "",
-      "Rules:",
-      "- Produce 5 to 8 slides with real, substantive content for the topic.",
-      "- Each slide has a short title and 3 to 5 concise bullet points.",
-      "- Keep bullets under ~15 words each.",
-      "- Output JSON only, nothing else.",
-    ].join("\n");
-  }
-  return [
-    "You are a document generator. Based on the user request below, output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
-    "",
-    `User request: "${input}"`,
-    "",
-    "JSON schema:",
-    '{"title":"string","subtitle":"string","sections":[{"heading":"string","paragraphs":["string"],"bullets":["string"]}]}',
-    "",
-    "Rules:",
-    "- Produce 3 to 6 sections with real, substantive content for the topic.",
-    "- Each section has a heading, 1 to 3 paragraphs, and optionally a few bullets.",
-    '- Use "bullets": [] when a section needs no bullet list.',
-    "- Output JSON only, nothing else.",
-  ].join("\n");
-}
-
 /** Pull the first balanced JSON object out of a model response. */
 function extractJson(raw: string): string {
   let text = raw.trim();
@@ -83,38 +50,79 @@ function extractJson(raw: string): string {
   return text.slice(start, end + 1);
 }
 
+/** A concise, user-facing decision record carried into the generated file. */
+export interface DecisionAppendix {
+  /** Key choices, assumptions, source limits, and verification notes. */
+  rationale: string[];
+  /** One-line verdict, e.g. "Judge accepted the answer (92%)". */
+  verdict: string;
+}
+
 interface GenerateOptions {
   model: string;
-  ollamaUrl?: string | null;
   maxTokens?: number;
   onPhase?: (phase: string) => void;
+  /** Include a concise "Decision Record" appendix in the file (default true). */
+  includeReasoning?: boolean;
+  /** Optional verifier metadata carried over from a prior goal-loop answer. */
+  priorReasoning?: { verdict?: string; criteria?: string[] };
 }
 
 /**
  * Generate a document/presentation end-to-end: model → JSON spec → written file.
- * Returns the saved file's metadata.
+ * When `includeReasoning` is set (the default), the file ends with a concise
+ * Decision Record. Raw model/goal-loop chain-of-thought is never exported.
  */
 export async function generateDocument(
   kind: DocKind,
   input: string,
   opts: GenerateOptions,
 ): Promise<GeneratedAttachment> {
+  const includeReasoning = opts.includeReasoning ?? true;
   const label = kind === "pptx" ? "presentation" : "document";
   opts.onPhase?.(`Drafting ${label} outline with ${opts.model}…`);
 
-  const raw = await invoke<string>("query_ollama", {
-    prompt: specPrompt(kind, input),
+  const raw = await invoke<string>("generate_document_spec", {
+    kind,
+    input,
     model: opts.model,
-    ollamaUrl: opts.ollamaUrl ?? null,
     maxTokens: opts.maxTokens ?? 4096,
   });
 
   const specJson = extractJson(raw);
-  // Validate it parses before sending to the backend for a clearer error.
-  JSON.parse(specJson);
+  // Reshape the model's bounded decision record into the backend's legacy
+  // `reasoning` envelope. The envelope name stays wire-compatible, but no raw
+  // hidden reasoning is copied into it.
+  const spec = JSON.parse(specJson) as Record<string, unknown>;
+
+  if (includeReasoning) {
+    const modelRationale = Array.isArray(spec.decision_record)
+      ? (spec.decision_record as unknown[])
+          .map(String)
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+          .slice(0, 5)
+      : [];
+    const rationale = [
+      ...(opts.priorReasoning?.criteria ?? []).map((value) => value.trim()),
+      ...modelRationale,
+    ].filter(Boolean).slice(0, 8);
+    const appendix: DecisionAppendix = {
+      rationale,
+      verdict: opts.priorReasoning?.verdict ?? "",
+    };
+    delete spec.decision_record;
+    spec.reasoning =
+      appendix.rationale.length > 0 || appendix.verdict
+        ? appendix
+        : undefined;
+  } else {
+    delete spec.decision_record;
+    delete spec.reasoning;
+  }
 
   opts.onPhase?.(`Writing ${kind === "pptx" ? "PowerPoint" : "Word"} file…`);
   const command = kind === "pptx" ? "create_powerpoint" : "create_word_document";
-  const resultJson = await invoke<string>(command, { specJson });
+  const resultJson = await invoke<string>(command, { specJson: JSON.stringify(spec) });
   return JSON.parse(resultJson) as GeneratedAttachment;
 }

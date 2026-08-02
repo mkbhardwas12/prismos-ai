@@ -1,0 +1,41 @@
+{
+  "reviewed_at": "2026-08-01",
+  "cargo_audit_version": "0.22.2",
+  "warnings": [
+    {"id": "RUSTSEC-2024-0370", "kind": "unmaintained", "package": "proc-macro-error", "version": "1.0.4"},
+    {"id": "RUSTSEC-2024-0411", "kind": "unmaintained", "package": "gdkwayland-sys", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0412", "kind": "unmaintained", "package": "gdk", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0413", "kind": "unmaintained", "package": "atk", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0414", "kind": "unmaintained", "package": "gdkx11-sys", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0415", "kind": "unmaintained", "package": "gtk", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0416", "kind": "unmaintained", "package": "atk-sys", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0417", "kind": "unmaintained", "package": "gdkx11", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0418", "kind": "unmaintained", "package": "gdk-sys", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0419", "kind": "unmaintained", "package": "gtk3-macros", "version": "0.18.2"},
+    {"id": "RUSTSEC-2024-0420", "kind": "unmaintained", "package": "gtk-sys", "version": "0.18.2"},
+    {
+      "id": "RUSTSEC-2024-0429",
+      "kind": "unsound",
+      "package": "glib",
+      "version": "0.18.5",
+      "owner": "PrismOS maintainer",
+      "review_by": "2026-09-01",
+      "rationale": "Linux-only transitive Tauri/GTK dependency. PrismOS source does not call the affected glib::VariantStrIter API, but indirect reachability is not proven absent; retain only as a time-bounded candidate exception pending an upstream Tauri GTK-stack upgrade."
+    },
+    {"id": "RUSTSEC-2025-0057", "kind": "unmaintained", "package": "fxhash", "version": "0.2.1"},
+    {"id": "RUSTSEC-2025-0075", "kind": "unmaintained", "package": "unic-char-range", "version": "0.9.0"},
+    {"id": "RUSTSEC-2025-0080", "kind": "unmaintained", "package": "unic-common", "version": "0.9.0"},
+    {"id": "RUSTSEC-2025-0081", "kind": "unmaintained", "package": "unic-char-property", "version": "0.9.0"},
+    {"id": "RUSTSEC-2025-0098", "kind": "unmaintained", "package": "unic-ucd-version", "version": "0.9.0"},
+    {"id": "RUSTSEC-2025-0100", "kind": "unmaintained", "package": "unic-ucd-ident", "version": "0.9.0"},
+    {
+      "id": "RUSTSEC-2026-0097",
+      "kind": "unsound",
+      "package": "rand",
+      "version": "0.7.3",
+      "owner": "PrismOS maintainer",
+      "review_by": "2026-09-01",
+      "rationale": "Build-dependency-only path through phf_codegen/selectors. The required rand log feature is absent from the resolved feature tree, PrismOS defines no custom logger using thread_rng, and rand 0.7.3 is not linked into the shipped runtime."
+    }
+  ]
+}

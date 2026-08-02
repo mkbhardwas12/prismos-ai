@@ -21,9 +21,9 @@ Check the area(s) this feature relates to:
 
 - [ ] 🧠 Intent Console (chat / LLM)
 - [ ] 🌈 Spectrum Graph (knowledge graph)
-- [ ] 🛡️ Sandbox Prisms (code execution)
+- [ ] 🛡️ Action Policy Simulator
 - [ ] ⏳ Spectral Timeline (history)
-- [ ] 💬 Agent Debate
+- [ ] 💬 Sequential Workflow Trace
 - [ ] ⚙️ Settings / Security
 - [ ] 🔌 Ollama integration
 - [ ] 📦 Build / CI / packaging

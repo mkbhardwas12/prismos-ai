@@ -107,6 +107,6 @@ export function formatReportMarkdown(r: ReviewReportPayload): string {
 
   lines.push(`🔒 ${r.read_only_guarantee}`);
   lines.push("");
-  lines.push(`───\n🔍 Project Review · read-only · full report in **${r.report_docx_filename}** · 100% local`);
+  lines.push(`───\n🔍 Project Review · read-only · fixed-loopback inference route · full report saved locally as **${r.report_docx_filename}**`);
   return lines.join("\n");
 }

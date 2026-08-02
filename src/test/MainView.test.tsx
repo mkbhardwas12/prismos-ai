@@ -6,6 +6,8 @@ import MainView from "../components/MainView";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings } from "../types";
 
+const useChatMock = vi.hoisted(() => vi.fn());
+
 // Mock all child components to isolate MainView logic
 vi.mock("../components/IntentInput", () => ({
   default: vi.fn(() => <div data-testid="intent-input" />),
@@ -23,27 +25,7 @@ vi.mock("../hooks/useVoice", () => ({
   useVoice: () => ({ speak: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock("../hooks/useChat", () => ({
-  useChat: () => ({
-    messages: [
-      {
-        id: "msg1",
-        role: "ai",
-        text: "Hello world",
-        timestamp: new Date(),
-        transparency: {
-          query_type: "general",
-          applied_band: "green",
-          context_nodes_used: 3,
-          model_used: "qwen3:4b",
-          domain_detected: "Engineering",
-        },
-      },
-    ],
-    isGenerating: false,
-    handleIntent: vi.fn(),
-    clearConversation: vi.fn(),
-    conversationRef: { current: null },
-  }),
+  useChat: useChatMock,
 }));
 vi.mock("../hooks/useSuggestions", () => ({
   useSuggestions: () => ({
@@ -72,7 +54,15 @@ vi.mock("../hooks/useOllama", () => ({
 }));
 vi.mock("framer-motion", () => ({
   motion: {
-    div: vi.fn(({ children, ...props }: any) => <div {...props}>{children}</div>),
+    div: vi.fn(({
+      children,
+      layout: _layout,
+      initial: _initial,
+      animate: _animate,
+      exit: _exit,
+      transition: _transition,
+      ...props
+    }: any) => <div {...props}>{children}</div>),
   },
   AnimatePresence: vi.fn(({ children }: any) => <>{children}</>),
 }));
@@ -105,6 +95,29 @@ describe("MainView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(invoke).mockImplementation(async () => "{}");
+    useChatMock.mockReturnValue({
+      messages: [
+        {
+          id: "msg1",
+          role: "ai",
+          content: "Hello world",
+          timestamp: new Date(),
+          transparency: {
+            query_type: "general",
+            applied_band: "green",
+            context_nodes_used: 3,
+            model_used: "qwen3:4b",
+            domain_detected: "Engineering",
+          },
+        },
+      ],
+      isProcessing: false,
+      processingPhase: "",
+      processingElapsed: 0,
+      handleIntent: vi.fn(),
+      clearConversation: vi.fn(),
+      conversationRef: { current: null },
+    });
   });
 
   it("offline badge retries the connection when clicked", async () => {
@@ -185,5 +198,64 @@ describe("MainView", () => {
       render(<MainView {...defaultProps} />);
     });
     expect(screen.getByTestId("daily-brief")).toBeInTheDocument();
+  });
+
+  it("shows one updating activity row per workflow role while processing", async () => {
+    useChatMock.mockReturnValue({
+      messages: [],
+      isProcessing: true,
+      processingPhase: "Refracting your intent…",
+      processingElapsed: 12,
+      handleIntent: vi.fn(),
+      clearConversation: vi.fn(),
+      conversationRef: { current: null },
+    });
+
+    await act(async () => {
+      render(
+        <MainView
+          {...defaultProps}
+          liveAgentSteps={[
+            {
+              schema_version: 1,
+              task_id: "task-1",
+              agent: "Orchestrator",
+              action: "Decomposing request…",
+              status: "thinking",
+              phase: "orchestrate",
+              iteration: 0,
+              elapsed_ms: 100,
+            },
+            {
+              schema_version: 1,
+              task_id: "task-1",
+              agent: "Orchestrator",
+              action: "Workflow stages prepared",
+              status: "completed",
+              phase: "orchestrate",
+              iteration: 0,
+              elapsed_ms: 850,
+            },
+            {
+              schema_version: 1,
+              task_id: "task-1",
+              agent: "Reasoner",
+              action: "Drafting the answer…",
+              status: "thinking",
+              phase: "build",
+              iteration: 1,
+              elapsed_ms: 1_200,
+            },
+          ]}
+        />,
+      );
+    });
+
+    expect(screen.getAllByText("Orchestrator")).toHaveLength(1);
+    expect(screen.getByText("Workflow stages prepared")).toBeInTheDocument();
+    expect(screen.queryByText("Decomposing request…")).not.toBeInTheDocument();
+    expect(screen.getByText("Reasoner")).toBeInTheDocument();
+    expect(screen.getByText("Drafting the answer…")).toBeInTheDocument();
+    expect(screen.getByText("1 working · 1 done")).toBeInTheDocument();
   });
 });

@@ -10,10 +10,12 @@
 // Nodes represent "life facets" — work, health, finance, social, learning, etc.
 // Edges carry dynamic intent weights updated through closed-loop feedback.
 
-use chrono::{DateTime, Utc, Timelike};
-use rusqlite::{params, Connection};
+use chrono::{DateTime, Timelike, Utc};
+use rusqlite::{backup, params, Connection, DatabaseName};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+#[cfg(test)]
+use std::io::Read;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -42,7 +44,7 @@ pub struct SpectrumEdge {
     pub target_id: String,
     pub relation: String,
     pub weight: f64,
-    pub momentum: f64,       // rate of weight change (closed-loop feedback velocity)
+    pub momentum: f64, // rate of weight change (closed-loop feedback velocity)
     pub reinforcements: u32, // number of times this edge was reinforced
     pub last_reinforced: String,
     pub created_at: String,
@@ -102,6 +104,64 @@ pub struct IntentQueryResult {
     pub temporal_boost: f64,
 }
 
+/// Durable metadata for an explicitly approved project knowledge source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeSourceSummary {
+    pub id: String,
+    pub name: String,
+    pub root_path: String,
+    pub file_count: usize,
+    pub chunk_count: usize,
+    pub bytes_indexed: u64,
+    pub skipped_files: usize,
+    pub error_count: usize,
+    pub status: String,
+    pub last_indexed: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct KnowledgeChunkRecord {
+    pub id: String,
+    pub label: String,
+    pub content: String,
+    pub source_path: String,
+    pub content_hash: String,
+}
+
+/// New Project Knowledge excerpts are deliberately non-portable. Reject their
+/// recognizable node shapes from older/raw snapshots too, so a restore cannot
+/// create source text that has lost its refresh/Forget ownership metadata.
+fn is_managed_knowledge_snapshot_node(node: &SpectrumNode) -> bool {
+    node.node_type == "project_chunk"
+        || (node.node_type == "project"
+            && node.id.starts_with("project-")
+            && node.id.ends_with(":overview"))
+}
+
+/// Older file-watcher builds created ownerless document snapshots with this
+/// exact shape. They can contain copied local source text but have no durable
+/// source record to refresh or forget, so they must not cross backup/sync
+/// boundaries. Keep this deliberately narrow so ordinary user documents remain
+/// portable.
+fn is_legacy_watcher_snapshot_node(node: &SpectrumNode) -> bool {
+    node.node_type == "document"
+        && node.label.starts_with("📄 ")
+        && node.content.starts_with("Local file:")
+}
+
+/// Earlier builds silently persisted one-off chat attachments as `doc_chunk`
+/// nodes. New attachment analysis is ephemeral; exclude any historical copies
+/// from every portable export/import/merge boundary as well.
+fn is_ephemeral_attachment_snapshot_node(node: &SpectrumNode) -> bool {
+    node.node_type == "doc_chunk"
+}
+
+fn is_nonportable_snapshot_node(node: &SpectrumNode) -> bool {
+    is_managed_knowledge_snapshot_node(node)
+        || is_legacy_watcher_snapshot_node(node)
+        || is_ephemeral_attachment_snapshot_node(node)
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 /// Weight decay factor per day of inactivity (closed-loop temporal decay)
@@ -117,10 +177,670 @@ const MOMENTUM_ALPHA: f64 = 0.3;
 /// Temporal boost half-life in hours for query relevance
 const TEMPORAL_HALF_LIFE_HOURS: f64 = 168.0; // 1 week
 
+// Imported snapshots are untrusted, even after an outer encrypted package has
+// been authenticated. These limits bound parsing follow-on work, diff memory,
+// and SQLite growth. The aggregate text budget also prevents many individually
+// valid fields from creating an oversized import.
+#[cfg(test)]
+const MAX_IMPORT_FILE_BYTES: u64 = 96 * 1024 * 1024;
+const MAX_IMPORT_NODES: usize = 25_000;
+const MAX_IMPORT_EDGES: usize = 100_000;
+const MAX_IMPORT_TOTAL_TEXT_BYTES: usize = 64 * 1024 * 1024;
+const MAX_IMPORT_NODE_ID_BYTES: usize = 256;
+const MAX_IMPORT_LABEL_BYTES: usize = 2 * 1024;
+const MAX_IMPORT_CONTENT_BYTES: usize = 1024 * 1024;
+const MAX_IMPORT_NODE_TYPE_BYTES: usize = 128;
+const MAX_IMPORT_LAYER_BYTES: usize = 64;
+const MAX_IMPORT_TIMESTAMP_BYTES: usize = 128;
+const MAX_IMPORT_RELATION_BYTES: usize = 256;
+const MAX_IMPORT_CONNECTIONS_PER_NODE: usize = 4_096;
+const MAX_IMPORT_FACETS: usize = 512;
+const MAX_LIVE_FEEDBACK_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_LIVE_CONTEXT_NODES: usize = 256;
+const MAX_LIVE_ENTITIES: usize = 256;
+const MAX_EMBEDDING_DIMENSIONS: usize = 16_384;
+const MAX_VECTOR_RESULTS: usize = 100;
+
+const LEGACY_DEMO_CLEANUP_MIGRATION: &str = "legacy_demo_cleanup_v1";
+const LEGACY_DEMO_NODES: &[(&str, &str, &str, &str, &str)] = &[
+    (
+        "demo-work-1",
+        "Weekly Goals",
+        "Track and review weekly professional goals, deadlines, and deliverables",
+        "work",
+        "core",
+    ),
+    (
+        "demo-work-2",
+        "Meeting Notes",
+        "Capture and organize notes from team meetings, 1:1s, and standups",
+        "work",
+        "context",
+    ),
+    (
+        "demo-learning-1",
+        "Learning Rust",
+        "Study notes on Rust ownership, lifetimes, and async patterns",
+        "learning",
+        "core",
+    ),
+    (
+        "demo-learning-2",
+        "AI Research",
+        "Papers and insights on local LLM inference, RAG systems, and agent architectures",
+        "learning",
+        "context",
+    ),
+    (
+        "demo-health-1",
+        "Fitness Tracker",
+        "Daily exercise log: running, strength training, stretching routines",
+        "health",
+        "core",
+    ),
+    (
+        "demo-health-2",
+        "Sleep Habits",
+        "Track sleep patterns, quality, and habits for better rest",
+        "health",
+        "context",
+    ),
+    (
+        "demo-finance-1",
+        "Budget Overview",
+        "Monthly income, expenses, savings goals, and investment tracking",
+        "finance",
+        "core",
+    ),
+    (
+        "demo-task-1",
+        "Home Projects",
+        "Organize home improvement tasks, shopping lists, and maintenance schedules",
+        "task",
+        "context",
+    ),
+    (
+        "demo-social-1",
+        "Family Events",
+        "Birthdays, anniversaries, family gatherings, and gift ideas",
+        "social",
+        "context",
+    ),
+    (
+        "demo-memory-1",
+        "Travel Plans",
+        "Trip ideas, itineraries, packing lists, and travel memories",
+        "memory",
+        "context",
+    ),
+];
+const LEGACY_DEMO_EDGES: &[(&str, &str, &str, &str, f64)] = &[
+    (
+        "demo-edge-1",
+        "demo-work-1",
+        "demo-work-2",
+        "feeds_into",
+        0.8,
+    ),
+    (
+        "demo-edge-2",
+        "demo-learning-1",
+        "demo-work-1",
+        "supports",
+        0.7,
+    ),
+    (
+        "demo-edge-3",
+        "demo-learning-2",
+        "demo-learning-1",
+        "related_to",
+        0.6,
+    ),
+    (
+        "demo-edge-4",
+        "demo-health-1",
+        "demo-health-2",
+        "affects",
+        0.75,
+    ),
+    (
+        "demo-edge-5",
+        "demo-work-1",
+        "demo-finance-1",
+        "impacts",
+        0.5,
+    ),
+    (
+        "demo-edge-6",
+        "demo-task-1",
+        "demo-social-1",
+        "related_to",
+        0.4,
+    ),
+    (
+        "demo-edge-7",
+        "demo-health-1",
+        "demo-work-1",
+        "enables",
+        0.6,
+    ),
+    (
+        "demo-edge-8",
+        "demo-memory-1",
+        "demo-social-1",
+        "connects_to",
+        0.5,
+    ),
+];
+const LEGACY_DEMO_INTENTS: &[(&str, &str)] = &[
+    ("What are my top priorities this week?", "query"),
+    ("Help me plan a healthy meal prep for the week", "task"),
+    ("Summarize the latest Rust async patterns", "learning"),
+    ("Track my morning run: 5K in 28 minutes", "health"),
+    ("Review my monthly budget and spending", "finance"),
+];
+
+type GraphResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+fn validate_import_text(
+    value: &str,
+    field: &str,
+    max_bytes: usize,
+    allow_empty: bool,
+    total_bytes: &mut usize,
+) -> GraphResult<()> {
+    if !allow_empty && value.trim().is_empty() {
+        return Err(format!("Invalid graph snapshot: {field} cannot be empty").into());
+    }
+    if value.len() > max_bytes {
+        return Err(format!("Invalid graph snapshot: {field} exceeds {max_bytes} bytes").into());
+    }
+    if value.contains('\0') {
+        return Err(format!("Invalid graph snapshot: {field} contains a NUL byte").into());
+    }
+    *total_bytes = total_bytes
+        .checked_add(value.len())
+        .ok_or("Invalid graph snapshot: text size overflow")?;
+    if *total_bytes > MAX_IMPORT_TOTAL_TEXT_BYTES {
+        return Err(format!(
+            "Invalid graph snapshot: text exceeds {} bytes",
+            MAX_IMPORT_TOTAL_TEXT_BYTES
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn validate_import_timestamp(value: &str, field: &str, total_bytes: &mut usize) -> GraphResult<()> {
+    validate_import_text(value, field, MAX_IMPORT_TIMESTAMP_BYTES, false, total_bytes)?;
+    DateTime::parse_from_rfc3339(value)
+        .map_err(|_| format!("Invalid graph snapshot: {field} is not RFC 3339"))?;
+    Ok(())
+}
+
+fn validate_import_snapshot(snapshot: &GraphSnapshot) -> GraphResult<()> {
+    if snapshot.nodes.len() > MAX_IMPORT_NODES {
+        return Err(format!(
+            "Invalid graph snapshot: {} nodes exceeds the limit of {}",
+            snapshot.nodes.len(),
+            MAX_IMPORT_NODES
+        )
+        .into());
+    }
+    if snapshot.edges.len() > MAX_IMPORT_EDGES {
+        return Err(format!(
+            "Invalid graph snapshot: {} edges exceeds the limit of {}",
+            snapshot.edges.len(),
+            MAX_IMPORT_EDGES
+        )
+        .into());
+    }
+    if snapshot.stats.node_count != snapshot.nodes.len()
+        || snapshot.stats.edge_count != snapshot.edges.len()
+    {
+        return Err("Invalid graph snapshot: statistics do not match graph contents".into());
+    }
+    if !snapshot.stats.avg_edge_weight.is_finite()
+        || !snapshot.stats.strongest_edge_weight.is_finite()
+        || !snapshot.stats.graph_density.is_finite()
+    {
+        return Err("Invalid graph snapshot: statistics contain non-finite values".into());
+    }
+    if snapshot.stats.facet_distribution.len() > MAX_IMPORT_FACETS {
+        return Err(format!(
+            "Invalid graph snapshot: facet count exceeds {}",
+            MAX_IMPORT_FACETS
+        )
+        .into());
+    }
+
+    let mut total_bytes = 0_usize;
+    let mut node_ids = HashSet::with_capacity(snapshot.nodes.len());
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        let prefix = format!("nodes[{index}]");
+        validate_import_text(
+            &node.id,
+            &format!("{prefix}.id"),
+            MAX_IMPORT_NODE_ID_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        if !node_ids.insert(node.id.as_str()) {
+            return Err(format!("Invalid graph snapshot: duplicate node id '{}'", node.id).into());
+        }
+        validate_import_text(
+            &node.label,
+            &format!("{prefix}.label"),
+            MAX_IMPORT_LABEL_BYTES,
+            true,
+            &mut total_bytes,
+        )?;
+        validate_import_text(
+            &node.content,
+            &format!("{prefix}.content"),
+            MAX_IMPORT_CONTENT_BYTES,
+            true,
+            &mut total_bytes,
+        )?;
+        validate_import_text(
+            &node.node_type,
+            &format!("{prefix}.node_type"),
+            MAX_IMPORT_NODE_TYPE_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        validate_import_text(
+            &node.layer,
+            &format!("{prefix}.layer"),
+            MAX_IMPORT_LAYER_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        validate_import_timestamp(
+            &node.last_accessed,
+            &format!("{prefix}.last_accessed"),
+            &mut total_bytes,
+        )?;
+        validate_import_timestamp(
+            &node.created_at,
+            &format!("{prefix}.created_at"),
+            &mut total_bytes,
+        )?;
+        validate_import_timestamp(
+            &node.updated_at,
+            &format!("{prefix}.updated_at"),
+            &mut total_bytes,
+        )?;
+        if node.connections.len() > MAX_IMPORT_CONNECTIONS_PER_NODE {
+            return Err(format!(
+                "Invalid graph snapshot: {prefix}.connections exceeds {} entries",
+                MAX_IMPORT_CONNECTIONS_PER_NODE
+            )
+            .into());
+        }
+        for (connection_index, connection) in node.connections.iter().enumerate() {
+            validate_import_text(
+                connection,
+                &format!("{prefix}.connections[{connection_index}]"),
+                MAX_IMPORT_NODE_ID_BYTES,
+                false,
+                &mut total_bytes,
+            )?;
+        }
+    }
+
+    let mut edge_ids = HashSet::with_capacity(snapshot.edges.len());
+    for (index, edge) in snapshot.edges.iter().enumerate() {
+        let prefix = format!("edges[{index}]");
+        validate_import_text(
+            &edge.id,
+            &format!("{prefix}.id"),
+            MAX_IMPORT_NODE_ID_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        if !edge_ids.insert(edge.id.as_str()) {
+            return Err(format!("Invalid graph snapshot: duplicate edge id '{}'", edge.id).into());
+        }
+        validate_import_text(
+            &edge.source_id,
+            &format!("{prefix}.source_id"),
+            MAX_IMPORT_NODE_ID_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        validate_import_text(
+            &edge.target_id,
+            &format!("{prefix}.target_id"),
+            MAX_IMPORT_NODE_ID_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        validate_import_text(
+            &edge.relation,
+            &format!("{prefix}.relation"),
+            MAX_IMPORT_RELATION_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+        validate_import_timestamp(
+            &edge.last_reinforced,
+            &format!("{prefix}.last_reinforced"),
+            &mut total_bytes,
+        )?;
+        validate_import_timestamp(
+            &edge.created_at,
+            &format!("{prefix}.created_at"),
+            &mut total_bytes,
+        )?;
+        if !edge.weight.is_finite() || !(MIN_EDGE_WEIGHT..=MAX_EDGE_WEIGHT).contains(&edge.weight) {
+            return Err(format!(
+                "Invalid graph snapshot: {prefix}.weight is outside the supported range"
+            )
+            .into());
+        }
+        if !edge.momentum.is_finite()
+            || !(-MAX_EDGE_WEIGHT..=MAX_EDGE_WEIGHT).contains(&edge.momentum)
+        {
+            return Err(format!(
+                "Invalid graph snapshot: {prefix}.momentum is outside the supported range"
+            )
+            .into());
+        }
+    }
+
+    for facet in snapshot.stats.facet_distribution.keys() {
+        validate_import_text(
+            facet,
+            "stats.facet_distribution key",
+            MAX_IMPORT_NODE_TYPE_BYTES,
+            false,
+            &mut total_bytes,
+        )?;
+    }
+    if let Some(label) = &snapshot.stats.most_connected_node {
+        validate_import_text(
+            label,
+            "stats.most_connected_node",
+            MAX_IMPORT_LABEL_BYTES,
+            true,
+            &mut total_bytes,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn validate_live_text(
+    value: &str,
+    field: &str,
+    max_bytes: usize,
+    allow_empty: bool,
+) -> GraphResult<()> {
+    if !allow_empty && value.trim().is_empty() {
+        return Err(format!("{field} cannot be empty").into());
+    }
+    if value.len() > max_bytes {
+        return Err(format!("{field} exceeds {max_bytes} bytes").into());
+    }
+    if value.contains('\0') {
+        return Err(format!("{field} contains a NUL byte").into());
+    }
+    Ok(())
+}
+
+fn validate_graph_id(value: &str, field: &str) -> GraphResult<()> {
+    validate_live_text(value, field, MAX_IMPORT_NODE_ID_BYTES, false)?;
+    if value.trim() != value || value.chars().any(char::is_control) {
+        return Err(format!("{field} contains whitespace padding or control characters").into());
+    }
+    Ok(())
+}
+
+fn validate_graph_token(value: &str, field: &str, max_bytes: usize) -> GraphResult<()> {
+    validate_live_text(value, field, max_bytes, false)?;
+    if !value.is_ascii()
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+    {
+        return Err(format!("{field} contains unsupported characters").into());
+    }
+    Ok(())
+}
+
+fn validate_node_write(
+    label: &str,
+    content: &str,
+    node_type: &str,
+    layer: &str,
+) -> GraphResult<()> {
+    validate_live_text(label, "node label", MAX_IMPORT_LABEL_BYTES, false)?;
+    validate_live_text(content, "node content", MAX_IMPORT_CONTENT_BYTES, true)?;
+    validate_graph_token(node_type, "node type", MAX_IMPORT_NODE_TYPE_BYTES)?;
+    if !matches!(layer, "core" | "context" | "knowledge" | "ephemeral") {
+        return Err("node layer must be core, context, knowledge, or ephemeral".into());
+    }
+    Ok(())
+}
+
 // ─── Spectrum Graph Engine ─────────────────────────────────────────────────────
 
 pub struct SpectrumGraph {
     conn: Connection,
+}
+
+/// Initialize the optional external-content FTS index. The backfill is guarded
+/// by a durable marker so opening another graph connection does not re-tokenize
+/// the entire knowledge base. `BEGIN IMMEDIATE` plus a second marker check keeps
+/// concurrent first-open attempts from performing the rebuild twice.
+fn initialize_fts(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS prismos_internal_migrations (
+            id TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+            label,
+            content,
+            content='nodes',
+            content_rowid='rowid',
+            tokenize='unicode61'
+        );
+        CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON nodes BEGIN
+            INSERT INTO nodes_fts(rowid, label, content)
+            VALUES (new.rowid, new.label, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS nodes_fts_ad AFTER DELETE ON nodes BEGIN
+            INSERT INTO nodes_fts(nodes_fts, rowid, label, content)
+            VALUES ('delete', old.rowid, old.label, old.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS nodes_fts_au AFTER UPDATE OF label, content ON nodes BEGIN
+            INSERT INTO nodes_fts(nodes_fts, rowid, label, content)
+            VALUES ('delete', old.rowid, old.label, old.content);
+            INSERT INTO nodes_fts(rowid, label, content)
+            VALUES (new.rowid, new.label, new.content);
+        END;
+        ",
+    )?;
+
+    let already_backfilled: bool = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM prismos_internal_migrations
+            WHERE id = 'nodes_fts_backfill_v1'
+        )",
+        [],
+        |row| row.get(0),
+    )?;
+    if already_backfilled {
+        return Ok(());
+    }
+
+    conn.execute_batch("BEGIN IMMEDIATE;")?;
+    let migration_result = (|| -> rusqlite::Result<()> {
+        let applied_by_another_connection: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM prismos_internal_migrations
+                WHERE id = 'nodes_fts_backfill_v1'
+            )",
+            [],
+            |row| row.get(0),
+        )?;
+        if !applied_by_another_connection {
+            conn.execute("INSERT INTO nodes_fts(nodes_fts) VALUES ('rebuild')", [])?;
+            conn.execute(
+                "INSERT INTO prismos_internal_migrations (id, applied_at)
+                 VALUES ('nodes_fts_backfill_v1', ?1)",
+                params![Utc::now().to_rfc3339()],
+            )?;
+        }
+        Ok(())
+    })();
+
+    match migration_result {
+        Ok(()) => conn.execute_batch("COMMIT;"),
+        Err(error) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(error)
+        }
+    }
+}
+
+/// Remove the fabricated starter graph written by releases that seeded an
+/// empty production profile. This deliberately behaves like a data migration,
+/// not a prefix purge: only byte-for-byte fixture rows from the original
+/// timestamp cohort are eligible. Any node that was edited, accessed, embedded,
+/// referenced by user history, or connected by a non-fixture/adopted edge is
+/// retained. Likewise, reinforced edges and edges with feedback are retained.
+fn cleanup_legacy_demo_data(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS prismos_internal_migrations (
+            id TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );",
+    )?;
+
+    let already_applied: bool = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM prismos_internal_migrations WHERE id = ?1
+        )",
+        params![LEGACY_DEMO_CLEANUP_MIGRATION],
+        |row| row.get(0),
+    )?;
+    if already_applied {
+        return Ok(());
+    }
+
+    conn.execute_batch("BEGIN IMMEDIATE;")?;
+    let migration_result = (|| -> rusqlite::Result<()> {
+        let applied_by_another_connection: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM prismos_internal_migrations WHERE id = ?1
+            )",
+            params![LEGACY_DEMO_CLEANUP_MIGRATION],
+            |row| row.get(0),
+        )?;
+        if applied_by_another_connection {
+            return Ok(());
+        }
+
+        // All legacy fixture rows were inserted with one RFC3339 timestamp.
+        // Recover it only from fixed IDs whose descriptive fields still match
+        // the fixture, then require it on every deletion below.
+        let mut cohort_timestamps = HashSet::new();
+        for (id, label, content, node_type, layer) in LEGACY_DEMO_NODES {
+            let mut statement = conn.prepare(
+                "SELECT created_at FROM nodes
+                 WHERE id = ?1 AND label = ?2 AND content = ?3
+                   AND node_type = ?4 AND layer = ?5",
+            )?;
+            let timestamps = statement
+                .query_map(params![id, label, content, node_type, layer], |row| {
+                    row.get::<_, String>(0)
+                })?;
+            for timestamp in timestamps {
+                cohort_timestamps.insert(timestamp?);
+            }
+        }
+
+        for timestamp in &cohort_timestamps {
+            // Intent IDs were randomized by the old seed. The exact fixture
+            // body plus the shared node timestamp is the safe provenance key.
+            for (raw_input, intent_type) in LEGACY_DEMO_INTENTS {
+                conn.execute(
+                    "DELETE FROM intent_log
+                     WHERE raw_input = ?1 AND intent_type = ?2
+                       AND matched_nodes = '[]' AND confidence = 0.85
+                       AND created_at = ?3",
+                    params![raw_input, intent_type, timestamp],
+                )?;
+            }
+
+            // Remove only untouched fixture edges. Feedback or reinforcement
+            // is evidence of adoption and keeps both the edge and its nodes.
+            for (id, source_id, target_id, relation, weight) in LEGACY_DEMO_EDGES {
+                conn.execute(
+                    "DELETE FROM edges
+                     WHERE id = ?1 AND source_id = ?2 AND target_id = ?3
+                       AND relation = ?4 AND weight = ?5 AND momentum = 0.05
+                       AND reinforcements = 0
+                       AND last_reinforced = ?6 AND created_at = ?6
+                       AND NOT EXISTS (
+                           SELECT 1 FROM feedback WHERE feedback.edge_id = edges.id
+                       )",
+                    params![id, source_id, target_id, relation, weight, timestamp],
+                )?;
+            }
+
+            // Exact mutable defaults prove the node was never touched. The
+            // reference checks avoid cascading or dangling user-created state.
+            for (id, label, content, node_type, layer) in LEGACY_DEMO_NODES {
+                let quoted_id = format!("%\"{id}\"%");
+                conn.execute(
+                    "DELETE FROM nodes
+                     WHERE id = ?1 AND label = ?2 AND content = ?3
+                       AND node_type = ?4 AND layer = ?5
+                       AND embedding IS NULL AND access_count = 1
+                       AND last_accessed = ?6 AND created_at = ?6 AND updated_at = ?6
+                       AND knowledge_source_id IS NULL AND source_path IS NULL
+                       AND content_hash IS NULL AND source_generation IS NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM edges
+                           WHERE edges.source_id = nodes.id OR edges.target_id = nodes.id
+                       )
+                       AND NOT EXISTS (
+                           SELECT 1 FROM dismissed_predictions
+                           WHERE dismissed_predictions.source_id = nodes.id
+                              OR dismissed_predictions.target_id = nodes.id
+                       )
+                       AND NOT EXISTS (
+                           SELECT 1 FROM intent_log
+                           WHERE intent_log.matched_nodes LIKE ?7
+                       )
+                       AND NOT EXISTS (
+                           SELECT 1 FROM response_feedback
+                           WHERE response_feedback.context_nodes LIKE ?7
+                       )",
+                    params![id, label, content, node_type, layer, timestamp, quoted_id],
+                )?;
+            }
+        }
+
+        conn.execute(
+            "INSERT INTO prismos_internal_migrations (id, applied_at) VALUES (?1, ?2)",
+            params![LEGACY_DEMO_CLEANUP_MIGRATION, Utc::now().to_rfc3339()],
+        )?;
+        Ok(())
+    })();
+
+    match migration_result {
+        Ok(()) => conn.execute_batch("COMMIT;"),
+        Err(error) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(error)
+        }
+    }
 }
 
 impl SpectrumGraph {
@@ -129,9 +849,24 @@ impl SpectrumGraph {
         let db_path = app_dir.join("spectrum_graph.db");
         let conn = Connection::open(db_path)?;
 
-        // Enable WAL mode for better concurrent read performance
+        // The graph contains private conversations and project excerpts. SQLite
+        // is not encrypted at rest yet, so at minimum keep it private to the OS
+        // account instead of inheriting a world-readable umask.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(app_dir, std::fs::Permissions::from_mode(0o700))?;
+            std::fs::set_permissions(
+                app_dir.join("spectrum_graph.db"),
+                std::fs::Permissions::from_mode(0o600),
+            )?;
+        }
+
+        // Enable WAL mode for better concurrent read performance. Secure
+        // deletion overwrites freed SQLite cells so deleted prompts and project
+        // excerpts are not left intact in reusable database pages.
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")?;
 
         // ── Step 1: Create tables (safe for both fresh and existing DBs) ──
         conn.execute_batch(
@@ -257,7 +992,7 @@ impl SpectrumGraph {
                 updated_at      TEXT NOT NULL
             );
 
-            -- Layer 11: Domain Profile — learned user domain expertise
+            -- Layer 11: Domain Profile — coarse query-topic mix (legacy table name)
             CREATE TABLE IF NOT EXISTS domain_profile (
                 id              TEXT PRIMARY KEY DEFAULT 'default',
                 domain_counts   TEXT NOT NULL DEFAULT '{}',
@@ -277,6 +1012,21 @@ impl SpectrumGraph {
                 query_type      TEXT NOT NULL DEFAULT '',
                 created_at      TEXT NOT NULL
             );
+
+            -- Approved, versioned project roots used by the local knowledge index.
+            CREATE TABLE IF NOT EXISTS knowledge_sources (
+                id              TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                root_path       TEXT NOT NULL UNIQUE,
+                file_count      INTEGER NOT NULL DEFAULT 0,
+                chunk_count     INTEGER NOT NULL DEFAULT 0,
+                bytes_indexed   INTEGER NOT NULL DEFAULT 0,
+                skipped_files   INTEGER NOT NULL DEFAULT 0,
+                error_count     INTEGER NOT NULL DEFAULT 0,
+                status          TEXT NOT NULL DEFAULT 'ready',
+                last_indexed    TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            );
             ",
         )?;
 
@@ -291,6 +1041,10 @@ impl SpectrumGraph {
             "ALTER TABLE edges ADD COLUMN momentum REAL NOT NULL DEFAULT 0.0;",
             "ALTER TABLE edges ADD COLUMN reinforcements INTEGER NOT NULL DEFAULT 0;",
             "ALTER TABLE edges ADD COLUMN last_reinforced TEXT NOT NULL DEFAULT '';",
+            "ALTER TABLE nodes ADD COLUMN knowledge_source_id TEXT;",
+            "ALTER TABLE nodes ADD COLUMN source_path TEXT;",
+            "ALTER TABLE nodes ADD COLUMN content_hash TEXT;",
+            "ALTER TABLE nodes ADD COLUMN source_generation TEXT;",
         ];
         for sql in &migrations {
             let _ = conn.execute_batch(sql); // Ignore "duplicate column" errors
@@ -306,6 +1060,9 @@ impl SpectrumGraph {
             CREATE INDEX IF NOT EXISTS idx_nodes_layer        ON nodes(layer);
             CREATE INDEX IF NOT EXISTS idx_nodes_updated      ON nodes(updated_at);
             CREATE INDEX IF NOT EXISTS idx_nodes_access       ON nodes(access_count DESC);
+            CREATE INDEX IF NOT EXISTS idx_nodes_knowledge_source ON nodes(knowledge_source_id);
+            CREATE INDEX IF NOT EXISTS idx_nodes_source_path  ON nodes(source_path);
+            CREATE INDEX IF NOT EXISTS idx_nodes_content_hash ON nodes(content_hash);
             CREATE INDEX IF NOT EXISTS idx_intent_log_type    ON intent_log(intent_type);
             CREATE INDEX IF NOT EXISTS idx_intent_log_time    ON intent_log(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_feedback_edge      ON feedback(edge_id);
@@ -323,13 +1080,119 @@ impl SpectrumGraph {
             CREATE INDEX IF NOT EXISTS idx_agent_memory_hash       ON agent_memory(content_hash);
             CREATE INDEX IF NOT EXISTS idx_model_performance_model ON model_performance(model_name);
             CREATE INDEX IF NOT EXISTS idx_domain_profile_domain   ON domain_profile(primary_domain);
+            CREATE INDEX IF NOT EXISTS idx_knowledge_sources_path  ON knowledge_sources(root_path);
             ",
         )?;
+
+        // Optional lexical index. Bundled SQLite normally includes FTS5; if a
+        // downstream platform omits it, all retrieval still falls back to the
+        // existing LIKE + graph + vector path.
+        let _ = initialize_fts(&conn);
+
+        // Older releases populated empty owner profiles with fabricated
+        // personal history. Clean only untouched, provably seeded rows.
+        cleanup_legacy_demo_data(&conn)?;
 
         Ok(Self { conn })
     }
 
-    /// Seed demo data for new users — only runs if graph is completely empty
+    /// Capture the complete live database using SQLite's online-backup API,
+    /// then serialize the consistent in-memory destination. Unlike portable
+    /// graph exports, this intentionally includes every table, managed project
+    /// excerpt, embedding, and learned signal. The caller must encrypt the
+    /// returned bytes before they leave memory.
+    pub(crate) fn full_database_backup_bytes(&self, max_bytes: u64) -> GraphResult<Vec<u8>> {
+        if max_bytes < 100 {
+            return Err("Database backup limit is too small".into());
+        }
+
+        let page_size: u64 = self
+            .conn
+            .query_row("PRAGMA page_size", [], |row| row.get(0))?;
+        let page_count: u64 = self
+            .conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))?;
+        let estimated_bytes = page_size
+            .checked_mul(page_count)
+            .ok_or("Database size overflow")?;
+        if estimated_bytes > max_bytes {
+            return Err(format!(
+                "Private database is {estimated_bytes} bytes, exceeding the vault limit of {max_bytes} bytes"
+            )
+            .into());
+        }
+
+        let mut destination = Connection::open_in_memory()
+            .map_err(|error| format!("Cannot open in-memory backup destination: {error}"))?;
+        {
+            let online_backup = backup::Backup::new(&self.conn, &mut destination)
+                .map_err(|error| format!("Cannot initialize SQLite online backup: {error}"))?;
+            let mut transient_failures = 0_u8;
+            loop {
+                let step = online_backup
+                    .step(128)
+                    .map_err(|error| format!("SQLite online backup step failed: {error}"))?;
+                let progress = online_backup.progress();
+                if progress.pagecount > 0 {
+                    let observed_bytes = page_size
+                        .checked_mul(progress.pagecount as u64)
+                        .ok_or("Database backup size overflow")?;
+                    if observed_bytes > max_bytes {
+                        return Err(format!(
+                            "Database grew beyond the vault limit of {max_bytes} bytes during backup"
+                        )
+                        .into());
+                    }
+                }
+                match step {
+                    backup::StepResult::Done => break,
+                    backup::StepResult::More => transient_failures = 0,
+                    backup::StepResult::Busy | backup::StepResult::Locked => {
+                        transient_failures = transient_failures.saturating_add(1);
+                        if transient_failures > 20 {
+                            return Err(
+                                "Database remained busy while creating the private vault".into()
+                            );
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    _ => return Err("Unsupported SQLite backup status".into()),
+                }
+            }
+        }
+
+        let integrity: String = destination
+            .query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))
+            .map_err(|error| format!("Cannot validate in-memory SQLite backup: {error}"))?;
+        if integrity != "ok" {
+            return Err(format!("SQLite refused the backup integrity check: {integrity}").into());
+        }
+
+        let serialized = destination
+            .serialize(DatabaseName::Main)
+            .map_err(|error| format!("Cannot serialize in-memory SQLite backup: {error}"))?;
+        if serialized.len() as u64 > max_bytes {
+            return Err(format!(
+                "Serialized database exceeds the vault limit of {max_bytes} bytes"
+            )
+            .into());
+        }
+        let mut bytes = serialized.to_vec();
+        // Online backup captures all committed WAL content in the destination,
+        // but page 1 can retain the source's WAL read/write version bytes. A
+        // standalone serialized image has no companion WAL and must use the
+        // rollback-journal header mode (1) to reopen portably.
+        if bytes.len() < 100 || !matches!(bytes[18], 1 | 2) || !matches!(bytes[19], 1 | 2) {
+            return Err("Serialized SQLite backup has an invalid database header".into());
+        }
+        bytes[18] = 1;
+        bytes[19] = 1;
+        Ok(bytes)
+    }
+
+    /// Test-only fixture generator. Production startup must never insert these
+    /// fabricated personal-looking records into an owner's knowledge graph.
+    #[cfg(test)]
     pub fn seed_demo_data(&self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let (nodes, _edges) = self.stats()?;
         if nodes > 0 {
@@ -338,21 +1201,7 @@ impl SpectrumGraph {
 
         let now = chrono::Utc::now().to_rfc3339();
 
-        // ── Demo nodes showing PrismOS-AI as a daily productivity tool ──
-        let demo_nodes = vec![
-            ("demo-work-1", "Weekly Goals", "Track and review weekly professional goals, deadlines, and deliverables", "work", "core"),
-            ("demo-work-2", "Meeting Notes", "Capture and organize notes from team meetings, 1:1s, and standups", "work", "context"),
-            ("demo-learning-1", "Learning Rust", "Study notes on Rust ownership, lifetimes, and async patterns", "learning", "core"),
-            ("demo-learning-2", "AI Research", "Papers and insights on local LLM inference, RAG systems, and agent architectures", "learning", "context"),
-            ("demo-health-1", "Fitness Tracker", "Daily exercise log: running, strength training, stretching routines", "health", "core"),
-            ("demo-health-2", "Sleep Habits", "Track sleep patterns, quality, and habits for better rest", "health", "context"),
-            ("demo-finance-1", "Budget Overview", "Monthly income, expenses, savings goals, and investment tracking", "finance", "core"),
-            ("demo-task-1", "Home Projects", "Organize home improvement tasks, shopping lists, and maintenance schedules", "task", "context"),
-            ("demo-social-1", "Family Events", "Birthdays, anniversaries, family gatherings, and gift ideas", "social", "context"),
-            ("demo-memory-1", "Travel Plans", "Trip ideas, itineraries, packing lists, and travel memories", "memory", "context"),
-        ];
-
-        for (id, label, content, ntype, layer) in &demo_nodes {
+        for (id, label, content, ntype, layer) in LEGACY_DEMO_NODES {
             self.conn.execute(
                 "INSERT OR IGNORE INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
@@ -360,19 +1209,7 @@ impl SpectrumGraph {
             )?;
         }
 
-        // ── Demo edges showing relationships between life facets ──
-        let demo_edges = vec![
-            ("demo-edge-1", "demo-work-1", "demo-work-2", "feeds_into", 0.8),
-            ("demo-edge-2", "demo-learning-1", "demo-work-1", "supports", 0.7),
-            ("demo-edge-3", "demo-learning-2", "demo-learning-1", "related_to", 0.6),
-            ("demo-edge-4", "demo-health-1", "demo-health-2", "affects", 0.75),
-            ("demo-edge-5", "demo-work-1", "demo-finance-1", "impacts", 0.5),
-            ("demo-edge-6", "demo-task-1", "demo-social-1", "related_to", 0.4),
-            ("demo-edge-7", "demo-health-1", "demo-work-1", "enables", 0.6),
-            ("demo-edge-8", "demo-memory-1", "demo-social-1", "connects_to", 0.5),
-        ];
-
-        for (id, src, tgt, rel, weight) in &demo_edges {
+        for (id, src, tgt, rel, weight) in LEGACY_DEMO_EDGES {
             self.conn.execute(
                 "INSERT OR IGNORE INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, 0.05, 0, ?6, ?6)",
@@ -380,16 +1217,7 @@ impl SpectrumGraph {
             )?;
         }
 
-        // ── Add demo intents to the intent log so the daily brief has data ──
-        let demo_intents = vec![
-            ("What are my top priorities this week?", "query"),
-            ("Help me plan a healthy meal prep for the week", "task"),
-            ("Summarize the latest Rust async patterns", "learning"),
-            ("Track my morning run: 5K in 28 minutes", "health"),
-            ("Review my monthly budget and spending", "finance"),
-        ];
-
-        for (raw, itype) in &demo_intents {
+        for (raw, itype) in LEGACY_DEMO_INTENTS {
             self.conn.execute(
                 "INSERT INTO intent_log (id, raw_input, intent_type, matched_nodes, confidence, created_at)
                  VALUES (?1, ?2, ?3, '[]', 0.85, ?4)",
@@ -425,22 +1253,25 @@ impl SpectrumGraph {
         node_type: &str,
         layer: &str,
     ) -> Result<SpectrumNode, Box<dyn std::error::Error + Send + Sync>> {
+        validate_node_write(label, content, node_type, layer)?;
         let now = Utc::now().to_rfc3339();
 
         // ── Dedup check: same label + node_type → update instead of insert ──
-        let existing: Option<String> = self.conn.prepare(
-            "SELECT id FROM nodes WHERE label = ?1 AND node_type = ?2 LIMIT 1",
-        )?
-        .query_row(params![label, node_type], |row| row.get::<_, String>(0))
-        .ok();
+        let existing: Option<String> = self
+            .conn
+            .prepare("SELECT id FROM nodes WHERE label = ?1 AND node_type = ?2 LIMIT 1")?
+            .query_row(params![label, node_type], |row| row.get::<_, String>(0))
+            .ok();
 
         if let Some(existing_id) = existing {
-            // Merge: append new content if different, bump access + timestamp
+            // Bounded replacement: a stable label is an upsert identity. Older
+            // builds appended every differing value forever, allowing one node
+            // to grow without limit across otherwise valid calls.
             self.conn.execute(
                 "UPDATE nodes SET access_count = access_count + 1,
                                   last_accessed = ?1, updated_at = ?1,
-                                  content = CASE WHEN content = ?2 THEN content
-                                                 ELSE content || '\n---\n' || ?2 END
+                                  embedding = CASE WHEN content = ?2 THEN embedding ELSE NULL END,
+                                  content = ?2
                  WHERE id = ?3",
                 params![now, content, existing_id],
             )?;
@@ -470,6 +1301,305 @@ impl SpectrumGraph {
             updated_at: now,
             connections: vec![],
         })
+    }
+
+    /// Source-backed upsert: replace the previous snapshot instead of appending
+    /// versions forever. This is the correct behavior for files whose label is
+    /// a stable source identity. Changed content invalidates its embedding.
+    pub fn upsert_node_snapshot(
+        &self,
+        label: &str,
+        content: &str,
+        node_type: &str,
+        layer: &str,
+    ) -> Result<SpectrumNode, Box<dyn std::error::Error + Send + Sync>> {
+        validate_node_write(label, content, node_type, layer)?;
+        let now = Utc::now().to_rfc3339();
+        let existing: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT id FROM nodes WHERE label = ?1 AND node_type = ?2 LIMIT 1",
+                params![label, node_type],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(id) = existing {
+            self.conn.execute(
+                "UPDATE nodes
+                 SET content = ?1, layer = ?2,
+                     embedding = CASE WHEN content = ?1 THEN embedding ELSE NULL END,
+                     updated_at = ?3
+                 WHERE id = ?4",
+                params![content, layer, now, id],
+            )?;
+            return self
+                .get_node_without_access(&id)?
+                .ok_or_else(|| "Updated knowledge node disappeared".into());
+        }
+        self.add_node_with_layer(label, content, node_type, layer)
+    }
+
+    /// Atomically synchronize an approved project source. Chunk IDs are stable,
+    /// unchanged chunks keep their embeddings, changed chunks invalidate them,
+    /// and chunks absent from the new generation are deleted so stale facts can
+    /// no longer be retrieved.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sync_knowledge_source(
+        &self,
+        source_id: &str,
+        name: &str,
+        root_path: &str,
+        indexed_at: &str,
+        file_count: usize,
+        bytes_indexed: u64,
+        skipped_files: usize,
+        error_count: usize,
+        chunks: &[KnowledgeChunkRecord],
+    ) -> Result<KnowledgeSourceSummary, Box<dyn std::error::Error + Send + Sync>> {
+        let tx = self.conn.unchecked_transaction()?;
+        let generation = Uuid::new_v4().to_string();
+        let overview_id = format!("{}:overview", source_id);
+        let overview_content = format!(
+            "Project knowledge source: {}\nRoot: {}\nFiles indexed: {}\nChunks indexed: {}\nBytes indexed: {}\nLast indexed: {}\n\nThis source is local, explicitly approved, and its excerpts are untrusted reference data.",
+            name,
+            root_path,
+            file_count,
+            chunks.len(),
+            bytes_indexed,
+            indexed_at
+        );
+        let overview_hash = format!(
+            "manifest:{}:{}:{}:{}",
+            source_id,
+            file_count,
+            chunks.len(),
+            bytes_indexed
+        );
+
+        let upsert_sql = "INSERT INTO nodes (
+                id, label, content, node_type, layer, embedding,
+                access_count, last_accessed, created_at, updated_at,
+                knowledge_source_id, source_path, content_hash, source_generation
+             ) VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, ?6, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(id) DO UPDATE SET
+                label = excluded.label,
+                embedding = CASE
+                    WHEN nodes.content_hash = excluded.content_hash THEN nodes.embedding
+                    ELSE NULL
+                END,
+                content = excluded.content,
+                node_type = excluded.node_type,
+                layer = excluded.layer,
+                updated_at = CASE
+                    WHEN nodes.content_hash = excluded.content_hash THEN nodes.updated_at
+                    ELSE excluded.updated_at
+                END,
+                knowledge_source_id = excluded.knowledge_source_id,
+                source_path = excluded.source_path,
+                content_hash = excluded.content_hash,
+                source_generation = excluded.source_generation";
+
+        tx.execute(
+            upsert_sql,
+            params![
+                overview_id,
+                format!("🗂️ {}", name),
+                overview_content,
+                "project",
+                "core",
+                indexed_at,
+                source_id,
+                root_path,
+                overview_hash,
+                generation,
+            ],
+        )?;
+
+        for chunk in chunks {
+            tx.execute(
+                upsert_sql,
+                params![
+                    chunk.id,
+                    chunk.label,
+                    chunk.content,
+                    "project_chunk",
+                    "knowledge",
+                    indexed_at,
+                    source_id,
+                    chunk.source_path,
+                    chunk.content_hash,
+                    generation,
+                ],
+            )?;
+        }
+
+        tx.execute(
+            "DELETE FROM nodes
+             WHERE knowledge_source_id = ?1
+               AND COALESCE(source_generation, '') <> ?2",
+            params![source_id, generation],
+        )?;
+
+        tx.execute(
+            "INSERT INTO knowledge_sources (
+                id, name, root_path, file_count, chunk_count, bytes_indexed,
+                skipped_files, error_count, status, last_indexed, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                root_path = excluded.root_path,
+                file_count = excluded.file_count,
+                chunk_count = excluded.chunk_count,
+                bytes_indexed = excluded.bytes_indexed,
+                skipped_files = excluded.skipped_files,
+                error_count = excluded.error_count,
+                status = excluded.status,
+                last_indexed = excluded.last_indexed,
+                updated_at = excluded.updated_at",
+            params![
+                source_id,
+                name,
+                root_path,
+                file_count as i64,
+                chunks.len() as i64,
+                bytes_indexed.min(i64::MAX as u64) as i64,
+                skipped_files as i64,
+                error_count as i64,
+                indexed_at,
+            ],
+        )?;
+        tx.commit()?;
+
+        Ok(KnowledgeSourceSummary {
+            id: source_id.to_string(),
+            name: name.to_string(),
+            root_path: root_path.to_string(),
+            file_count,
+            chunk_count: chunks.len(),
+            bytes_indexed,
+            skipped_files,
+            error_count,
+            status: "ready".into(),
+            last_indexed: indexed_at.to_string(),
+        })
+    }
+
+    pub fn list_knowledge_sources(
+        &self,
+    ) -> Result<Vec<KnowledgeSourceSummary>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, root_path, file_count, chunk_count, bytes_indexed,
+                    skipped_files, error_count, status, last_indexed
+             FROM knowledge_sources
+             ORDER BY updated_at DESC",
+        )?;
+        let sources = stmt
+            .query_map([], |row| {
+                Ok(KnowledgeSourceSummary {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    root_path: row.get(2)?,
+                    file_count: row.get::<_, i64>(3)?.max(0) as usize,
+                    chunk_count: row.get::<_, i64>(4)?.max(0) as usize,
+                    bytes_indexed: row.get::<_, i64>(5)?.max(0) as u64,
+                    skipped_files: row.get::<_, i64>(6)?.max(0) as usize,
+                    error_count: row.get::<_, i64>(7)?.max(0) as usize,
+                    status: row.get(8)?,
+                    last_indexed: row.get(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(sources)
+    }
+
+    pub fn knowledge_source_exists(
+        &self,
+        source_id: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let exists = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM knowledge_sources WHERE id = ?1)",
+            params![source_id],
+            |row| row.get(0),
+        )?;
+        Ok(exists)
+    }
+
+    pub fn node_ids_include_managed_knowledge(
+        &self,
+        node_ids: &[String],
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        for node_id in node_ids {
+            let is_managed: bool = self.conn.query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM nodes
+                    WHERE id = ?1 AND knowledge_source_id IS NOT NULL
+                )",
+                params![node_id],
+                |row| row.get(0),
+            )?;
+            if is_managed {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Forget one explicitly selected project source and all of its owned
+    /// chunks. Cross-source/user nodes are untouched.
+    pub fn delete_knowledge_source(
+        &self,
+        source_id: &str,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let tx = self.conn.unchecked_transaction()?;
+        let source_node_ids: Vec<String> = {
+            let mut stmt = tx.prepare("SELECT id FROM nodes WHERE knowledge_source_id = ?1")?;
+            let rows = stmt.query_map(params![source_id], |row| row.get(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        for node_id in &source_node_ids {
+            tx.execute(
+                "DELETE FROM response_feedback WHERE context_nodes LIKE ?1 ESCAPE '\\'",
+                params![format!("%\"{}\"%", node_id)],
+            )?;
+        }
+        // Remove generated conversations/entities that copied source-grounded
+        // response text in older app versions. These nodes are recognizable by
+        // type/content and a direct provenance edge to this managed source.
+        let derived_conversations = tx.execute(
+            "DELETE FROM nodes
+             WHERE node_type = 'conversation'
+               AND id IN (
+                    SELECT e.source_id
+                    FROM edges e
+                    JOIN nodes source_node ON source_node.id = e.target_id
+                    WHERE e.relation = 'derived_from'
+                      AND source_node.knowledge_source_id = ?1
+               )",
+            params![source_id],
+        )?;
+        let derived_entities = tx.execute(
+            "DELETE FROM nodes
+             WHERE node_type = 'entity'
+               AND content LIKE 'Concept extracted from conversation:%'
+               AND id IN (
+                    SELECT e.source_id
+                    FROM edges e
+                    JOIN nodes source_node ON source_node.id = e.target_id
+                    WHERE e.relation = 'related_to'
+                      AND source_node.knowledge_source_id = ?1
+               )",
+            params![source_id],
+        )?;
+        let source_nodes = tx.execute(
+            "DELETE FROM nodes WHERE knowledge_source_id = ?1",
+            params![source_id],
+        )?;
+        tx.execute(
+            "DELETE FROM knowledge_sources WHERE id = ?1",
+            params![source_id],
+        )?;
+        tx.commit()?;
+        Ok(source_nodes + derived_conversations + derived_entities)
     }
 
     /// Retrieve all nodes with connections populated, ordered by recency
@@ -517,7 +1647,8 @@ impl SpectrumGraph {
             for id in &node_ids {
                 params.push(Box::new(id.clone()));
             }
-            let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
 
             let edges: Vec<(String, String)> = edge_stmt
                 .query_map(param_refs.as_slice(), |row| {
@@ -527,7 +1658,8 @@ impl SpectrumGraph {
                 .collect();
 
             // Build a lookup: node_id → list of connected node_ids
-            let mut conn_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+            let mut conn_map: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
             for (src, tgt) in &edges {
                 conn_map.entry(src.clone()).or_default().push(tgt.clone());
                 conn_map.entry(tgt.clone()).or_default().push(src.clone());
@@ -599,6 +1731,7 @@ impl SpectrumGraph {
         &self,
         query: &str,
     ) -> Result<Vec<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        validate_live_text(query, "search query", 64 * 1024, false)?;
         let pattern = format!("%{}%", query);
         let mut stmt = self.conn.prepare(
             "SELECT id, label, content, node_type,
@@ -629,10 +1762,8 @@ impl SpectrumGraph {
     }
 
     /// Delete a node and all its edges (cascade)
-    pub fn delete_node(
-        &self,
-        id: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn delete_node(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(id, "node id")?;
         self.conn.execute(
             "DELETE FROM edges WHERE source_id = ?1 OR target_id = ?1",
             params![id],
@@ -649,9 +1780,14 @@ impl SpectrumGraph {
         label: &str,
         content: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(id, "node id")?;
+        validate_live_text(label, "node label", MAX_IMPORT_LABEL_BYTES, false)?;
+        validate_live_text(content, "node content", MAX_IMPORT_CONTENT_BYTES, true)?;
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "UPDATE nodes SET label = ?1, content = ?2, updated_at = ?3 WHERE id = ?4",
+            "UPDATE nodes SET label = ?1, content = ?2,
+                              embedding = CASE WHEN content = ?2 THEN embedding ELSE NULL END,
+                              updated_at = ?3 WHERE id = ?4",
             params![label, content, now, id],
         )?;
         Ok(())
@@ -669,6 +1805,15 @@ impl SpectrumGraph {
         relation: &str,
         weight: f64,
     ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(source_id, "edge source id")?;
+        validate_graph_id(target_id, "edge target id")?;
+        validate_graph_token(relation, "edge relation", MAX_IMPORT_RELATION_BYTES)?;
+        if source_id == target_id {
+            return Err("edge source and target must differ".into());
+        }
+        if !weight.is_finite() {
+            return Err("edge weight must be finite".into());
+        }
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
         let clamped = weight.clamp(MIN_EDGE_WEIGHT, MAX_EDGE_WEIGHT);
@@ -700,6 +1845,12 @@ impl SpectrumGraph {
         target_id: &str,
         relation: &str,
     ) -> Result<(SpectrumEdge, bool), Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(source_id, "edge source id")?;
+        validate_graph_id(target_id, "edge target id")?;
+        validate_graph_token(relation, "edge relation", MAX_IMPORT_RELATION_BYTES)?;
+        if source_id == target_id {
+            return Err("edge source and target must differ".into());
+        }
         // Check if edge already exists
         let mut stmt = self.conn.prepare(
             "SELECT id, source_id, target_id, relation, weight,
@@ -740,6 +1891,10 @@ impl SpectrumGraph {
         edge_id: &str,
         feedback_signal: f64, // positive = reinforce, negative = weaken
     ) -> Result<SpectrumEdge, Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(edge_id, "edge id")?;
+        if !feedback_signal.is_finite() || !(-1.0..=1.0).contains(&feedback_signal) {
+            return Err("feedback signal must be finite and between -1 and 1".into());
+        }
         let now = Utc::now().to_rfc3339();
 
         // Fetch current edge state
@@ -750,20 +1905,19 @@ impl SpectrumGraph {
              FROM edges WHERE id = ?1",
         )?;
 
-        let edge: SpectrumEdge = stmt
-            .query_row(params![edge_id], |row| {
-                Ok(SpectrumEdge {
-                    id: row.get(0)?,
-                    source_id: row.get(1)?,
-                    target_id: row.get(2)?,
-                    relation: row.get(3)?,
-                    weight: row.get(4)?,
-                    momentum: row.get(5)?,
-                    reinforcements: row.get(6)?,
-                    last_reinforced: row.get(7)?,
-                    created_at: row.get(8)?,
-                })
-            })?;
+        let edge: SpectrumEdge = stmt.query_row(params![edge_id], |row| {
+            Ok(SpectrumEdge {
+                id: row.get(0)?,
+                source_id: row.get(1)?,
+                target_id: row.get(2)?,
+                relation: row.get(3)?,
+                weight: row.get(4)?,
+                momentum: row.get(5)?,
+                reinforcements: row.get(6)?,
+                last_reinforced: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
 
         // Apply temporal decay since last reinforcement
         let decay = self.calculate_temporal_decay(&edge.last_reinforced);
@@ -812,6 +1966,7 @@ impl SpectrumGraph {
         &self,
         node_id: &str,
     ) -> Result<Vec<SpectrumEdge>, Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(node_id, "node id")?;
         let mut stmt = self.conn.prepare(
             "SELECT id, source_id, target_id, relation, weight,
                     COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
@@ -873,6 +2028,58 @@ impl SpectrumGraph {
     //  QUERY INTENT — Graph-Aware Semantic Retrieval
     // ═══════════════════════════════════════════════════════════════════════
 
+    /// FTS5/BM25 lexical candidates. Failure is intentionally non-fatal because
+    /// some downstream SQLite builds may omit FTS5.
+    fn fts_search_nodes(
+        &self,
+        terms: &[String],
+        limit: usize,
+    ) -> Result<Vec<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut seen = std::collections::HashSet::new();
+        let tokens: Vec<String> = terms
+            .iter()
+            .flat_map(|term| term.split(|c: char| !c.is_alphanumeric() && c != '_'))
+            .map(|token| token.to_lowercase())
+            .filter(|token| token.len() >= 3 && seen.insert(token.clone()))
+            .take(16)
+            .collect();
+        if tokens.is_empty() {
+            return Ok(vec![]);
+        }
+        let query = tokens
+            .iter()
+            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let mut stmt = self.conn.prepare(
+            "SELECT n.id, n.label, n.content, n.node_type,
+                    COALESCE(n.layer, 'context'), COALESCE(n.access_count, 0),
+                    COALESCE(n.last_accessed, n.updated_at), n.created_at, n.updated_at
+             FROM nodes_fts
+             JOIN nodes n ON n.rowid = nodes_fts.rowid
+             WHERE nodes_fts MATCH ?1
+             ORDER BY bm25(nodes_fts)
+             LIMIT ?2",
+        )?;
+        let nodes = stmt
+            .query_map(params![query, limit as i64], |row| {
+                Ok(SpectrumNode {
+                    id: row.get(0)?,
+                    label: row.get(1)?,
+                    content: row.get(2)?,
+                    node_type: row.get(3)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                    connections: vec![],
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(nodes)
+    }
+
     /// Query the Spectrum Graph for nodes relevant to a parsed intent.
     /// Combines text matching, edge weight traversal, temporal boosting,
     /// and access frequency into a unified relevance score.
@@ -882,6 +2089,14 @@ impl SpectrumGraph {
         intent_type: &str,
         entities: &[String],
     ) -> Result<Vec<IntentQueryResult>, Box<dyn std::error::Error + Send + Sync>> {
+        validate_live_text(raw_input, "intent input", 64 * 1024, false)?;
+        validate_graph_token(intent_type, "intent type", MAX_IMPORT_NODE_TYPE_BYTES)?;
+        if entities.len() > MAX_LIVE_ENTITIES {
+            return Err(format!("intent entities exceed {MAX_LIVE_ENTITIES} items").into());
+        }
+        for entity in entities {
+            validate_live_text(entity, "intent entity", MAX_IMPORT_LABEL_BYTES, false)?;
+        }
         let now = Utc::now().to_rfc3339();
 
         // Log this intent for pattern mining
@@ -892,46 +2107,87 @@ impl SpectrumGraph {
             params![log_id, raw_input, intent_type, now],
         )?;
 
-        // Build search terms from entities and raw input words
-        let mut search_terms: Vec<String> = entities.to_vec();
-        // Filter: only words ≥ 4 chars and not in stop list (avoids noisy matches)
+        // Build a bounded, deduplicated token set. Project corpora can contain
+        // thousands of chunks, so an unbounded LIKE scan per prompt word turns
+        // long chat input into quadratic-feeling retrieval latency.
         let stop_words: &[&str] = &[
-            "what", "when", "where", "which", "whom", "whose", "that", "this",
-            "these", "those", "there", "their", "about", "after", "again",
-            "been", "before", "being", "between", "both", "could", "does",
-            "doing", "down", "each", "from", "have", "here", "just", "know",
-            "like", "make", "many", "more", "most", "much", "must", "need",
-            "only", "other", "over", "same", "should", "some", "such", "take",
-            "tell", "than", "them", "then", "they", "very", "want", "well",
-            "were", "will", "with", "would", "your", "also", "been", "came",
-            "come", "even", "ever", "every", "give", "goes", "going", "gone",
-            "good", "great", "help", "into", "keep", "last", "long", "look",
-            "made", "might", "move", "next", "once", "open", "part", "play",
-            "please", "point", "right", "show", "still", "think", "thought",
-            "time", "turn", "under", "upon", "used", "using", "went", "work",
+            "what", "when", "where", "which", "whom", "whose", "that", "this", "these", "those",
+            "there", "their", "about", "after", "again", "been", "before", "being", "between",
+            "both", "could", "does", "doing", "down", "each", "from", "have", "here", "just",
+            "know", "like", "make", "many", "more", "most", "much", "must", "need", "only",
+            "other", "over", "same", "should", "some", "such", "take", "tell", "than", "them",
+            "then", "they", "very", "want", "well", "were", "will", "with", "would", "your",
+            "also", "been", "came", "come", "even", "ever", "every", "give", "goes", "going",
+            "gone", "good", "great", "help", "into", "keep", "last", "long", "look", "made",
+            "might", "move", "next", "once", "open", "part", "play", "please", "point", "right",
+            "show", "still", "think", "thought", "time", "turn", "under", "upon", "used", "using",
+            "went", "work",
         ];
-        for word in raw_input.split_whitespace() {
-            let lower = word.to_lowercase();
-            // Require minimum 4 chars AND not a stop word
-            if lower.len() >= 4
+        let mut search_terms = Vec::new();
+        let mut seen_terms = HashSet::new();
+        let tokens = entities
+            .iter()
+            .flat_map(|entity| {
+                entity.split(|character: char| !character.is_alphanumeric() && character != '_')
+            })
+            .chain(
+                raw_input.split(|character: char| !character.is_alphanumeric() && character != '_'),
+            );
+        for token in tokens {
+            let lower = token.to_lowercase();
+            if lower.len() >= 3
                 && !stop_words.contains(&lower.as_str())
-                && !search_terms.contains(&lower)
+                && seen_terms.insert(lower.clone())
             {
                 search_terms.push(lower);
+                if search_terms.len() >= 16 {
+                    break;
+                }
             }
         }
 
         // Phase 1: Direct text match scoring
         let mut results: Vec<IntentQueryResult> = Vec::new();
-        let mut seen_ids: Vec<String> = Vec::new();
+        let mut seen_ids: HashSet<String> = HashSet::new();
 
-        for term in &search_terms {
-            let pattern = format!("%{}%", term);
+        // BM25 gives the large project corpus a real lexical index instead of
+        // relying solely on repeated `%LIKE%` scans. Rank is fused with the
+        // existing graph/temporal/access signals below.
+        if let Ok(fts_nodes) = self.fts_search_nodes(&search_terms, 30) {
+            for (rank, node) in fts_nodes.into_iter().enumerate() {
+                seen_ids.insert(node.id.clone());
+                let temporal_boost = self.calculate_temporal_boost(&node.updated_at);
+                let access_boost = (node.access_count as f64).ln().max(0.0) * 0.05;
+                let rank_bonus = 0.35 / (rank as f64 + 1.0);
+                results.push(IntentQueryResult {
+                    relevance_score: 0.55 + rank_bonus + access_boost,
+                    path_strength: 0.0,
+                    temporal_boost,
+                    node,
+                });
+            }
+        }
+
+        // Leading-wildcard LIKE is a compatibility fallback for SQLite builds
+        // without FTS5 or unusually sparse FTS results. Bound it tightly so a
+        // large multi-project corpus is not scanned once per prompt token.
+        let fallback_terms: Vec<&String> = if results.len() < 8 {
+            search_terms.iter().take(4).collect()
+        } else {
+            vec![]
+        };
+        for term in fallback_terms {
+            let escaped = term
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            let pattern = format!("%{}%", escaped);
             let mut stmt = self.conn.prepare(
                 "SELECT id, label, content, node_type,
                         COALESCE(layer, 'context'), COALESCE(access_count, 0),
                         COALESCE(last_accessed, updated_at), created_at, updated_at
-                 FROM nodes WHERE label LIKE ?1 OR content LIKE ?1
+                 FROM nodes
+                 WHERE label LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\'
                  LIMIT 30",
             )?;
 
@@ -960,7 +2216,7 @@ impl SpectrumGraph {
                     }
                     continue;
                 }
-                seen_ids.push(node.id.clone());
+                seen_ids.insert(node.id.clone());
 
                 let temporal_boost = self.calculate_temporal_boost(&node.updated_at);
                 let access_boost = (node.access_count as f64).ln().max(0.0) * 0.05;
@@ -974,11 +2230,19 @@ impl SpectrumGraph {
             }
         }
 
-        // Phase 2: Graph traversal — boost nodes connected to matched nodes via strong edges
-        let matched_ids: Vec<String> = results.iter().map(|r| r.node.id.clone()).collect();
+        // Bound graph expansion before issuing per-node connection queries.
+        results.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(40);
+
+        // Phase 2: Graph traversal — boost nodes connected to top lexical matches.
+        let matched_ids: Vec<String> = results.iter().take(16).map(|r| r.node.id.clone()).collect();
         for mid in &matched_ids {
             let edges = self.get_connections(mid)?;
-            for edge in &edges {
+            for edge in edges.iter().take(16) {
                 let neighbor_id = if edge.source_id == *mid {
                     &edge.target_id
                 } else {
@@ -991,7 +2255,7 @@ impl SpectrumGraph {
 
                 if let Some(r) = results.iter_mut().find(|r| r.node.id == *neighbor_id) {
                     r.path_strength += effective_weight * 0.3;
-                } else if effective_weight > 0.3 {
+                } else if effective_weight > 0.3 && results.len() < 64 {
                     // Pull in strongly connected neighbors not yet in results
                     if let Ok(Some(neighbor)) = self.get_node_without_access(neighbor_id) {
                         let temporal_boost = self.calculate_temporal_boost(&neighbor.updated_at);
@@ -1037,16 +2301,18 @@ impl SpectrumGraph {
     //  DEDUPLICATE NODES — Clean up duplicate label+type entries
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Merge duplicate nodes (same label + node_type) into one.
+    /// Merge user/legacy duplicate nodes (same label + node_type) into one.
+    /// Source-owned knowledge nodes are excluded because their stable IDs and
+    /// ownership boundaries are authoritative even when two projects share a
+    /// directory name and relative path.
     /// Keeps the oldest node, merges content, sums access_count,
     /// re-points edges, and deletes the extras. Returns count merged.
-    pub fn deduplicate_nodes(
-        &self,
-    ) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn deduplicate_nodes(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
         // Find groups of duplicates
         let mut stmt = self.conn.prepare(
             "SELECT label, node_type, COUNT(*) AS cnt
              FROM nodes
+             WHERE knowledge_source_id IS NULL
              GROUP BY label, node_type
              HAVING cnt > 1
              ORDER BY cnt DESC",
@@ -1070,6 +2336,7 @@ impl SpectrumGraph {
                 "SELECT id, content, COALESCE(access_count, 0)
                  FROM nodes
                  WHERE label = ?1 AND node_type = ?2
+                   AND knowledge_source_id IS NULL
                  ORDER BY created_at ASC",
             )?;
 
@@ -1105,10 +2372,8 @@ impl SpectrumGraph {
                 )?;
 
                 // Delete orphan edges that now point to same node on both sides
-                self.conn.execute(
-                    "DELETE FROM edges WHERE source_id = target_id",
-                    [],
-                )?;
+                self.conn
+                    .execute("DELETE FROM edges WHERE source_id = target_id", [])?;
 
                 // Delete duplicate edges that couldn't be re-pointed (OR IGNORE skipped them)
                 self.conn.execute(
@@ -1117,7 +2382,8 @@ impl SpectrumGraph {
                 )?;
 
                 // Delete the duplicate node
-                self.conn.execute("DELETE FROM nodes WHERE id = ?1", params![dup_id])?;
+                self.conn
+                    .execute("DELETE FROM nodes WHERE id = ?1", params![dup_id])?;
                 total_merged += 1;
             }
 
@@ -1139,6 +2405,7 @@ impl SpectrumGraph {
     /// Analyze graph patterns to predict what the user might need next.
     /// Uses: recent intent history, high-momentum edges, access patterns,
     /// and temporal clustering to generate anticipatory suggestions.
+    #[allow(clippy::type_complexity)] // Row tuple mirrors the bounded SQL projection below.
     pub fn anticipate_needs(
         &self,
     ) -> Result<Vec<AnticipatedNeed>, Box<dyn std::error::Error + Send + Sync>> {
@@ -1179,15 +2446,23 @@ impl SpectrumGraph {
             &momentum_edges
         {
             // Skip if both labels are near-identical (truncated duplicates)
-            let src_norm = src_label.to_lowercase().chars().take(40).collect::<String>();
-            let tgt_norm = tgt_label.to_lowercase().chars().take(40).collect::<String>();
+            let src_norm = src_label
+                .to_lowercase()
+                .chars()
+                .take(40)
+                .collect::<String>();
+            let tgt_norm = tgt_label
+                .to_lowercase()
+                .chars()
+                .take(40)
+                .collect::<String>();
             if src_norm == tgt_norm {
                 continue;
             }
             // Skip if we already have a suggestion about this pair
-            let already_seen = needs.iter().any(|n| {
-                n.related_nodes.contains(src_id) && n.related_nodes.contains(tgt_id)
-            });
+            let already_seen = needs
+                .iter()
+                .any(|n| n.related_nodes.contains(src_id) && n.related_nodes.contains(tgt_id));
             if already_seen {
                 continue;
             }
@@ -1334,32 +2609,46 @@ impl SpectrumGraph {
             let (text, action, icon) = match src_type.as_str() {
                 "work" => (
                     format!("Your \"{}\" ↔ \"{}\" connection is growing fast", src, tgt),
-                    format!("Summarize my recent progress on \"{}\" and how it relates to \"{}\"", src, tgt),
+                    format!(
+                        "Summarize my recent progress on \"{}\" and how it relates to \"{}\"",
+                        src, tgt
+                    ),
                     "📈".to_string(),
                 ),
                 "health" => (
                     format!("\"{}\" and \"{}\" are linked in your health data", src, tgt),
-                    format!("Suggest a wellness routine connecting \"{}\" and \"{}\"", src, tgt),
+                    format!(
+                        "Suggest a wellness routine connecting \"{}\" and \"{}\"",
+                        src, tgt
+                    ),
                     "💪".to_string(),
                 ),
                 "finance" => (
                     format!("\"{}\" and \"{}\" are trending together", src, tgt),
-                    format!("Give me a quick budget check for \"{}\" and \"{}\"", src, tgt),
+                    format!(
+                        "Give me a quick budget check for \"{}\" and \"{}\"",
+                        src, tgt
+                    ),
                     "💰".to_string(),
                 ),
                 "learning" => (
                     format!("Your learning in \"{}\" connects to \"{}\"", src, tgt),
-                    format!("Create a deeper study plan connecting \"{}\" and \"{}\"", src, tgt),
+                    format!(
+                        "Create a deeper study plan connecting \"{}\" and \"{}\"",
+                        src, tgt
+                    ),
                     "📚".to_string(),
                 ),
                 _ => (
                     format!("\"{}\" and \"{}\" are becoming strongly linked", src, tgt),
-                    format!("Explore how \"{}\" and \"{}\" are connected and what I should do next", src, tgt),
+                    format!(
+                        "Explore how \"{}\" and \"{}\" are connected and what I should do next",
+                        src, tgt
+                    ),
                     "🔗".to_string(),
                 ),
             };
-            let confidence = (*w / MAX_EDGE_WEIGHT).min(1.0).max(0.3) * 0.7
-                + (*m).min(1.0) * 0.3;
+            let confidence = (*w / MAX_EDGE_WEIGHT).clamp(0.3, 1.0) * 0.7 + (*m).min(1.0) * 0.3;
             suggestions.push(ProactiveSuggestion {
                 id: Uuid::new_v4().to_string(),
                 text,
@@ -1390,7 +2679,8 @@ impl SpectrumGraph {
                 let (text, action, icon) = match intent_type.as_str() {
                     "task" | "work" => (
                         format!("You've had {} work intents in 3 days", count),
-                        "Organize my current priorities and suggest what to focus on next".to_string(),
+                        "Organize my current priorities and suggest what to focus on next"
+                            .to_string(),
                         "📋".to_string(),
                     ),
                     "question" | "learning" => (
@@ -1400,12 +2690,16 @@ impl SpectrumGraph {
                     ),
                     "creative" => (
                         format!("Creative streak! {} creative intents", count),
-                        "Capture and organize all my recent creative ideas into a coherent plan".to_string(),
+                        "Capture and organize all my recent creative ideas into a coherent plan"
+                            .to_string(),
                         "🎨".to_string(),
                     ),
                     _ => (
                         format!("Active with \"{}\" — {} times recently", intent_type, count),
-                        format!("Help me organize my recent activity around \"{}\"", intent_type),
+                        format!(
+                            "Help me organize my recent activity around \"{}\"",
+                            intent_type
+                        ),
                         "⚡".to_string(),
                     ),
                 };
@@ -1444,7 +2738,10 @@ impl SpectrumGraph {
                 suggestions.push(ProactiveSuggestion {
                     id: Uuid::new_v4().to_string(),
                     text: format!("\"{}\" keeps coming up but isn't connected", label),
-                    action_intent: format!("Find connections between \"{}\" and my other knowledge, then link them", label),
+                    action_intent: format!(
+                        "Find connections between \"{}\" and my other knowledge, then link them",
+                        label
+                    ),
                     icon: "🧩".to_string(),
                     category: "connections".to_string(),
                     confidence: (0.4 + (*ac as f64 * 0.05).min(0.4)),
@@ -1508,7 +2805,9 @@ impl SpectrumGraph {
         let now = Utc::now().to_rfc3339();
         let content = format!(
             "Suggestion: {}\nAction: {}\nCategory: {}\nConfidence: {:.0}%",
-            suggestion.text, suggestion.action_intent, suggestion.category,
+            suggestion.text,
+            suggestion.action_intent,
+            suggestion.category,
             suggestion.confidence * 100.0
         );
         self.conn.execute(
@@ -1542,9 +2841,9 @@ impl SpectrumGraph {
         let mut matching_ids: Vec<String> = Vec::new();
         for kw in keywords {
             let pattern = format!("%{}%", kw.to_lowercase());
-            let mut stmt = self.conn.prepare(
-                "SELECT id FROM nodes WHERE LOWER(label) LIKE ?1 LIMIT 10",
-            )?;
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM nodes WHERE LOWER(label) LIKE ?1 LIMIT 10")?;
             let ids: Vec<String> = stmt
                 .query_map(params![pattern], |row| row.get::<_, String>(0))?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -1581,10 +2880,9 @@ impl SpectrumGraph {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 for (edge_id, weight, momentum, reinforcements) in &edges {
-                    let new_momentum =
-                        MOMENTUM_ALPHA * signal + (1.0 - MOMENTUM_ALPHA) * momentum;
-                    let new_weight =
-                        (weight + REINFORCEMENT_DELTA * signal).clamp(MIN_EDGE_WEIGHT, MAX_EDGE_WEIGHT);
+                    let new_momentum = MOMENTUM_ALPHA * signal + (1.0 - MOMENTUM_ALPHA) * momentum;
+                    let new_weight = (weight + REINFORCEMENT_DELTA * signal)
+                        .clamp(MIN_EDGE_WEIGHT, MAX_EDGE_WEIGHT);
                     let new_reinforcements = reinforcements + 1;
 
                     self.conn.execute(
@@ -1605,7 +2903,9 @@ impl SpectrumGraph {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Get the complete graph snapshot for frontend rendering
-    pub fn get_full_graph(&self) -> Result<GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn get_full_graph(
+        &self,
+    ) -> Result<GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
         let nodes = self.get_all_nodes()?;
         let edges = self.get_all_edges()?;
         let stats = self.get_metrics()?;
@@ -1617,30 +2917,149 @@ impl SpectrumGraph {
         })
     }
 
+    /// Build a portable snapshot that intentionally excludes approved
+    /// project-source excerpts, strict legacy watcher snapshots, and historical
+    /// one-off attachment chunks. Project excerpts are regenerable from locally
+    /// approved roots; transient attachments have no persistence consent.
+    pub fn get_portable_graph(
+        &self,
+    ) -> Result<GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+        let mut node_stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes
+             WHERE knowledge_source_id IS NULL
+             ORDER BY updated_at DESC",
+        )?;
+        let mut nodes: Vec<SpectrumNode> = node_stmt
+            .query_map([], |row| {
+                Ok(SpectrumNode {
+                    id: row.get(0)?,
+                    label: row.get(1)?,
+                    content: row.get(2)?,
+                    node_type: row.get(3)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                    connections: vec![],
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        nodes.retain(|node| !is_nonportable_snapshot_node(node));
+        let portable_node_ids: HashSet<String> = nodes.iter().map(|node| node.id.clone()).collect();
+
+        let mut edge_stmt = self.conn.prepare(
+            "SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
+                    COALESCE(e.momentum, 0.0), COALESCE(e.reinforcements, 0),
+                    COALESCE(e.last_reinforced, e.created_at), e.created_at
+             FROM edges e
+             JOIN nodes source ON source.id = e.source_id
+             JOIN nodes target ON target.id = e.target_id
+             WHERE source.knowledge_source_id IS NULL
+               AND target.knowledge_source_id IS NULL
+             ORDER BY e.weight DESC",
+        )?;
+        let edges: Vec<SpectrumEdge> = edge_stmt
+            .query_map([], |row| {
+                Ok(SpectrumEdge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    relation: row.get(3)?,
+                    weight: row.get(4)?,
+                    momentum: row.get(5)?,
+                    reinforcements: row.get(6)?,
+                    last_reinforced: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|edge| {
+                portable_node_ids.contains(&edge.source_id)
+                    && portable_node_ids.contains(&edge.target_id)
+            })
+            .collect();
+
+        let mut connection_map: HashMap<String, Vec<String>> = HashMap::new();
+        for edge in &edges {
+            connection_map
+                .entry(edge.source_id.clone())
+                .or_default()
+                .push(edge.target_id.clone());
+            connection_map
+                .entry(edge.target_id.clone())
+                .or_default()
+                .push(edge.source_id.clone());
+        }
+        for node in &mut nodes {
+            node.connections = connection_map.remove(&node.id).unwrap_or_default();
+        }
+
+        let node_count = nodes.len();
+        let edge_count = edges.len();
+        let avg_edge_weight = if edge_count == 0 {
+            0.0
+        } else {
+            edges.iter().map(|edge| edge.weight).sum::<f64>() / edge_count as f64
+        };
+        let strongest_edge_weight = edges.iter().map(|edge| edge.weight).fold(0.0_f64, f64::max);
+        let mut facet_distribution = HashMap::new();
+        for node in &nodes {
+            *facet_distribution
+                .entry(node.node_type.clone())
+                .or_insert(0) += 1;
+        }
+        let most_connected_node = nodes
+            .iter()
+            .max_by_key(|node| node.connections.len())
+            .map(|node| node.label.clone());
+        let max_edges = if node_count > 1 {
+            node_count * (node_count - 1) / 2
+        } else {
+            1
+        };
+
+        let snapshot = GraphSnapshot {
+            nodes,
+            edges,
+            stats: GraphMetrics {
+                node_count,
+                edge_count,
+                avg_edge_weight,
+                strongest_edge_weight,
+                facet_distribution,
+                most_connected_node,
+                graph_density: edge_count as f64 / max_edges as f64,
+            },
+        };
+        validate_import_snapshot(&snapshot)?;
+        Ok(snapshot)
+    }
+
     /// Compute extended graph metrics
     pub fn get_metrics(&self) -> Result<GraphMetrics, Box<dyn std::error::Error + Send + Sync>> {
-        let node_count: usize =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM nodes", [], |row| row.get(0))?;
-        let edge_count: usize =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
-
-        let avg_edge_weight: f64 = self
+        let node_count: usize = self
             .conn
-            .query_row(
-                "SELECT COALESCE(AVG(weight), 0.0) FROM edges",
-                [],
-                |row| row.get(0),
-            )?;
-
-        let strongest_edge_weight: f64 = self
+            .query_row("SELECT COUNT(*) FROM nodes", [], |row| row.get(0))?;
+        let edge_count: usize = self
             .conn
-            .query_row(
-                "SELECT COALESCE(MAX(weight), 0.0) FROM edges",
-                [],
-                |row| row.get(0),
-            )?;
+            .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
+
+        let avg_edge_weight: f64 =
+            self.conn
+                .query_row("SELECT COALESCE(AVG(weight), 0.0) FROM edges", [], |row| {
+                    row.get(0)
+                })?;
+
+        let strongest_edge_weight: f64 =
+            self.conn
+                .query_row("SELECT COALESCE(MAX(weight), 0.0) FROM edges", [], |row| {
+                    row.get(0)
+                })?;
 
         // Facet distribution
         let mut stmt = self
@@ -1691,21 +3110,76 @@ impl SpectrumGraph {
 
     /// Get basic stats (backwards compatible)
     pub fn stats(&self) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
-        let node_count: usize =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM nodes", [], |row| row.get(0))?;
-        let edge_count: usize =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
+        let node_count: usize = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM nodes", [], |row| row.get(0))?;
+        let edge_count: usize = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
         Ok((node_count, edge_count))
     }
 
-    /// Clear all nodes and edges from the Spectrum Graph
-    /// Returns the count of deleted nodes and edges.
+    /// Clear all user content and learned state from the Spectrum Graph database.
+    /// Schema/migration markers are retained so the database remains usable.
     pub fn clear_graph(&self) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
         let (nodes, edges) = self.stats()?;
-        self.conn.execute("DELETE FROM edges", [])?;
-        self.conn.execute("DELETE FROM nodes", [])?;
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch(
+            "
+            DELETE FROM feedback;
+            DELETE FROM edges;
+            DELETE FROM nodes;
+            DELETE FROM knowledge_sources;
+            DELETE FROM intent_log;
+            DELETE FROM response_feedback;
+            DELETE FROM cognitive_profile;
+            DELETE FROM cognitive_timeline;
+            DELETE FROM dismissed_predictions;
+            DELETE FROM refraction_log;
+            DELETE FROM agent_memory;
+            DELETE FROM domain_profile;
+            DELETE FROM model_performance;
+            ",
+        )?;
+        tx.commit()?;
+
+        // The logical delete has committed at this point. Truncate the WAL and
+        // rebuild the database so deleted text is not retained in WAL frames or
+        // free pages. Report post-commit cleanup failures explicitly: callers
+        // must not mistake them for a rolled-back deletion.
+        let wal_cleanup_error =
+            match self
+                .conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                }) {
+                Ok((0, _, _)) => None,
+                Ok((busy, log_frames, checkpointed_frames)) => Some(format!(
+                    "WAL cleanup remained busy \
+                 ({busy}; {checkpointed_frames}/{log_frames} frames checkpointed)"
+                )),
+                Err(error) => Some(format!("WAL cleanup failed: {error}")),
+            };
+        let vacuum_cleanup_error = self
+            .conn
+            .execute_batch("VACUUM;")
+            .err()
+            .map(|error| format!("free-space cleanup failed: {error}"));
+        let cleanup_errors: Vec<String> = [wal_cleanup_error, vacuum_cleanup_error]
+            .into_iter()
+            .flatten()
+            .collect();
+        if !cleanup_errors.is_empty() {
+            return Err(format!(
+                "All user data was deleted, but SQLite physical cleanup was incomplete: {}",
+                cleanup_errors.join("; ")
+            )
+            .into());
+        }
         Ok((nodes, edges))
     }
 
@@ -1804,7 +3278,10 @@ impl SpectrumGraph {
             params![now],
         )?;
         if promoted > 0 {
-            eprintln!("[SpectrumGraph] Promoted {} ephemeral nodes to context layer", promoted);
+            eprintln!(
+                "[SpectrumGraph] Promoted {} ephemeral nodes to context layer",
+                promoted
+            );
         }
         Ok(promoted as u32)
     }
@@ -1813,12 +3290,14 @@ impl SpectrumGraph {
     //  PERSIST / LOAD — Explicit Graph Serialization
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Persist the current graph state to a JSON export file.
-    /// This is a point-in-time snapshot that can be restored via `load()`.
-    /// The SQLite database is always the source of truth; this provides
-    /// portable backup / migration support.
-    pub fn persist(&self, export_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let snapshot = self.get_full_graph()?;
+    /// Test-only legacy plaintext serializer. Production export/import is
+    /// authenticated and encrypted through the You-Port command surface.
+    #[cfg(test)]
+    pub fn persist(
+        &self,
+        export_path: &Path,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let snapshot = self.get_portable_graph()?;
 
         // Add metadata envelope
         let export = serde_json::json!({
@@ -1836,33 +3315,82 @@ impl SpectrumGraph {
         let json = serde_json::to_string_pretty(&export)?;
         std::fs::write(export_path, &json)?;
 
-        Ok(format!("Persisted {} nodes, {} edges to {:?}",
-            snapshot.nodes.len(), snapshot.edges.len(), export_path))
+        Ok(format!(
+            "Persisted {} nodes, {} edges to {:?}",
+            snapshot.nodes.len(),
+            snapshot.edges.len(),
+            export_path
+        ))
     }
 
-    /// Load a previously persisted graph snapshot, merging into the current database.
-    /// Nodes and edges that already exist (by ID) are skipped; new ones are inserted.
-    /// This supports the You-Port device handoff pattern.
-    pub fn load(&self, import_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let json = std::fs::read_to_string(import_path)?;
-        let export: serde_json::Value = serde_json::from_str(&json)?;
+    /// Test-only loader for validating legacy migration and merge invariants.
+    #[cfg(test)]
+    pub fn load(
+        &self,
+        import_path: &Path,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let mut file = std::fs::File::open(import_path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() {
+            return Err("Invalid graph export: import path is not a regular file".into());
+        }
+        if metadata.len() > MAX_IMPORT_FILE_BYTES {
+            return Err(format!(
+                "Invalid graph export: file exceeds {} bytes",
+                MAX_IMPORT_FILE_BYTES
+            )
+            .into());
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.by_ref()
+            .take(MAX_IMPORT_FILE_BYTES + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_IMPORT_FILE_BYTES {
+            return Err(format!(
+                "Invalid graph export: file exceeds {} bytes",
+                MAX_IMPORT_FILE_BYTES
+            )
+            .into());
+        }
+        let json =
+            String::from_utf8(bytes).map_err(|_| "Invalid graph export: file is not UTF-8 JSON")?;
+        let mut export: serde_json::Value = serde_json::from_str(&json)?;
 
-        let snapshot_val = export.get("snapshot")
-            .ok_or("Invalid export: missing 'snapshot' field")?;
-        let snapshot: GraphSnapshot = serde_json::from_value(snapshot_val.clone())?;
+        if export.get("format").and_then(serde_json::Value::as_str)
+            != Some("prismos-spectrum-graph-v1")
+        {
+            return Err("Invalid graph export: unsupported format".into());
+        }
+
+        let snapshot_val = export
+            .get_mut("snapshot")
+            .ok_or("Invalid export: missing 'snapshot' field")?
+            .take();
+        let snapshot: GraphSnapshot = serde_json::from_value(snapshot_val)?;
+        validate_import_snapshot(&snapshot)?;
 
         let mut nodes_imported = 0u32;
         let mut edges_imported = 0u32;
+        let excluded_node_ids: HashSet<&str> = snapshot
+            .nodes
+            .iter()
+            .filter(|node| is_nonportable_snapshot_node(node))
+            .map(|node| node.id.as_str())
+            .collect();
+        let tx = self.conn.unchecked_transaction()?;
 
         // Import nodes (skip existing)
         for node in &snapshot.nodes {
-            let exists: bool = self.conn.query_row(
+            if is_nonportable_snapshot_node(node) {
+                continue;
+            }
+            let exists: bool = tx.query_row(
                 "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
                 params![node.id],
                 |row| row.get(0),
             )?;
             if !exists {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
@@ -1876,13 +3404,28 @@ impl SpectrumGraph {
 
         // Import edges (skip existing)
         for edge in &snapshot.edges {
-            let exists: bool = self.conn.query_row(
+            if excluded_node_ids.contains(edge.source_id.as_str())
+                || excluded_node_ids.contains(edge.target_id.as_str())
+            {
+                continue;
+            }
+            let endpoints_exist: bool = tx.query_row(
+                "SELECT
+                    EXISTS(SELECT 1 FROM nodes WHERE id = ?1)
+                    AND EXISTS(SELECT 1 FROM nodes WHERE id = ?2)",
+                params![edge.source_id, edge.target_id],
+                |row| row.get(0),
+            )?;
+            if !endpoints_exist {
+                continue;
+            }
+            let exists: bool = tx.query_row(
                 "SELECT COUNT(*) > 0 FROM edges WHERE id = ?1",
                 params![edge.id],
                 |row| row.get(0),
             )?;
             if !exists {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
@@ -1893,13 +3436,16 @@ impl SpectrumGraph {
                 edges_imported += 1;
             }
         }
+        tx.commit()?;
 
-        Ok(format!("Loaded {} new nodes, {} new edges from {:?}",
-            nodes_imported, edges_imported, import_path))
+        Ok(format!(
+            "Loaded {} new nodes, {} new edges from {:?}",
+            nodes_imported, edges_imported, import_path
+        ))
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  VECTOR SIMILARITY — NPU-Ready Embedding Support
+    //  VECTOR SIMILARITY — BOUNDED EMBEDDING SUPPORT
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Store a vector embedding for a node (stored as BLOB in SQLite).
@@ -1911,10 +3457,17 @@ impl SpectrumGraph {
         node_id: &str,
         embedding: &[f64],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(node_id, "embedding node id")?;
+        if embedding.is_empty() || embedding.len() > MAX_EMBEDDING_DIMENSIONS {
+            return Err(
+                format!("embedding must contain 1..={MAX_EMBEDDING_DIMENSIONS} values").into(),
+            );
+        }
+        if embedding.iter().any(|value| !value.is_finite()) {
+            return Err("embedding contains a non-finite value".into());
+        }
         // Serialize f64 vector as little-endian bytes
-        let bytes: Vec<u8> = embedding.iter()
-            .flat_map(|f| f.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
 
         self.conn.execute(
             "UPDATE nodes SET embedding = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1928,11 +3481,15 @@ impl SpectrumGraph {
         &self,
         node_id: &str,
     ) -> Result<Option<Vec<f64>>, Box<dyn std::error::Error + Send + Sync>> {
-        let result: Option<Vec<u8>> = self.conn.query_row(
-            "SELECT embedding FROM nodes WHERE id = ?1",
-            params![node_id],
-            |row| row.get(0),
-        ).ok();
+        validate_graph_id(node_id, "embedding node id")?;
+        let result: Option<Vec<u8>> = self
+            .conn
+            .query_row(
+                "SELECT embedding FROM nodes WHERE id = ?1",
+                params![node_id],
+                |row| row.get(0),
+            )
+            .ok();
 
         match result {
             Some(bytes) if !bytes.is_empty() => {
@@ -1957,9 +3514,21 @@ impl SpectrumGraph {
         query_embedding: &[f64],
         top_k: usize,
     ) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, embedding FROM nodes WHERE embedding IS NOT NULL",
-        )?;
+        if query_embedding.is_empty() || query_embedding.len() > MAX_EMBEDDING_DIMENSIONS {
+            return Err(format!(
+                "query embedding must contain 1..={MAX_EMBEDDING_DIMENSIONS} values"
+            )
+            .into());
+        }
+        if query_embedding.iter().any(|value| !value.is_finite()) {
+            return Err("query embedding contains a non-finite value".into());
+        }
+        if top_k == 0 || top_k > MAX_VECTOR_RESULTS {
+            return Err(format!("vector result limit must be 1..={MAX_VECTOR_RESULTS}").into());
+        }
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, embedding FROM nodes WHERE embedding IS NOT NULL")?;
 
         let mut results: Vec<(String, f64)> = stmt
             .query_map([], |row| {
@@ -1969,7 +3538,9 @@ impl SpectrumGraph {
             })?
             .filter_map(|r| r.ok())
             .filter_map(|(id, bytes)| {
-                if bytes.is_empty() { return None; }
+                if bytes.is_empty() {
+                    return None;
+                }
                 let embedding: Vec<f64> = bytes
                     .chunks_exact(8)
                     .filter_map(|c| {
@@ -1991,6 +3562,7 @@ impl SpectrumGraph {
     /// knowledge becomes semantically searchable soonest. Used by the
     /// opportunistic per-query backfill in the refractive core (no migration
     /// needed: the graph embeds itself over time).
+    #[allow(clippy::type_complexity)] // Compact row tuple is the method's compatibility API.
     pub fn nodes_missing_embedding(
         &self,
         limit: usize,
@@ -2046,6 +3618,45 @@ impl SpectrumGraph {
         Ok(nodes)
     }
 
+    /// Return the most recent completed chat turns for bounded multi-turn
+    /// continuity. This is deliberately independent of semantic retrieval:
+    /// follow-ups such as "do that for the other project" often share no useful
+    /// keywords with the preceding turn.
+    pub fn recent_conversation_nodes(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'ephemeral'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes
+             WHERE node_type = 'conversation'
+             ORDER BY created_at DESC
+             LIMIT ?1",
+        )?;
+        let mut nodes: Vec<SpectrumNode> = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(SpectrumNode {
+                    id: row.get(0)?,
+                    label: row.get(1)?,
+                    content: row.get(2)?,
+                    node_type: row.get(3)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                    connections: vec![],
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        // Feed the model in chronological order even though the database query
+        // selects newest-first to enforce the bound.
+        nodes.reverse();
+        Ok(nodes)
+    }
+
     /// Hybrid retrieval: keyword+graph results from `query_intent`, enriched
     /// with vector-similarity hits when a query embedding is available.
     /// Semantic-only hits (things keyword search can never find — "who am I?"
@@ -2097,9 +3708,9 @@ impl SpectrumGraph {
 
     /// Get total feedback signal count for analytics
     pub fn get_feedback_count(&self) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        let count: usize = self.conn.query_row(
-            "SELECT COUNT(*) FROM feedback", [], |row| row.get(0)
-        )?;
+        let count: usize = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM feedback", [], |row| row.get(0))?;
         Ok(count)
     }
 
@@ -2120,16 +3731,48 @@ impl SpectrumGraph {
         context_node_ids: &[String],
         model: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        validate_graph_id(conversation_id, "conversation id")?;
+        validate_live_text(
+            question,
+            "feedback question",
+            MAX_IMPORT_CONTENT_BYTES,
+            false,
+        )?;
+        validate_live_text(
+            response,
+            "feedback response",
+            MAX_LIVE_FEEDBACK_RESPONSE_BYTES,
+            false,
+        )?;
+        if rating != -1 && rating != 1 {
+            return Err("feedback rating must be exactly -1 or 1".into());
+        }
+        if context_node_ids.len() > MAX_LIVE_CONTEXT_NODES {
+            return Err(
+                format!("feedback context exceeds {MAX_LIVE_CONTEXT_NODES} node ids").into(),
+            );
+        }
+        for node_id in context_node_ids {
+            validate_graph_id(node_id, "feedback context node id")?;
+        }
+        validate_live_text(model, "feedback model", 200, false)?;
+        if model.trim() != model || model.chars().any(char::is_control) {
+            return Err("feedback model contains whitespace padding or control characters".into());
+        }
         let now = Utc::now().to_rfc3339();
         let fb_id = Uuid::new_v4().to_string();
-        let ctx_json = serde_json::to_string(context_node_ids).unwrap_or_default();
+        let ctx_json = serde_json::to_string(context_node_ids)?;
 
-        // Store the feedback record
-        self.conn.execute(
-            "INSERT INTO response_feedback (id, conversation_id, question, response, rating, context_nodes, model, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![fb_id, conversation_id, question, response, rating, ctx_json, model, now],
-        )?;
+        // Never persist a second, ownerless copy of a project-grounded answer.
+        // The quality signal can still adjust retrieval edges and the cognitive
+        // profile, but Forget must be able to remove all source-derived text.
+        if !self.node_ids_include_managed_knowledge(context_node_ids)? {
+            self.conn.execute(
+                "INSERT INTO response_feedback (id, conversation_id, question, response, rating, context_nodes, model, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![fb_id, conversation_id, question, response, rating, ctx_json, model, now],
+            )?;
+        }
 
         // Adjust edge weights between context nodes based on feedback
         // 👍 (+1) → positive feedback signal (reinforce these paths)
@@ -2170,7 +3813,8 @@ impl SpectrumGraph {
         limit: usize,
     ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error + Send + Sync>> {
         // Extract significant words from query for LIKE matching
-        let words: Vec<String> = query.split_whitespace()
+        let words: Vec<String> = query
+            .split_whitespace()
             .filter(|w| w.len() >= 4)
             .take(3)
             .map(|w| w.to_lowercase())
@@ -2192,12 +3836,10 @@ impl SpectrumGraph {
             let rows = stmt.query_map(params![pattern, limit as u32], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?;
-            for row in rows {
-                if let Ok(pair) = row {
-                    // Avoid duplicates
-                    if !results.iter().any(|(q, _)| q == &pair.0) {
-                        results.push(pair);
-                    }
+            for pair in rows.flatten() {
+                // Avoid duplicates
+                if !results.iter().any(|(q, _)| q == &pair.0) {
+                    results.push(pair);
                 }
             }
             if results.len() >= limit {
@@ -2210,13 +3852,14 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  COGNITIVE IMPRINT — Adaptive Response Personality
+    //  RESPONSE PREFERENCES — Explicit local preference signals
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Load the user's cognitive profile (creates default if none exists)
     pub fn get_cognitive_profile(
         &self,
-    ) -> Result<crate::cognitive_profile::CognitiveProfile, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<crate::cognitive_profile::CognitiveProfile, Box<dyn std::error::Error + Send + Sync>>
+    {
         let result = self.conn.query_row(
             "SELECT depth, creativity, formality, technical_level, example_preference, \
                     interaction_count, last_updated \
@@ -2273,6 +3916,7 @@ impl SpectrumGraph {
     }
 
     /// Get intent log entries for the last N days
+    #[allow(clippy::type_complexity)] // Compact row tuple is the method's compatibility API.
     pub fn get_recent_intents(
         &self,
         days: u32,
@@ -2300,7 +3944,9 @@ impl SpectrumGraph {
     }
 
     /// Lifetime stats for Brain Wrapped: (total_intents, distinct_active_days)
-    pub fn get_lifetime_stats(&self) -> Result<(u32, u32), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn get_lifetime_stats(
+        &self,
+    ) -> Result<(u32, u32), Box<dyn std::error::Error + Send + Sync>> {
         let total_intents: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM intent_log", [], |row| row.get(0))
@@ -2319,18 +3965,28 @@ impl SpectrumGraph {
     /// Generate a daily brief/recap from Spectrum Graph activity
     /// Returns stats about today's activity: intents processed, nodes created/updated,
     /// edges strengthened, top facets, and highlights
-    pub fn get_daily_brief(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn get_daily_brief(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         // Intents processed today
-        let intents_today: usize = self.conn.query_row(
-            "SELECT COUNT(*) FROM intent_log WHERE created_at > datetime('now', '-1 day')",
-            [], |row| row.get(0)
-        ).unwrap_or(0);
+        let intents_today: usize = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM intent_log WHERE created_at > datetime('now', '-1 day')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         // Nodes created today
-        let nodes_created_today: usize = self.conn.query_row(
-            "SELECT COUNT(*) FROM nodes WHERE created_at > datetime('now', '-1 day')",
-            [], |row| row.get(0)
-        ).unwrap_or(0);
+        let nodes_created_today: usize = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM nodes WHERE created_at > datetime('now', '-1 day')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         // Nodes updated today (updated_at differs from created_at and is today)
         let nodes_updated_today: usize = self.conn.query_row(
@@ -2353,37 +4009,49 @@ impl SpectrumGraph {
              WHERE created_at > datetime('now', '-1 day') OR last_accessed > datetime('now', '-1 day')
              GROUP BY node_type ORDER BY cnt DESC LIMIT 5"
         )?;
-        let facets: Vec<(String, usize)> = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
-        })?.filter_map(|r| r.ok()).collect();
+        let facets: Vec<(String, usize)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         // Recent intent types today
         let mut stmt2 = self.conn.prepare(
             "SELECT intent_type, COUNT(*) as cnt FROM intent_log
              WHERE created_at > datetime('now', '-1 day')
-             GROUP BY intent_type ORDER BY cnt DESC LIMIT 5"
+             GROUP BY intent_type ORDER BY cnt DESC LIMIT 5",
         )?;
-        let intent_types: Vec<(String, usize)> = stmt2.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
-        })?.filter_map(|r| r.ok()).collect();
+        let intent_types: Vec<(String, usize)> = stmt2
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         // Strongest edge reinforced today
-        let strongest_today: Option<(String, f64, i32)> = self.conn.query_row(
-            "SELECT e.relation, e.weight, e.reinforcements FROM edges e
+        let strongest_today: Option<(String, f64, i32)> = self
+            .conn
+            .query_row(
+                "SELECT e.relation, e.weight, e.reinforcements FROM edges e
              WHERE e.last_reinforced > datetime('now', '-1 day')
              ORDER BY e.weight DESC LIMIT 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        ).ok();
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .ok();
 
         // Most accessed node today
-        let busiest_node: Option<(String, String, i32)> = self.conn.query_row(
-            "SELECT label, node_type, access_count FROM nodes
+        let busiest_node: Option<(String, String, i32)> = self
+            .conn
+            .query_row(
+                "SELECT label, node_type, access_count FROM nodes
              WHERE last_accessed > datetime('now', '-1 day')
              ORDER BY access_count DESC LIMIT 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        ).ok();
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .ok();
 
         // ── Yesterday's activity (for Morning Brief context) ──
         let yesterday_intents: usize = self.conn.query_row(
@@ -2401,35 +4069,45 @@ impl SpectrumGraph {
             "SELECT label, node_type FROM nodes
              WHERE last_accessed > datetime('now', '-2 days')
                AND access_count <= 3
-             ORDER BY last_accessed DESC LIMIT 4"
+             ORDER BY last_accessed DESC LIMIT 4",
         )?;
-        let pending_topics: Vec<serde_json::Value> = pending_stmt.query_map([], |row| {
-            Ok(serde_json::json!({
-                "label": row.get::<_, String>(0)?,
-                "node_type": row.get::<_, String>(1)?,
-            }))
-        })?.filter_map(|r| r.ok()).collect();
+        let pending_topics: Vec<serde_json::Value> = pending_stmt
+            .query_map([], |row| {
+                Ok(serde_json::json!({
+                    "label": row.get::<_, String>(0)?,
+                    "node_type": row.get::<_, String>(1)?,
+                }))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         // ── Tomorrow priorities: highest-weight recently-active nodes ──
         let mut priority_stmt = self.conn.prepare(
             "SELECT n.label, n.node_type, SUM(e.weight) as total_weight FROM nodes n
              LEFT JOIN edges e ON n.id = e.source_id OR n.id = e.target_id
              WHERE n.last_accessed > datetime('now', '-3 days')
-             GROUP BY n.id ORDER BY total_weight DESC LIMIT 4"
+             GROUP BY n.id ORDER BY total_weight DESC LIMIT 4",
         )?;
-        let tomorrow_priorities: Vec<serde_json::Value> = priority_stmt.query_map([], |row| {
-            Ok(serde_json::json!({
-                "label": row.get::<_, String>(0)?,
-                "node_type": row.get::<_, String>(1)?,
-                "weight": row.get::<_, f64>(2).unwrap_or(0.0),
-            }))
-        })?.filter_map(|r| r.ok()).collect();
+        let tomorrow_priorities: Vec<serde_json::Value> = priority_stmt
+            .query_map([], |row| {
+                Ok(serde_json::json!({
+                    "label": row.get::<_, String>(0)?,
+                    "node_type": row.get::<_, String>(1)?,
+                    "weight": row.get::<_, f64>(2).unwrap_or(0.0),
+                }))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         // ── New connections discovered today ──
-        let new_connections_today: usize = self.conn.query_row(
-            "SELECT COUNT(*) FROM edges WHERE created_at > datetime('now', '-1 day')",
-            [], |row| row.get(0)
-        ).unwrap_or(0);
+        let new_connections_today: usize = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM edges WHERE created_at > datetime('now', '-1 day')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         // ── Graph growth streak: consecutive days with new nodes (max 30 lookback) ──
         let mut streak: usize = 0;
@@ -2443,12 +4121,22 @@ impl SpectrumGraph {
                 ),
                 [], |row| row.get(0)
             ).unwrap_or(0);
-            if count > 0 { streak += 1; } else { break; }
+            if count > 0 {
+                streak += 1;
+            } else {
+                break;
+            }
         }
 
         // Determine time of day for greeting context
         let hour = chrono::Local::now().hour();
-        let time_period = if hour < 12 { "morning" } else if hour < 17 { "afternoon" } else { "evening" };
+        let time_period = if hour < 12 {
+            "morning"
+        } else if hour < 17 {
+            "afternoon"
+        } else {
+            "evening"
+        };
         let is_morning = hour < 12;
         let is_evening = hour >= 18;
 
@@ -2479,12 +4167,14 @@ impl SpectrumGraph {
             }));
         }
 
-        let facet_map: serde_json::Value = facets.iter()
+        let facet_map: serde_json::Value = facets
+            .iter()
             .map(|(k, v)| (k.clone(), serde_json::json!(v)))
             .collect::<serde_json::Map<String, serde_json::Value>>()
             .into();
 
-        let intent_type_map: serde_json::Value = intent_types.iter()
+        let intent_type_map: serde_json::Value = intent_types
+            .iter()
             .map(|(k, v)| (k.clone(), serde_json::json!(v)))
             .collect::<serde_json::Map<String, serde_json::Value>>()
             .into();
@@ -2545,6 +4235,7 @@ impl SpectrumGraph {
     }
 
     /// Get cognitive drift: compare current profile against historical snapshots
+    #[allow(clippy::type_complexity)] // Row tuple mirrors the fixed timeline projection.
     pub fn get_cognitive_drift(
         &self,
         weeks: u32,
@@ -2648,8 +4339,10 @@ impl SpectrumGraph {
     /// Analyze thought currents from intent history
     pub fn get_thought_currents(
         &self,
-    ) -> Result<Vec<crate::thought_currents::ThoughtCurrent>, Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<
+        Vec<crate::thought_currents::ThoughtCurrent>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT intent_type, raw_input, created_at FROM intent_log \
              WHERE created_at > datetime('now', '-90 days') \
@@ -2678,8 +4371,10 @@ impl SpectrumGraph {
     pub fn predict_edges(
         &self,
         limit: usize,
-    ) -> Result<Vec<crate::cognitive_profile::PredictedEdge>, Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<
+        Vec<crate::cognitive_profile::PredictedEdge>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         let mut node_stmt = self.conn.prepare(
             "SELECT id, label, content, node_type FROM nodes \
              ORDER BY access_count DESC LIMIT 100",
@@ -2698,12 +4393,15 @@ impl SpectrumGraph {
             .collect();
 
         let existing_edges: std::collections::HashSet<(String, String)> = {
-            let mut stmt = self.conn.prepare("SELECT source_id, target_id FROM edges")?;
-            let results: Vec<(String, String)> = stmt.query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+            let mut stmt = self
+                .conn
+                .prepare("SELECT source_id, target_id FROM edges")?;
+            let results: Vec<(String, String)> = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
             results.into_iter().collect()
         };
 
@@ -2711,11 +4409,12 @@ impl SpectrumGraph {
             let mut stmt = self
                 .conn
                 .prepare("SELECT source_id, target_id FROM dismissed_predictions")?;
-            let results: Vec<(String, String)> = stmt.query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+            let results: Vec<(String, String)> = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
             results.into_iter().collect()
         };
 
@@ -2769,7 +4468,11 @@ impl SpectrumGraph {
                         target_label: label_b.clone(),
                         probability: confidence,
                         reason,
-                        evidence_type: if overlap > 0 { "keyword_overlap".to_string() } else { "same_domain".to_string() },
+                        evidence_type: if overlap > 0 {
+                            "keyword_overlap".to_string()
+                        } else {
+                            "same_domain".to_string()
+                        },
                     });
                 }
             }
@@ -2846,8 +4549,10 @@ impl SpectrumGraph {
     /// Get refraction insights — aggregated band usage statistics
     pub fn get_refraction_insights(
         &self,
-    ) -> Result<crate::cognitive_profile::RefractionInsights, Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<
+        crate::cognitive_profile::RefractionInsights,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         let mut band_stmt = self.conn.prepare(
             "SELECT applied_band, COUNT(*) FROM refraction_log \
              GROUP BY applied_band ORDER BY COUNT(*) DESC",
@@ -2893,7 +4598,10 @@ impl SpectrumGraph {
 
         Ok(crate::cognitive_profile::RefractionInsights {
             total_refractions: total_count,
-            band_distribution: band_counts.iter().map(|(k, v)| (k.clone(), *v as f64)).collect(),
+            band_distribution: band_counts
+                .iter()
+                .map(|(k, v)| (k.clone(), *v as f64))
+                .collect(),
             band_by_query_type: std::collections::HashMap::new(),
             blind_spots: Vec::new(),
             growth_score: override_rate,
@@ -2903,7 +4611,10 @@ impl SpectrumGraph {
                     ins.push(format!("Most common shift: {} → {}", from, to));
                 }
                 if override_rate > 0.3 {
-                    ins.push(format!("High override rate ({:.0}%) — you often refine band choices", override_rate * 100.0));
+                    ins.push(format!(
+                        "High override rate ({:.0}%) — you often refine band choices",
+                        override_rate * 100.0
+                    ));
                 }
                 ins
             },
@@ -2944,8 +4655,10 @@ impl SpectrumGraph {
         &self,
         agent_name: &str,
         limit: usize,
-    ) -> Result<Vec<crate::cognitive_profile::AgentMemoryEntry>, Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<
+        Vec<crate::cognitive_profile::AgentMemoryEntry>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT agent_name, memory_key, memory_value, created_at, updated_at \
              FROM agent_memory WHERE agent_name = ?1 \
@@ -3024,7 +4737,13 @@ impl SpectrumGraph {
             "INSERT OR REPLACE INTO domain_profile \
              (id, domain_counts, total_queries, primary_domain, confidence, last_updated) \
              VALUES ('default', ?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![domain_counts, total_queries, primary_domain, confidence, now],
+            rusqlite::params![
+                domain_counts,
+                total_queries,
+                primary_domain,
+                confidence,
+                now
+            ],
         )?;
         Ok(())
     }
@@ -3048,7 +4767,15 @@ impl SpectrumGraph {
             "INSERT INTO model_performance \
              (id, model_name, domain, latency_ms, satisfaction, query_type, created_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![id, model_name, domain, latency_ms, satisfaction, query_type, now],
+            rusqlite::params![
+                id,
+                model_name,
+                domain,
+                latency_ms,
+                satisfaction,
+                query_type,
+                now
+            ],
         )?;
         Ok(())
     }
@@ -3056,8 +4783,10 @@ impl SpectrumGraph {
     /// Get model recommendations based on historical performance
     pub fn get_model_recommendations(
         &self,
-    ) -> Result<Vec<crate::model_tracker::ModelRecommendation>, Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<
+        Vec<crate::model_tracker::ModelRecommendation>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT model_name, domain, latency_ms, satisfaction \
              FROM model_performance \
@@ -3075,7 +4804,13 @@ impl SpectrumGraph {
                     tokens_generated: None,
                     user_feedback: {
                         let sat: f64 = row.get(3)?;
-                        if sat > 0.5 { Some(true) } else if sat < -0.5 { Some(false) } else { None }
+                        if sat > 0.5 {
+                            Some(true)
+                        } else if sat < -0.5 {
+                            Some(false)
+                        } else {
+                            None
+                        }
                     },
                     timestamp: String::new(),
                 })
@@ -3095,7 +4830,11 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     if len == 0 {
         return 0.0;
     }
-    let dot: f64 = a[..len].iter().zip(b[..len].iter()).map(|(x, y)| x * y).sum();
+    let dot: f64 = a[..len]
+        .iter()
+        .zip(b[..len].iter())
+        .map(|(x, y)| x * y)
+        .sum();
     let mag_a: f64 = a[..len].iter().map(|x| x * x).sum::<f64>().sqrt();
     let mag_b: f64 = b[..len].iter().map(|x| x * x).sum::<f64>().sqrt();
     if mag_a > 0.0 && mag_b > 0.0 {
@@ -3121,9 +4860,9 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
 /// Resolution strategy for merge conflicts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MergeStrategy {
-    Theirs,  // Incoming snapshot wins on conflict
-    Ours,    // Local graph wins on conflict
-    Latest,  // Most recently updated version wins
+    Theirs, // Incoming snapshot wins on conflict
+    Ours,   // Local graph wins on conflict
+    Latest, // Most recently updated version wins
 }
 
 impl MergeStrategy {
@@ -3131,7 +4870,7 @@ impl MergeStrategy {
         match s.to_lowercase().as_str() {
             "theirs" => MergeStrategy::Theirs,
             "ours" => MergeStrategy::Ours,
-            "latest" | _ => MergeStrategy::Latest,
+            _ => MergeStrategy::Latest,
         }
     }
 }
@@ -3139,12 +4878,12 @@ impl MergeStrategy {
 /// A single conflict detected during merge diff
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergeConflict {
-    pub entity_type: String,        // "node" or "edge"
+    pub entity_type: String, // "node" or "edge"
     pub entity_id: String,
-    pub field: String,              // which field differs
+    pub field: String, // which field differs
     pub local_value: String,
     pub remote_value: String,
-    pub resolution: String,         // "kept_local" | "took_remote" | "took_latest"
+    pub resolution: String, // "kept_local" | "took_remote" | "took_latest"
     pub resolved_value: String,
 }
 
@@ -3186,6 +4925,7 @@ impl SpectrumGraph {
         incoming: &GraphSnapshot,
         strategy: &MergeStrategy,
     ) -> Result<MergeDiff, Box<dyn std::error::Error + Send + Sync>> {
+        validate_import_snapshot(incoming)?;
         let mut diff = MergeDiff {
             nodes_only_local: 0,
             nodes_only_remote: 0,
@@ -3199,10 +4939,22 @@ impl SpectrumGraph {
         };
 
         // Build incoming lookup maps
-        let incoming_nodes: HashMap<String, &SpectrumNode> =
-            incoming.nodes.iter().map(|n| (n.id.clone(), n)).collect();
-        let incoming_edges: HashMap<String, &SpectrumEdge> =
-            incoming.edges.iter().map(|e| (e.id.clone(), e)).collect();
+        let incoming_nodes: HashMap<String, &SpectrumNode> = incoming
+            .nodes
+            .iter()
+            .filter(|node| !is_nonportable_snapshot_node(node))
+            .map(|node| (node.id.clone(), node))
+            .collect();
+        let incoming_node_ids: HashSet<&str> = incoming_nodes.keys().map(String::as_str).collect();
+        let incoming_edges: HashMap<String, &SpectrumEdge> = incoming
+            .edges
+            .iter()
+            .filter(|edge| {
+                incoming_node_ids.contains(edge.source_id.as_str())
+                    && incoming_node_ids.contains(edge.target_id.as_str())
+            })
+            .map(|edge| (edge.id.clone(), edge))
+            .collect();
 
         // Get local data
         let local_nodes = self.get_all_nodes()?;
@@ -3273,18 +5025,27 @@ impl SpectrumGraph {
                                 entity_id: id.clone(),
                                 field: "content".into(),
                                 local_value: if local_node.content.chars().count() > 80 {
-                                    format!("{}…", local_node.content.chars().take(80).collect::<String>())
+                                    format!(
+                                        "{}…",
+                                        local_node.content.chars().take(80).collect::<String>()
+                                    )
                                 } else {
                                     local_node.content.clone()
                                 },
                                 remote_value: if remote_node.content.chars().count() > 80 {
-                                    format!("{}…", remote_node.content.chars().take(80).collect::<String>())
+                                    format!(
+                                        "{}…",
+                                        remote_node.content.chars().take(80).collect::<String>()
+                                    )
                                 } else {
                                     remote_node.content.clone()
                                 },
                                 resolution: resolution.clone(),
                                 resolved_value: if resolved_content.chars().count() > 80 {
-                                    format!("{}…", resolved_content.chars().take(80).collect::<String>())
+                                    format!(
+                                        "{}…",
+                                        resolved_content.chars().take(80).collect::<String>()
+                                    )
                                 } else {
                                     resolved_content
                                 },
@@ -3331,8 +5092,14 @@ impl SpectrumGraph {
                             entity_type: "edge".into(),
                             entity_id: id.clone(),
                             field: "weight".into(),
-                            local_value: format!("{:.3} (×{})", local_edge.weight, local_edge.reinforcements),
-                            remote_value: format!("{:.3} (×{})", remote_edge.weight, remote_edge.reinforcements),
+                            local_value: format!(
+                                "{:.3} (×{})",
+                                local_edge.weight, local_edge.reinforcements
+                            ),
+                            remote_value: format!(
+                                "{:.3} (×{})",
+                                remote_edge.weight, remote_edge.reinforcements
+                            ),
                             resolution: resolution.clone(),
                             resolved_value: match resolution.as_str() {
                                 "took_remote" => format!("{:.3}", remote_edge.weight),
@@ -3363,10 +5130,21 @@ impl SpectrumGraph {
         let mut edges_added = 0_usize;
         let mut edges_updated = 0_usize;
         let mut edges_skipped = 0_usize;
+        let excluded_node_ids: HashSet<&str> = incoming
+            .nodes
+            .iter()
+            .filter(|node| is_nonportable_snapshot_node(node))
+            .map(|node| node.id.as_str())
+            .collect();
+        let tx = self.conn.unchecked_transaction()?;
 
         // --- Merge nodes ---
         for remote_node in &incoming.nodes {
-            let exists: bool = self.conn.query_row(
+            if is_nonportable_snapshot_node(remote_node) {
+                nodes_skipped += 1;
+                continue;
+            }
+            let exists: bool = tx.query_row(
                 "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
                 params![remote_node.id],
                 |row| row.get(0),
@@ -3374,7 +5152,7 @@ impl SpectrumGraph {
 
             if !exists {
                 // New node — insert directly
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
@@ -3386,17 +5164,17 @@ impl SpectrumGraph {
                 nodes_added += 1;
             } else {
                 // Existing node — check for conflict
-                let local_label: String = self.conn.query_row(
+                let local_label: String = tx.query_row(
                     "SELECT label FROM nodes WHERE id = ?1",
                     params![remote_node.id],
                     |row| row.get(0),
                 )?;
-                let local_content: String = self.conn.query_row(
+                let local_content: String = tx.query_row(
                     "SELECT content FROM nodes WHERE id = ?1",
                     params![remote_node.id],
                     |row| row.get(0),
                 )?;
-                let local_updated: String = self.conn.query_row(
+                let local_updated: String = tx.query_row(
                     "SELECT updated_at FROM nodes WHERE id = ?1",
                     params![remote_node.id],
                     |row| row.get(0),
@@ -3404,13 +5182,13 @@ impl SpectrumGraph {
 
                 if local_label == remote_node.label && local_content == remote_node.content {
                     // No conflict — merge access_count (take max)
-                    let local_access: u32 = self.conn.query_row(
+                    let local_access: u32 = tx.query_row(
                         "SELECT COALESCE(access_count, 0) FROM nodes WHERE id = ?1",
                         params![remote_node.id],
                         |row| row.get(0),
                     )?;
                     if remote_node.access_count > local_access {
-                        self.conn.execute(
+                        tx.execute(
                             "UPDATE nodes SET access_count = ?1 WHERE id = ?2",
                             params![remote_node.access_count, remote_node.id],
                         )?;
@@ -3425,7 +5203,7 @@ impl SpectrumGraph {
                     };
 
                     if should_update {
-                        self.conn.execute(
+                        tx.execute(
                             "UPDATE nodes SET label = ?1, content = ?2, node_type = ?3, layer = ?4, updated_at = ?5
                              WHERE id = ?6",
                             params![
@@ -3443,7 +5221,13 @@ impl SpectrumGraph {
 
         // --- Merge edges ---
         for remote_edge in &incoming.edges {
-            let exists: bool = self.conn.query_row(
+            if excluded_node_ids.contains(remote_edge.source_id.as_str())
+                || excluded_node_ids.contains(remote_edge.target_id.as_str())
+            {
+                edges_skipped += 1;
+                continue;
+            }
+            let exists: bool = tx.query_row(
                 "SELECT COUNT(*) > 0 FROM edges WHERE id = ?1",
                 params![remote_edge.id],
                 |row| row.get(0),
@@ -3451,19 +5235,19 @@ impl SpectrumGraph {
 
             if !exists {
                 // Check that both endpoints exist before inserting
-                let src_exists: bool = self.conn.query_row(
+                let src_exists: bool = tx.query_row(
                     "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
                     params![remote_edge.source_id],
                     |row| row.get(0),
                 )?;
-                let tgt_exists: bool = self.conn.query_row(
+                let tgt_exists: bool = tx.query_row(
                     "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
                     params![remote_edge.target_id],
                     |row| row.get(0),
                 )?;
 
                 if src_exists && tgt_exists {
-                    self.conn.execute(
+                    tx.execute(
                         "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                         params![
@@ -3478,12 +5262,12 @@ impl SpectrumGraph {
                 }
             } else {
                 // Existing edge — compare weights
-                let local_weight: f64 = self.conn.query_row(
+                let local_weight: f64 = tx.query_row(
                     "SELECT weight FROM edges WHERE id = ?1",
                     params![remote_edge.id],
                     |row| row.get(0),
                 )?;
-                let local_reinforced: String = self.conn.query_row(
+                let local_reinforced: String = tx.query_row(
                     "SELECT COALESCE(last_reinforced, created_at) FROM edges WHERE id = ?1",
                     params![remote_edge.id],
                     |row| row.get(0),
@@ -3499,7 +5283,7 @@ impl SpectrumGraph {
                     };
 
                     if should_update {
-                        self.conn.execute(
+                        tx.execute(
                             "UPDATE edges SET weight = ?1, momentum = ?2, reinforcements = ?3, last_reinforced = ?4
                              WHERE id = ?5",
                             params![
@@ -3515,6 +5299,7 @@ impl SpectrumGraph {
                 }
             }
         }
+        tx.commit()?;
 
         let conflicts_resolved = diff.conflicts.len();
         let strategy_str = match strategy {
@@ -3546,7 +5331,7 @@ impl SpectrumGraph {
     /// Export the current graph as a portable sync package (unencrypted JSON).
     /// Used for cross-device sync where You-Port encryption wraps the transport.
     pub fn export_sync_package(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let snapshot = self.get_full_graph()?;
+        let snapshot = self.get_portable_graph()?;
         let package = serde_json::json!({
             "format": "prismos-sync-v1",
             "device_id": Uuid::new_v4().to_string(),
@@ -3564,13 +5349,82 @@ impl SpectrumGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     /// Create a SpectrumGraph backed by a temp directory (auto-cleaned)
     fn test_graph() -> (SpectrumGraph, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
         let graph = SpectrumGraph::new(dir.path()).expect("failed to create graph");
         (graph, dir)
+    }
+
+    fn import_node(id: &str, label: &str, content: &str, node_type: &str) -> SpectrumNode {
+        let now = Utc::now().to_rfc3339();
+        SpectrumNode {
+            id: id.into(),
+            label: label.into(),
+            content: content.into(),
+            node_type: node_type.into(),
+            layer: "context".into(),
+            access_count: 0,
+            last_accessed: now.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+            connections: vec![],
+        }
+    }
+
+    fn import_snapshot(nodes: Vec<SpectrumNode>, edges: Vec<SpectrumEdge>) -> GraphSnapshot {
+        let node_count = nodes.len();
+        let edge_count = edges.len();
+        GraphSnapshot {
+            nodes,
+            edges,
+            stats: GraphMetrics {
+                node_count,
+                edge_count,
+                avg_edge_weight: 0.0,
+                strongest_edge_weight: 0.0,
+                facet_distribution: HashMap::new(),
+                most_connected_node: None,
+                graph_density: 0.0,
+            },
+        }
+    }
+
+    #[test]
+    fn live_graph_writes_enforce_bounds_and_replace_duplicate_content() {
+        let (graph, _dir) = test_graph();
+        let first = graph.add_node("Stable", "first", "note").unwrap();
+        let second = graph.add_node("Stable", "second", "note").unwrap();
+        assert_eq!(first.id, second.id);
+        assert_eq!(second.content, "second");
+        assert!(!second.content.contains("first\n---"));
+
+        assert!(graph
+            .add_node(&"x".repeat(MAX_IMPORT_LABEL_BYTES + 1), "body", "note")
+            .is_err());
+        assert!(graph.add_node("label", "body", "bad type!").is_err());
+        assert!(graph
+            .add_node_with_layer("label", "body", "note", "unbounded-layer")
+            .is_err());
+    }
+
+    #[test]
+    fn live_edges_and_vectors_reject_invalid_numeric_inputs() {
+        let (graph, _dir) = test_graph();
+        let left = graph.add_node("Left", "left", "note").unwrap();
+        let right = graph.add_node("Right", "right", "note").unwrap();
+        assert!(graph
+            .add_edge(&left.id, &right.id, "related", f64::NAN)
+            .is_err());
+        assert!(graph
+            .add_edge(&left.id, &right.id, "bad relation", 1.0)
+            .is_err());
+        assert!(graph
+            .set_node_embedding(&left.id, &[f64::INFINITY])
+            .is_err());
+        assert!(graph.vector_search(&[], 10).is_err());
+        assert!(graph.vector_search(&[0.1], MAX_VECTOR_RESULTS + 1).is_err());
     }
 
     // ─── Construction & Schema ─────────────────────────────────────────────
@@ -3584,6 +5438,16 @@ mod tests {
     }
 
     #[test]
+    fn test_new_enables_sqlite_secure_delete() {
+        let (g, _dir) = test_graph();
+        let secure_delete: i64 = g
+            .conn
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(secure_delete, 1);
+    }
+
+    #[test]
     fn test_seed_demo_data_populates_graph() {
         let (g, _dir) = test_graph();
         assert!(g.seed_demo_data().unwrap()); // returns true on first call
@@ -3592,6 +5456,198 @@ mod tests {
         assert!(edges >= 8, "expected ≥8 demo edges, got {}", edges);
         // Second call should skip (graph already has data)
         assert!(!g.seed_demo_data().unwrap());
+    }
+
+    #[test]
+    fn legacy_demo_cleanup_removes_only_seed_cohort_and_is_idempotent() {
+        let (graph, dir) = test_graph();
+        assert!(graph.seed_demo_data().unwrap());
+        graph
+            .conn
+            .execute(
+                "DELETE FROM prismos_internal_migrations WHERE id = ?1",
+                params![LEGACY_DEMO_CLEANUP_MIGRATION],
+            )
+            .unwrap();
+        drop(graph);
+
+        let cleaned = SpectrumGraph::new(dir.path()).unwrap();
+        assert_eq!(cleaned.stats().unwrap(), (0, 0));
+        let intent_count: usize = cleaned
+            .conn
+            .query_row("SELECT COUNT(*) FROM intent_log", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(intent_count, 0);
+        let marker_count: usize = cleaned
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM prismos_internal_migrations WHERE id = ?1",
+                params![LEGACY_DEMO_CLEANUP_MIGRATION],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(marker_count, 1);
+        drop(cleaned);
+
+        let reopened = SpectrumGraph::new(dir.path()).unwrap();
+        assert_eq!(reopened.stats().unwrap(), (0, 0));
+        let marker_count_after_reopen: usize = reopened
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM prismos_internal_migrations WHERE id = ?1",
+                params![LEGACY_DEMO_CLEANUP_MIGRATION],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(marker_count_after_reopen, 1);
+    }
+
+    #[test]
+    fn legacy_demo_cleanup_preserves_adopted_nodes_and_user_edges() {
+        let (graph, dir) = test_graph();
+        assert!(graph.seed_demo_data().unwrap());
+
+        graph
+            .update_node(
+                "demo-work-1",
+                "My Weekly Goals",
+                "Owner-edited goals that must survive migration",
+            )
+            .unwrap();
+        graph.get_node("demo-task-1").unwrap().unwrap();
+
+        let user_node = graph
+            .add_node("Owner project", "Real owner-authored content", "work")
+            .unwrap();
+        let user_edge = graph
+            .add_edge("demo-health-1", &user_node.id, "supports", 0.9)
+            .unwrap();
+        graph
+            .conn
+            .execute(
+                "UPDATE edges SET weight = 0.9, reinforcements = 1
+                 WHERE id = 'demo-edge-3'",
+                [],
+            )
+            .unwrap();
+
+        // A genuine later intent that happens to use fixture wording must not
+        // be removed without the fixture cohort timestamp.
+        graph
+            .conn
+            .execute(
+                "INSERT INTO intent_log
+                 (id, raw_input, intent_type, matched_nodes, confidence, created_at)
+                 VALUES ('owner-intent', ?1, ?2, '[]', 0.85, '2040-01-01T00:00:00Z')",
+                params![LEGACY_DEMO_INTENTS[0].0, LEGACY_DEMO_INTENTS[0].1],
+            )
+            .unwrap();
+
+        graph
+            .conn
+            .execute(
+                "DELETE FROM prismos_internal_migrations WHERE id = ?1",
+                params![LEGACY_DEMO_CLEANUP_MIGRATION],
+            )
+            .unwrap();
+        drop(graph);
+
+        let cleaned = SpectrumGraph::new(dir.path()).unwrap();
+
+        let edited = cleaned
+            .get_node_without_access("demo-work-1")
+            .unwrap()
+            .expect("edited demo node must be preserved");
+        assert_eq!(edited.label, "My Weekly Goals");
+        assert!(cleaned
+            .get_node_without_access("demo-task-1")
+            .unwrap()
+            .is_some());
+        assert!(cleaned
+            .get_node_without_access("demo-health-1")
+            .unwrap()
+            .is_some());
+        assert!(cleaned
+            .get_node_without_access("demo-learning-1")
+            .unwrap()
+            .is_some());
+        assert!(cleaned
+            .get_node_without_access("demo-learning-2")
+            .unwrap()
+            .is_some());
+        assert!(cleaned
+            .get_node_without_access("demo-finance-1")
+            .unwrap()
+            .is_none());
+
+        let user_edge_count: usize = cleaned
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM edges WHERE id = ?1",
+                params![user_edge.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(user_edge_count, 1);
+        let adopted_fixture_edge_count: usize = cleaned
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM edges WHERE id = 'demo-edge-3'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(adopted_fixture_edge_count, 1);
+        let owner_intent_count: usize = cleaned
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM intent_log WHERE id = 'owner-intent'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(owner_intent_count, 1);
+    }
+
+    #[test]
+    fn legacy_demo_cleanup_rolls_back_on_failure() {
+        let (graph, _dir) = test_graph();
+        assert!(graph.seed_demo_data().unwrap());
+        graph
+            .conn
+            .execute(
+                "DELETE FROM prismos_internal_migrations WHERE id = ?1",
+                params![LEGACY_DEMO_CLEANUP_MIGRATION],
+            )
+            .unwrap();
+        graph
+            .conn
+            .execute_batch(
+                "CREATE TEMP TRIGGER reject_legacy_edge_cleanup
+                 BEFORE DELETE ON edges
+                 WHEN OLD.id LIKE 'demo-edge-%'
+                 BEGIN
+                     SELECT RAISE(ABORT, 'forced cleanup failure');
+                 END;",
+            )
+            .unwrap();
+
+        assert!(cleanup_legacy_demo_data(&graph.conn).is_err());
+        assert_eq!(graph.stats().unwrap(), (10, 8));
+        let intent_count: usize = graph
+            .conn
+            .query_row("SELECT COUNT(*) FROM intent_log", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(intent_count, 5);
+        let marker_count: usize = graph
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM prismos_internal_migrations WHERE id = ?1",
+                params![LEGACY_DEMO_CLEANUP_MIGRATION],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(marker_count, 0);
     }
 
     // ─── Node CRUD ─────────────────────────────────────────────────────────
@@ -3612,7 +5668,9 @@ mod tests {
     #[test]
     fn test_add_node_with_layer() {
         let (g, _dir) = test_graph();
-        let node = g.add_node_with_layer("Core Node", "core stuff", "learning", "core").unwrap();
+        let node = g
+            .add_node_with_layer("Core Node", "core stuff", "learning", "core")
+            .unwrap();
         assert_eq!(node.layer, "core");
     }
 
@@ -3630,8 +5688,10 @@ mod tests {
     #[test]
     fn test_search_nodes() {
         let (g, _dir) = test_graph();
-        g.add_node("Rust Async Patterns", "async/await ownership", "learning").unwrap();
-        g.add_node("Cooking Recipes", "pasta pizza bread", "note").unwrap();
+        g.add_node("Rust Async Patterns", "async/await ownership", "learning")
+            .unwrap();
+        g.add_node("Cooking Recipes", "pasta pizza bread", "note")
+            .unwrap();
 
         let results = g.search_nodes("Rust").unwrap();
         assert_eq!(results.len(), 1);
@@ -3687,7 +5747,10 @@ mod tests {
         let n1 = g.add_node("A", "a", "work").unwrap();
         let n2 = g.add_node("B", "b", "work").unwrap();
         let edge = g.add_edge(&n1.id, &n2.id, "test", 999.0).unwrap();
-        assert!(edge.weight <= MAX_EDGE_WEIGHT, "weight should be clamped to MAX_EDGE_WEIGHT");
+        assert!(
+            edge.weight <= MAX_EDGE_WEIGHT,
+            "weight should be clamped to MAX_EDGE_WEIGHT"
+        );
     }
 
     #[test]
@@ -3719,9 +5782,15 @@ mod tests {
         let n2 = g.add_node("B", "b", "work").unwrap();
         let edge = g.add_edge(&n1.id, &n2.id, "test", 1.0).unwrap();
         let updated = g.update_edge_weight(&edge.id, 1.0).unwrap();
-        assert!(updated.weight > edge.weight, "positive signal should increase weight");
+        assert!(
+            updated.weight > edge.weight,
+            "positive signal should increase weight"
+        );
         assert_eq!(updated.reinforcements, 1);
-        assert!(updated.momentum > 0.0, "momentum should be positive after positive signal");
+        assert!(
+            updated.momentum > 0.0,
+            "momentum should be positive after positive signal"
+        );
     }
 
     #[test]
@@ -3752,12 +5821,101 @@ mod tests {
     #[test]
     fn test_query_intent_matches_nodes() {
         let (g, _dir) = test_graph();
-        g.add_node("Rust Ownership", "Understanding Rust borrow checker and lifetimes", "learning").unwrap();
-        g.add_node("Cooking Pasta", "Italian pasta recipe with fresh tomatoes", "note").unwrap();
+        g.add_node(
+            "Rust Ownership",
+            "Understanding Rust borrow checker and lifetimes",
+            "learning",
+        )
+        .unwrap();
+        g.add_node(
+            "Cooking Pasta",
+            "Italian pasta recipe with fresh tomatoes",
+            "note",
+        )
+        .unwrap();
 
-        let results = g.query_intent("Rust lifetimes borrow", "Query", &[]).unwrap();
+        let results = g
+            .query_intent("Rust lifetimes borrow", "Query", &[])
+            .unwrap();
         assert!(!results.is_empty(), "should match at least one node");
         assert_eq!(results[0].node.label, "Rust Ownership");
+    }
+
+    #[test]
+    fn test_fts_search_finds_project_symbols() {
+        let (g, _dir) = test_graph();
+        let node = g
+            .add_node_with_layer(
+                "src/runtime/orchestrator.rs",
+                "The WorkflowEngine coordinates ProjectKnowledge ingestion and retrieval.",
+                "project_chunk",
+                "knowledge",
+            )
+            .unwrap();
+        let hits = g
+            .fts_search_nodes(&["ProjectKnowledge".into()], 10)
+            .unwrap();
+        assert!(hits.iter().any(|hit| hit.id == node.id));
+    }
+
+    #[test]
+    fn test_fts_migration_rebuilds_preexisting_nodes() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("spectrum_graph.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE nodes (
+                    id TEXT PRIMARY KEY, label TEXT NOT NULL, content TEXT NOT NULL,
+                    node_type TEXT NOT NULL DEFAULT 'note', layer TEXT NOT NULL DEFAULT 'context',
+                    embedding BLOB, access_count INTEGER NOT NULL DEFAULT 0,
+                    last_accessed TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                 );",
+            )
+            .unwrap();
+            let now = Utc::now().to_rfc3339();
+            conn.execute(
+                "INSERT INTO nodes
+                 (id, label, content, node_type, layer, last_accessed, created_at, updated_at)
+                 VALUES ('pre-fts', 'Old row', 'legacyftstoken', 'note', 'context', ?1, ?1, ?1)",
+                params![now],
+            )
+            .unwrap();
+        }
+
+        let graph = SpectrumGraph::new(dir.path()).unwrap();
+        let count: usize = graph
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM nodes_fts WHERE nodes_fts MATCH 'legacyftstoken'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        let marker_count: usize = graph
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM prismos_internal_migrations
+                 WHERE id = 'nodes_fts_backfill_v1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(marker_count, 1);
+        drop(graph);
+
+        let reopened = SpectrumGraph::new(dir.path()).unwrap();
+        let marker_count_after_reopen: usize = reopened
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM prismos_internal_migrations
+                 WHERE id = 'nodes_fts_backfill_v1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(marker_count_after_reopen, 1);
     }
 
     // ─── Graph Operations ──────────────────────────────────────────────────
@@ -3769,8 +5927,14 @@ mod tests {
         g.add_node("B", "b", "work").unwrap();
         let (nodes, edges) = g.clear_graph().unwrap();
         assert_eq!(nodes, 2);
+        assert_eq!(edges, 0);
         let (remaining, _) = g.stats().unwrap();
         assert_eq!(remaining, 0);
+        let free_pages: i64 = g
+            .conn
+            .query_row("PRAGMA freelist_count", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(free_pages, 0, "VACUUM should reclaim free database pages");
     }
 
     #[test]
@@ -3829,6 +5993,63 @@ mod tests {
         assert_eq!(after, 1);
     }
 
+    #[test]
+    fn test_deduplicate_preserves_same_named_chunks_from_different_sources() {
+        let (g, _dir) = test_graph();
+        let indexed_at = Utc::now().to_rfc3339();
+        let shared_label = "website · src/index.ts [1/1]";
+        let source_a = KnowledgeChunkRecord {
+            id: "knowledge-source-a-index".into(),
+            label: shared_label.into(),
+            content: "Project: website\nSource: src/index.ts\n\nsource A".into(),
+            source_path: "src/index.ts".into(),
+            content_hash: "hash-a".into(),
+        };
+        let source_b = KnowledgeChunkRecord {
+            id: "knowledge-source-b-index".into(),
+            label: shared_label.into(),
+            content: "Project: website\nSource: src/index.ts\n\nsource B".into(),
+            source_path: "src/index.ts".into(),
+            content_hash: "hash-b".into(),
+        };
+
+        g.sync_knowledge_source(
+            "project-source-a",
+            "website",
+            "/projects/a/website",
+            &indexed_at,
+            1,
+            8,
+            0,
+            0,
+            &[source_a],
+        )
+        .unwrap();
+        g.sync_knowledge_source(
+            "project-source-b",
+            "website",
+            "/projects/b/website",
+            &indexed_at,
+            1,
+            8,
+            0,
+            0,
+            &[source_b],
+        )
+        .unwrap();
+
+        assert_eq!(g.deduplicate_nodes().unwrap(), 0);
+        assert!(g
+            .get_node_without_access("knowledge-source-a-index")
+            .unwrap()
+            .is_some());
+        assert!(g
+            .get_node_without_access("knowledge-source-b-index")
+            .unwrap()
+            .is_some());
+        assert_eq!(g.list_knowledge_sources().unwrap().len(), 2);
+    }
+
     // ─── Temporal Helpers ──────────────────────────────────────────────────
 
     #[test]
@@ -3837,14 +6058,21 @@ mod tests {
         let now = Utc::now().to_rfc3339();
         let decay = g.calculate_temporal_decay(&now);
         // Should be very close to 1.0 for a just-reinforced edge
-        assert!(decay > 0.99, "decay for recent edge should be ~1.0, got {}", decay);
+        assert!(
+            decay > 0.99,
+            "decay for recent edge should be ~1.0, got {}",
+            decay
+        );
     }
 
     #[test]
     fn test_temporal_decay_empty_timestamp() {
         let (g, _dir) = test_graph();
         let decay = g.calculate_temporal_decay("");
-        assert!((decay - 0.9).abs() < 1e-9, "empty timestamp should return 0.9 default");
+        assert!(
+            (decay - 0.9).abs() < 1e-9,
+            "empty timestamp should return 0.9 default"
+        );
     }
 
     #[test]
@@ -3852,7 +6080,11 @@ mod tests {
         let (g, _dir) = test_graph();
         let now = Utc::now().to_rfc3339();
         let boost = g.calculate_temporal_boost(&now);
-        assert!(boost > 0.9, "boost for recently updated node should be high, got {}", boost);
+        assert!(
+            boost > 0.9,
+            "boost for recently updated node should be high, got {}",
+            boost
+        );
     }
 
     // ─── Vector Embeddings ─────────────────────────────────────────────────
@@ -3868,6 +6100,91 @@ mod tests {
         assert_eq!(loaded.len(), 5);
         assert!((loaded[0] - 0.1).abs() < 1e-9);
         assert!((loaded[4] - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_content_updates_invalidate_stale_embeddings() {
+        let (g, _dir) = test_graph();
+        let node = g.add_node("Mutable", "old content", "note").unwrap();
+        g.set_node_embedding(&node.id, &[0.1, 0.2]).unwrap();
+        g.update_node(&node.id, "Mutable", "new content").unwrap();
+        assert!(g.get_node_embedding(&node.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_source_snapshot_upsert_replaces_instead_of_appending() {
+        let (g, _dir) = test_graph();
+        let first = g
+            .upsert_node_snapshot("/project/README.md", "version one", "document", "knowledge")
+            .unwrap();
+        g.set_node_embedding(&first.id, &[0.1, 0.2]).unwrap();
+        let second = g
+            .upsert_node_snapshot("/project/README.md", "version two", "document", "knowledge")
+            .unwrap();
+        assert_eq!(first.id, second.id);
+        assert_eq!(second.content, "version two");
+        assert!(!second.content.contains("version one"));
+        assert!(g.get_node_embedding(&second.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_knowledge_source_sync_preserves_unchanged_and_removes_stale_chunks() {
+        let (g, _dir) = test_graph();
+        let chunks = vec![
+            KnowledgeChunkRecord {
+                id: "knowledge-a".into(),
+                label: "demo · README.md [1/1]".into(),
+                content: "Project: demo\nSource: README.md\n\nalpha facts".into(),
+                source_path: "README.md".into(),
+                content_hash: "hash-a".into(),
+            },
+            KnowledgeChunkRecord {
+                id: "knowledge-b".into(),
+                label: "demo · src/lib.rs [1/1]".into(),
+                content: "Project: demo\nSource: src/lib.rs\n\nbeta facts".into(),
+                source_path: "src/lib.rs".into(),
+                content_hash: "hash-b".into(),
+            },
+        ];
+        g.sync_knowledge_source(
+            "source-demo",
+            "demo",
+            "/tmp/demo",
+            "2026-01-01T00:00:00Z",
+            2,
+            100,
+            0,
+            0,
+            &chunks,
+        )
+        .unwrap();
+        g.set_node_embedding("knowledge-a", &[0.2, 0.8]).unwrap();
+
+        g.sync_knowledge_source(
+            "source-demo",
+            "demo",
+            "/tmp/demo",
+            "2026-01-02T00:00:00Z",
+            1,
+            50,
+            1,
+            0,
+            &chunks[..1],
+        )
+        .unwrap();
+
+        assert!(g.get_node_embedding("knowledge-a").unwrap().is_some());
+        assert!(g.get_node("knowledge-b").unwrap().is_none());
+        let sources = g.list_knowledge_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].chunk_count, 1);
+
+        let deleted = g.delete_knowledge_source("source-demo").unwrap();
+        assert_eq!(
+            deleted, 2,
+            "one chunk plus its project overview should be removed"
+        );
+        assert!(g.list_knowledge_sources().unwrap().is_empty());
     }
 
     #[test]
@@ -3895,9 +6212,14 @@ mod tests {
         g.add_edge(&n1.id, &n2.id, "link", 1.0).unwrap();
 
         g.submit_response_feedback(
-            "conv-1", "What is X?", "X is Y", 1,
-            &[n1.id.clone(), n2.id.clone()], "mistral",
-        ).unwrap();
+            "conv-1",
+            "What is X?",
+            "X is Y",
+            1,
+            &[n1.id.clone(), n2.id.clone()],
+            "mistral",
+        )
+        .unwrap();
 
         let count = g.get_feedback_count().unwrap();
         assert!(count >= 1, "feedback count should be ≥1");
@@ -3907,13 +6229,60 @@ mod tests {
     fn test_get_good_examples() {
         let (g, _dir) = test_graph();
         g.submit_response_feedback(
-            "conv-1", "Explain Rust ownership", "Rust uses ownership for memory safety", 1,
-            &[], "mistral",
-        ).unwrap();
+            "conv-1",
+            "Explain Rust ownership",
+            "Rust uses ownership for memory safety",
+            1,
+            &[],
+            "mistral",
+        )
+        .unwrap();
 
         let examples = g.get_good_examples("Rust ownership", 5).unwrap();
         assert!(!examples.is_empty());
         assert!(examples[0].0.contains("Rust"));
+    }
+
+    #[test]
+    fn project_grounded_feedback_does_not_copy_question_or_answer() {
+        let (g, _dir) = test_graph();
+        let chunk = KnowledgeChunkRecord {
+            id: "knowledge-feedback-chunk".into(),
+            label: "project · source/file.rs [1/1]".into(),
+            content: "Source: source/file.rs\n\nprivate project fact".into(),
+            source_path: "file.rs".into(),
+            content_hash: "feedback-hash".into(),
+        };
+        g.sync_knowledge_source(
+            "project-feedback",
+            "project",
+            "/project",
+            &Utc::now().to_rfc3339(),
+            1,
+            10,
+            0,
+            0,
+            &[chunk],
+        )
+        .unwrap();
+
+        g.submit_response_feedback(
+            "feedback-conversation",
+            "private question",
+            "private project fact",
+            1,
+            &["knowledge-feedback-chunk".into()],
+            "mistral",
+        )
+        .unwrap();
+
+        let stored: usize = g
+            .conn
+            .query_row("SELECT COUNT(*) FROM response_feedback", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(stored, 0);
     }
 
     // ─── Hybrid (Semantic + Keyword) Retrieval ─────────────────────────────
@@ -3921,7 +6290,9 @@ mod tests {
     #[test]
     fn test_nodes_missing_embedding_backfill_cycle() {
         let (g, _dir) = test_graph();
-        let n = g.add_node("Alpha", "alpha node content for testing", "work").unwrap();
+        let n = g
+            .add_node("Alpha", "alpha node content for testing", "work")
+            .unwrap();
         let missing = g.nodes_missing_embedding(50).unwrap();
         assert!(missing.iter().any(|(id, _, _)| id == &n.id));
 
@@ -3938,7 +6309,11 @@ mod tests {
         let (g, _dir) = test_graph();
         // Profile node — shares NO ≥4-char keyword with the query "who am i".
         let n = g
-            .add_node("User profile", "Manish builds local-first software products", "personal")
+            .add_node(
+                "User profile",
+                "Manish builds local-first software products",
+                "personal",
+            )
             .unwrap();
         g.set_node_embedding(&n.id, &[1.0, 0.0, 0.0]).unwrap();
 
@@ -3959,13 +6334,21 @@ mod tests {
     #[test]
     fn test_query_intent_hybrid_none_matches_keyword_path() {
         let (g, _dir) = test_graph();
-        g.add_node("Rust notes", "Rust lifetimes and borrowing rules", "learning")
-            .unwrap();
+        g.add_node(
+            "Rust notes",
+            "Rust lifetimes and borrowing rules",
+            "learning",
+        )
+        .unwrap();
         let kw = g.query_intent("Rust lifetimes", "Query", &[]).unwrap();
         let hy = g
             .query_intent_hybrid("Rust lifetimes", "Query", &[], None)
             .unwrap();
-        assert_eq!(kw.len(), hy.len(), "None embedding must behave like keyword-only");
+        assert_eq!(
+            kw.len(),
+            hy.len(),
+            "None embedding must behave like keyword-only"
+        );
     }
 
     #[test]
@@ -3986,19 +6369,85 @@ mod tests {
     fn test_pinned_profile_nodes_returns_personal_core_only() {
         let (g, _dir) = test_graph();
         let pin = g
-            .add_node_with_layer("Manish (owner)", "Solo builder of 8 products", "personal", "core")
+            .add_node_with_layer(
+                "Manish (owner)",
+                "Solo builder of 8 products",
+                "personal",
+                "core",
+            )
             .unwrap();
-        g.add_node_with_layer("Some doc", "regular knowledge content", "document", "knowledge")
-            .unwrap();
+        g.add_node_with_layer(
+            "Some doc",
+            "regular knowledge content",
+            "document",
+            "knowledge",
+        )
+        .unwrap();
         g.add_node("Casual note", "personal-ish but context layer", "personal")
             .unwrap();
 
         let pins = g.pinned_profile_nodes(4).unwrap();
-        assert!(pins.iter().any(|p| p.id == pin.id), "personal/core node must be pinned");
         assert!(
-            pins.iter().all(|p| p.node_type == "personal" && p.layer == "core"),
+            pins.iter().any(|p| p.id == pin.id),
+            "personal/core node must be pinned"
+        );
+        assert!(
+            pins.iter()
+                .all(|p| p.node_type == "personal" && p.layer == "core"),
             "only personal+core nodes may be pinned"
         );
+    }
+
+    #[test]
+    fn test_recent_conversation_nodes_are_bounded_and_chronological() {
+        let (g, _dir) = test_graph();
+        let first = g
+            .add_node_with_layer(
+                "Chat first",
+                "Q: one\n\nA: first",
+                "conversation",
+                "ephemeral",
+            )
+            .unwrap();
+        let second = g
+            .add_node_with_layer(
+                "Chat second",
+                "Q: two\n\nA: second",
+                "conversation",
+                "ephemeral",
+            )
+            .unwrap();
+        let third = g
+            .add_node_with_layer(
+                "Chat third",
+                "Q: three\n\nA: third",
+                "conversation",
+                "ephemeral",
+            )
+            .unwrap();
+        g.conn
+            .execute(
+                "UPDATE nodes SET created_at = '2026-01-01T00:00:00Z' WHERE id = ?1",
+                params![first.id],
+            )
+            .unwrap();
+        g.conn
+            .execute(
+                "UPDATE nodes SET created_at = '2026-01-02T00:00:00Z' WHERE id = ?1",
+                params![second.id],
+            )
+            .unwrap();
+        g.conn
+            .execute(
+                "UPDATE nodes SET created_at = '2026-01-03T00:00:00Z' WHERE id = ?1",
+                params![third.id],
+            )
+            .unwrap();
+
+        let turns = g.recent_conversation_nodes(2).unwrap();
+        assert_eq!(turns.len(), 2);
+        assert_eq!(turns[0].label, "Chat second");
+        assert_eq!(turns[1].label, "Chat third");
     }
 
     // ─── Cognitive Profile ─────────────────────────────────────────────────
@@ -4014,10 +6463,12 @@ mod tests {
     #[test]
     fn test_save_and_load_cognitive_profile() {
         let (g, _dir) = test_graph();
-        let mut profile = crate::cognitive_profile::CognitiveProfile::default();
-        profile.depth = 0.8;
-        profile.creativity = 0.9;
-        profile.interaction_count = 42;
+        let profile = crate::cognitive_profile::CognitiveProfile {
+            depth: 0.8,
+            creativity: 0.9,
+            interaction_count: 42,
+            ..Default::default()
+        };
         g.save_cognitive_profile(&profile).unwrap();
 
         let loaded = g.get_cognitive_profile().unwrap();
@@ -4033,16 +6484,23 @@ mod tests {
         let (g, _dir) = test_graph();
         let drift = g.get_cognitive_drift(4).unwrap();
         assert_eq!(drift.summary, "insufficient_data");
-        assert!(drift.weeks_compared <= 1, "should have minimal weeks with no snapshots");
+        assert!(
+            drift.weeks_compared <= 1,
+            "should have minimal weeks with no snapshots"
+        );
     }
 
     #[test]
     fn test_cognitive_snapshot_and_drift() {
         let (g, _dir) = test_graph();
         let profile = crate::cognitive_profile::CognitiveProfile {
-            depth: 0.6, creativity: 0.4, formality: 0.5,
-            technical_level: 0.7, example_preference: 0.3,
-            interaction_count: 10, last_updated: String::new(),
+            depth: 0.6,
+            creativity: 0.4,
+            formality: 0.5,
+            technical_level: 0.7,
+            example_preference: 0.3,
+            interaction_count: 10,
+            last_updated: String::new(),
         };
         g.save_cognitive_snapshot(&profile).unwrap();
 
@@ -4055,7 +6513,9 @@ mod tests {
     #[test]
     fn test_log_and_get_refraction_insights() {
         let (g, _dir) = test_graph();
-        let id = g.log_refraction("test query", "Query", "Direct", "Analytical").unwrap();
+        let id = g
+            .log_refraction("test query", "Query", "Direct", "Analytical")
+            .unwrap();
         assert!(!id.is_empty());
 
         g.update_refraction_choice(&id, "Creative").unwrap();
@@ -4070,8 +6530,10 @@ mod tests {
     #[test]
     fn test_store_and_recall_agent_memory() {
         let (g, _dir) = test_graph();
-        g.store_agent_memory("reasoner", "last_topic", "Rust async patterns").unwrap();
-        g.store_agent_memory("reasoner", "preference", "verbose explanations").unwrap();
+        g.store_agent_memory("reasoner", "last_topic", "Rust async patterns")
+            .unwrap();
+        g.store_agent_memory("reasoner", "preference", "verbose explanations")
+            .unwrap();
 
         let memories = g.recall_agent_memory("reasoner", 10).unwrap();
         assert_eq!(memories.len(), 2);
@@ -4100,7 +6562,8 @@ mod tests {
     #[test]
     fn test_save_and_get_domain_profile() {
         let (g, _dir) = test_graph();
-        g.save_domain_profile("{\"Medical\":5}", 5, "Medical", 0.85).unwrap();
+        g.save_domain_profile("{\"Medical\":5}", 5, "Medical", 0.85)
+            .unwrap();
 
         let loaded = g.get_domain_profile().unwrap();
         assert_eq!(loaded["primary_domain"], "Medical");
@@ -4112,7 +6575,8 @@ mod tests {
     #[test]
     fn test_persist_and_load() {
         let (g, dir) = test_graph();
-        g.add_node("PersistTest", "content to persist", "work").unwrap();
+        g.add_node("PersistTest", "content to persist", "work")
+            .unwrap();
 
         let export_path = dir.path().join("export.json");
         let msg = g.persist(&export_path).unwrap();
@@ -4126,6 +6590,173 @@ mod tests {
 
         let (nodes, _) = g2.stats().unwrap();
         assert_eq!(nodes, 1);
+    }
+
+    #[test]
+    fn test_portable_snapshots_omit_managed_project_excerpts() {
+        let (graph, dir) = test_graph();
+        let normal = graph.add_node("Portable note", "keep me", "note").unwrap();
+        let chunk = KnowledgeChunkRecord {
+            id: "knowledge-private-chunk".into(),
+            label: "private · src/lib.rs [1/1]".into(),
+            content: "Project: private\nSource: src/lib.rs\n\nprivate source text".into(),
+            source_path: "src/lib.rs".into(),
+            content_hash: "private-hash".into(),
+        };
+        graph
+            .sync_knowledge_source(
+                "project-private",
+                "private",
+                "/projects/private",
+                &Utc::now().to_rfc3339(),
+                1,
+                19,
+                0,
+                0,
+                &[chunk],
+            )
+            .unwrap();
+        graph
+            .add_edge(&normal.id, "knowledge-private-chunk", "derived_from", 1.0)
+            .unwrap();
+
+        let portable = graph.get_portable_graph().unwrap();
+        assert_eq!(portable.nodes.len(), 1);
+        assert_eq!(portable.nodes[0].id, normal.id);
+        assert!(portable.edges.is_empty());
+
+        let export_path = dir.path().join("portable.json");
+        graph.persist(&export_path).unwrap();
+        let restored_dir = tempfile::tempdir().unwrap();
+        let restored = SpectrumGraph::new(restored_dir.path()).unwrap();
+        restored.load(&export_path).unwrap();
+        assert!(restored
+            .get_node_without_access(&normal.id)
+            .unwrap()
+            .is_some());
+        assert!(restored
+            .get_node_without_access("knowledge-private-chunk")
+            .unwrap()
+            .is_none());
+        assert!(restored.list_knowledge_sources().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_portable_snapshot_omits_legacy_watcher_and_attachment_chunks() {
+        let (graph, _dir) = test_graph();
+        let legacy = graph
+            .add_node(
+                "📄 src/private.rs",
+                "Local file: src/private.rs\n\ncopied source",
+                "document",
+            )
+            .unwrap();
+        let emoji_only = graph
+            .add_node("📄 Personal notes", "ordinary user document", "document")
+            .unwrap();
+        let prefix_only = graph
+            .add_node(
+                "Migration note",
+                "Local file: this is ordinary prose",
+                "document",
+            )
+            .unwrap();
+        let attachment_chunk = graph
+            .add_node(
+                "📄 meeting.txt [chunk 1/1]",
+                "Source: meeting.txt\n\none-off private attachment",
+                "doc_chunk",
+            )
+            .unwrap();
+        let touching = graph
+            .add_edge(&emoji_only.id, &legacy.id, "references", 1.0)
+            .unwrap();
+        let attachment_edge = graph
+            .add_edge(&emoji_only.id, &attachment_chunk.id, "references", 1.0)
+            .unwrap();
+        let portable_edge = graph
+            .add_edge(&emoji_only.id, &prefix_only.id, "related", 1.0)
+            .unwrap();
+
+        let portable = graph.get_portable_graph().unwrap();
+        let ids: HashSet<&str> = portable.nodes.iter().map(|node| node.id.as_str()).collect();
+        assert!(!ids.contains(legacy.id.as_str()));
+        assert!(!ids.contains(attachment_chunk.id.as_str()));
+        assert!(ids.contains(emoji_only.id.as_str()));
+        assert!(ids.contains(prefix_only.id.as_str()));
+        assert!(!portable.edges.iter().any(|edge| edge.id == touching.id));
+        assert!(!portable
+            .edges
+            .iter()
+            .any(|edge| edge.id == attachment_edge.id));
+        assert!(portable
+            .edges
+            .iter()
+            .any(|edge| edge.id == portable_edge.id));
+    }
+
+    #[test]
+    fn forgetting_a_source_removes_owned_and_directly_derived_copies() {
+        let (graph, _dir) = test_graph();
+        let chunk = KnowledgeChunkRecord {
+            id: "knowledge-forget-chunk".into(),
+            label: "project · project-forget/src/lib.rs [1/1]".into(),
+            content: "Project: project\nSource: project-forget/src/lib.rs\n\nsecret fact".into(),
+            source_path: "src/lib.rs".into(),
+            content_hash: "forget-hash".into(),
+        };
+        graph
+            .sync_knowledge_source(
+                "project-forget",
+                "project",
+                "/projects/project",
+                &Utc::now().to_rfc3339(),
+                1,
+                11,
+                0,
+                0,
+                &[chunk],
+            )
+            .unwrap();
+        let conversation = graph
+            .add_node_with_layer(
+                "Chat: project fact",
+                "Q: fact?\n\nA: secret fact",
+                "conversation",
+                "ephemeral",
+            )
+            .unwrap();
+        let entity = graph
+            .add_node_with_layer(
+                "secret concept",
+                "Concept extracted from conversation: \"fact?\"\nRelated response: secret fact",
+                "entity",
+                "context",
+            )
+            .unwrap();
+        graph
+            .add_edge(
+                &conversation.id,
+                "knowledge-forget-chunk",
+                "derived_from",
+                1.0,
+            )
+            .unwrap();
+        graph
+            .add_edge(&entity.id, "knowledge-forget-chunk", "related_to", 1.0)
+            .unwrap();
+
+        graph.delete_knowledge_source("project-forget").unwrap();
+
+        assert!(graph
+            .get_node_without_access("knowledge-forget-chunk")
+            .unwrap()
+            .is_none());
+        assert!(graph
+            .get_node_without_access(&conversation.id)
+            .unwrap()
+            .is_none());
+        assert!(graph.get_node_without_access(&entity.id).unwrap().is_none());
     }
 
     // ─── Anticipate Needs ──────────────────────────────────────────────────
@@ -4168,7 +6799,9 @@ mod tests {
     #[test]
     fn test_strengthen_related_edges() {
         let (g, _dir) = test_graph();
-        let n1 = g.add_node("Rust Patterns", "ownership", "learning").unwrap();
+        let n1 = g
+            .add_node("Rust Patterns", "ownership", "learning")
+            .unwrap();
         let n2 = g.add_node("Rust Async", "futures", "learning").unwrap();
         g.add_edge(&n1.id, &n2.id, "related", 1.0).unwrap();
 
@@ -4222,8 +6855,14 @@ mod tests {
     #[test]
     fn test_predict_edges_same_domain() {
         let (g, _dir) = test_graph();
-        g.add_node("React Hooks", "useState useEffect custom hooks", "learning").unwrap();
-        g.add_node("React Context", "useContext provider custom hooks", "learning").unwrap();
+        g.add_node("React Hooks", "useState useEffect custom hooks", "learning")
+            .unwrap();
+        g.add_node(
+            "React Context",
+            "useContext provider custom hooks",
+            "learning",
+        )
+        .unwrap();
 
         let predictions = g.predict_edges(5).unwrap();
         // Both are "learning" type with shared words — should predict a link
@@ -4251,10 +6890,10 @@ mod tests {
 
         // After dismissal, predict_edges should exclude this pair
         let predictions = g.predict_edges(10).unwrap();
-        let found = predictions.iter().any(|p|
+        let found = predictions.iter().any(|p| {
             (p.source_id == n1.id && p.target_id == n2.id)
-            || (p.source_id == n2.id && p.target_id == n1.id)
-        );
+                || (p.source_id == n2.id && p.target_id == n1.id)
+        });
         assert!(!found, "dismissed prediction should not appear again");
     }
 
@@ -4263,8 +6902,10 @@ mod tests {
     #[test]
     fn test_store_model_performance() {
         let (g, _dir) = test_graph();
-        g.store_model_performance("mistral", "General", 150.0, 0.8, "Query").unwrap();
-        g.store_model_performance("llama3", "Medical", 200.0, 0.9, "Analyze").unwrap();
+        g.store_model_performance("mistral", "General", 150.0, 0.8, "Query")
+            .unwrap();
+        g.store_model_performance("llama3", "Medical", 200.0, 0.9, "Analyze")
+            .unwrap();
         // Should not error — just verifies storage works
     }
 
@@ -4287,17 +6928,26 @@ mod tests {
 
         let incoming = GraphSnapshot {
             nodes: vec![SpectrumNode {
-                id: "remote-1".into(), label: "Remote Node".into(),
-                content: "from another device".into(), node_type: "note".into(),
-                layer: "context".into(), access_count: 1,
-                last_accessed: now.clone(), created_at: now.clone(),
-                updated_at: now.clone(), connections: vec![],
+                id: "remote-1".into(),
+                label: "Remote Node".into(),
+                content: "from another device".into(),
+                node_type: "note".into(),
+                layer: "context".into(),
+                access_count: 1,
+                last_accessed: now.clone(),
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                connections: vec![],
             }],
             edges: vec![],
             stats: GraphMetrics {
-                node_count: 1, edge_count: 0, avg_edge_weight: 0.0,
-                strongest_edge_weight: 0.0, facet_distribution: HashMap::new(),
-                most_connected_node: None, graph_density: 0.0,
+                node_count: 1,
+                edge_count: 0,
+                avg_edge_weight: 0.0,
+                strongest_edge_weight: 0.0,
+                facet_distribution: HashMap::new(),
+                most_connected_node: None,
+                graph_density: 0.0,
             },
         };
 
@@ -4310,6 +6960,97 @@ mod tests {
     }
 
     // ─── Export Sync Package ───────────────────────────────────────────────
+
+    #[test]
+    fn test_merge_rejects_oversized_content_before_writing() {
+        let (g, _dir) = test_graph();
+        let oversized = "x".repeat(MAX_IMPORT_CONTENT_BYTES + 1);
+        let incoming = import_snapshot(
+            vec![import_node("oversized", "Oversized", &oversized, "note")],
+            vec![],
+        );
+
+        let error = g
+            .merge_graph(&incoming, &MergeStrategy::Latest)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("content exceeds"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(g.stats().unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn test_import_validation_rejects_node_count_over_limit() {
+        let nodes = (0..=MAX_IMPORT_NODES)
+            .map(|index| import_node(&format!("node-{index}"), "N", "", "note"))
+            .collect();
+        let incoming = import_snapshot(nodes, vec![]);
+
+        let error = validate_import_snapshot(&incoming).unwrap_err().to_string();
+        assert!(error.contains("nodes exceeds"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn test_merge_is_atomic_when_a_later_insert_fails() {
+        let (g, _dir) = test_graph();
+        g.conn
+            .execute_batch(
+                "CREATE TRIGGER reject_atomic_bad
+                 BEFORE INSERT ON nodes
+                 WHEN NEW.id = 'atomic-bad'
+                 BEGIN
+                    SELECT RAISE(ABORT, 'forced insert failure');
+                 END;",
+            )
+            .unwrap();
+        let incoming = import_snapshot(
+            vec![
+                import_node("atomic-good", "Good", "first insert", "note"),
+                import_node("atomic-bad", "Bad", "second insert", "note"),
+            ],
+            vec![],
+        );
+
+        assert!(g.merge_graph(&incoming, &MergeStrategy::Latest).is_err());
+        assert_eq!(g.stats().unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn test_load_is_atomic_when_a_later_insert_fails() {
+        let (g, dir) = test_graph();
+        g.conn
+            .execute_batch(
+                "CREATE TRIGGER reject_load_bad
+                 BEFORE INSERT ON nodes
+                 WHEN NEW.id = 'load-bad'
+                 BEGIN
+                    SELECT RAISE(ABORT, 'forced load failure');
+                 END;",
+            )
+            .unwrap();
+        let snapshot = import_snapshot(
+            vec![
+                import_node("load-good", "Good", "first insert", "note"),
+                import_node("load-bad", "Bad", "second insert", "note"),
+            ],
+            vec![],
+        );
+        let export_path = dir.path().join("atomic-load.json");
+        std::fs::write(
+            &export_path,
+            serde_json::to_vec(&serde_json::json!({
+                "format": "prismos-spectrum-graph-v1",
+                "snapshot": snapshot,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert!(g.load(&export_path).is_err());
+        assert_eq!(g.stats().unwrap(), (0, 0));
+    }
 
     #[test]
     fn test_export_sync_package() {
@@ -4334,7 +7075,10 @@ mod tests {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![0.0, 1.0, 0.0];
         let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < 1e-9, "orthogonal vectors should have similarity ~0");
+        assert!(
+            sim.abs() < 1e-9,
+            "orthogonal vectors should have similarity ~0"
+        );
     }
 
     #[test]
@@ -4359,6 +7103,9 @@ mod tests {
     fn test_thought_currents_empty_graph() {
         let (g, _dir) = test_graph();
         let currents = g.get_thought_currents().unwrap();
-        assert!(currents.is_empty(), "empty graph should have no thought currents");
+        assert!(
+            currents.is_empty(),
+            "empty graph should have no thought currents"
+        );
     }
 }

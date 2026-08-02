@@ -1,17 +1,17 @@
-// PrismOS-AI Refractive Core — NPU-Accelerated Multi-Agent Orchestration Engine
+// PrismOS-AI Refractive Core — bounded sequential orchestration engine
 //
 // The Refractive Core is the central nervous system of PrismOS-AI.
 // Architecture:
 //   1. Ingest raw user input
 //   2. Apply Intent Lens decomposition (NLU → structured intent)
 //   3. Query Spectrum Graph for contextual memory (graph-aware retrieval)
-//   4. Route through agent pipeline (5 specialized agents)
+//   4. Route through the bounded sequential plan/build/judge workflow
 //   5. Update Spectrum Graph edges with closed-loop feedback
-//   6. Spawn LangGraph agents for complex multi-step tasks
+//   6. Record deterministic compatibility-role checks and workflow provenance
 //   7. Return refractive result with side effects & provenance
 //
-// NPU acceleration: uses SIMD-optimized scoring when available,
-// falls back to standard CPU f64 arithmetic otherwise.
+// SIMD acceleration: uses AVX2/NEON-friendly scoring when available,
+// falls back to standard scalar CPU f64 arithmetic otherwise.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -75,21 +75,57 @@ pub struct RefractiveResult {
     pub response: String,
     pub intent: ParsedIntent,
     pub agent_used: String,
-    pub context_nodes: Vec<String>,      // node IDs from Spectrum Graph context
-    pub edges_reinforced: Vec<String>,   // edge IDs that were reinforced
-    pub anticipations: Vec<String>,      // anticipated need suggestions
+    pub context_nodes: Vec<String>, // node IDs from Spectrum Graph context
+    pub edges_reinforced: Vec<String>, // edge IDs that were reinforced
+    pub anticipations: Vec<String>, // anticipated need suggestions
     pub processing_time_ms: u64,
-    pub npu_accelerated: bool,
-    pub collaboration: Option<CollaborationSummary>,  // LangGraph multi-agent trace
-    pub conversation_id: Option<String>, // links response to feedback system
+    #[serde(alias = "npu_accelerated")]
+    pub simd_accelerated: bool,
+    pub collaboration: Option<CollaborationSummary>, // Sequential workflow trace (legacy field name)
+    pub conversation_id: Option<String>,             // links response to feedback system
+    /// Requested/reported Reasoner identity plus explicit attestation and receipt facts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference: Option<crate::inference_bridge::InferenceMetadata>,
     // ── Intent Transparency fields ──
     pub query_type: Option<String>,
     pub natural_band: Option<String>,
     pub applied_band: Option<String>,
+    /// Active coarse query-topic guidance (legacy field name); never a credential claim.
     pub domain_detected: Option<String>,
+    // ── Goal-loop provenance (plan → build → judge → refine) ──
+    /// How many BUILD→JUDGE attempts ran this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iterations_used: Option<u32>,
+    /// The iteration budget for this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<u32>,
+    /// True only when a real LLM judge accepted the final answer against the
+    /// acceptance criteria (false = best-so-far / unvalidated / offline).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validated: Option<bool>,
+    /// The final judge score in [0.0, 1.0].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judge_score: Option<f64>,
+    /// True only when the final verdict came from a valid model-critic response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judge_graded: Option<bool>,
+    /// Bounded verdict/fallback summary. This is not hidden chain-of-thought.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judge_summary: Option<String>,
+    /// Reserved for wire compatibility. Hidden model reasoning is discarded and
+    /// this field is intentionally never populated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_trace: Option<String>,
+    /// The acceptance criteria the answer was judged against.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acceptance_criteria: Option<Vec<String>>,
+    /// Remaining deficiencies when the loop ended unvalidated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deficiencies: Option<Vec<String>>,
 }
 
-/// Compact summary of multi-agent collaboration for frontend display
+/// Compact summary of the sequential workflow for frontend display.
+/// Some field names retain the older collaboration/debate schema for compatibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollaborationSummary {
     pub session_id: String,
@@ -104,7 +140,7 @@ pub struct CollaborationSummary {
     pub debate: Option<DebateFrontendSummary>,
 }
 
-/// Compact debate info for frontend
+/// Compact deterministic role-trace info using the legacy debate schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebateFrontendSummary {
     pub rounds: usize,
@@ -136,25 +172,24 @@ pub struct TraceSummary {
     pub status: String,
 }
 
-// ─── NPU Scoring Engine ────────────────────────────────────────────────────────
+// ─── SIMD Scoring Engine ────────────────────────────────────────────────────────
 
-/// NPU-accelerated (or CPU fallback) scoring engine for intent relevance.
+/// CPU scoring engine with an AVX2/NEON-friendly SIMD path for intent relevance.
 /// On systems with AVX2/NEON, uses SIMD-optimized f64 vector ops.
 /// Falls back to scalar f64 arithmetic on all other platforms.
-struct NpuScorer {
-    accelerated: bool,
+struct SimdScorer {
+    simd_accelerated: bool,
 }
 
-impl NpuScorer {
+impl SimdScorer {
     fn new() -> Self {
-        // Detect hardware acceleration capabilities
-        let accelerated = Self::detect_simd_support();
-        if accelerated {
-            eprintln!("[RefractiveCore] NPU/SIMD acceleration: ENABLED");
+        let simd_accelerated = Self::detect_simd_support();
+        if simd_accelerated {
+            eprintln!("[RefractiveCore] CPU SIMD scoring: ENABLED");
         } else {
-            eprintln!("[RefractiveCore] NPU/SIMD acceleration: CPU fallback");
+            eprintln!("[RefractiveCore] CPU SIMD scoring: scalar fallback");
         }
-        Self { accelerated }
+        Self { simd_accelerated }
     }
 
     /// Detect SIMD support at runtime
@@ -176,7 +211,7 @@ impl NpuScorer {
     }
 
     /// Compute relevance score between intent embedding and node embedding
-    /// Uses dot-product similarity with NPU acceleration when available
+    /// Uses dot-product similarity with CPU SIMD acceleration when available.
     fn score_relevance(&self, intent_weights: &[f64], node_weights: &[f64]) -> f64 {
         if intent_weights.is_empty() || node_weights.is_empty() {
             return 0.0;
@@ -184,7 +219,7 @@ impl NpuScorer {
 
         let len = intent_weights.len().min(node_weights.len());
 
-        if self.accelerated {
+        if self.simd_accelerated {
             // SIMD-friendly: process in chunks of 4 for vectorization
             self.simd_dot_product(&intent_weights[..len], &node_weights[..len])
         } else {
@@ -293,23 +328,30 @@ pub fn get_agents_with_active(active_id: Option<&str>) -> Vec<Agent> {
          "Central coordinator that decomposes user intents and dispatches to specialized agents via the Refractive Core pipeline"),
         ("memory_keeper", "Memory Keeper", "Manages Spectrum Graph persistence and retrieval",
          "Handles all read/write operations to the Spectrum Graph, including semantic search, relationship mapping, and closed-loop edge reinforcement"),
-        ("reasoner", "Reasoner", "Performs deep analysis and inference via LLM",
-         "Interfaces with Ollama for local LLM inference, chain-of-thought reasoning, and content generation with NPU-accelerated context scoring"),
-        ("tool_smith", "Tool Smith", "Executes sandboxed operations in Prism containers",
-         "Manages WASM sandboxes for safe code execution, file operations, and tool use within deterministic Prism boundaries"),
+        ("reasoner", "Reasoner", "Performs bounded analysis and inference via LLM",
+         "Interfaces with Ollama for local LLM inference and content generation, returning answers and concise decision rationale without exposing hidden chain-of-thought"),
+        ("tool_smith", "Tool Smith", "Reviews modeled actions against native policy",
+         "Classifies modeled actions against fixed allow-lists and records signed policy decisions; it does not run arbitrary code or provide a code-execution sandbox"),
         ("sentinel", "Sentinel", "Monitors security, privacy, and system health",
          "Validates all operations against privacy policies, manages encryption, monitors resource usage, and enforces local-first data sovereignty"),
-        ("email_keeper", "Email Keeper", "Summarizes unread emails locally (read-only IMAP)",
-         "Connects to your IMAP mailbox in read-only mode, fetches envelope metadata only (subject + sender), and produces a private summary via local LLM. No email content ever leaves the sandbox."),
-        ("calendar_keeper", "Calendar Keeper", "Reads local .ics calendars and summarizes today's schedule",
-         "Parses local .ics (iCalendar) files in read-only mode, extracts today's events, detects scheduling conflicts, suggests free time blocks, and produces a private summary via local LLM. No calendar data ever leaves the sandbox."),
-        ("finance_keeper", "Finance Keeper", "Tracks your stock watchlist with public market data",
-         "Fetches read-only public market data for your ticker watchlist, summarizes price changes, identifies gainers and losers, and produces a private portfolio summary via local LLM. No trades are ever executed and no financial accounts are accessed."),
     ];
-    agents_def.into_iter().map(|(id, name, role, desc)| {
-        let status = if active_id == Some(id) { AgentStatus::Processing } else { AgentStatus::Idle };
-        Agent { id: id.into(), name: name.into(), role: role.into(), status, description: desc.into() }
-    }).collect()
+    agents_def
+        .into_iter()
+        .map(|(id, name, role, desc)| {
+            let status = if active_id == Some(id) {
+                AgentStatus::Processing
+            } else {
+                AgentStatus::Idle
+            };
+            Agent {
+                id: id.into(),
+                name: name.into(),
+                role: role.into(),
+                status,
+                description: desc.into(),
+            }
+        })
+        .collect()
 }
 
 // ─── Refractive Core Engine ────────────────────────────────────────────────────
@@ -318,24 +360,33 @@ pub fn get_agents_with_active(active_id: Option<&str>) -> Vec<Agent> {
 /// Ingests inputs → applies Intent Lenses → queries Spectrum Graph →
 /// routes through agents → updates graph with feedback → returns results.
 pub struct RefractiveEngine {
-    scorer: NpuScorer,
+    scorer: SimdScorer,
 }
 
 impl RefractiveEngine {
     pub fn new() -> Self {
         Self {
-            scorer: NpuScorer::new(),
+            scorer: SimdScorer::new(),
         }
     }
 
-    /// Full refractive pipeline: intent → context → LangGraph multi-agent collaboration → result
+    /// Full refractive pipeline: intent → context → bounded sequential workflow → result
     pub async fn refract(
         &self,
         intent: ParsedIntent,
         app_dir: &Path,
         app_handle: tauri::AppHandle,
         model: &str,
+        request_id: &str,
     ) -> Result<RefractiveResult, Box<dyn std::error::Error + Send + Sync>> {
+        if let Err(detail) = crate::inference_bridge::validate_request_id(request_id) {
+            return Err(Box::new(
+                crate::inference_bridge::InferenceError::Protocol {
+                    request_id: request_id.to_string(),
+                    detail: detail.into(),
+                },
+            ));
+        }
         let start = Instant::now();
 
         // ── Step 0: Semantic layer — embed the query on local Ollama ──
@@ -385,11 +436,13 @@ impl RefractiveEngine {
             query_embedding.as_deref(),
         )?;
 
-        let context_node_ids: Vec<String> =
+        let mut context_node_ids: Vec<String> =
             context_results.iter().map(|r| r.node.id.clone()).collect();
 
-        // ── Step 1.5: Domain Detection — learn user's professional domain ──
-        let domain_prefix = {
+        // ── Step 1.5: Query-topic mix — coarse keyword classification ──
+        // Keep the active topic typed alongside its prompt. Parsing a human-facing
+        // prompt to recover the enum is brittle and can misreport the classification.
+        let (domain_prefix, guidance_topic) = {
             let db_data = graph.get_domain_profile()?;
             let mut dp = crate::domain_detector::DomainProfile::default();
 
@@ -410,25 +463,27 @@ impl RefractiveEngine {
             dp.record_query(&intent.raw);
             let counts_json =
                 serde_json::to_string(&dp.domain_counts).unwrap_or_else(|_| "{}".to_string());
-            let primary_str = format!("{:?}", dp.primary_domain);
+            let primary_str = dp.primary_domain.storage_key();
             let _ = graph.save_domain_profile(
                 &counts_json,
                 dp.total_queries as i64,
-                &primary_str,
+                primary_str,
                 dp.confidence,
             );
 
-            dp.get_domain_prompt()
+            let guidance_topic = dp.guidance_topic();
+            let prompt = dp.get_domain_prompt();
+            (prompt, guidance_topic)
         };
 
-        // ── Step 2: NPU-scored context ranking ──
+        // ── Step 2: CPU SIMD-scored context ranking ──
         let intent_weights = self.scorer.intent_to_weights(&intent);
         let mut scored_context: Vec<(String, f64)> = Vec::new();
 
         for result in &context_results {
             let node_weights = self.scorer.node_type_to_weights(&result.node.node_type);
-            let npu_score = self.scorer.score_relevance(&intent_weights, &node_weights);
-            let combined = result.relevance_score * 0.6 + npu_score * 0.4;
+            let simd_score = self.scorer.score_relevance(&intent_weights, &node_weights);
+            let combined = result.relevance_score * 0.6 + simd_score * 0.4;
             scored_context.push((result.node.id.clone(), combined));
         }
         scored_context.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -440,13 +495,39 @@ impl RefractiveEngine {
         // pinned profile, and now so does PrismOS.
         let pinned = graph.pinned_profile_nodes(4).unwrap_or_default();
         let pinned_ids: Vec<String> = pinned.iter().map(|n| n.id.clone()).collect();
+        for id in &pinned_ids {
+            if !context_node_ids.contains(id) {
+                context_node_ids.push(id.clone());
+            }
+        }
+
+        // Always include a small, chronological window of recent completed
+        // turns. Semantic retrieval alone cannot resolve pronouns and terse
+        // follow-ups reliably. Stored turns are bounded and still live inside
+        // the untrusted reference envelope enforced by the Reasoner prompt.
+        let recent_conversations = graph.recent_conversation_nodes(4).unwrap_or_default();
+        let recent_ids: Vec<String> = recent_conversations.iter().map(|n| n.id.clone()).collect();
+        for id in &recent_ids {
+            if !context_node_ids.contains(id) {
+                context_node_ids.push(id.clone());
+            }
+        }
         let retrieved: Vec<crate::spectrum_graph::IntentQueryResult> = context_results
             .iter()
-            .filter(|r| !pinned_ids.contains(&r.node.id))
+            .filter(|r| !pinned_ids.contains(&r.node.id) && !recent_ids.contains(&r.node.id))
             .cloned()
             .collect();
 
         let mut context_summary = self.build_context_summary(&retrieved);
+
+        let conversation_block = Self::build_conversation_block(&recent_conversations);
+        if !conversation_block.is_empty() {
+            context_summary = if context_summary.is_empty() {
+                conversation_block
+            } else {
+                format!("{}\n\n{}", conversation_block, context_summary)
+            };
+        }
 
         let profile_block = Self::build_profile_block(&pinned);
         if !profile_block.is_empty() {
@@ -462,47 +543,69 @@ impl RefractiveEngine {
             context_summary = format!("{}\n\n{}", domain_prefix, context_summary);
         }
 
-        // ── Step 4: Execute LangGraph multi-agent collaboration ──
-        // All 5 agents collaborate: Orchestrator decomposes → Reasoner analyzes →
-        // Tool Smith evaluates → Memory Keeper persists → Sentinel validates →
-        // Consensus vote → Execute through Sandbox Prism
-        eprintln!("[RefractiveCore] Launching LangGraph multi-agent collaboration...");
+        // ── Step 4: Execute the bounded sequential goal loop ──
+        // The backend runs model-backed plan → build → judge → refine stages in
+        // sequence. Additional roles/votes in the returned trace are deterministic
+        // logical records, not concurrently executing models.
+        eprintln!("[RefractiveCore] Launching bounded sequential workflow...");
 
         let (mut result, session, workflow_state) = crate::agents::graph::execute_collaboration(
             intent,
             &context_summary,
             &context_node_ids,
             &scored_context,
-            self.scorer.accelerated,
+            self.scorer.simd_accelerated,
             app_dir,
             app_handle,
             model,
+            request_id,
         )
         .await?;
 
-        // ── Step 5: Attach collaboration summary to result ──
+        // ── Step 5: Attach the compatibility workflow summary to the result ──
         let consensus = session.consensus.as_ref();
 
-        // Extract debate data from workflow state
+        // Extract deterministic role-trace data through the legacy debate shape.
         let debate_frontend = workflow_state.as_ref().and_then(|ws| {
-            ws.debate.as_ref().map(|d| {
-                DebateFrontendSummary {
-                    rounds: d.rounds_completed,
-                    total_arguments: d.arguments.len(),
-                    positions: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Position").count(),
-                    challenges: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Challenge").count(),
-                    rebuttals: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Rebuttal").count(),
-                    supports: d.arguments.iter().filter(|a| format!("{:?}", a.argument_type) == "Support").count(),
-                    agreement_score: d.agreement_score,
-                    resolved: d.resolved,
-                    arguments: d.arguments.iter().map(|a| ArgumentFrontendSummary {
+            ws.debate.as_ref().map(|d| DebateFrontendSummary {
+                rounds: d.rounds_completed,
+                total_arguments: d.arguments.len(),
+                positions: d
+                    .arguments
+                    .iter()
+                    .filter(|a| format!("{:?}", a.argument_type) == "Position")
+                    .count(),
+                challenges: d
+                    .arguments
+                    .iter()
+                    .filter(|a| format!("{:?}", a.argument_type) == "Challenge")
+                    .count(),
+                rebuttals: d
+                    .arguments
+                    .iter()
+                    .filter(|a| format!("{:?}", a.argument_type) == "Rebuttal")
+                    .count(),
+                supports: d
+                    .arguments
+                    .iter()
+                    .filter(|a| format!("{:?}", a.argument_type) == "Support")
+                    .count(),
+                agreement_score: d.agreement_score,
+                resolved: d.resolved,
+                arguments: d
+                    .arguments
+                    .iter()
+                    .map(|a| ArgumentFrontendSummary {
                         agent: a.from.display_name().to_string(),
                         argument_type: format!("{:?}", a.argument_type),
-                        target: a.target_agent.as_ref().map(|t| t.display_name().to_string()),
+                        target: a
+                            .target_agent
+                            .as_ref()
+                            .map(|t| t.display_name().to_string()),
                         content: a.content.clone(),
                         confidence: a.confidence,
-                    }).collect(),
-                }
+                    })
+                    .collect(),
             })
         });
 
@@ -519,9 +622,7 @@ impl RefractiveEngine {
                 })
                 .collect(),
             consensus_approved: consensus.map(|c| c.approved).unwrap_or(false),
-            consensus_summary: consensus
-                .map(|c| c.summary.clone())
-                .unwrap_or_default(),
+            consensus_summary: consensus.map(|c| c.summary.clone()).unwrap_or_default(),
             vote_count: session.votes.len(),
             approve_count: consensus.map(|c| c.approve_count).unwrap_or(0),
             reject_count: consensus.map(|c| c.reject_count).unwrap_or(0),
@@ -534,20 +635,14 @@ impl RefractiveEngine {
         result.query_type = Some(format!("{:?}", result.intent.intent_type));
         result.natural_band = Some(result.agent_used.clone());
         result.applied_band = Some(result.agent_used.clone());
-        // Domain: extract from the domain_prefix we computed earlier
-        if !domain_prefix.is_empty() {
-            // domain_prefix is like "[Medical context] ..." — extract the domain name
-            let domain_name = domain_prefix
-                .trim_start_matches('[')
-                .split(']')
-                .next()
-                .unwrap_or("General")
-                .replace(" context", "")
-                .replace(" expertise", "");
-            result.domain_detected = Some(domain_name);
-        } else {
-            result.domain_detected = Some("General".to_string());
-        }
+        // Legacy field name: this reports the active coarse query-topic guidance,
+        // not the user's profession, credentials, or expertise.
+        result.domain_detected = Some(
+            guidance_topic
+                .unwrap_or(crate::domain_detector::UserDomain::General)
+                .storage_key()
+                .to_string(),
+        );
 
         // Override processing time to include full collaboration
         result.processing_time_ms = start.elapsed().as_millis() as u64;
@@ -569,7 +664,7 @@ impl RefractiveEngine {
     }
 
     /// Select the appropriate agent based on intent type
-    /// (Superseded by LangGraph multi-agent collaboration in refract())
+    /// (Superseded by the bounded sequential workflow in refract())
     #[allow(dead_code)]
     fn select_agent(&self, intent: &ParsedIntent) -> (String, String) {
         match intent.intent_type {
@@ -601,7 +696,8 @@ impl RefractiveEngine {
                 "sentinel".into(),
                 "You are PrismOS-AI Sentinel, the local-first system agent of the Refractive Core. \
                  Provide system information, configuration help, and privacy assurance. \
-                 All data stays local — no telemetry, no cloud sync.".into(),
+                 Describe the configured privacy boundary accurately: core Ollama is loopback-only \
+                 by default, while explicitly enabled remote endpoints and optional integrations may use the network.".into(),
             ),
         }
     }
@@ -675,6 +771,24 @@ impl RefractiveEngine {
         }
         block
     }
+
+    /// Render a bounded transcript window from persisted conversation nodes.
+    /// Conversation answers are already capped at persistence time; this second
+    /// cap guards databases created by older versions.
+    fn build_conversation_block(turns: &[crate::spectrum_graph::SpectrumNode]) -> String {
+        if turns.is_empty() {
+            return String::new();
+        }
+        let rendered: Vec<String> = turns
+            .iter()
+            .take(4)
+            .map(|turn| turn.content.chars().take(1000).collect::<String>())
+            .collect();
+        format!(
+            "Recent conversation (continuity only; earlier assistant answers may be wrong):\n{}",
+            rendered.join("\n\n")
+        )
+    }
 }
 
 // ─── Process Intent — Full Pipeline Entry Point ────────────
@@ -691,7 +805,16 @@ pub async fn process_intent_full(
     let parsed = lens.parse(raw_input);
 
     let engine = RefractiveEngine::new();
-    engine.refract(parsed, app_dir, app_handle, "mistral").await
+    let request_id = uuid::Uuid::new_v4().to_string();
+    engine
+        .refract(
+            parsed,
+            app_dir,
+            app_handle,
+            crate::ollama_bridge::DEFAULT_CHAT_MODEL,
+            &request_id,
+        )
+        .await
 }
 
 /// Get the full Spectrum Graph snapshot for frontend visualization.
@@ -741,7 +864,14 @@ pub async fn route_intent(
         system_prompt, intent.raw
     );
 
-    let response = crate::ollama_bridge::generate("mistral", &prompt, None, None, None).await?;
+    let response = crate::ollama_bridge::generate(
+        crate::ollama_bridge::DEFAULT_CHAT_MODEL,
+        &prompt,
+        None,
+        None,
+        None,
+    )
+    .await?;
     Ok(response)
 }
 
@@ -775,16 +905,17 @@ mod tests {
     #[test]
     fn test_get_agents_returns_all() {
         let agents = get_agents();
-        assert_eq!(agents.len(), 8, "should return all 8 agents");
+        assert_eq!(
+            agents.len(),
+            5,
+            "should return the five available core roles"
+        );
         let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
         assert!(ids.contains(&"orchestrator"));
         assert!(ids.contains(&"memory_keeper"));
         assert!(ids.contains(&"reasoner"));
         assert!(ids.contains(&"tool_smith"));
         assert!(ids.contains(&"sentinel"));
-        assert!(ids.contains(&"email_keeper"));
-        assert!(ids.contains(&"calendar_keeper"));
-        assert!(ids.contains(&"finance_keeper"));
     }
 
     #[test]
@@ -820,64 +951,82 @@ mod tests {
         for agent in &agents {
             assert!(!agent.name.is_empty(), "Agent name should not be empty");
             assert!(!agent.role.is_empty(), "Agent role should not be empty");
-            assert!(!agent.description.is_empty(), "Agent description should not be empty");
+            assert!(
+                !agent.description.is_empty(),
+                "Agent description should not be empty"
+            );
         }
     }
 
-    // ─── NpuScorer ─────────────────────────────────────────────────────────
+    // ─── SimdScorer ─────────────────────────────────────────────────────────
 
     #[test]
-    fn test_npu_scorer_creation() {
-        let scorer = NpuScorer::new();
+    fn test_simd_scorer_creation() {
+        let scorer = SimdScorer::new();
         // Should not panic — acceleration depends on hardware
-        let _ = scorer.accelerated;
+        let _ = scorer.simd_accelerated;
     }
 
     #[test]
     fn test_score_relevance_empty_vectors() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let score = scorer.score_relevance(&[], &[]);
         assert!((score - 0.0).abs() < 1e-9, "empty vectors should return 0");
     }
 
     #[test]
     fn test_score_relevance_identical_vectors() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let v = vec![1.0, 0.0, 0.0, 0.0, 0.0];
         let score = scorer.score_relevance(&v, &v);
-        assert!((score - 1.0).abs() < 1e-6, "identical vectors should have score ~1.0, got {}", score);
+        assert!(
+            (score - 1.0).abs() < 1e-6,
+            "identical vectors should have score ~1.0, got {}",
+            score
+        );
     }
 
     #[test]
     fn test_score_relevance_orthogonal_vectors() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let a = vec![1.0, 0.0, 0.0, 0.0, 0.0];
         let b = vec![0.0, 1.0, 0.0, 0.0, 0.0];
         let score = scorer.score_relevance(&a, &b);
-        assert!(score.abs() < 1e-6, "orthogonal vectors should have score ~0, got {}", score);
+        assert!(
+            score.abs() < 1e-6,
+            "orthogonal vectors should have score ~0, got {}",
+            score
+        );
     }
 
     #[test]
     fn test_score_relevance_partial_overlap() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let a = vec![1.0, 1.0, 0.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0, 0.0, 0.0];
         let score = scorer.score_relevance(&a, &b);
-        assert!(score > 0.5 && score < 1.0, "partial overlap should give 0.5–1.0, got {}", score);
+        assert!(
+            score > 0.5 && score < 1.0,
+            "partial overlap should give 0.5–1.0, got {}",
+            score
+        );
     }
 
     #[test]
     fn test_scalar_dot_product_basic() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let a = vec![3.0, 4.0];
         let b = vec![3.0, 4.0];
         let result = scorer.scalar_dot_product(&a, &b);
-        assert!((result - 1.0).abs() < 1e-9, "identical 2D vectors should give 1.0");
+        assert!(
+            (result - 1.0).abs() < 1e-9,
+            "identical 2D vectors should give 1.0"
+        );
     }
 
     #[test]
     fn test_simd_dot_product_matches_scalar() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         // Use vector length > 4 to exercise the SIMD chunking path
         let a = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
         let b = vec![0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
@@ -886,7 +1035,8 @@ mod tests {
         assert!(
             (simd_result - scalar_result).abs() < 1e-9,
             "SIMD and scalar dot products should match: {} vs {}",
-            simd_result, scalar_result
+            simd_result,
+            scalar_result
         );
     }
 
@@ -894,7 +1044,7 @@ mod tests {
 
     #[test]
     fn test_intent_to_weights_query() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let intent = ParsedIntent {
             raw: "test query".into(),
             intent_type: IntentType::Query,
@@ -903,12 +1053,15 @@ mod tests {
         };
         let weights = scorer.intent_to_weights(&intent);
         assert_eq!(weights.len(), 5);
-        assert!(weights[0] > weights[1], "Query weight should be highest at index 0");
+        assert!(
+            weights[0] > weights[1],
+            "Query weight should be highest at index 0"
+        );
     }
 
     #[test]
     fn test_intent_to_weights_confidence_scaling() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let high_conf = ParsedIntent {
             raw: "test".into(),
             intent_type: IntentType::Query,
@@ -923,19 +1076,26 @@ mod tests {
         };
         let hw = scorer.intent_to_weights(&high_conf);
         let lw = scorer.intent_to_weights(&low_conf);
-        assert!(hw[0] > lw[0], "higher confidence should produce larger weights");
+        assert!(
+            hw[0] > lw[0],
+            "higher confidence should produce larger weights"
+        );
     }
 
     #[test]
     fn test_intent_to_weights_entity_boost() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let no_entities = ParsedIntent {
-            raw: "test".into(), intent_type: IntentType::Query,
-            entities: vec![], confidence: 1.0,
+            raw: "test".into(),
+            intent_type: IntentType::Query,
+            entities: vec![],
+            confidence: 1.0,
         };
         let with_entities = ParsedIntent {
-            raw: "test".into(), intent_type: IntentType::Query,
-            entities: vec!["rust".into(), "async".into()], confidence: 1.0,
+            raw: "test".into(),
+            intent_type: IntentType::Query,
+            entities: vec!["rust".into(), "async".into()],
+            confidence: 1.0,
         };
         let w1 = scorer.intent_to_weights(&no_entities);
         let w2 = scorer.intent_to_weights(&with_entities);
@@ -944,19 +1104,28 @@ mod tests {
 
     #[test]
     fn test_intent_to_weights_all_types() {
-        let scorer = NpuScorer::new();
-        let types = vec![
-            IntentType::Query, IntentType::Create, IntentType::Analyze,
-            IntentType::Connect, IntentType::System,
+        let scorer = SimdScorer::new();
+        let types = [
+            IntentType::Query,
+            IntentType::Create,
+            IntentType::Analyze,
+            IntentType::Connect,
+            IntentType::System,
         ];
         for (i, it) in types.iter().enumerate() {
             let intent = ParsedIntent {
-                raw: "test".into(), intent_type: it.clone(),
-                entities: vec![], confidence: 1.0,
+                raw: "test".into(),
+                intent_type: it.clone(),
+                entities: vec![],
+                confidence: 1.0,
             };
             let w = scorer.intent_to_weights(&intent);
-            assert!(w[i] >= w.iter().cloned().fold(0.0_f64, f64::min),
-                "weight at index {} should be dominant for {:?}", i, it);
+            assert!(
+                w[i] >= w.iter().cloned().fold(0.0_f64, f64::min),
+                "weight at index {} should be dominant for {:?}",
+                i,
+                it
+            );
         }
     }
 
@@ -964,17 +1133,32 @@ mod tests {
 
     #[test]
     fn test_node_type_to_weights_known_types() {
-        let scorer = NpuScorer::new();
-        let types = vec!["note", "memory", "task", "work", "health", "finance", "social", "learning", "conversation"];
+        let scorer = SimdScorer::new();
+        let types = vec![
+            "note",
+            "memory",
+            "task",
+            "work",
+            "health",
+            "finance",
+            "social",
+            "learning",
+            "conversation",
+        ];
         for ntype in types {
             let w = scorer.node_type_to_weights(ntype);
-            assert_eq!(w.len(), 5, "all weight vectors should be 5D for type '{}'", ntype);
+            assert_eq!(
+                w.len(),
+                5,
+                "all weight vectors should be 5D for type '{}'",
+                ntype
+            );
         }
     }
 
     #[test]
     fn test_node_type_to_weights_unknown_returns_uniform() {
-        let scorer = NpuScorer::new();
+        let scorer = SimdScorer::new();
         let w = scorer.node_type_to_weights("unknown_type");
         assert_eq!(w, vec![0.5, 0.5, 0.5, 0.5, 0.5]);
     }
@@ -1035,21 +1219,53 @@ mod tests {
     }
 
     #[test]
+    fn test_build_conversation_block_is_bounded_and_warns_about_trust() {
+        let turn = crate::spectrum_graph::SpectrumNode {
+            id: "conv-1".into(),
+            label: "Chat".into(),
+            content: format!("Q: Which repo?\n\nA: The first one. {}", "x".repeat(4000)),
+            node_type: "conversation".into(),
+            layer: "ephemeral".into(),
+            access_count: 0,
+            last_accessed: String::new(),
+            created_at: String::new(),
+            updated_at: String::new(),
+            connections: vec![],
+        };
+        let block = RefractiveEngine::build_conversation_block(&[turn]);
+        assert!(block.contains("earlier assistant answers may be wrong"));
+        assert!(block.contains("Which repo?"));
+        assert!(
+            block.len() < 1200,
+            "recent turn content must remain bounded"
+        );
+    }
+
+    #[test]
+    fn test_build_conversation_block_empty() {
+        assert!(RefractiveEngine::build_conversation_block(&[]).is_empty());
+    }
+
+    #[test]
     fn test_build_context_summary_filters_short_content() {
         let engine = RefractiveEngine::new();
-        let results = vec![
-            crate::spectrum_graph::IntentQueryResult {
-                node: crate::spectrum_graph::SpectrumNode {
-                    id: "n1".into(), label: "Short".into(),
-                    content: "tiny".into(), // < 20 chars
-                    node_type: "note".into(), layer: "context".into(),
-                    access_count: 0, last_accessed: String::new(),
-                    created_at: String::new(), updated_at: String::new(),
-                    connections: vec![],
-                },
-                relevance_score: 0.9, path_strength: 0.0, temporal_boost: 0.0,
+        let results = vec![crate::spectrum_graph::IntentQueryResult {
+            node: crate::spectrum_graph::SpectrumNode {
+                id: "n1".into(),
+                label: "Short".into(),
+                content: "tiny".into(), // < 20 chars
+                node_type: "note".into(),
+                layer: "context".into(),
+                access_count: 0,
+                last_accessed: String::new(),
+                created_at: String::new(),
+                updated_at: String::new(),
+                connections: vec![],
             },
-        ];
+            relevance_score: 0.9,
+            path_strength: 0.0,
+            temporal_boost: 0.0,
+        }];
         let summary = engine.build_context_summary(&results);
         assert!(summary.is_empty(), "short content nodes should be filtered");
     }
@@ -1095,27 +1311,39 @@ mod tests {
         let summary = engine.build_context_summary(&results);
         // Should include at most 2 conversation nodes
         let conv_count = summary.matches("(conversation)").count();
-        assert!(conv_count <= 2, "should limit conversation nodes to 2, got {}", conv_count);
+        assert!(
+            conv_count <= 2,
+            "should limit conversation nodes to 2, got {}",
+            conv_count
+        );
     }
 
     #[test]
     fn test_build_context_summary_skips_suggestions() {
         let engine = RefractiveEngine::new();
-        let results = vec![
-            crate::spectrum_graph::IntentQueryResult {
-                node: crate::spectrum_graph::SpectrumNode {
-                    id: "s1".into(), label: "Suggestion Node".into(),
-                    content: "This is a proactive suggestion that should be skipped from context".into(),
-                    node_type: "suggestion".into(), layer: "ephemeral".into(),
-                    access_count: 0, last_accessed: String::new(),
-                    created_at: String::new(), updated_at: String::new(),
-                    connections: vec![],
-                },
-                relevance_score: 0.9, path_strength: 0.0, temporal_boost: 0.0,
+        let results = vec![crate::spectrum_graph::IntentQueryResult {
+            node: crate::spectrum_graph::SpectrumNode {
+                id: "s1".into(),
+                label: "Suggestion Node".into(),
+                content: "This is a proactive suggestion that should be skipped from context"
+                    .into(),
+                node_type: "suggestion".into(),
+                layer: "ephemeral".into(),
+                access_count: 0,
+                last_accessed: String::new(),
+                created_at: String::new(),
+                updated_at: String::new(),
+                connections: vec![],
             },
-        ];
+            relevance_score: 0.9,
+            path_strength: 0.0,
+            temporal_boost: 0.0,
+        }];
         let summary = engine.build_context_summary(&results);
-        assert!(summary.is_empty(), "suggestion nodes should be filtered out");
+        assert!(
+            summary.is_empty(),
+            "suggestion nodes should be filtered out"
+        );
     }
 
     // ─── Select Agent (legacy) ─────────────────────────────────────────────
@@ -1132,8 +1360,10 @@ mod tests {
         ];
         for (intent_type, expected_agent) in cases {
             let intent = ParsedIntent {
-                raw: "test".into(), intent_type,
-                entities: vec![], confidence: 1.0,
+                raw: "test".into(),
+                intent_type,
+                entities: vec![],
+                confidence: 1.0,
             };
             let (agent_id, _system_prompt) = engine.select_agent(&intent);
             assert_eq!(agent_id, expected_agent);

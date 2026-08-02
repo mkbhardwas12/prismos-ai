@@ -1,0 +1,14 @@
+{
+  "name": "repo-launch-night",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local, ethical launch room for earning organic GitHub stars and forks.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

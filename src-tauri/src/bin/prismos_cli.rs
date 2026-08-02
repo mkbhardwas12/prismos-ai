@@ -9,7 +9,7 @@
 //   prismos-cli models
 //   prismos-cli health
 //
-// The full GUI still does the agent debate / Spectrum Graph / Brain Wrapped
+// The full GUI still does the staged workflow / Spectrum Graph / Brain Wrapped
 // flow — this CLI is the "quick check" surface for devs and shell scripts.
 //
 
@@ -79,18 +79,19 @@ fn parse_args() -> Result<Args, String> {
     }
 
     let cmd = match raw[0].as_str() {
-        "ask"               => Cmd::Ask,
-        "models" | "list"   => Cmd::Models,
-        "health" | "ping"   => Cmd::Health,
+        "ask" => Cmd::Ask,
+        "models" | "list" => Cmd::Models,
+        "health" | "ping" => Cmd::Health,
         "-h" | "--help" | "help" => Cmd::Help,
-        "-V" | "--version"  => Cmd::Version,
+        "-V" | "--version" => Cmd::Version,
         other => return Err(format!("unknown command: {other}")),
     };
 
     let mut args = Args {
         cmd,
-        model:     std::env::var("PRISMOS_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string()),
-        base_url:  std::env::var("PRISMOS_OLLAMA_URL").unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string()),
+        model: std::env::var("PRISMOS_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string()),
+        base_url: std::env::var("PRISMOS_OLLAMA_URL")
+            .unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string()),
         no_stream: false,
         from_stdin: false,
         prompt: String::new(),
@@ -109,7 +110,7 @@ fn parse_args() -> Result<Args, String> {
                 args.base_url = raw.get(i).ok_or("--url needs a value")?.clone();
             }
             "--no-stream" => args.no_stream = true,
-            "--stdin"     => args.from_stdin = true,
+            "--stdin" => args.from_stdin = true,
             "--help" | "-h" => {
                 args.cmd = Cmd::Help;
             }
@@ -124,7 +125,9 @@ fn parse_args() -> Result<Args, String> {
     if args.cmd == Cmd::Ask {
         if args.from_stdin {
             let mut buf = String::new();
-            io::stdin().read_to_string(&mut buf).map_err(|e| e.to_string())?;
+            io::stdin()
+                .read_to_string(&mut buf)
+                .map_err(|e| e.to_string())?;
             args.prompt = buf.trim().to_string();
         } else {
             args.prompt = positional.join(" ");
@@ -166,18 +169,21 @@ COMMANDS
 OPTIONS
   -m, --model <name>   Model to use (default: qwen3:4b, env: PRISMOS_MODEL)
       --url <url>      Ollama base URL (default: http://localhost:11434,
-                       env: PRISMOS_OLLAMA_URL)
+                       env: PRISMOS_OLLAMA_URL; loopback-only unless
+                       PRISMOS_ALLOW_REMOTE_OLLAMA=1)
       --no-stream      Print the full answer at the end instead of streaming.
       --stdin          Read the prompt from stdin (lets you pipe in files).
 
 EXAMPLES
   prismos-cli health
   prismos-cli models
-  prismos-cli ask \"explain WASM sandboxing in one paragraph\"
+  prismos-cli ask \"explain the native action policy in one paragraph\"
   cat notes.md | prismos-cli ask --stdin --model qwen3:4b
 
-The CLI talks to Ollama directly — your data never leaves the machine.
-For the full agent-debate experience, launch the GUI: `npm run tauri dev`.
+The CLI accepts only an origin-only loopback Ollama URL by default and disables
+HTTP proxies and redirects. Explicit remote opt-in requires HTTPS and changes
+that privacy boundary.
+For the full staged workflow, launch the GUI: `npm run tauri dev`.
 ";
 
 // ─── runtime ──────────────────────────────────────────────────────────────────
@@ -194,14 +200,29 @@ async fn main() -> ExitCode {
     };
 
     match args.cmd {
-        Cmd::Help    => { print!("{HELP}"); ExitCode::SUCCESS }
-        Cmd::Version => { println!("prismos-cli {}", env!("CARGO_PKG_VERSION")); ExitCode::SUCCESS }
-        Cmd::Health  => match check_health(&args.base_url).await {
-            Ok(true)  => { println!("ok — ollama is up at {}", args.base_url); ExitCode::SUCCESS }
-            Ok(false) => { eprintln!("down — no response from {}", args.base_url); ExitCode::from(1) }
-            Err(e)    => { eprintln!("error: {e}"); ExitCode::from(1) }
+        Cmd::Help => {
+            print!("{HELP}");
+            ExitCode::SUCCESS
+        }
+        Cmd::Version => {
+            println!("prismos-cli {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Cmd::Health => match check_health(&args.base_url).await {
+            Ok(true) => {
+                println!("ok — ollama is up at {}", args.base_url);
+                ExitCode::SUCCESS
+            }
+            Ok(false) => {
+                eprintln!("down — no response from {}", args.base_url);
+                ExitCode::from(1)
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                ExitCode::from(1)
+            }
         },
-        Cmd::Models  => match list_models(&args.base_url).await {
+        Cmd::Models => match list_models(&args.base_url).await {
             Ok(models) => {
                 if models.is_empty() {
                     println!("(no models pulled — try: ollama pull qwen3:4b)");
@@ -212,7 +233,10 @@ async fn main() -> ExitCode {
                 }
                 ExitCode::SUCCESS
             }
-            Err(e) => { eprintln!("error: {e}"); ExitCode::from(1) }
+            Err(e) => {
+                eprintln!("error: {e}");
+                ExitCode::from(1)
+            }
         },
         Cmd::Ask => {
             if !matches!(check_health(&args.base_url).await, Ok(true)) {
@@ -229,7 +253,10 @@ async fn main() -> ExitCode {
             };
             match res {
                 Ok(()) => ExitCode::SUCCESS,
-                Err(e) => { eprintln!("\nerror: {e}"); ExitCode::from(1) }
+                Err(e) => {
+                    eprintln!("\nerror: {e}");
+                    ExitCode::from(1)
+                }
             }
         }
     }
@@ -237,17 +264,81 @@ async fn main() -> ExitCode {
 
 // ─── ops ──────────────────────────────────────────────────────────────────────
 
+fn remote_ollama_allowed() -> bool {
+    std::env::var("PRISMOS_ALLOW_REMOTE_OLLAMA")
+        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+}
+
+fn validated_base_url(input: &str) -> Result<String, String> {
+    validate_base_url_with_policy(input, remote_ollama_allowed())
+}
+
+fn validate_base_url_with_policy(input: &str, allow_remote: bool) -> Result<String, String> {
+    let parsed = reqwest::Url::parse(input.trim())
+        .map_err(|error| format!("invalid Ollama URL: {error}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Ollama URL must use http or https".into());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("Ollama URL must not contain credentials".into());
+    }
+    if parsed.path() != "/" || parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err("Ollama URL must be an origin without a path, query, or fragment".into());
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "Ollama URL must include a host".to_string())?;
+    let is_loopback = host.eq_ignore_ascii_case("localhost")
+        || host == "::1"
+        || host == "[::1]"
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|address| address.is_loopback())
+            .unwrap_or(false);
+    if !is_loopback && parsed.scheme() != "https" {
+        return Err("remote Ollama URLs must use HTTPS to protect prompts in transit".into());
+    }
+    if !is_loopback && !allow_remote {
+        return Err(
+            "remote Ollama URLs are disabled; set PRISMOS_ALLOW_REMOTE_OLLAMA=1 only for intentional remote use"
+                .into(),
+        );
+    }
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
+}
+
+fn local_http_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+}
+
 async fn check_health(url: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    match client.get(format!("{url}/api/version")).timeout(HEALTH_TIMEOUT).send().await {
+    let url = validated_base_url(url)?;
+    let client = local_http_client()?;
+    match client
+        .get(format!("{url}/api/version"))
+        .timeout(HEALTH_TIMEOUT)
+        .send()
+        .await
+    {
         Ok(r) => Ok(r.status().is_success()),
         Err(_) => Ok(false),
     }
 }
 
-async fn list_models(url: &str) -> Result<Vec<ModelEntry>, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let resp = client.get(format!("{url}/api/tags")).timeout(HEALTH_TIMEOUT * 4).send().await?;
+async fn list_models(
+    url: &str,
+) -> Result<Vec<ModelEntry>, Box<dyn std::error::Error + Send + Sync>> {
+    let url = validated_base_url(url)?;
+    let client = local_http_client()?;
+    let resp = client
+        .get(format!("{url}/api/tags"))
+        .timeout(HEALTH_TIMEOUT * 4)
+        .send()
+        .await?;
     if !resp.status().is_success() {
         return Err(format!("ollama returned {}", resp.status()).into());
     }
@@ -256,16 +347,26 @@ async fn list_models(url: &str) -> Result<Vec<ModelEntry>, Box<dyn std::error::E
 }
 
 async fn generate_blocking(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let body = GenerateRequest { model: &a.model, prompt: a.prompt.clone(), stream: false };
+    let base_url = validated_base_url(&a.base_url)?;
+    let client = local_http_client()?;
+    let body = GenerateRequest {
+        model: &a.model,
+        prompt: a.prompt.clone(),
+        stream: false,
+    };
     let resp = client
-        .post(format!("{}/api/generate", a.base_url))
+        .post(format!("{base_url}/api/generate"))
         .json(&body)
         .timeout(GENERATE_TIMEOUT)
         .send()
         .await?;
     if !resp.status().is_success() {
-        return Err(format!("ollama returned {}: {}", resp.status(), resp.text().await.unwrap_or_default()).into());
+        return Err(format!(
+            "ollama returned {}: {}",
+            resp.status(),
+            resp.text().await.unwrap_or_default()
+        )
+        .into());
     }
     let parsed: GenerateChunk = resp.json().await?;
     println!("{}", parsed.response);
@@ -273,16 +374,26 @@ async fn generate_blocking(a: &Args) -> Result<(), Box<dyn std::error::Error + S
 }
 
 async fn generate_streaming(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let body = GenerateRequest { model: &a.model, prompt: a.prompt.clone(), stream: true };
+    let base_url = validated_base_url(&a.base_url)?;
+    let client = local_http_client()?;
+    let body = GenerateRequest {
+        model: &a.model,
+        prompt: a.prompt.clone(),
+        stream: true,
+    };
     let resp = client
-        .post(format!("{}/api/generate", a.base_url))
+        .post(format!("{base_url}/api/generate"))
         .json(&body)
         .timeout(GENERATE_TIMEOUT)
         .send()
         .await?;
     if !resp.status().is_success() {
-        return Err(format!("ollama returned {}: {}", resp.status(), resp.text().await.unwrap_or_default()).into());
+        return Err(format!(
+            "ollama returned {}: {}",
+            resp.status(),
+            resp.text().await.unwrap_or_default()
+        )
+        .into());
     }
 
     let mut stream = resp.bytes_stream();
@@ -296,7 +407,9 @@ async fn generate_streaming(a: &Args) -> Result<(), Box<dyn std::error::Error + 
         while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
             let line = buf.drain(..=pos).collect::<Vec<u8>>();
             let line = &line[..line.len().saturating_sub(1)];
-            if line.is_empty() { continue; }
+            if line.is_empty() {
+                continue;
+            }
             match serde_json::from_slice::<GenerateChunk>(line) {
                 Ok(c) => {
                     if !c.response.is_empty() {
@@ -326,5 +439,42 @@ fn human_size(bytes: u64) -> String {
         size /= 1024.0;
         unit += 1;
     }
-    if unit == 0 { format!("{} {}", bytes, UNITS[0]) } else { format!("{:.1} {}", size, UNITS[unit]) }
+    if unit == 0 {
+        format!("{} {}", bytes, UNITS[0])
+    } else {
+        format!("{:.1} {}", size, UNITS[unit])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_policy_accepts_loopback_origins() {
+        assert_eq!(
+            validated_base_url("http://127.0.0.1:11434/").unwrap(),
+            "http://127.0.0.1:11434"
+        );
+        assert_eq!(
+            validated_base_url("http://[::1]:11434").unwrap(),
+            "http://[::1]:11434"
+        );
+    }
+
+    #[test]
+    fn endpoint_policy_rejects_paths_and_credentials() {
+        assert!(validated_base_url("http://localhost:11434/api").is_err());
+        assert!(validated_base_url("http://user:pass@localhost:11434").is_err());
+    }
+
+    #[test]
+    fn endpoint_policy_requires_https_and_opt_in_for_remote_origins() {
+        assert!(validate_base_url_with_policy("http://ollama.internal:11434", true).is_err());
+        assert!(validate_base_url_with_policy("https://ollama.internal:11434", false).is_err());
+        assert_eq!(
+            validate_base_url_with_policy("https://ollama.internal:11434", true).unwrap(),
+            "https://ollama.internal:11434"
+        );
+    }
 }

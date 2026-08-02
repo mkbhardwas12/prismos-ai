@@ -3,9 +3,10 @@
 // Instead of stuffing entire documents into the prompt (which hits context limits),
 // this module:
 //   1. Chunks documents into overlapping segments (~2000 chars each)
-//   2. Indexes chunks as Spectrum Graph nodes (with source metadata)
-//   3. On query, retrieves the top-K most relevant chunks via keyword matching
-//   4. Injects only relevant chunks into the prompt for focused, accurate answers
+//   2. Retrieves the top-K most relevant chunks via keyword matching
+//   3. Returns only relevant chunks for bounded, ephemeral document analysis
+//
+// Ordinary chat attachments are intentionally never written to Spectrum Graph.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -23,9 +24,6 @@ const TOP_K_CHUNKS: usize = 5;
 
 /// Minimum document length (chars) to trigger chunking (below this, use full doc)
 const MIN_CHUNK_THRESHOLD: usize = 3000;
-
-/// Node type used for document chunks in the Spectrum Graph
-const CHUNK_NODE_TYPE: &str = "doc_chunk";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,7 +210,13 @@ fn find_break_point(chars: &[char], start: usize, target: usize, text_len: usize
 fn sanitize_source(source: &str) -> String {
     source
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .chars()
         .take(50)
@@ -276,17 +280,15 @@ fn score_chunk(query: &str, chunk: &DocumentChunk) -> f64 {
 /// Extract searchable terms from text (lowercased, deduplicated, stop-words removed)
 fn extract_terms(text: &str) -> Vec<String> {
     let stop_words: &[&str] = &[
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "shall",
-        "should", "may", "might", "must", "can", "could", "and", "but", "or",
-        "nor", "not", "so", "yet", "for", "in", "on", "at", "to", "of", "by",
-        "with", "from", "up", "about", "into", "through", "during", "before",
-        "after", "above", "below", "between", "out", "off", "over", "under",
-        "again", "further", "then", "once", "here", "there", "when", "where",
-        "why", "how", "all", "each", "every", "both", "few", "more", "most",
-        "other", "some", "such", "no", "only", "own", "same", "than", "too",
-        "very", "just", "because", "as", "until", "while", "if", "it", "its",
-        "this", "that", "these", "those", "what", "which", "who", "whom",
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "shall", "should", "may", "might", "must", "can",
+        "could", "and", "but", "or", "nor", "not", "so", "yet", "for", "in", "on", "at", "to",
+        "of", "by", "with", "from", "up", "about", "into", "through", "during", "before", "after",
+        "above", "below", "between", "out", "off", "over", "under", "again", "further", "then",
+        "once", "here", "there", "when", "where", "why", "how", "all", "each", "every", "both",
+        "few", "more", "most", "other", "some", "such", "no", "only", "own", "same", "than", "too",
+        "very", "just", "because", "as", "until", "while", "if", "it", "its", "this", "that",
+        "these", "those", "what", "which", "who", "whom",
     ];
 
     text.to_lowercase()
@@ -297,7 +299,11 @@ fn extract_terms(text: &str) -> Vec<String> {
 }
 
 /// Retrieve the top-K most relevant chunks for a query from a chunked document.
-pub fn retrieve_chunks(query: &str, document: &ChunkedDocument, top_k: Option<usize>) -> RagContext {
+pub fn retrieve_chunks(
+    query: &str,
+    document: &ChunkedDocument,
+    top_k: Option<usize>,
+) -> RagContext {
     let k = top_k.unwrap_or(TOP_K_CHUNKS);
 
     let mut scored: Vec<(usize, f64)> = document
@@ -313,7 +319,10 @@ pub fn retrieve_chunks(query: &str, document: &ChunkedDocument, top_k: Option<us
     // Take top-K
     let top = scored.into_iter().take(k).collect::<Vec<_>>();
 
-    let chunks: Vec<DocumentChunk> = top.iter().map(|(i, _)| document.chunks[*i].clone()).collect();
+    let chunks: Vec<DocumentChunk> = top
+        .iter()
+        .map(|(i, _)| document.chunks[*i].clone())
+        .collect();
     let scores: Vec<f64> = top.iter().map(|(_, s)| *s).collect();
 
     RagContext {
@@ -373,48 +382,6 @@ pub fn build_rag_context(document_text: &str, query: &str, source: &str) -> RagR
     }
 }
 
-/// Index document chunks into the Spectrum Graph for persistent retrieval.
-/// Returns the node IDs created.
-pub fn index_chunks_to_graph(
-    graph: &crate::spectrum_graph::SpectrumGraph,
-    document: &ChunkedDocument,
-) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut node_ids = Vec::new();
-
-    for chunk in &document.chunks {
-        let label = format!(
-            "📄 {} [chunk {}/{}]",
-            chunk.source,
-            chunk.chunk_index + 1,
-            chunk.total_chunks
-        );
-        let content = format!(
-            "Source: {}\nChunk: {}/{}\nChars: {}-{}\n\n{}",
-            chunk.source,
-            chunk.chunk_index + 1,
-            chunk.total_chunks,
-            chunk.char_start,
-            chunk.char_end,
-            chunk.content
-        );
-
-        let node = graph.add_node_with_layer(&label, &content, CHUNK_NODE_TYPE, "knowledge")?;
-        node_ids.push(node.id);
-    }
-
-    // Create edges between consecutive chunks for traversal
-    for i in 0..node_ids.len().saturating_sub(1) {
-        let _ = graph.add_edge(
-            &node_ids[i],
-            &node_ids[i + 1],
-            "next_chunk",
-            0.9,
-        );
-    }
-
-    Ok(node_ids)
-}
-
 // ─── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -440,10 +407,7 @@ mod tests {
         assert!(result.chunks.len() > 1);
         // Verify all content is covered
         assert_eq!(result.chunks[0].char_start, 0);
-        assert_eq!(
-            result.chunks.last().unwrap().char_end,
-            text.chars().count()
-        );
+        assert_eq!(result.chunks.last().unwrap().char_end, text.chars().count());
     }
 
     #[test]
@@ -476,7 +440,8 @@ mod tests {
             chunk_index: 0,
             total_chunks: 1,
             source: "test.txt".to_string(),
-            content: "Rust programming language is great for systems programming and memory safety".to_string(),
+            content: "Rust programming language is great for systems programming and memory safety"
+                .to_string(),
             char_start: 0,
             char_end: 76,
             node_id: None,

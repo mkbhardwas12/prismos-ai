@@ -1,7 +1,8 @@
 // Agent Definitions — LangGraph Workflow Architecture
 //
-// Defines the 5 core PrismOS-AI agents with system prompts, debate roles,
-// and state management for the formal LangGraph state-graph workflow.
+// Defines five compatibility workflow roles used for deterministic trace and
+// policy bookkeeping. Only explicitly routed Planner/Reasoner/Critic calls are
+// model-backed; these role objects are not five independent parallel agents.
 
 import { invoke } from "@tauri-apps/api/core";
 import type { StateGraph, RefractiveResult } from "../types";
@@ -36,9 +37,9 @@ export const CORE_AGENTS = {
     debateRole: "analysis",
     systemPrompt: `You are the Reasoner agent in PrismOS-AI. Your role is to:
 1. Perform deep analysis and inference
-2. Generate chain-of-thought reasoning
-3. Answer complex questions with detailed explanations
-4. Synthesize information from multiple sources`,
+2. Produce concise rationales, assumptions, and uncertainty—not hidden chain-of-thought
+3. Answer complex questions with evidence-oriented explanations
+4. Synthesize information from cited local sources`,
   },
   toolSmith: {
     id: "tool_smith",
@@ -46,10 +47,10 @@ export const CORE_AGENTS = {
     icon: "🔧",
     debateRole: "execution",
     systemPrompt: `You are the Tool Smith agent in PrismOS-AI. Your role is to:
-1. Execute code in sandboxed WASM environments
-2. Manage file operations safely
-3. Run tools and integrations
-4. Handle computational tasks with auto-rollback support`,
+1. Prepare bounded, schema-validated tool requests
+2. Submit modeled actions to the per-agent allow-list policy
+3. Describe intended and observed side effects honestly
+4. Never claim arbitrary code isolation or generic rollback`,
   },
   sentinel: {
     id: "sentinel",
@@ -59,44 +60,8 @@ export const CORE_AGENTS = {
     systemPrompt: `You are the Sentinel agent in PrismOS-AI. Your role is to:
 1. Monitor all operations for security and privacy
 2. Validate data access permissions
-3. Encrypt sensitive information
-4. Track resource usage and system health`,
-  },
-  emailKeeper: {
-    id: "email_keeper",
-    name: "Email Keeper",
-    icon: "📬",
-    debateRole: "information",
-    systemPrompt: `You are the Email Keeper agent in PrismOS-AI. Your role is to:
-1. Connect to the user's IMAP mailbox in READ-ONLY mode
-2. Fetch only envelope metadata (subject + sender — never email bodies)
-3. Summarize unread emails locally via the Sandbox Prism
-4. Never store, transmit, or log raw email content
-5. Produce concise, actionable summaries for the Morning Brief`,
-  },
-  calendarKeeper: {
-    id: "calendar_keeper",
-    name: "Calendar Keeper",
-    icon: "📅",
-    debateRole: "scheduling",
-    systemPrompt: `You are the Calendar Keeper agent in PrismOS-AI. Your role is to:
-1. Parse local .ics (iCalendar) files in READ-ONLY mode
-2. Extract today's events, detect scheduling conflicts
-3. Suggest free time blocks for focused work
-4. Never modify, delete, or transmit calendar files
-5. Produce concise scheduling summaries for the Morning Brief`,
-  },
-  financeKeeper: {
-    id: "finance_keeper",
-    name: "Finance Keeper",
-    icon: "💰",
-    debateRole: "finance",
-    systemPrompt: `You are the Finance Keeper agent in PrismOS-AI. Your role is to:
-1. Fetch public market data for the user's ticker watchlist (READ-ONLY)
-2. Summarize daily price changes, gainers, and losers
-3. Identify notable market movements in tracked stocks
-4. Never execute trades, access financial accounts, or store credentials
-5. Produce concise portfolio summaries for the Morning Brief`,
+3. Check declared local, network, and persistence boundaries
+4. Track policy decisions and surface unresolved risk`,
   },
 } as const;
 
@@ -123,7 +88,7 @@ export function createInitialState(userInput: string): AgentState {
 
 // ─── LangGraph Workflow Bindings ───────────────────────────────────────────────
 
-/** Run a full LangGraph collaboration pipeline for an intent */
+/** Run the bounded sequential workflow for an intent. */
 export async function runCollaboration(input: string): Promise<RefractiveResult> {
   const json = await invoke<string>("run_collaboration", { input });
   return JSON.parse(json);
@@ -135,7 +100,7 @@ export async function getWorkflowGraph(): Promise<StateGraph> {
   return JSON.parse(json);
 }
 
-/** Get the debate log from the most recent collaboration */
+/** Get the deterministic comparison trace from the most recent workflow. */
 export async function getDebateLog(): Promise<unknown[]> {
   const json = await invoke<string>("get_debate_log");
   return JSON.parse(json);

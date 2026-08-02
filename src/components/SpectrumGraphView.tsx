@@ -3,7 +3,7 @@
 // Renders the multi-layered Spectrum Graph using react-force-graph-2d.
 //
 // Organized as CLUSTERS: nodes are grouped into knowledge families (You,
-// PrismOS, PolyEdgeBot, Projects, Chats, Documents, Insights, Knowledge).
+// PrismOS, Projects, Chats, Documents, Insights, and Knowledge).
 // Collapsed clusters render as one hub bubble — click a hub to expand its
 // members in place; click again (or use the legend / toolbar) to collapse.
 // Clicking a member focuses it: neighbors stay lit, everything else dims.
@@ -56,7 +56,6 @@ interface ClusterDef {
 const CLUSTER_DEFS: ClusterDef[] = [
   { id: "you", name: "You", icon: "👤", color: "#f48fb1", match: (id) => id.startsWith("user-") },
   { id: "prismos", name: "PrismOS", icon: "🔮", color: "#64b5f6", match: (id) => id.startsWith("pos-") || id === "proj-prismos" },
-  { id: "polyedgebot", name: "PolyEdgeBot", icon: "📈", color: "#ffb74d", match: (id) => id.startsWith("peb-") },
   { id: "projects", name: "Projects", icon: "🗂️", color: "#4fc3f7", match: (id) => id.startsWith("proj-") },
   { id: "chats", name: "Chats", icon: "💬", color: "#78909c", match: (_id, t) => t === "conversation" },
   { id: "documents", name: "Documents", icon: "📄", color: "#aed581", match: (_id, t) => t === "document" || t === "doc_chunk" },
@@ -236,7 +235,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     }
   }, []);
 
-  // ─── Load edge prophecy predictions ────────────────────────────────────
+  // ─── Load heuristic candidate links (legacy prediction API) ────────────
 
   const loadPredictions = useCallback(async () => {
     try {
@@ -411,7 +410,9 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const anchors = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>();
     const n = activeClusters.length || 1;
-    const radius = n <= 2 ? 160 : 150 + n * 42;
+    // Push cluster centres further apart so knowledge / chat / project each get
+    // their own island instead of piling into one blob.
+    const radius = n <= 2 ? 240 : 200 + n * 58;
     activeClusters.forEach((c, i) => {
       const angle = (2 * Math.PI * i) / n - Math.PI / 2;
       map.set(c.id, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
@@ -433,7 +434,9 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         for (const node of nodes) {
           const a = anchors.get(node.cluster);
           if (!a) continue;
-          const k = (node.isHub ? 0.22 : 0.05) * alpha;
+          // Hold members near their own cluster so stronger repulsion spreads
+          // them WITHIN the island instead of scattering across other clusters.
+          const k = (node.isHub ? 0.3 : 0.12) * alpha;
           node.vx = (node.vx ?? 0) + (a.x - (node.x ?? 0)) * k;
           node.vy = (node.vy ?? 0) + (a.y - (node.y ?? 0)) * k;
         }
@@ -449,7 +452,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     const collideForce = () => {
       let nodes: GraphNode[] = [];
       const force = () => {
-        const pad = 10;
+        const pad = 16;
         for (let i = 0; i < nodes.length; i++) {
           for (let j = i + 1; j < nodes.length; j++) {
             const a = nodes[i];
@@ -480,7 +483,10 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     fg.d3Force("cluster", clusterForce());
     fg.d3Force("collide", collideForce());
     const charge = fg.d3Force("charge");
-    if (charge?.strength) charge.strength(-70);
+    // Stronger repulsion opens the blob into a legible web; distanceMax stops far
+    // nodes from flinging apart so the graph stays framed and calm.
+    if (charge?.strength) charge.strength(-120);
+    if (charge?.distanceMax) charge.distanceMax(440);
     const link = fg.d3Force("link");
     if (link?.distance) {
       link.distance((l: GraphLink) => {
@@ -488,9 +494,11 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         const t = linkEndId(l.target);
         const sn = displayed.nodes.find((n) => n.id === s);
         const tn = displayed.nodes.find((n) => n.id === t);
-        return sn && tn && sn.cluster === tn.cluster ? 42 : 170;
+        return sn && tn && sn.cluster === tn.cluster ? 70 : 210;
       });
     }
+    // Gentle links let repulsion do the spreading instead of yanking nodes tight.
+    if (link?.strength) link.strength(0.14);
     fg.d3ReheatSimulation();
   }, [displayed, anchors]);
 
@@ -625,13 +633,16 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         return;
       }
 
-      // ── Member node ──
+      // ── Member node ── soft halo for depth, crisp core.
       const nodeSize = (node.val || 6) / Math.max(globalScale * 0.55, 1);
 
+      ctx.shadowColor = node.color;
+      ctx.shadowBlur = 8 / globalScale;
       ctx.beginPath();
       ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
       ctx.fillStyle = node.color;
       ctx.fill();
+      ctx.shadowBlur = 0; // keep the rings/labels below crisp
 
       // Highlight selected
       if (selectedNode?.id === node.id) {
@@ -649,18 +660,28 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         ctx.stroke();
       }
 
-      // Label only when it can actually be read: zoomed in, or part of the
-      // focused neighborhood, or hovered. This is what kills the label pile-up.
+      // Label only when it can actually be read — this is what kills the pile-up:
+      //  • always for hovered / focused / selected nodes,
+      //  • at deep zoom (>3.2) show everything in view,
+      //  • at mid zoom (>1.9) show only "significant" nodes (bigger or well-used),
+      // so a normal view stays a clean web and detail reveals as you lean in.
       const inFocus = focusIds?.has(node.id) ?? false;
       const isHovered = hoverNode?.id === node.id;
-      const showLabel = !dimmed && (globalScale > 1.4 || inFocus || isHovered || selectedNode?.id === node.id);
+      const significant = (node.val ?? 6) > 7 || node.access_count > 3;
+      const showLabel =
+        !dimmed &&
+        (isHovered ||
+          inFocus ||
+          selectedNode?.id === node.id ||
+          globalScale > 3.2 ||
+          (globalScale > 1.9 && significant));
       if (showLabel) {
         const fontSize = Math.max(3.5, 11 / globalScale);
         ctx.font = `${fontSize}px Inter, sans-serif`;
         const text = node.label.length > 26 ? node.label.slice(0, 26) + "…" : node.label;
         const w = ctx.measureText(text).width;
         const ly = y + nodeSize + 2.5 / globalScale;
-        ctx.fillStyle = "rgba(8,10,16,0.66)";
+        ctx.fillStyle = "rgba(8,10,16,0.82)";
         ctx.beginPath();
         ctx.roundRect(x - w / 2 - 3 / globalScale, ly, w + 6 / globalScale, fontSize * 1.35, 3 / globalScale);
         ctx.fill();
@@ -682,84 +703,103 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       const target = link.target as unknown as { x: number; y: number; id?: string };
       if (!source || !target) return;
 
-      const dimmed = focusIds
-        ? !(focusIds.has(linkEndId(link.source)) && focusIds.has(linkEndId(link.target)))
-        : false;
-      ctx.save();
-      if (dimmed) ctx.globalAlpha = 0.08;
+      const sx = source.x, sy = source.y, tx = target.x, ty = target.y;
+      // Skip until both endpoints have real positions. createLinearGradient()
+      // throws on a non-finite coordinate (unlike moveTo/lineTo), so guard it —
+      // this is what crashed the view on the first frame / after a data swap.
+      if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(tx) || !Number.isFinite(ty)) {
+        return;
+      }
+      const sId = linkEndId(link.source);
+      const tId = linkEndId(link.target);
 
-      // Predicted edges render as dashed lines
-      if (link.predicted) {
-        ctx.setLineDash([8 / globalScale, 4 / globalScale]);
+      // ── Curved edge ── the key de-tangler: crossing edges bow apart instead of
+      // overlapping into a hairball. Curvature sign is stable per pair so A↔B and
+      // B↔A don't sit on top of each other, and it reads as a clean arc to trace.
+      const curvature = (sId < tId ? 1 : -1) * 0.16;
+      const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+      const cx = mx - (ty - sy) * curvature;
+      const cy = my + (tx - sx) * curvature;
+      const arc = () => {
         ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = "rgba(180, 140, 255, 0.5)";
-        ctx.lineWidth = 1.5 / globalScale;
+        ctx.moveTo(sx, sy);
+        ctx.quadraticCurveTo(cx, cy, tx, ty);
+      };
+
+      const dimmed = focusIds ? !(focusIds.has(sId) && focusIds.has(tId)) : false;
+      const focused = !dimmed && focusIds ? focusIds.has(sId) && focusIds.has(tId) : false;
+      ctx.save();
+      ctx.lineCap = "round";
+      if (dimmed) ctx.globalAlpha = 0.05;
+
+      // Predicted edges → dashed violet arc.
+      if (link.predicted) {
+        ctx.setLineDash([7 / globalScale, 5 / globalScale]);
+        arc();
+        ctx.strokeStyle = "rgba(180, 140, 255, 0.45)";
+        ctx.lineWidth = 1.4 / globalScale;
         ctx.stroke();
         ctx.restore();
         return;
       }
 
-      // Bundled hub↔hub / hub↔node links: width grows with how many real
-      // connections they carry, drawn softly so hubs stay visually calm.
+      // Bundled hub links: soft gradient arc, width scales with connections carried.
       if ((link.aggregated ?? 0) > 0 && link.edge_id.startsWith("agg:")) {
         const w = Math.min(4, 0.6 + (link.aggregated ?? 1) * 0.25) / globalScale;
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = "rgba(140, 160, 200, 0.35)";
+        const g = ctx.createLinearGradient(sx, sy, tx, ty);
+        g.addColorStop(0, "rgba(150, 170, 210, 0.08)");
+        g.addColorStop(1, "rgba(150, 170, 210, 0.30)");
+        arc();
+        ctx.strokeStyle = g;
         ctx.lineWidth = w;
         ctx.stroke();
         ctx.restore();
         return;
       }
 
-      // Width proportional to edge weight
       const width = Math.max(0.5, link.weight * 1.5) / globalScale;
 
-      // Color: blue for positive momentum, red for negative, gray for neutral
-      let color = "rgba(100, 100, 120, 0.4)";
-      if (link.momentum > 0.05) color = "rgba(100, 180, 255, 0.6)";
-      else if (link.momentum < -0.05) color = "rgba(255, 100, 100, 0.4)";
+      // Base hue by momentum (blue = strengthening, red = weakening, slate = neutral),
+      // drawn as a source→target alpha gradient so flow direction reads without any
+      // arrowhead clutter. Brighter when the edge is inside the focused neighborhood.
+      let r = 120, g = 135, b = 160;
+      if (link.momentum > 0.05) { r = 100; g = 180; b = 255; }
+      else if (link.momentum < -0.05) { r = 255; g = 120; b = 120; }
+      const aHi = focused ? 0.9 : 0.5;
+      const aLo = focused ? 0.3 : 0.1;
+      const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+      grad.addColorStop(0, `rgba(${r},${g},${b},${aLo})`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},${aHi})`);
 
-      // Glow effect for newly strengthened edges (golden pulse)
-      const isRecent = recentEdges.has(link.edge_id);
+      // Golden pulse for newly strengthened edges (follows the arc).
       const phase = glowRef.current;
-      if (isRecent) {
+      if (recentEdges.has(link.edge_id)) {
         const pulse = 0.5 + 0.5 * Math.abs(Math.sin(phase * 1.5 + link.weight * 3));
         ctx.save();
-        ctx.shadowColor = "rgba(255, 200, 60, " + (0.6 * pulse) + ")";
+        ctx.shadowColor = `rgba(255, 200, 60, ${0.6 * pulse})`;
         ctx.shadowBlur = (6 + 4 * pulse) / globalScale;
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
+        arc();
         ctx.strokeStyle = `rgba(255, 210, 80, ${0.4 + 0.25 * pulse})`;
-        ctx.lineWidth = (width * 1.5);
+        ctx.lineWidth = width * 1.5;
         ctx.stroke();
         ctx.restore();
       }
 
-      // Glow effect for high-momentum edges (Phase 1 — Alive Graph)
-      const isHighMomentum = link.momentum > 0.1;
-      if (isHighMomentum) {
+      // Blue pulse for high-momentum edges (Alive Graph).
+      if (link.momentum > 0.1) {
         const pulse = 0.4 + 0.6 * Math.abs(Math.sin(phase * 2 + link.weight));
         ctx.save();
-        ctx.shadowColor = "rgba(100, 200, 255, " + (0.8 * pulse) + ")";
+        ctx.shadowColor = `rgba(100, 200, 255, ${0.8 * pulse})`;
         ctx.shadowBlur = (8 + 6 * pulse) / globalScale;
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
+        arc();
         ctx.strokeStyle = `rgba(120, 200, 255, ${0.5 + 0.3 * pulse})`;
-        ctx.lineWidth = (width * 1.8);
+        ctx.lineWidth = width * 1.8;
         ctx.stroke();
         ctx.restore();
       }
 
-      ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.lineTo(target.x, target.y);
-      ctx.strokeStyle = color;
+      arc();
+      ctx.strokeStyle = grad;
       ctx.lineWidth = width;
       ctx.stroke();
       ctx.restore();
@@ -788,8 +828,8 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           <div className="sg-empty">
             <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS-AI" className="sg-empty-logo" /></div>
             <div className="sg-growing-pulse" />
-            <h3>🌱 Memory is growing…</h3>
-            <p>Your Spectrum Graph builds itself as you chat. Each conversation creates nodes and connections that PrismOS-AI learns from.</p>
+            <h3>🌱 Local memory is ready</h3>
+            <p>Successful chats can add local conversation nodes and links. Explicit feedback can adjust which stored context is retrieved later.</p>
             <p className="sg-empty-hint">Try sending an intent like <em>"Summarize my week"</em> to get started.</p>
           </div>
         ) : (
@@ -837,11 +877,11 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
                   ? `${link.aggregated} connection${(link.aggregated ?? 1) > 1 ? "s" : ""} between groups`
                   : `${link.relation} (weight: ${link.weight.toFixed(2)}, momentum: ${link.momentum.toFixed(2)})`
               }
-              cooldownTicks={120}
+              cooldownTicks={220}
+              warmupTicks={60}
               d3AlphaDecay={0.02}
-              d3VelocityDecay={0.32}
-              linkDirectionalArrowLength={3}
-              linkDirectionalArrowRelPos={1}
+              d3VelocityDecay={0.3}
+              linkDirectionalArrowLength={0}
               backgroundColor="transparent"
             />
           </>
@@ -884,7 +924,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
               <li><strong>Click a bubble</strong> to expand that cluster</li>
               <li><strong>Click a node</strong> to focus it — neighbors light up</li>
               <li><strong>+/−</strong> buttons reinforce or weaken edges</li>
-              <li><strong>Dashed lines</strong> are predicted connections</li>
+              <li><strong>Dashed lines</strong> are heuristic link candidates</li>
             </ul>
             <button className="sg-intro-dismiss" onClick={() => { localStorage.setItem("prismos-graph-intro-seen", "1"); setShowIntro(false); }}>
               Got it! →
@@ -955,17 +995,17 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           </div>
         )}
 
-        {/* Anticipatory Needs */}
+        {/* Heuristic need suggestions */}
         {anticipations.length > 0 && (
           <div className="sg-anticipations">
-            <h4>🔮 Anticipated Needs</h4>
+            <h4>🧭 Heuristic Need Suggestions</h4>
             {anticipations.map((need, i) => (
               <div key={i} className="sg-anticipation-item">
                 <p className="sg-anticipation-suggestion">{need.suggestion}</p>
                 <div className="sg-anticipation-meta">
                   <span className="sg-tag">{need.facet}</span>
                   <span className="sg-confidence">
-                    {(need.confidence * 100).toFixed(0)}%
+                    {(need.confidence * 100).toFixed(0)}% heuristic score
                   </span>
                 </div>
               </div>
@@ -973,11 +1013,11 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           </div>
         )}
 
-        {/* Edge Prophecy — predicted connections */}
+        {/* Heuristic candidate links */}
         {predictions.length > 0 && (
           <div className="sg-prophecy">
-            <h4>✨ Edge Prophecy</h4>
-            <p className="sg-prophecy-desc">Predicted connections between your ideas</p>
+            <h4>✨ Candidate Links</h4>
+            <p className="sg-prophecy-desc">Heuristic link suggestions between your ideas</p>
             {predictions.slice(0, 5).map((pred, i) => (
               <div key={i} className="sg-prophecy-item">
                 <div className="sg-prophecy-labels">
@@ -987,7 +1027,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
                 </div>
                 <div className="sg-prophecy-reason">{pred.reason}</div>
                 <div className="sg-prophecy-meta">
-                  <span className="sg-confidence">{(pred.probability * 100).toFixed(0)}%</span>
+                  <span className="sg-confidence">{(pred.probability * 100).toFixed(0)}% heuristic score</span>
                   <div className="sg-prophecy-actions">
                     <button
                       className="sg-prophecy-btn sg-prophecy-confirm"

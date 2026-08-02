@@ -1,74 +1,92 @@
-# How PrismOS Self-Improves
+# How PrismOS Improves Answers Without Autonomous Training
 
-PrismOS gets better at **three timescales — all on-device, zero bytes leaving the
-machine.** Nothing here calls a cloud model; every loop closes locally against
-Ollama (`localhost:11434`) and a local SQLite brain. Wi-Fi off changes nothing.
+> **Current implementation status (August 2026):** local retrieval, positive-
+> response few-shot use, cognitive-profile updates, and a bounded sequential
+> **plan → build → judge → refine** answer loop are live. Personal-data model
+> training is disabled. Only synthetic smoke validation is currently permitted.
 
-```
-                 ┌──────────────────────────────────────────────┐
-   your question │                                              │
-        ──────▶  │  ① RAG / Knowledge Graph    (per query, ms)  │  better CONTEXT
-                 │     retrieve nodes + 👍 few-shot exemplars   │  (grounds the answer
-                 │                                              │   in YOUR data)
-                 ├──────────────────────────────────────────────┤
-                 │  ② Response Loop + Council  (per answer, sec)│  better ANSWER
-                 │     plan→build→judge→refine; N models debate │  (this reply, now)
-                 ├──────────────────────────────────────────────┤
-   👍 / 👎 ─────▶│  ③ Model Flywheel           (per model, wks) │  better MODEL
-                 │     harvest→LoRA→eval-gate→ship-if-better    │  (the weights, over time)
-                 └──────────────────────────────────────────────┘
-                          ▲                               │
-                          └──────  response_feedback  ◀───┘
-                            every rating fuels ① and ③
+PrismOS improves the current experience at two live timescales. A third,
+weight-changing layer remains gated.
+
+```text
+                 CURRENT
+question -> 1. local retrieval and approved knowledge -> better context
+         -> 2. sequential plan/build/judge/refine     -> better candidate answer
+
+                 DISABLED FOR PERSONAL DATA
+feedback -> reviewed/consented dataset -> LoRA -> holdout -> manual promotion
+
+                 ALLOWED VALIDATION
+synthetic fixtures -> smoke toolchain check -> disposable smoke artifact
 ```
 
-## ① RAG / Knowledge Graph — better *context* (milliseconds · **live**)
-Most weak answers are missing context, not a weak model. Each query retrieves
-relevant nodes from the Spectrum Graph **and** pulls your highest-rated past
-answers as **few-shot exemplars** (`get_good_examples`), then applies your
-cognitive profile. So a 👍 you give today literally shapes tomorrow's prompts —
-the cheapest, fastest improvement, and it's already wired in the app.
+## 1. Retrieval and local adaptation — live
 
-## ② Response Loop + Council — better *answer* (seconds · in the pending PR)
-For hard questions the one-pass pipeline becomes **plan → build → judge → refine**,
-with the **Council** (several local models answer, peer-review each other
-*anonymously*, a chairman synthesizes) acting as the judge. An ensemble of local
-models beats any single one, and refinement catches what a single pass misses.
-Opt-in, so quick everyday queries stay snappy.
-→ `docs/LOCAL_LOOP_ENGINE.md`
+Each query can retrieve relevant Spectrum Graph nodes, recent context, and highly
+rated prior examples, then apply local response preferences. This changes prompt
+context, not model weights. Approved Project Knowledge remains source-owned and
+portable exports omit its managed excerpts.
 
-## ③ Model Flywheel — better *model* (weeks · runnable prototype)
-The only loop that changes the weights:
-`response_feedback` → `harvest.py` (**only rating > 0 / validated answers** become
-training data) → MLX **LoRA** fine-tune → `eval_gate.py` holdout (**ship only if it
-beats the base**) → `ollama create`, keeping **N‑1 for instant rollback**. The
-payoff is a model specialized to *your* reasoning / technical / market-research /
-innovation domains — the moat a generic bigger model can't match.
-→ `docs/SELF_IMPROVING_LLM.md` · `scripts/flywheel/`
+A thumbs-up can affect future few-shot selection and profile statistics. It is not
+consent to export the prompt/answer into a fine-tuning dataset.
 
-## Why it improves instead of degrading or leaking
-- **No model collapse.** Only human-validated (👍) answers train; nothing ships
-  unless it beats the current model on a held-out set; the prior version is kept
-  for rollback. (Auto-training on self-output is the classic collapse trap — so the
-  flywheel stays **human-gated** for the first rounds; the eval-gate is what makes it
-  *safe* to automate on a cron later.)
-- **No egress.** All three loops run against local Ollama + local SQLite. This is the
-  core invariant ("zero bytes leave the machine") and a hard review gate on every change.
+## 2. Bounded response loop — live
 
-## The virtuous cycle
-One 👍 does triple duty: a **few-shot exemplar** (① now), a **training example**
-(③ later), and a **graph node** (① context). The more you use PrismOS and rate
-answers, the better both the answers (today) and the model (over time) — without a
-single byte leaving your laptop.
+For eligible open-ended requests, PrismOS runs in sequence:
 
-## Status (honest)
+1. Planner derives bounded acceptance criteria.
+2. Reasoner builds one candidate.
+3. Sentinel applies a policy veto and the Critic scores the candidate.
+4. Bounded deficiencies can drive another build while the score improves.
+5. PrismOS returns the accepted or best-so-far candidate.
+
+Planner, Reasoner, and Critic may route to different installed models, but their
+calls are serialized. Deterministic role traces, debate text, and vote records are
+not independent parallel agents. The loop refines text; it does not authorize
+filesystem, network, or tool actions.
+
+See [Local Loop Engine](LOCAL_LOOP_ENGINE.md).
+
+## 3. Model flywheel — personal-data path disabled
+
+The repository contains a LoRA research prototype, but a full run over personal
+`response_feedback` is currently disabled. Positive ratings alone do not establish
+dataset consent or filter secrets, PII, proprietary material, or source-derived
+content. Fine-tuned weights can memorize those inputs.
+
+Before a personal-data run can be enabled, PrismOS needs:
+
+- explicit preview, example-level review, and separate training consent;
+- secret/PII/ownership handling with removals and a bound dataset manifest;
+- an explicit private output destination with restrictive permissions;
+- an OS-backed cross-process lock covering UI, backend, and direct scripts;
+- independent holdout evaluation and separate manual promotion.
+
+The only currently allowed flywheel operation is a smoke validation on synthetic,
+non-sensitive fixtures. Smoke must not read the application database or Project
+Knowledge and does not prove that a candidate is useful or safe.
+
+See [Answer Improvement and Gated Training Research](SELF_IMPROVING_LLM.md) and
+[`scripts/flywheel/README.md`](../scripts/flywheel/README.md).
+
+## Status
+
 | Layer | State |
 |---|---|
-| ① RAG + 👍 few-shot retrieval | **live in the app** |
-| ② Loop + Council | **in the pending cloud PR** (default-off) |
-| ③ Flywheel | **runnable prototype** — needs a validated corpus (keep rating answers 👍) |
+| Local RAG and highly rated few-shot retrieval | Live |
+| Cognitive/profile adaptation | Live |
+| Bounded Planner/Reasoner/Critic loop | Live and sequential |
+| Parallel multi-model Council | Not implemented |
+| Synthetic flywheel smoke validation | Allowed for mechanical testing only |
+| Personal-data harvest and full LoRA training | Disabled pending consent/security controls |
+| Automatic scheduling or model promotion | Not implemented and not authorized |
 
-> Round-one fuel is measured by `scripts/flywheel/harvest.py` against your local
-> `spectrum_graph.db`. A 30B LoRA on a few dozen examples overfits — aim for
-> hundreds of validated answers before the first real round; until then, `--smoke`
-> validates the whole pipeline on a tiny model in minutes.
+## Honest limits
+
+- Retrieved context and LLM judgment remain fallible; citations, executable tests,
+  and human review are stronger evidence.
+- Local execution does not erase privacy risk. The live SQLite database is plaintext
+  to the OS account, model weights may memorize data, and downloads can use the network.
+- Base-weight/dependency acquisition can reach external registries.
+- Process exit success is not an evaluation result.
+- Keep all personal datasets, adapters, logs, and weights out of the public repository.

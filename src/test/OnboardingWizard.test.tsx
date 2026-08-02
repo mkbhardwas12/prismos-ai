@@ -26,8 +26,8 @@ describe("OnboardingWizard", () => {
     localStorage.clear();
     // Default: ollama is running, has models
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "check_ollama_status") return true;
-      if (cmd === "list_ollama_models") return JSON.stringify([
+      if (cmd === "check_local_inference_status") return true;
+      if (cmd === "list_local_inference_models") return JSON.stringify([
         { name: "qwen3:4b", size: 2.5e9 },
       ]);
       if (cmd === "pull_ollama_model") return "Model pulled successfully";
@@ -49,6 +49,31 @@ describe("OnboardingWizard", () => {
     expect(screen.getByText(/Let's get you set up/)).toBeInTheDocument();
   });
 
+  it("separates the fixed private-inference route from the editable management URL", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "check_local_inference_status") return false;
+      return "{}";
+    });
+
+    await act(async () => {
+      render(
+        <OnboardingWizard
+          settings={defaultSettings}
+          onSettingsChange={vi.fn()}
+          onComplete={vi.fn()}
+        />
+      );
+    });
+
+    const privateRoute = screen.getByLabelText("Private inference URL") as HTMLInputElement;
+    const managementRoute = screen.getByLabelText("Model management URL") as HTMLInputElement;
+    expect(privateRoute).toHaveValue("http://localhost:11434");
+    expect(privateRoute).toHaveAttribute("readonly");
+    expect(managementRoute).toHaveValue(defaultSettings.ollamaUrl);
+    expect(managementRoute).not.toHaveAttribute("readonly");
+    expect(screen.getByText(/cannot redirect chat, document, image, or Project Knowledge prompts/i)).toBeInTheDocument();
+  });
+
   it("auto-checks Ollama on mount and advances to step 2", async () => {
     await act(async () => {
       render(
@@ -60,7 +85,7 @@ describe("OnboardingWizard", () => {
       );
     });
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("check_ollama_status", { ollamaUrl: "http://localhost:11434" });
+      expect(invoke).toHaveBeenCalledWith("check_local_inference_status");
     });
     // After successful check it should auto-advance to step 2
     await waitFor(() => {
@@ -90,8 +115,8 @@ describe("OnboardingWizard", () => {
     expect(model16.name).toBeDefined();
 
     // Higher RAM should get equal or higher priority model
-    expect(model16.ramMin).toBeLessThanOrEqual(16);
-    expect(model4.ramMin).toBeLessThanOrEqual(4);
+    expect(model16.suggestedRamGB).toBeLessThanOrEqual(16);
+    expect(model4.suggestedRamGB).toBeLessThanOrEqual(4);
   });
 
   it("POPULAR_MODELS built from registry show desc and size", async () => {

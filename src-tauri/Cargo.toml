@@ -1,7 +1,7 @@
 [package]
 name = "prismos"
 version = "0.5.2"
-description = "PrismOS-AI — Local-First Agentic Personal AI Operating System"
+description = "PrismOS-AI — local-first desktop assistant with bounded sequential workflows"
 authors = ["PrismOS-AI Contributors"]
 edition = "2021"
 default-run = "prismos"
@@ -25,7 +25,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled", "backup", "serialize"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
@@ -36,33 +36,20 @@ hex = "0.4"
 hmac = "0.12"
 aes-gcm = "0.10"
 getrandom = "0.2"
+zeroize = "1"
 futures-util = "0.3"
 thiserror = "1"
-wasmtime = "27"
 tauri-plugin-global-shortcut = "2.3.1"
 
-# Phase 4 — Local Voice + File Indexing
-cpal = "0.15"
-hound = "3.5"
+# Phase 4 — File Indexing prototype support
 notify = "6.1"
 walkdir = "2"
 dirs = "6"
-tauri-plugin-updater = "2.10.0"
 tauri-plugin-window-state = "2.4.1"
 
-# Phase 5.5 — Document Ingest (PDF, DOCX, PPTX, XLSX)
-pdf-extract = "0.7"
+# Bounded document ingest and generation
 docx-rs = "0.4"
-calamine = "0.26"
-zip = "2"
-
-# Phase 7 — Contextual Screen Awareness (local screen capture)
-xcap = "0.8"
-image = { version = "0.25", default-features = false, features = ["png"] }
-
-# Email Keeper — Read-only IMAP summary
-imap = "2.4"
-native-tls = "0.2"
+zip = "8.6"
 
 # Calendar Keeper — Local .ics calendar integration
 ical = "0.11"

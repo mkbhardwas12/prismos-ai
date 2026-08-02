@@ -1,4 +1,4 @@
-// PrismOS-AI Sidebar — Navigation, Spectrum Graph Mini View, Active Agents
+// PrismOS-AI Sidebar — Navigation, Spectrum Graph Mini View, Workflow Roles
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -9,7 +9,7 @@ import ProactivePanel from "./ProactivePanel";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./Sidebar.css";
 
-type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard";
+type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard" | "research";
 
 interface SidebarProps {
   currentView: string;
@@ -121,10 +121,10 @@ export default function Sidebar({
               className={`sidebar-item ${currentView === "chat" ? "active" : ""}`}
               onClick={() => handleNavigate("chat")}
               aria-current={currentView === "chat" ? "page" : undefined}
-              title="Chat with your AI agents — send intents and get intelligent responses"
+              title="Chat with your local model and approved knowledge"
             >
               <span className="sidebar-item-icon" aria-hidden="true">💬</span>
-              <span className="sidebar-item-text">Intent Console<span className="sidebar-item-subtitle">Chat with AI agents</span></span>
+              <span className="sidebar-item-text">Intent Console<span className="sidebar-item-subtitle">Local knowledge chat</span></span>
               <span className="kbd" aria-hidden="true">⌃1</span>
             </button>
 
@@ -164,11 +164,20 @@ export default function Sidebar({
               className={`sidebar-item ${currentView === "sandbox" ? "active" : ""}`}
               onClick={() => handleNavigate("sandbox")}
               aria-current={currentView === "sandbox" ? "page" : undefined}
-              title="Execute AI actions in isolated sandboxes with cryptographic rollback"
+              title="Inspect deterministic action-policy decisions and bookkeeping checkpoints"
             >
               <span className="sidebar-item-icon" aria-hidden="true">🔒</span>
-              <span className="sidebar-item-text">Sandbox Prisms<span className="sidebar-item-subtitle">Isolated AI execution</span></span>
+              <span className="sidebar-item-text">Action Policies<span className="sidebar-item-subtitle">Policy simulator &amp; records</span></span>
               <span className="kbd" aria-hidden="true">⌃4</span>
+            </button>
+            <button
+              className={`sidebar-item ${currentView === "research" ? "active" : ""}`}
+              onClick={() => handleNavigate("research")}
+              aria-current={currentView === "research" ? "page" : undefined}
+              title="DMZ research bridge — isolated, consented web fetches; the core never egresses"
+            >
+              <span className="sidebar-item-icon" aria-hidden="true">🌐</span>
+              <span className="sidebar-item-text">Research<span className="sidebar-item-subtitle">Consented web bridge (DMZ)</span></span>
             </button>
 
             {/* Timeline — uses sibling layout instead of nested button */}
@@ -196,10 +205,10 @@ export default function Sidebar({
             <button
               className="sidebar-item sidebar-item-special"
               onClick={() => window.dispatchEvent(new CustomEvent("prismos:open-brain-wrapped"))}
-              title="See your shareable Cognitive Fingerprint and year-in-thinking story"
+              title="See a shareable illustrated profile signature and activity story"
             >
               <span className="sidebar-item-icon" aria-hidden="true">✨</span>
-              Brain Wrapped<span className="sidebar-item-subtitle">Your mind, visualized</span>
+              Brain Wrapped<span className="sidebar-item-subtitle">Your profile, illustrated</span>
             </button>
 
             <button
@@ -244,8 +253,8 @@ export default function Sidebar({
                   return (
                     <div className="spectrum-empty">
                       <div className="spectrum-growing-pulse" />
-                      <span className="spectrum-growing-text">🌱 Memory is growing…</span>
-                      <span>Send an intent to start building your knowledge graph.</span>
+                      <span className="spectrum-growing-text">🌱 Local memory is ready</span>
+                      <span>Send an intent to add your first conversation node.</span>
                     </div>
                   );
                 }
@@ -278,9 +287,9 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* Active Agents */}
+          {/* Workflow Roles */}
           <div className="sidebar-section">
-            <div className="sidebar-section-title">Active Agents</div>
+            <div className="sidebar-section-title">Workflow Roles</div>
             <ActiveAgents agents={agents} collaboration={collaboration} debateSummary={debateSummary} liveAgentSteps={liveAgentSteps} />
           </div>
         </nav>

@@ -32,6 +32,8 @@ docs/media/_overlays/
 docs/media/_brain_wrapped/
 docs/media/_stream/
 docs/screenshots/live/
+# Unreviewed local capture with retired claims; never publish this root artifact.
+/file.gif
 
 # Private / legal (do not sync)
 *_EVIDENCE.md
@@ -39,17 +41,16 @@ docs/screenshots/live/
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PRIVATE knowledge — keep on-device, NEVER push to the public repo.
-# These describe the user's private projects / live-money trading bot.
-# PrismOS still ingests them locally; they just must not be committed.
+# PrismOS may ingest these sources locally; their content must not be committed.
 # ─────────────────────────────────────────────────────────────────────────────
 knowledge/
 PrismDocs/
 
-# Local AI-agent config + project guide. CLAUDE.md and the skills describe the
-# owner's private portfolio, live-money trading bot, local paths and secrets —
-# local-only tooling, NEVER push to the public repo. (polyedgebot-ops lives here.)
+# Local AI-agent configuration may contain private project names, paths, or
+# credentials. Keep it outside this public repository.
 CLAUDE.md
 .claude/
+.prismos-private-terms
 
 # Python
 __pycache__/
@@ -70,6 +71,15 @@ venv/
 *.db-shm
 *.sqlite
 *.sqlite3
+you-port-device.key
+prismos-audit.log
+# Encrypted exports are private data too. Ciphertext, filenames, timestamps,
+# and Git history can still disclose metadata, so use a separate private backup
+# location rather than this public source repository.
+*.prismos
+*.prismos-sync
+*.prismos-vault
+private-backups/
 # App data directory (knowledge graph, profile, audit log) if ever copied into repo
 **/com.prismos.app/
 # Brain / memory exports & dumps
@@ -90,6 +100,60 @@ scripts/flywheel/holdout.jsonl
 *.npz
 adapters/
 fused/
+
+# Secrets and local credentials
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.pem
+*.key
+credentials*.json
+secrets*.json
+credentials*.yaml
+credentials*.yml
+credentials*.toml
+secrets*.yaml
+secrets*.yml
+secrets*.toml
+service-account*.json
+service-account*.yaml
+service-account*.yml
+service-account*.toml
+service_account*.json
+service_account*.yaml
+service_account*.yml
+service_account*.toml
+.npmrc
+.pypirc
+.netrc
+.git-credentials
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+*.ppk
+*.jks
+*.keystore
+*.kdbx
+keystore.properties
+# Public fixture templates remain allowed when they contain placeholders only.
+!credentials.example.json
+!credentials.example.yaml
+!credentials.example.yml
+!credentials.example.toml
+!secrets.example.json
+!secrets.example.yaml
+!secrets.example.yml
+!secrets.example.toml
+!service-account.example.json
+!service-account.example.yaml
+!service-account.example.yml
+!service-account.example.toml
 
 # Logs
 *.log

@@ -36,12 +36,12 @@ def load(font_path: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(font_path, size)
 
 SCENES = [
-    ("scene_01.png", "Boots local. Picks a model from Ollama."),
-    ("scene_02.png", "Ask anything. No internet required."),
-    ("scene_03.png", "Every answer becomes a node in your graph."),
-    ("scene_04.png", "Searchable, offline, yours."),
-    ("scene_05.png", "Untrusted code runs in a WASM sandbox."),
-    ("scene_06.png", "See how your thinking actually evolves."),
+    ("scene_01.png", "Local knowledge chat starts from your explicit prompt."),
+    ("scene_02.png", "Chat uses loopback inference by default."),
+    ("scene_03.png", "Approved knowledge and chats build your local graph."),
+    ("scene_04.png", "Searchable on your device."),
+    ("scene_05.png", "Modeled actions pass a bounded native policy gate."),
+    ("scene_06.png", "See how your interaction profile changes over time."),
 ]
 
 BAR_H = 92
@@ -62,7 +62,7 @@ def render_caption(filename: str, text: str) -> None:
     draw.text((40, H - BAR_H + 24), text, font=f, fill=TEXT)
     # corner meta
     fm = load(FONT, 14)
-    meta = "PrismOS-AI · local · private"
+    meta = "PrismOS-AI · local-first · explicit privacy boundaries"
     bbox = draw.textbbox((0, 0), meta, font=fm)
     tw = bbox[2] - bbox[0]
     draw.text((W - tw - 40, H - 30), meta, font=fm, fill=META)
@@ -73,13 +73,13 @@ def render_title() -> None:
     draw = ImageDraw.Draw(img)
     # main title
     f1 = load(FONT_BOLD, 68)
-    title = "Local. Private. Yours."
+    title = "Local-first. Open. Yours."
     bb = draw.textbbox((0, 0), title, font=f1)
     tw, th = bb[2] - bb[0], bb[3] - bb[1]
     draw.text(((W - tw) / 2, (H - th) / 2 - 80), title, font=f1, fill=TEXT)
     # subtitle (accent)
     f2 = load(FONT_BOLD, 30)
-    sub = "8 agents  ·  Spectrum Graph  ·  zero egress"
+    sub = "Sequential model workflow  ·  Spectrum Graph  ·  local-first core"
     bb = draw.textbbox((0, 0), sub, font=f2)
     tw = bb[2] - bb[0]
     draw.text(((W - tw) / 2, (H / 2) + 10), sub, font=f2, fill=STRIPE)

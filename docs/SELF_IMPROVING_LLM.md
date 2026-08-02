@@ -1,82 +1,130 @@
-# PrismOS — Self-Improving Local LLM (the data flywheel)
+# PrismOS Answer Improvement and Gated Training Research
 
-> Grow your *own* reasoning LLM on-device: the loop+council validates answers, the best ones
-> become training data, and a periodic **MLX LoRA** fine-tune folds them back into an Ollama
-> model. 100% offline. Verifier-grounded so it gets **better, not collapsed.**
-> (Backed by the deep-research run `wyvtvcrao` — 24/25 claims adversarially verified.)
+> **Current status (August 2026):** production chat has a bounded sequential
+> Planner/Reasoner/Critic answer loop. Weight-level personal-data training is
+> disabled. The flywheel currently permits synthetic smoke validation only and
+> never promotes a model.
 
-## TL;DR verdict
-Feasible today on the 64 GB M5 Max. Three pieces:
-1. **Base** — already on disk: `qwen3:30b-a3b` (Qwen3-30B-A3B-Thinking, MoE 3.3B active) or `qwen3:32b`. Alternatives: QwQ-32B, Phi-4-reasoning (14B).
-2. **Method** — rejection-sampling / STaR-family **SFT on the model's OWN verifier-validated outputs** (Think-Prune-Train, V-STaR, Self-Rewarding LMs). *Not* heavy RL — DeepSeek showed distillation/SFT beats small-model RL.
-3. **Toolchain** — **MLX-LM LoRA/QLoRA** (64 GB LoRA-tunes up to 32B), fuse → GGUF → Ollama.
+PrismOS does not autonomously train, schedule a training job, change the default
+model, or roll back model weights. It also does not run a true parallel model
+Council. Quality improvement is an evaluation goal, not a guarantee.
 
-## The flywheel
-```
-                ┌───────────────────────── PrismOS loop engine ─────────────────────────┐
- user asks ──▶  PLAN ──▶ BUILD (generate) ──▶ JUDGE (council: peer-review + chairman
-                                                      / verifier where ground-truth exists)
-                                              │
-                                  PRUNE: keep ONLY validated traces  ◀── the load-bearing safety gate
-                                              │
-        spectrum_graph.db  ◀── thumbs-up + good answers accumulate (response_feedback)
-                                              │
-                  (periodic, offline)         ▼
-   HARVEST validated (prompt,answer) SFT pairs  +  (chosen,rejected) preference pairs
-                                              │
-                       MLX LoRA fine-tune `qwen3:30b-a3b`
-                                              │
-                          HOLDOUT EVAL gate (ship only if ≥ base)
-                                              │
-                  fuse → GGUF → `ollama create qwen3-prism:vN`
-                                              │
-                        better base ──▶ loop runs on it next time ──▶ repeat
+## What is live
+
+The shipped answer path can improve a response without changing model weights:
+
+```text
+local retrieval -> bounded plan -> build -> policy gate -> judge -> optional refine
 ```
 
-## Why verifier-grounding is non-negotiable
-Training on **unfiltered** self-generated data causes **model collapse** (Shumailov et al., *Nature* 2024 — irreversible degradation). The fix proven across the literature: **keep only correctness/verifier-pruned traces** ("stabilizes training, preserving knowledge" — Think-Prune-Train, arXiv 2504.18116). So the **judge/verifier is the safety mechanism**, not the generation.
+Positive feedback can influence local few-shot retrieval and profile adaptation.
+That immediate personalization stays in the local Spectrum Graph. A rating does
+not authorize export into a training dataset.
 
-## The honest limit (shapes the rollout)
-Every verified self-improvement result was on **math/code with a ground-truth answer key.** Your goals include **market research & innovation — no ground truth**, where the council/LLM-judge signal is weaker and more collapse-prone, and self-judging **saturates after a few rounds**. Therefore:
+## Current flywheel boundary
 
-| Domain | Quality signal | Flywheel cadence |
+```text
+CURRENT
+synthetic non-sensitive fixtures -> smoke toolchain validation -> disposable artifact
+
+DISABLED
+personal feedback -> reviewed dataset -> LoRA -> holdout -> candidate -> manual promotion
+```
+
+The smoke path must be synthetic and must not read conversations,
+`response_feedback`, Project Knowledge, a Private Vault, or another local corpus.
+Its purpose is to check tool availability and mechanical wiring on a small model.
+Dependencies and uncached base weights may be downloaded, so smoke is not
+necessarily offline.
+
+## Why personal-data training is disabled
+
+The local feedback table may contain private prompts, responses, project-derived
+facts, names, identifiers, credentials, regulated data, or copyrighted material.
+Fine-tuned weights can memorize and reproduce training content. Selecting a thumbs-up
+does not establish consent, ownership, correctness, or absence of secrets.
+
+The current process-local concurrency guard is also insufficient for a sensitive
+training system: it cannot coordinate multiple PrismOS processes and direct script
+invocations. A full path needs an OS-backed cross-process lock.
+
+## Gates required before a full run
+
+1. **Explicit consent and bounded preview**
+   - Show every proposed example or an auditable bounded review set.
+   - State purpose, model, retention, destination, and expected artifacts.
+   - Require a separate training approval; chat feedback is not approval.
+2. **Secret, PII, and ownership review**
+   - Scan and redact/exclude credentials, private identifiers, proprietary/source
+     material, and disallowed data.
+   - Let the owner remove examples and re-run the manifest before training.
+3. **Private output destination**
+   - Require an explicit path outside the public source worktree and public build
+     artifacts.
+   - Apply restrictive permissions to datasets, logs, adapters, and fused weights.
+4. **Cross-process exclusivity**
+   - Use an OS-backed lock acquired by UI, backend, and scripts.
+   - Define safe stale-lock detection and cleanup.
+5. **Immutable provenance**
+   - Hash the approved examples, split, holdout, base weights, tool versions,
+     parameters, and destination into a review manifest.
+6. **Independent evaluation**
+   - Prefer executable tests or exact references.
+   - Use blinded human review for subjective work.
+   - Treat an LLM judge as advisory only.
+7. **Manual promotion and rollback**
+   - Keep the prior known-good model.
+   - Separate training, evaluation, and promotion authority.
+
+## Proposed toolchain, not a current authorization
+
+The source tree contains research/prototype components:
+
+| Component | Intended role | Current authorization |
 |---|---|---|
-| Code, SAP ops, anything checkable | **automated verifier** (tests/exec/exact-match) → trustworthy | aggressive |
-| Reasoning/technical Q&A | council peer-review + chairman | moderate, holdout-gated |
-| Market research / innovation | **human thumbs-up only** (rating>0) | conservative, human-in-loop, holdout-gated |
+| `run_flywheel.sh --smoke` | Synthetic mechanical validation | Allowed |
+| `harvest.py` | Build SFT/preference data from reviewed feedback | Personal use disabled |
+| `train_lora.py` | MLX-LM LoRA/QLoRA training and candidate packaging | Full use disabled |
+| `eval_gate.py` | Compare candidate and base on a holdout | Advisory; no deployment action |
+| PrismOS launcher | Start one explicitly requested process | Full mode disabled |
 
-**Every retrain is gated by a holdout eval — a bad round can never ship.** Self-judging is a few-round booster, not infinite improvement; schedule periodic human review and fresh data.
+Older examples showing direct full-run commands are intentionally retired. Do not
+run the harvester against a personal `spectrum_graph.db` until the gates above are
+implemented.
 
-## Data schema (already in your DB)
-`~/Library/Application Support/com.prismos.app/spectrum_graph.db` → `response_feedback`:
-`(id, conversation_id, question, response, rating, context_nodes, model, created_at)`.
-- `rating > 0` → SFT positive (prompt=question, completion=response).
-- `rating < 0` → rejected; pair with a positive same-question answer → DPO (chosen, rejected).
+## Evaluation policy
 
-## Components (prototype in `scripts/flywheel/`)
-| File | Role |
+Training repeatedly on unfiltered generated data can degrade a model. Even after
+full training is enabled, an in-chat Critic score or thumbs-up cannot be the only
+quality gate.
+
+| Domain | Stronger evaluation signal |
 |---|---|
-| `harvest.py` | read `response_feedback` → `data/train.jsonl` + `data/valid.jsonl` (+ optional `prefs.jsonl`) in MLX chat format |
-| `train_lora.py` | MLX-LM LoRA/QLoRA fine-tune → fuse → (GGUF) → Ollama Modelfile |
-| `eval_gate.py` | holdout eval: tuned vs base; emit SHIP / NO-SHIP |
-| `run_flywheel.sh` | orchestrate harvest → train → eval-gate → register |
-| `README.md` | setup (mlx-lm), `--smoke` end-to-end test on a tiny model first |
+| Code, configuration, math | Executable tests, type checks, exact references |
+| Technical explanation | Held-out references plus expert review |
+| Market research and innovation | Time-bounded sources and blinded human review |
+| Personal style | Explicit owner review with privacy/memorization checks |
 
-## Key practicalities
-- **Train from HF/MLX weights, not the Ollama GGUF.** MLX can't train a GGUF. Pull the MLX base (e.g. `mlx-community/Qwen3-30B-A3B-...-4bit`); fine-tune; convert the *result* back to GGUF for Ollama.
-- **Memory (64 GB):** MLX LoRA fits ≤32B; QLoRA (quantized base) roughly halves it. Start small: validate the whole pipeline on a 0.5–3B model (`--smoke`) before a 30B run.
-- **MoE GGUF caveat:** MLX→GGUF export for Qwen3-MoE may be unsupported; fall back to `llama.cpp convert_hf_to_gguf.py` + quantize. `train_lora.py` documents both paths.
-- **Versioning:** every shipped model is `qwen3-prism:vN`; keep the prior version so you can roll back. Never overwrite.
+Process success only means the training/evaluation process terminated as reported;
+it does not mean the candidate beat the base or is safe to promote.
 
-## Guardrails (hard rules)
-1. **Only verifier/human-validated traces enter training** (collapse prevention).
-2. **Holdout eval gate** before any `ollama create` ships a new version.
-3. **Keep N-1** (roll back instantly if vN regresses in real use).
-4. **Diversity + human-in-loop** every few rounds; watch for self-judge saturation/reward-hacking.
-5. **Zero egress** — harvest, train, eval, register all run locally; nothing leaves the machine.
+## Data and network boundaries
 
-## Sources (verified)
-Think-Prune-Train [arXiv 2504.18116] · V-STaR [2402.06457] · Self-Rewarding LMs [2401.10020] ·
-RLHFlow self-rewarding-reasoning [github.com/RLHFlow] · MLX-LM LoRA [github.com/ml-explore/mlx-lm] ·
-mlx-tune (DPO/GRPO on MLX) [github.com/ARahim3/mlx-tune] · model collapse [Nature s41586-024-07566-y] ·
-DeepSeek-R1 distillation>small-RL [Nature s41586-025-09422-z]. Full report: task `wyvtvcrao`.
+- Personal databases, datasets, holdouts, adapters, weights, and logs must never be
+  committed to the public repository.
+- Encrypted Private Vault packages are recovery candidates, not training inputs;
+  complete a clean-profile restore drill before relying on one.
+- Dataset and model artifacts require a separate private backup/retention policy.
+- Base-model and dependency acquisition can reach external registries.
+- Candidate registration and evaluation must remain on a numeric loopback Ollama
+  endpoint unless a separately reviewed private deployment exists.
+- A remote endpoint or private Git repository does not remove consent, licensing,
+  PII, or memorization risk.
+
+## Research context
+
+LoRA/QLoRA and verifier-grounded fine-tuning can be useful, but published results do
+not establish that a personal-data loop is safe or will improve this application.
+Relevant background includes Think-Prune-Train, V-STaR, Self-Rewarding LMs,
+model-collapse research, and the MLX-LM/PEFT documentation. Treat those sources as
+design inputs, not evidence that the disabled production gate may be bypassed.

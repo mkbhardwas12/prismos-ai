@@ -5,7 +5,18 @@
 // error a user hit with a saved `deepseek-v3:16b` that was never pulled).
 
 import { describe, it, expect } from "vitest";
-import { DEFAULT_MODEL, modelMatches, resolveDefaultModel } from "../lib/config";
+import {
+  chooseModelAfterRemoval,
+  DEFAULT_MODEL,
+  isReviewedModel,
+  modelMatches,
+  resolveDefaultModel,
+} from "../lib/config";
+import { MODEL_REGISTRY } from "../lib/modelRegistry";
+
+it("keeps the runtime default aligned with the registry default", () => {
+  expect(DEFAULT_MODEL).toBe(MODEL_REGISTRY.find((model) => model.isDefault)?.name);
+});
 
 describe("modelMatches", () => {
   it("matches identical names", () => {
@@ -24,8 +35,36 @@ describe("modelMatches", () => {
   });
 });
 
+describe("isReviewedModel", () => {
+  it("recognizes reviewed tags with implicit latest normalization", () => {
+    expect(isReviewedModel("llama3.2")).toBe(true);
+    expect(isReviewedModel("llama3.2:latest")).toBe(true);
+  });
+
+  it("rejects empty and unregistered stale tags", () => {
+    expect(isReviewedModel("")).toBe(false);
+    expect(isReviewedModel("deepseek-v3:16b")).toBe(false);
+  });
+});
+
+describe("chooseModelAfterRemoval", () => {
+  it("prefers the canonical installed default", () => {
+    expect(chooseModelAfterRemoval(["llama3.2:latest", DEFAULT_MODEL]))
+      .toBe(DEFAULT_MODEL);
+  });
+
+  it("chooses a reviewed installed text model when the default is absent", () => {
+    expect(chooseModelAfterRemoval(["embeddinggemma:latest", "llama3.2:latest"]))
+      .toBe("llama3.2:latest");
+  });
+
+  it("does not treat an arbitrary installed tag as generative", () => {
+    expect(chooseModelAfterRemoval(["embeddinggemma:latest"])).toBe(DEFAULT_MODEL);
+  });
+});
+
 describe("resolveDefaultModel", () => {
-  const installed = ["qwen3:30b-a3b", "qwen2.5-coder:7b", "llama3.1:8b"];
+  const installed = ["qwen3:4b", "qwen2.5-coder:7b", "llama3.1:8b"];
 
   it("keeps the saved model when it is installed (no fallback)", () => {
     const r = resolveDefaultModel("qwen2.5-coder:7b", installed);
@@ -36,7 +75,7 @@ describe("resolveDefaultModel", () => {
     // The exact bug: a saved deepseek-v3:16b that was never pulled.
     const r = resolveDefaultModel("deepseek-v3:16b", installed);
     expect(r.fellBack).toBe(true);
-    expect(r.model).toBe(DEFAULT_MODEL); // qwen3:30b-a3b is installed
+    expect(r.model).toBe(DEFAULT_MODEL); // qwen3:4b is installed
   });
 
   it("falls back to the first installed model when DEFAULT_MODEL is also absent", () => {

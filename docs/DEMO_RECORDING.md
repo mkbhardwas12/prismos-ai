@@ -1,10 +1,19 @@
-# Demo GIF — recording guide
+# Demo media — privacy-safe generation and optional live recording
 
-The README reserves a hero slot for a 30-second demo GIF. This document is the shot list and the exact commands to record + encode it. The whole thing should take about 20 minutes including retakes.
+The tracked `docs/media/prismos-demo.*` files are generated from illustrated
+previews containing synthetic public documentation data. Regenerate them with:
+
+```bash
+bash scripts/build-demo.sh
+```
+
+Do not replace them with a capture of an owner's normal profile. The optional
+live-recording guide below is only for a disposable test account/profile filled
+with reviewed synthetic public fixtures.
 
 ## Why this matters
 
-Every visitor decides whether to keep reading the README in the first 3 seconds. A static screenshot loses that decision. An animated GIF that shows PrismOS-AI *doing something useful, offline* wins it.
+Every visitor decides whether to keep reading the README in the first 3 seconds. A static screenshot loses that decision. An animated GIF that shows PrismOS-AI using its fixed-loopback core on a useful task makes the behavior concrete.
 
 ## Specs
 
@@ -21,23 +30,26 @@ Every visitor decides whether to keep reading the README in the first 3 seconds.
 ## Shot list (each beat is on screen for ~3s)
 
 1. **0:00–0:03 — App launch.** Click the dock icon. PrismOS opens into the empty Intent Console.
-2. **0:03–0:08 — Drop a real file.** Drag `samples/contract-v2.pdf` (or anything 5+ pages) onto the input. The file pill appears.
+2. **0:03–0:08 — Drop a real file.** Drag a non-sensitive DOCX, PPTX, or allowlisted UTF-8 text/code file (including CSV/TSV) onto the input. The file pill appears. Convert PDFs to UTF-8 text first. XLSX and legacy `.xls` fail closed before parsing; export spreadsheets as CSV/TSV.
 3. **0:08–0:13 — Ask the question.** Type: *"What changed compared to last week's draft?"* Hit return.
-4. **0:13–0:20 — Watch the agents debate.** Camera stays on the live agent status strip + the streaming answer. The "Refraction" bar should visibly tick.
-5. **0:20–0:24 — Spectrum Graph grows.** Cut to the Spectrum Graph view — one new node + edge appears.
-6. **0:24–0:28 — Brain Wrapped.** Open Brain Wrapped from the sidebar. Land on the Fingerprint slide.
-7. **0:28–0:30 — Final card.** A title card overlay: **"100% local. 0 bytes left this laptop."** + the prismos.ai URL.
+4. **0:13–0:20 — Watch the bounded workflow.** Camera stays on the workflow-role indicators and the sequential plan → build → judge → refine progress. Do not describe them as independent or parallel agents.
+5. **0:20–0:24 — Show ephemeral handling.** Open the Spectrum Graph and confirm the one-off attachment did not create a persistent document-chunk node.
+6. **0:24–0:28 — Brain Wrapped.** Open Brain Wrapped from the sidebar. Land on the Profile Signature slide.
+7. **0:28–0:30 — Final card.** A title card overlay: **"Local-first core. Fixed-loopback inference. Optional egress disclosed."** + the project URL.
 
 Keep the cursor visible. Slow, deliberate movements — fast pointer is unreadable in a GIF.
 
 ## Pre-flight (so the recording isn't full of jank)
 
-- Run a fresh DB so the Spectrum Graph isn't cluttered: backup `~/Library/Application Support/com.prismos.ai/spectrum.db` then delete it.
+- Use a separate OS test account or another disposable app profile. Never move,
+  delete, or record the owner's live database for demo preparation.
+- Populate the disposable profile only with reviewed synthetic public fixtures.
 - Set the theme to dark (more contrast in GIFs).
 - Resize the window to exactly 1280×800. On macOS: `osascript -e 'tell application "System Events" to tell process "PrismOS-AI" to set size of front window to {1280, 800}'`
-- Quit Slack, Notion, Discord — anything that pops notifications.
+- Quit Slack, Notion, Discord — anything that pops notifications or reveals an account.
 - Use a clean desktop wallpaper (solid color).
-- Make sure Ollama has `qwen3:4b` pulled so the first inference isn't a download.
+- Make sure the selected local model is already installed so recording does not
+  trigger a download. Loopback transport does not attest the model/runtime.
 
 ## Recording — macOS
 
@@ -80,7 +92,7 @@ This is the part most people get wrong. Naïvely converting produces a 30+ MB GI
 
 ```bash
 INPUT=~/Movies/prismos-demo-raw.mov
-OUT=docs/screenshots/prismos-demo.gif
+OUT=docs/media/prismos-demo.gif
 
 # 1. Generate an adaptive 128-color palette tuned to the video's actual colors.
 ffmpeg -y -i "$INPUT" -vf "fps=18,scale=900:-1:flags=lanczos,palettegen=max_colors=128" /tmp/palette.png
@@ -98,11 +110,11 @@ If it's still over budget: drop fps to 15, drop width to 800, or trim a second o
 
 ## Title card overlay (optional, for the final 2 seconds)
 
-If you want the "100% local. 0 bytes left this laptop." bumper:
+If you want the local-first boundary bumper:
 
 ```bash
 ffmpeg -i raw.mov \
-  -vf "drawtext=text='100% local. 0 bytes left this laptop.':\
+  -vf "drawtext=text='Local-first core. Fixed-loopback inference.':\
 fontfile=/System/Library/Fonts/Helvetica.ttc:\
 fontsize=44:fontcolor=white:x=(w-text_w)/2:y=h-100:\
 enable='between(t,28,30)'" \
@@ -115,11 +127,11 @@ The README has a clearly marked `<!-- HERO GIF -->` slot in the opener. Replace 
 
 ```markdown
 <p align="center">
-  <img src="docs/screenshots/prismos-demo.gif" width="720" alt="PrismOS-AI — 30-second demo" />
+  <img src="docs/media/prismos-demo.gif" width="720" alt="PrismOS-AI — 30-second demo" />
 </p>
 ```
 
-Commit the `.gif` to `docs/screenshots/` (not `.mov` — keep the master out of git or use git-lfs).
+Commit the `.gif` to `docs/media/` (not `.mov` — keep the master out of git or use git-lfs).
 
 ## Master files
 

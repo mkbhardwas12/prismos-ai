@@ -1,12 +1,12 @@
-# PrismOS-AI Installation Guide
+# PrismOS-AI Verified Desktop Installation Guide
 
-> Complete installation instructions for all platforms
+> Verified desktop installation and reviewed source-build guidance
 
 ---
 
 ## Table of Contents
 
-1. [Pre-Built Installers (Recommended)](#pre-built-installers-recommended)
+1. [Verified Release Installers](#verified-release-installers)
 2. [Building from Source](#building-from-source)
 3. [Platform-Specific Instructions](#platform-specific-instructions)
 4. [Post-Installation Setup](#post-installation-setup)
@@ -14,19 +14,30 @@
 
 ---
 
-## Pre-Built Installers (Recommended)
+## Verified Release Installers
+
+The current GitHub Actions candidate workflow is manual and produces short-lived,
+**unsigned and unnotarized** build artifacts. It does not publish a GitHub Release.
+Those candidates are for maintainer testing, not trusted distribution.
+
+Only distribute or install a prebuilt PrismOS package after its source revision,
+SHA-256 digest, platform signature, and publisher have been independently verified.
+macOS packages must also pass notarization verification. If no such approved release
+exists, build from reviewed source instead of bypassing an operating-system warning.
 
 ### Download
 
-Visit the [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/latest) and download the appropriate installer for your platform.
+Visit the [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+only after confirming that the release provides approved signed/notarized packages,
+checksums, and provenance for the revision you intend to install.
 
 ### Windows
 
 **Option 1: MSI Installer (Recommended)**
 
 1. Download `PrismOS-AI_X.X.X_x64_en-US.msi`
-2. Double-click the MSI file
-3. Follow the installation wizard
+2. Verify the published SHA-256 digest and Windows publisher signature
+3. Double-click the verified MSI file and follow the installation wizard
 4. Choose installation directory (default: `C:\Program Files\PrismOS-AI`)
 5. Click "Install"
 6. Launch from Start Menu or Desktop shortcut
@@ -34,8 +45,9 @@ Visit the [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/la
 **Option 2: EXE Installer**
 
 1. Download `PrismOS-AI_X.X.X_x64-setup.exe`
-2. Run the installer (may require administrator privileges)
-3. Follow the installation wizard
+2. Verify the published SHA-256 digest and Windows publisher signature
+3. Run the verified installer as a normal user; approve elevation only when the
+   reviewed installer requires it for the selected install scope
 4. Launch after installation completes
 
 **System Requirements:**
@@ -49,10 +61,11 @@ Visit the [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/la
 **For Apple Silicon (M1/M2/M3)**
 
 1. Download `PrismOS-AI_X.X.X_aarch64.dmg`
-2. Open the DMG file
-3. Drag PrismOS-AI to Applications folder
-4. Right-click and select "Open" (first launch only to bypass Gatekeeper)
-5. Launch from Applications or Spotlight
+2. Verify the published SHA-256 digest, code signature, and notarization result
+3. Open the verified DMG file
+4. Drag PrismOS-AI to Applications folder
+5. Launch from Applications or Spotlight. Do not remove quarantine metadata or
+   bypass Gatekeeper for an unverified package
 
 **For Intel Macs**
 
@@ -65,20 +78,23 @@ Visit the [Releases Page](https://github.com/mkbhardwas12/prismos-ai/releases/la
 - 2 GB free disk space (plus space for models)
 - [Ollama](https://ollama.com/download) installed separately
 
-**Note**: On first launch, you may need to grant permissions for:
-- Microphone access (for voice input)
-- Accessibility access (for global hotkey)
+**Note**: You may need to grant:
+- Microphone access only when using browser-provided speech recognition. Availability
+  and network behavior depend on the system webview/provider; PrismOS does not ship
+  working local Whisper transcription.
+- Accessibility access for the global hotkey.
 
 ### Linux
 
 **Option 1: DEB Package (Debian/Ubuntu)**
 
-```bash
-# Download the .deb file
-wget https://github.com/mkbhardwas12/prismos-ai/releases/download/vX.X.X/prismos_X.X.X_amd64.deb
+Download only an independently approved package plus its release evidence. Verify
+publisher/provenance and the published checksum first; then install the verified
+local file:
 
-# Install
-sudo dpkg -i prismos_X.X.X_amd64.deb
+```bash
+sha256sum -c SHA256SUMS
+sudo dpkg -i ./prismos_X.X.X_amd64.deb
 
 # If dependencies are missing:
 sudo apt-get install -f
@@ -89,14 +105,11 @@ prismos
 
 **Option 2: AppImage (Universal)**
 
+After the same provenance, signature, and checksum verification:
+
 ```bash
-# Download the AppImage
-wget https://github.com/mkbhardwas12/prismos-ai/releases/download/vX.X.X/PrismOS-AI_X.X.X_amd64.AppImage
-
-# Make executable
+sha256sum -c SHA256SUMS
 chmod +x PrismOS-AI_X.X.X_amd64.AppImage
-
-# Run
 ./PrismOS-AI_X.X.X_amd64.AppImage
 ```
 
@@ -119,22 +132,16 @@ sudo apt-get install -y \
 
 ### Android
 
-**APK Installation (Sideload)**
+**Android status**
 
-1. Download `prismos-android-vX.X.X.apk`
-2. On your Android device, enable "Install from unknown sources":
-   - Settings → Security → Unknown Sources
-   - Or Settings → Apps → Special Access → Install Unknown Apps
-3. Transfer APK to device or download directly
-4. Open the APK file to install
-5. Launch PrismOS-AI from app drawer
+The manual desktop candidate workflow does not build or publish Android packages.
+Do not enable unknown-source installation for an unverified PrismOS APK. Android
+distribution requires a separately built, signed, provenance-linked package that
+has been tested on the advertised device/API range. Otherwise use a developer build
+from reviewed source on a dedicated test device.
 
-**System Requirements:**
-- Android 8.0 (API 26) or later
-- 2 GB RAM minimum, 4 GB recommended
-- 1 GB free storage (plus space for models)
-
-**Note**: Android version has limited functionality. Full Ollama integration is not available on mobile yet.
+This guide intentionally provides no APK installation shortcut. Generated mobile
+configuration is not evidence of a supported or distributable Android product.
 
 ---
 
@@ -144,36 +151,20 @@ sudo apt-get install -y \
 
 Install these tools before building:
 
-1. **Node.js** (≥ 18)
-   ```bash
-   # Download from https://nodejs.org/
-   # Or via package manager:
-   # Ubuntu/Debian:
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt-get install -y nodejs
+1. **Node.js** (≥ 22.12; CI uses the supported Node 24 LTS line)
+   Install from [nodejs.org](https://nodejs.org/) or a reviewed operating-system
+   package source. Verify the publisher/package and do not pipe a mutable setup
+   script from the network directly into a privileged shell.
 
-   # macOS:
-   brew install node
-
-   # Windows:
-   # Download installer from nodejs.org
-   ```
-
-2. **Rust** (≥ 1.75)
-   ```bash
-   # All platforms:
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source $HOME/.cargo/env
-   ```
+2. **Rust** (the version pinned in `rust-toolchain.toml`)
+   Install `rustup` using the platform instructions at
+   [rustup.rs](https://rustup.rs), review the downloaded installer before running
+   it, then let the checked-in toolchain file select the exact compiler.
 
 3. **Ollama**
-   ```bash
-   # macOS/Linux:
-   curl -fsSL https://ollama.com/install.sh | sh
-
-   # Windows:
-   # Download installer from https://ollama.com/download
-   ```
+   Download it from [Ollama's official download page](https://ollama.com/download),
+   inspect the package/script and publisher information, then install it explicitly.
+   PrismOS does not pipe Ollama's mutable network installer directly into a shell.
 
 4. **Platform-Specific Dependencies**
 
@@ -255,51 +246,51 @@ After running `npm run tauri build`, installers are created in:
 
 ### Windows: Advanced Configuration
 
-**Install as System Service (Optional)**
+**User-level autostart (optional)**
 
-To run PrismOS-AI as a background service:
-
-1. Open Task Scheduler
-2. Create Basic Task
-3. Trigger: At startup
-4. Action: Start a program
-5. Program: `C:\Program Files\PrismOS-AI\PrismOS-AI.exe`
-6. Check "Run with highest privileges"
+PrismOS does not require elevated or system-service execution. If autostart is
+needed, use Windows **Settings → Apps → Startup** or a user-level Task Scheduler
+entry triggered **At log on**. Do not select “Run with highest privileges.”
 
 **Firewall Configuration**
 
-If Windows Firewall blocks Ollama connections:
-
-1. Windows Security → Firewall & network protection → Allow an app
-2. Click "Change settings" → "Allow another app"
-3. Browse to `C:\Users\{YourName}\AppData\Local\Programs\ollama\ollama.exe`
-4. Check both Private and Public networks
+PrismOS private inference connects to Ollama over loopback and should not require a
+public inbound firewall exception. Do not expose Ollama on a Public network. If a
+firewall prompt appears, cancel it, confirm Ollama is bound to loopback, and verify
+`http://localhost:11434/api/tags` locally. Any deliberate LAN deployment is outside
+the private-inference design and requires its own authentication and firewall review.
 
 ### macOS: Permissions & Codesigning
 
 **Grant Permissions**
 
-On first launch, grant these permissions when prompted:
+Grant permissions only when the corresponding feature prompts:
 
-1. **Microphone**: Required for voice input
-2. **Accessibility**: Required for global hotkey (Ctrl+Space)
-3. **Full Disk Access** (optional): For file indexer to watch directories
+1. **Microphone**: Optional, for browser-provided speech recognition when the
+   system webview exposes it. This may use an external provider; bundled real
+   Whisper transcription is unavailable.
+2. **Accessibility**: Required for the global hotkey (Ctrl+Space).
+
+Full Disk Access is not required for knowledge ingestion. The legacy background
+watcher/indexer is disabled; Project Knowledge reads only a bounded root after an
+explicit preview and approval.
 
 **Manual Permission Grant**
 
 If not prompted:
 
 1. System Settings → Privacy & Security
-2. Microphone → Enable PrismOS-AI
-3. Accessibility → Enable PrismOS-AI
+2. Microphone → Enable PrismOS-AI only if you choose browser speech recognition
+3. Accessibility → Enable PrismOS-AI for the global hotkey
 
-**Notarization**
+**Signature and notarization**
 
-Pre-built DMG files are notarized and stapled. If building from source, you'll see a warning on first launch. To bypass:
-
-```bash
-sudo xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
-```
+The current manual candidate artifacts are unsigned and unnotarized. Do not
+distribute them as release builds and do not bypass Gatekeeper. A distributable
+macOS build must be signed and notarized independently, then verified on the exact
+downloaded artifact before installation. For example, release verification may use
+`codesign --verify --deep --strict --verbose=2` and `spctl --assess --type execute
+--verbose=4`; these checks do not replace checksum and provenance review.
 
 ### Linux: Desktop Integration
 
@@ -314,7 +305,7 @@ cat > ~/.local/share/applications/prismos-ai.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=PrismOS-AI
-Comment=Local-First Agentic Personal AI Operating System
+Comment=Local-first desktop assistant with bounded sequential workflows
 Exec=/path/to/PrismOS-AI_X.X.X_amd64.AppImage
 Icon=prismos
 Terminal=false
@@ -331,41 +322,14 @@ mkdir -p ~/.config/autostart
 cp ~/.local/share/applications/prismos-ai.desktop ~/.config/autostart/
 ```
 
-### Android: Advanced Setup
-
-**Enable Developer Options**
-
-1. Settings → About Phone
-2. Tap "Build Number" 7 times
-3. Go back → Developer Options
-4. Enable "USB Debugging"
-
-**Install via ADB**
-
-```bash
-# Connect device via USB
-adb devices
-
-# Install APK
-adb install prismos-android-vX.X.X.apk
-
-# Launch
-adb shell am start -n com.prismos.app/.MainActivity
-```
-
 ---
 
 ## Post-Installation Setup
 
 ### 1. Install Ollama
 
-**macOS/Linux:**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-**Windows:**
-Download from https://ollama.com/download
+**All platforms:** download from [Ollama's official download page](https://ollama.com/download),
+verify the publisher/package appropriate to your platform, and install explicitly.
 
 ### 2. Start Ollama Service
 
@@ -379,34 +343,22 @@ Ollama runs as a system service automatically after installation.
 
 ### 3. Download Models
 
-**Recommended Models:**
+**Example local models:**
 
 ```bash
-# Text & Reasoning (choose one)
-ollama pull qwen3:4b         # Default — fast, multilingual, great quality
-ollama pull llama3.2         # Proven alternative, 128k context
-ollama pull mistral          # Faster, smaller
-ollama pull deepseek-r1      # Advanced reasoning
+# Text model configured by default
+ollama pull qwen3:4b
 
-# Vision (required for image analysis)
-ollama pull llama3.2-vision  # Default vision model
-ollama pull llava            # Alternative vision model
+# Optional compatible vision model for image analysis
+ollama pull llama3.2-vision
 
-# Code (optional, auto-routed when code detected)
-ollama pull qwen2.5-coder    # Best code model
-ollama pull codellama        # Alternative code specialist
-
-# Power User (optional)
-ollama pull qwen2.5          # Multilingual
-ollama pull gemma2:2b        # Lightweight
+# Inspect installed names before selecting a different model
+ollama list
 ```
 
-**Model Sizes:**
-- `qwen3:4b`: ~2.6 GB (default)
-- `llama3.2`: ~2 GB
-- `llama3.2-vision`: ~7.9 GB
-- `mistral`: ~4.1 GB
-- `deepseek-r1`: ~37 GB (large!)
+Model sizes and tags change by quantization and registry version. Inspect the exact
+artifact before downloading and confirm that its license, storage, RAM, and context
+requirements fit the intended machine.
 
 ### 4. First Launch
 
@@ -437,14 +389,33 @@ If you see a response from the AI, installation is complete!
 - Go to System Settings → Privacy & Security → Accessibility
 - Enable PrismOS-AI
 
-### 7. Optional: File Indexer
+### 7. Optional: Project Knowledge
 
-To enable automatic document indexing:
+To ground chat in a project or a folder of projects:
 
-1. Create directory: `~/Documents/PrismDocs`
-2. Settings → File Indexer → Enable
-3. Drop documents into `PrismDocs` folder
-4. They'll be auto-ingested into Spectrum Graph
+1. Open **Settings → Project Knowledge**.
+2. Enter the project-folder path and select **Scan**. This first pass reads
+   metadata only; it does not read file contents.
+3. Review the bounded candidate count, total size, excluded sensitive files,
+   ignored folders, and any truncation warning.
+4. Select **Approve & Index** to read that approved file set in read-only mode
+   and store cited chunks in PrismOS's local Spectrum Graph.
+5. Use **Refresh** after source files change. **Forget** removes only
+   PrismOS-owned knowledge chunks; it never deletes or edits the source files.
+
+Project roots are never followed through symlinks, and common secrets,
+credentials, vendor/build folders, binaries, and oversized files are excluded.
+Secret redaction is best-effort, so review the scan scope before approval. See
+[Project Knowledge](PROJECT_KNOWLEDGE.md) for supported files, safety limits,
+storage details, refresh behavior, and retrieval semantics.
+
+There is no active background watcher. Refresh is explicit and repeats the preview and
+approval flow. Project Knowledge accepts only allowlisted UTF-8 source, documentation,
+configuration, and manifest text; it does not parse Office or PDF files. One-off chat
+attachments follow a separate ephemeral path supporting bounded DOCX, PPTX, and
+allowlisted UTF-8 text/code, including CSV/TSV, and are not automatically added to
+Project Knowledge or the Spectrum Graph. Convert PDFs to UTF-8 text before attaching
+them. XLSX and legacy `.xls` fail closed before parsing; export spreadsheets as CSV/TSV.
 
 ---
 
@@ -470,17 +441,17 @@ To enable automatic document indexing:
    # Check Services → Ollama Service is running
    ```
 
-3. Verify URL in Settings:
-   - Settings → Model → Ollama URL
-   - Should be: `http://localhost:11434`
+3. Private inference always uses `http://localhost:11434`; the Ollama URL shown in
+   Settings controls model management/status only and cannot redirect chat, document,
+   vision, or workflow prompts.
 
-#### Issue: "Model 'llama3.2' not found"
+#### Issue: "Model 'qwen3:4b' not found"
 
 **Solution:**
 
 ```bash
 # Pull the model
-ollama pull llama3.2
+ollama pull qwen3:4b
 
 # Verify installation
 ollama list
@@ -498,7 +469,8 @@ ollama list
 
 2. In Settings:
    - Reduce max tokens (default: 2048 → 1024)
-   - Disable file indexer if not needed
+   - Let any explicitly approved Project Knowledge index/refresh finish; there is no
+     background watcher to disable
 
 #### Issue: Vision model fails
 
@@ -523,25 +495,18 @@ ollama list
 
 **Solution:**
 
-1. **Backup first** via You-Port:
-   - Settings → You-Port → Export Graph
-   - Save the encrypted file
-
-2. Locate database:
-   ```bash
-   # macOS:
-   ~/Library/Application Support/com.prismos.app/spectrum.db
-
-   # Linux:
-   ~/.local/share/com.prismos.app/spectrum.db
-
-   # Windows:
-   C:\Users\{YourName}\AppData\Roaming\com.prismos.app\spectrum.db
-   ```
-
-3. Delete database file (app will recreate on next launch)
-
-4. Re-import from You-Port export
+1. Quit PrismOS and preserve the complete app-data directory. Do not delete or
+   overwrite `spectrum_graph.db` or its sidecars while diagnosing corruption.
+2. If the app still opens safely, create a new encrypted **Private Vault** outside
+   every Git worktree before attempting recovery. Portable You-Port packages omit
+   managed Project Knowledge and are not full disaster recovery.
+3. Validate the preserved copy and the candidate vault; never disable integrity or
+   schema checks to force a restore.
+4. Stage a known-good Private Vault through the supported restore workflow and
+   restart. Verify representative conversations, sources, learned state, and the
+   audit chain before removing any preserved copy.
+5. If startup or rollback reports failure, stop reopening the app and seek recovery
+   help with the exact non-secret error and protected files intact.
 
 ### Platform-Specific Issues
 
@@ -549,17 +514,17 @@ ollama list
 
 **Solution:**
 
-1. Click "More info"
-2. Click "Run anyway"
-3. This is expected for unsigned installers
+Do not choose “Run anyway” for an unverified build. Confirm the artifact digest and
+publisher signature against an independently approved release. If the signature or
+provenance cannot be verified, delete the candidate and build from reviewed source.
 
 #### macOS: "App is damaged and can't be opened"
 
 **Solution:**
 
-```bash
-sudo xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
-```
+Do not remove quarantine metadata to force the app open. Re-download an independently
+verified signed/notarized package, compare its published digest, or build from reviewed
+source. Treat an unexpected Gatekeeper failure as a stop condition.
 
 #### Linux: Missing library errors
 
@@ -593,4 +558,4 @@ After installation:
 
 ---
 
-**PrismOS-AI v0.5.1** — Your mind, your machine, your OS.
+**PrismOS-AI v0.5.2** — Your work, your machine, your control.

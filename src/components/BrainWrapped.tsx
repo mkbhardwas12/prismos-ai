@@ -1,8 +1,9 @@
-// BrainWrapped — Animated, shareable story of how the user thinks.
+// BrainWrapped — Animated, shareable story of a derived interaction profile.
 //
-// THE INNOVATION: Spotify Wrapped, but for your mind. Generated entirely
-// from local cognitive data (Cognitive Imprint, Drift, Currents, Prophecies).
-// Every slide is shareable as a PNG card with the unique Cognitive Fingerprint.
+// The Wrapped-style slides summarize local profile signals (preferences, drift,
+// recurring graph patterns, and candidate links). They are an illustration,
+// not a psychological assessment or identity system. Sharing exposes derived,
+// linkable behavioral metadata by explicit user action.
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
@@ -95,7 +96,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
     if (!snapshot) return;
     try {
       await navigator.clipboard.writeText(
-        `My PrismOS Cognitive Fingerprint: ${snapshot.fingerprint.hash} (${snapshot.fingerprint.archetype})`
+        `My PrismOS Profile Signature: ${snapshot.fingerprint.hash} (illustrated label: ${snapshot.fingerprint.archetype})`
       );
     } catch (e) {
       console.error(e);
@@ -108,8 +109,8 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
   //
   // Implementation note: we render the poster into a detached DOM subtree via
   // createRoot, capture it with html2canvas, then tear it down. This keeps the
-  // hidden DOM out of the user-facing component tree (so existing tests don't
-  // see duplicate "This is your mind." text) and avoids any layout flicker.
+  // hidden DOM out of the user-facing component tree (so tests do not see
+  // duplicate slide copy) and avoids any layout flicker.
   const shareWrapped = useCallback(async () => {
     if (!snapshot || sharing) return;
     setSharing(true);
@@ -145,7 +146,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
               {renderSlide(i, snapshot)}
               <div className="bw-watermark" style={{ marginTop: 24 }}>
                 <span className="bw-watermark-mark">◆ PrismOS-AI</span>
-                <span className="bw-watermark-tag">prismos.ai · local · private</span>
+                <span className="bw-watermark-tag">local profile · share intentionally</span>
               </div>
             </div>
           ))}
@@ -201,8 +202,8 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
         );
       });
 
-      const filename = `prismos-brain-wrapped-${snapshot.fingerprint.hash.slice(0, 8)}.png`;
-      const shareText = `My cognitive fingerprint is ${snapshot.fingerprint.hash.slice(0, 12)}… — I'm ${snapshot.fingerprint.archetype} in @PrismOS_AI 🧠✨\n\n100% local. 0 bytes left my device.`;
+      const filename = `prismos-profile-wrapped-${snapshot.fingerprint.hash.slice(0, 8)}.png`;
+      const shareText = `My PrismOS profile signature is ${snapshot.fingerprint.hash.slice(0, 12)}… — my illustrated response-preference label is ${snapshot.fingerprint.archetype}.\n\nDerived from a heuristic local profile vector; not a personality assessment or unique identity.`;
 
       // Best path: native share sheet with the image attached.
       const file = new File([blob], filename, { type: "image/png" });
@@ -215,7 +216,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
 
       if (canShareFile && typeof nav.share === "function") {
         try {
-          await nav.share({ files: [file], text: shareText, title: "My PrismOS Brain Wrapped" });
+          await nav.share({ files: [file], text: shareText, title: "My PrismOS Profile Wrapped" });
           setShareStatus("Shared ✓");
           setTimeout(() => setShareStatus(null), 2500);
           return;
@@ -275,7 +276,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
     return (
       <div className="bw-overlay" onClick={onClose}>
         <div className="bw-error">
-          <h2>Couldn't generate your Wrapped</h2>
+          <h2>Couldn't generate your profile story</h2>
           <p>{error}</p>
           <button onClick={onClose}>Close</button>
         </div>
@@ -288,7 +289,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
       <div className="bw-overlay">
         <div className="bw-loading">
           <div className="bw-prism-pulse" />
-          <p>Refracting your mind into a story…</p>
+          <p>Building your interaction-profile story…</p>
         </div>
       </div>
     );
@@ -297,7 +298,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
   const progress = ((slideIndex + 1) / totalSlides) * 100;
 
   return (
-    <div className="bw-overlay" role="dialog" aria-label="Brain Wrapped">
+    <div className="bw-overlay" role="dialog" aria-label="Profile Wrapped">
       {/* Top bar: progress dots + controls */}
       <div className="bw-topbar">
         <div className="bw-progress-dots">
@@ -340,7 +341,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
           {/* Watermark */}
           <div className="bw-watermark">
             <span className="bw-watermark-mark">◆ PrismOS-AI</span>
-            <span className="bw-watermark-tag">prismos.ai · local · private</span>
+            <span className="bw-watermark-tag">local profile · share intentionally</span>
           </div>
         </motion.div>
       </AnimatePresence>
@@ -351,7 +352,7 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
           📥 Save Slide
         </button>
         <button className="bw-action" onClick={copyFingerprint} disabled={sharing}>
-          🔗 Copy Fingerprint
+          🔗 Copy Signature
         </button>
         <button
           className="bw-action bw-action-share"
@@ -359,9 +360,12 @@ export default function BrainWrapped({ onClose }: BrainWrappedProps) {
           disabled={sharing}
           title="Build a single tall image of all 7 slides and share it"
         >
-          {sharing ? "…" : "🪐 Share My Wrapped"}
+          {sharing ? "…" : "🪐 Share My Profile"}
         </button>
       </div>
+      <p className="bw-share-disclosure">
+        Sharing sends a PNG plus a derived profile label/signature to your chosen share target. This heuristic metadata is linkable and is not anonymous.
+      </p>
 
       {shareStatus && (
         <div className="bw-share-toast" role="status" aria-live="polite">
@@ -411,10 +415,10 @@ function SlideFingerprint({ snapshot }: { snapshot: BrainSnapshot }) {
 
   return (
     <div className="bw-slide bw-slide-fingerprint">
-      <div className="bw-slide-tag">SLIDE 1 · YOUR COGNITIVE FINGERPRINT</div>
-      <h1 className="bw-slide-title">This is your mind.</h1>
+      <div className="bw-slide-tag">SLIDE 1 · YOUR PROFILE SIGNATURE</div>
+      <h1 className="bw-slide-title">An illustrated interaction profile.</h1>
       <p className="bw-slide-sub">
-        Computed from how you think, not what you said. Mathematically unique to you.
+        Derived from a quantized response-preference vector, not raw chat text. Deterministic—not unique or an identity credential.
       </p>
 
       <div className="bw-fingerprint-stage">
@@ -482,7 +486,7 @@ function SlideFingerprint({ snapshot }: { snapshot: BrainSnapshot }) {
       </div>
 
       <div className="bw-fingerprint-hash">
-        <span className="bw-hash-label">FINGERPRINT</span>
+        <span className="bw-hash-label">PROFILE SIGNATURE</span>
         <span className="bw-hash-value">{fp.hash}</span>
       </div>
     </div>
@@ -493,8 +497,10 @@ function SlideArchetype({ snapshot }: { snapshot: BrainSnapshot }) {
   const fp = snapshot.fingerprint;
   return (
     <div className="bw-slide bw-slide-archetype">
-      <div className="bw-slide-tag">SLIDE 2 · YOUR ARCHETYPE</div>
-      <p className="bw-slide-sub">PrismOS classified your thinking as…</p>
+      <div className="bw-slide-tag">SLIDE 2 · ILLUSTRATED PROFILE LABEL</div>
+      <p className="bw-slide-sub">
+        A nearest-anchor label from five response-preference values—not a personality assessment.
+      </p>
       <h1 className="bw-archetype-name" style={{ color: fp.palette[1] }}>
         {fp.archetype}
       </h1>
@@ -519,7 +525,7 @@ function SlideAxes({ snapshot }: { snapshot: BrainSnapshot }) {
   return (
     <div className="bw-slide bw-slide-axes">
       <div className="bw-slide-tag">SLIDE 3 · YOUR FIVE DIMENSIONS</div>
-      <h2 className="bw-slide-title">How your mind tunes itself.</h2>
+      <h2 className="bw-slide-title">How your response preferences are tuned.</h2>
       <div className="bw-axes-list">
         {axes.map((a, i) => (
           <motion.div
@@ -554,7 +560,7 @@ function SlideEvolution({ snapshot }: { snapshot: BrainSnapshot }) {
   return (
     <div className="bw-slide bw-slide-evolution">
       <div className="bw-slide-tag">SLIDE 4 · HOW YOU'VE CHANGED</div>
-      <h2 className="bw-slide-title">Your mind is moving.</h2>
+      <h2 className="bw-slide-title">Your interaction profile is changing.</h2>
       <p className="bw-evolution-text">{snapshot.evolution_summary}</p>
       {snapshot.drift && (
         <div className="bw-deltas">
@@ -580,7 +586,7 @@ function SlideEvolution({ snapshot }: { snapshot: BrainSnapshot }) {
 function SlideCurrents({ snapshot }: { snapshot: BrainSnapshot }) {
   return (
     <div className="bw-slide bw-slide-currents">
-      <div className="bw-slide-tag">SLIDE 5 · YOUR THOUGHT CURRENTS</div>
+      <div className="bw-slide-tag">SLIDE 5 · RECURRING GRAPH PATTERNS</div>
       <h2 className="bw-slide-title">What kept pulling at you.</h2>
       {snapshot.top_currents.length === 0 ? (
         <p className="bw-empty">No recurring patterns yet — keep chatting to find your currents.</p>
@@ -610,10 +616,10 @@ function SlideCurrents({ snapshot }: { snapshot: BrainSnapshot }) {
 function SlideProphecies({ snapshot }: { snapshot: BrainSnapshot }) {
   return (
     <div className="bw-slide bw-slide-prophecies">
-      <div className="bw-slide-tag">SLIDE 6 · EDGE PROPHECY</div>
-      <h2 className="bw-slide-title">Connections waiting to happen.</h2>
+      <div className="bw-slide-tag">SLIDE 6 · CANDIDATE LINKS</div>
+      <h2 className="bw-slide-title">Possible connections to review.</h2>
       <p className="bw-evolution-text">
-        PrismOS predicts <strong>{snapshot.prophecy_count}</strong> new links your mind hasn't drawn yet.
+        PrismOS proposes <strong>{snapshot.prophecy_count}</strong> candidate links not yet present in your profile graph.
       </p>
       {snapshot.top_prophecies.length > 0 && (
         <div className="bw-prophecy-list">
@@ -628,7 +634,7 @@ function SlideProphecies({ snapshot }: { snapshot: BrainSnapshot }) {
               <span className="bw-prophecy-node">{p.source_label}</span>
               <span className="bw-prophecy-arrow">⟿</span>
               <span className="bw-prophecy-node">{p.target_label}</span>
-              <span className="bw-prophecy-prob">{Math.round(p.probability * 100)}%</span>
+              <span className="bw-prophecy-prob">{Math.round(p.probability * 100)}% heuristic score</span>
             </motion.div>
           ))}
         </div>
@@ -641,7 +647,7 @@ function SlideStats({ snapshot }: { snapshot: BrainSnapshot }) {
   const s = snapshot.stats;
   return (
     <div className="bw-slide bw-slide-stats">
-      <div className="bw-slide-tag">SLIDE 7 · YOUR YEAR IN THINKING</div>
+      <div className="bw-slide-tag">SLIDE 7 · YOUR PROFILE BY THE NUMBERS</div>
       <h2 className="bw-slide-title">By the numbers.</h2>
       <div className="bw-stats-grid">
         <Stat label="Intents" value={s.total_intents} />
@@ -649,11 +655,11 @@ function SlideStats({ snapshot }: { snapshot: BrainSnapshot }) {
         <Stat label="Connections" value={s.total_edges} />
         <Stat label="Active Days" value={s.days_active} />
         <Stat label="Interactions" value={s.interactions} />
-        <Stat label="Archetype" value={snapshot.fingerprint.archetype} small />
+        <Stat label="Profile Label" value={snapshot.fingerprint.archetype} small />
       </div>
       <p className="bw-final-tag">"{snapshot.fingerprint.archetype_tagline}"</p>
       <p className="bw-final-cta">
-        100% generated locally · 0 bytes left your device
+        Generated from your local Spectrum Graph
       </p>
     </div>
   );

@@ -12,7 +12,7 @@ const mockSnapshot: BrainSnapshot = {
     shape_points: [[50, 18], [76, 38], [66, 70], [34, 70], [24, 38]],
     rotation: 1.234,
     archetype: "The Architect",
-    archetype_tagline: "Builds rigorous mental models from first principles",
+    archetype_tagline: "Often prefers structured, first-principles responses",
     seed: 20210,
   },
   profile: {
@@ -25,14 +25,14 @@ const mockSnapshot: BrainSnapshot = {
     last_updated: "2026-04-18T00:00:00Z",
   },
   axis_labels: {
-    depth: "Deep Diver",
-    creativity: "Just-the-Facts",
-    formality: "Professional Tone",
-    technical_level: "Expert Tier",
-    example_preference: "Balanced Learner",
+    depth: "Prefers depth",
+    creativity: "Prefers literal",
+    formality: "Prefers formal",
+    technical_level: "Specialized Vocabulary",
+    example_preference: "Balanced examples",
   },
   drift: null,
-  evolution_summary: "Your cognitive profile is still calibrating.",
+  evolution_summary: "The response-preference profile is still calibrating.",
   top_currents: [
     { theme: "You ask about Coding every Monday", frequency: 4, momentum: "rising" },
     { theme: "You ask about Reasoning every Wednesday", frequency: 3, momentum: "steady" },
@@ -52,7 +52,7 @@ const mockSnapshot: BrainSnapshot = {
     total_edges: 134,
     days_active: 21,
     interactions: 142,
-    favorite_archetype_phrase: "Builds rigorous mental models from first principles",
+    favorite_archetype_phrase: "Often prefers structured, first-principles responses",
   },
   generated_at: "2026-04-18T00:00:00Z",
   schema_version: 1,
@@ -72,39 +72,40 @@ describe("BrainWrapped", () => {
   it("shows loading state before snapshot arrives", async () => {
     invokeMock.mockImplementation(() => new Promise(() => {})); // never resolves
     render(<BrainWrapped onClose={vi.fn()} />);
-    expect(screen.getByText(/Refracting your mind/i)).toBeInTheDocument();
+    expect(screen.getByText(/Building your interaction-profile story/i)).toBeInTheDocument();
   });
 
   it("renders fingerprint slide first", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("This is your mind.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("An illustrated interaction profile.")).toBeInTheDocument());
     expect(screen.getByText(mockSnapshot.fingerprint.hash)).toBeInTheDocument();
   });
 
-  it("displays the cognitive archetype", async () => {
+  it("displays the illustrated profile label without a personality claim", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("This is your mind.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("An illustrated interaction profile.")).toBeInTheDocument());
     // Advance to slide 2
     fireEvent.keyDown(window, { key: "ArrowRight" });
     await waitFor(() =>
       expect(screen.getByText("The Architect")).toBeInTheDocument()
     );
     expect(
-      screen.getByText(/Builds rigorous mental models/i)
+      screen.getByText(/Often prefers structured/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/not a personality assessment/i)).toBeInTheDocument();
   });
 
   it("calls onClose when Escape is pressed", async () => {
     const onClose = vi.fn();
     render(<BrainWrapped onClose={onClose} />);
-    await waitFor(() => screen.getByText("This is your mind."));
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("navigates to a specific slide via progress dots", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => screen.getByText("This is your mind."));
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
     const dots = screen.getAllByRole("button", { name: /Go to slide/i });
     expect(dots).toHaveLength(7);
     fireEvent.click(dots[6]);
@@ -113,11 +114,20 @@ describe("BrainWrapped", () => {
     );
   });
 
+  it("labels candidate-link percentages as heuristic scores", async () => {
+    render(<BrainWrapped onClose={vi.fn()} />);
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
+    const dots = screen.getAllByRole("button", { name: /Go to slide/i });
+    fireEvent.click(dots[5]);
+    await waitFor(() => expect(screen.getByText(/CANDIDATE LINKS/)).toBeInTheDocument());
+    expect(screen.getByText("82% heuristic score")).toBeInTheDocument();
+  });
+
   it("renders watermark on every slide", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => screen.getByText("This is your mind."));
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
     expect(screen.getByText(/PrismOS-AI/)).toBeInTheDocument();
-    expect(screen.getByText(/local · private/i)).toBeInTheDocument();
+    expect(screen.getByText(/local profile · share intentionally/i)).toBeInTheDocument();
   });
 
   it("calls invoke('generate_brain_snapshot') on mount", async () => {
@@ -131,21 +141,21 @@ describe("BrainWrapped", () => {
     invokeMock.mockRejectedValueOnce("DB locked");
     render(<BrainWrapped onClose={vi.fn()} />);
     await waitFor(() =>
-      expect(screen.getByText(/Couldn't generate your Wrapped/i)).toBeInTheDocument()
+      expect(screen.getByText(/Couldn't generate your profile story/i)).toBeInTheDocument()
     );
   });
 
   it("includes share buttons", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => screen.getByText("This is your mind."));
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
     expect(screen.getByText(/Save Slide/i)).toBeInTheDocument();
-    expect(screen.getByText(/Copy Fingerprint/i)).toBeInTheDocument();
-    expect(screen.getByText(/Share My Wrapped/i)).toBeInTheDocument();
+    expect(screen.getByText(/Copy Signature/i)).toBeInTheDocument();
+    expect(screen.getByText(/Share My Profile/i)).toBeInTheDocument();
   });
 
   it("advances slides via right arrow key", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => screen.getByText("This is your mind."));
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
 
     // Slide 1 → 2 (Archetype)
     act(() => fireEvent.keyDown(window, { key: "ArrowRight" }));
@@ -153,12 +163,12 @@ describe("BrainWrapped", () => {
 
     // Slide 2 → 3 (Axes)
     act(() => fireEvent.keyDown(window, { key: "ArrowRight" }));
-    await waitFor(() => screen.getByText("How your mind tunes itself."));
+    await waitFor(() => screen.getByText("How your response preferences are tuned."));
   });
 
   it("displays lifetime stats on final slide", async () => {
     render(<BrainWrapped onClose={vi.fn()} />);
-    await waitFor(() => screen.getByText("This is your mind."));
+    await waitFor(() => screen.getByText("An illustrated interaction profile."));
     const dots = screen.getAllByRole("button", { name: /Go to slide/i });
     fireEvent.click(dots[6]);
     await waitFor(() => screen.getByText("By the numbers."));

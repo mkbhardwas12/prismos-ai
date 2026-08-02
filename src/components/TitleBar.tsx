@@ -1,7 +1,6 @@
-// PrismOS-AI Custom Title Bar — Frameless window chrome
+// PrismOS-AI in-app window bar, shown within the native decorated window.
 //
-// Replaces native OS title bar with a sleek custom drag bar.
-// Provides window controls (minimize, maximize, close) and app identity.
+// Provides an additional drag region, window controls, and app identity.
 
 import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";

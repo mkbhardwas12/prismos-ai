@@ -23,23 +23,19 @@ const TIME_SUGGESTIONS: Record<TimeBucket, ProactiveSuggestion[]> = {
   early_morning: [
     { id: "def-em-1", text: "Plan your day before it starts?", action_intent: "Help me plan today — suggest a prioritized schedule based on my recent activity", icon: "📝", category: "habits", confidence: 0.82 },
     { id: "def-em-2", text: "Review overnight insights from your graph", action_intent: "What patterns or insights have emerged in my knowledge graph since yesterday?", icon: "🌙", category: "patterns", confidence: 0.75 },
-    { id: "def-em-email", text: "Any overnight emails worth noting?", action_intent: "Fetch and summarize any unread emails that arrived overnight — flag anything urgent", icon: "📬", category: "habits", confidence: 0.73 },
-    { id: "def-em-calendar", text: "What's on your schedule today?", action_intent: "Show me today's calendar events, flag any conflicts, and suggest time blocks for focused work", icon: "📅", category: "habits", confidence: 0.76 },
-    { id: "def-em-finance", text: "How are your stocks doing?", action_intent: "Fetch my portfolio watchlist and summarize today's price changes — flag any big movers", icon: "💰", category: "habits", confidence: 0.71 },
-    { id: "def-em-3", text: "Set focus time for deep work", action_intent: "Block 2 hours of focused deep work time for this morning and suggest what to work on", icon: "🎯", category: "momentum", confidence: 0.7 },
+    { id: "def-em-3", text: "Draft a deep-work plan", action_intent: "Draft a two-hour deep-work plan for this morning based only on my approved local context", icon: "🎯", category: "momentum", confidence: 0.7 },
+    { id: "def-em-4", text: "Find an open thread to resume", action_intent: "Find one unfinished thread in my local knowledge graph and suggest a concrete next step", icon: "🧭", category: "momentum", confidence: 0.72 },
   ],
   morning: [
-    { id: "def-m-1", text: "Shall I block focus time this morning?", action_intent: "Block 2 hours of focused deep work time for this morning and suggest what to work on", icon: "🎯", category: "habits", confidence: 0.85 },
+    { id: "def-m-1", text: "Draft a focus plan for this morning?", action_intent: "Draft a two-hour focus plan for this morning and suggest what to work on; do not modify my calendar", icon: "🎯", category: "habits", confidence: 0.85 },
     { id: "def-m-2", text: "Summarize what you were working on yesterday", action_intent: "Summarize what I worked on yesterday and suggest what to continue today", icon: "📋", category: "momentum", confidence: 0.8 },
-    { id: "def-m-email", text: "Check your unread emails", action_intent: "Fetch and summarize my unread emails — highlight anything urgent or time-sensitive", icon: "📬", category: "habits", confidence: 0.78 },
-    { id: "def-m-calendar", text: "Review today's schedule", action_intent: "Show me today's calendar events, detect any scheduling conflicts, and suggest free time blocks for deep work", icon: "📅", category: "habits", confidence: 0.80 },
-    { id: "def-m-finance", text: "Check your portfolio", action_intent: "Fetch my stock watchlist and summarize today's market movements — highlight gainers and losers", icon: "💰", category: "habits", confidence: 0.74 },
     { id: "def-m-3", text: "Check your knowledge graph growth", action_intent: "Show me how my knowledge graph has grown this week — any new connections?", icon: "🌱", category: "connections", confidence: 0.72 },
+    { id: "def-m-4", text: "Verify a recent project answer", action_intent: "Choose a recent project-grounded answer and show its local source citations, assumptions, and remaining uncertainty", icon: "✅", category: "patterns", confidence: 0.76 },
   ],
   afternoon: [
     { id: "def-a-1", text: "Quick progress check — what have you accomplished?", action_intent: "Summarize what I've accomplished today and what's still pending", icon: "📊", category: "momentum", confidence: 0.83 },
     { id: "def-a-2", text: "Discover hidden connections in your graph", action_intent: "What unexpected connections exist between my recent topics? Find cross-domain insights", icon: "🔗", category: "connections", confidence: 0.78 },
-    { id: "def-a-3", text: "Order your usual coffee?", action_intent: "Help me take a break — suggest a quick refresher activity based on my patterns", icon: "☕", category: "habits", confidence: 0.65 },
+    { id: "def-a-3", text: "Time for a short reset?", action_intent: "Suggest a quick refresher activity based on my local patterns; do not place orders or contact anyone", icon: "☕", category: "habits", confidence: 0.65 },
   ],
   evening: [
     { id: "def-e-1", text: "Wrap up your day — evening recap?", action_intent: "Give me an evening recap of today's activity and prepare tomorrow's priorities", icon: "🌆", category: "habits", confidence: 0.88 },
@@ -47,7 +43,7 @@ const TIME_SUGGESTIONS: Record<TimeBucket, ProactiveSuggestion[]> = {
     { id: "def-e-3", text: "Prepare tomorrow's schedule", action_intent: "Prepare a draft schedule for tomorrow based on today's patterns and pending tasks", icon: "📅", category: "momentum", confidence: 0.8 },
   ],
   night: [
-    { id: "def-n-1", text: "Burning the midnight oil — set a reminder to rest?", action_intent: "Set a wind-down reminder and summarize what I accomplished tonight", icon: "🌙", category: "habits", confidence: 0.9 },
+    { id: "def-n-1", text: "Burning the midnight oil — draft a wind-down plan?", action_intent: "Draft a wind-down plan and summarize what I accomplished tonight; do not create a system reminder", icon: "🌙", category: "habits", confidence: 0.9 },
     { id: "def-n-2", text: "Quick brain dump before you sleep?", action_intent: "Let me do a quick brain dump — capture my current thoughts and ideas for tomorrow", icon: "💭", category: "patterns", confidence: 0.82 },
     { id: "def-n-3", text: "Review the week's graph evolution", action_intent: "Show me how my knowledge graph evolved this week — key patterns and growth areas", icon: "📈", category: "connections", confidence: 0.7 },
   ],

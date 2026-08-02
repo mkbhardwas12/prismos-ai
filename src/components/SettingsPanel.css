@@ -227,6 +227,123 @@
   margin-top: 6px;
 }
 
+/* ── Project Knowledge ── */
+.knowledge-preview {
+  margin: 12px 0 16px;
+  padding: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.knowledge-preview-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.knowledge-preview-root {
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.knowledge-candidates {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.knowledge-candidates summary {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.knowledge-candidates ul {
+  max-height: 180px;
+  margin: 8px 0 0;
+  padding: 8px 8px 8px 26px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+}
+
+.knowledge-candidates li {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.knowledge-source {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+
+.knowledge-source-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.knowledge-source-main strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.knowledge-source-main span,
+.knowledge-source-main small {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-source-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+@media (max-width: 680px) {
+  .knowledge-source {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .knowledge-source-actions .settings-btn {
+    flex: 1;
+  }
+}
+
 /* ── Select dropdown ── */
 .settings-select {
   width: 100%;

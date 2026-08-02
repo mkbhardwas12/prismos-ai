@@ -109,12 +109,7 @@ impl Default for MessageMetadata {
 }
 
 impl AgentMessage {
-    pub fn new(
-        from: AgentRole,
-        to: MessageTarget,
-        msg_type: MessageType,
-        content: String,
-    ) -> Self {
+    pub fn new(from: AgentRole, to: MessageTarget, msg_type: MessageType, content: String) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             from,
@@ -170,7 +165,7 @@ pub struct ConsensusOutcome {
 
 // ─── Collaboration Session ─────────────────────────────────────────────────────
 
-/// Tracks the full multi-agent collaboration for a single intent
+/// Tracks the compatibility workflow trace for a single intent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollaborationSession {
     pub session_id: String,

@@ -1,18 +1,19 @@
-// Calendar Keeper — Local-First, Sandbox-Isolated Calendar Agent
+// Calendar Keeper prototype — unavailable in the current command registry
 //
 // The Calendar Keeper reads local .ics (iCalendar) files in READ-ONLY mode,
-// extracts today's events, and summarizes them locally via Ollama.
-// No calendar data ever leaves the device:
+// extracts today's events, and can build a prompt for fixed-loopback Ollama.
+// Read-only parsing and action-policy records are not OS sandbox isolation, and
+// loopback does not attest what the separately installed daemon does afterward.
 //
 //   1. Read .ics file(s) from user-specified directory (read-only)
 //   2. Parse VEVENT components — extract summary, start/end, location, description
 //   3. Filter to today's events and upcoming 24h window
-//   4. Pass event metadata through Sandbox Prism
-//   5. LLM summarizes locally via Ollama (conflict detection + time-block suggestions)
+//   4. Apply the native action-policy bookkeeping checks
+//   5. Optionally summarize through fixed-loopback Ollama
 //   6. Return structured summary (events list + conflicts + free blocks)
 //
-// No calendar data is ever sent to the cloud. Files are never modified.
-// The user must explicitly enable this feature in Settings.
+// Source files are never modified. No email/calendar/finance IPC command is
+// registered in the current build; future activation requires explicit consent.
 
 use chrono::{Local, NaiveDate, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
@@ -124,8 +125,7 @@ pub fn discover_ics_files(path: &str) -> Result<Vec<PathBuf>, String> {
 
     if p.is_dir() {
         let mut files = Vec::new();
-        let entries = std::fs::read_dir(p)
-            .map_err(|e| format!("Cannot read directory: {}", e))?;
+        let entries = std::fs::read_dir(p).map_err(|e| format!("Cannot read directory: {}", e))?;
         for entry in entries.flatten() {
             let ep = entry.path();
             if ep.is_file() && ep.extension().and_then(|e| e.to_str()) == Some("ics") {
@@ -292,7 +292,9 @@ fn format_time_display(dt_str: &str, all_day: bool) -> String {
 /// This function NEVER modifies any files — read-only access only.
 pub fn get_todays_events(config: &CalendarConfig) -> Result<CalendarSummary, String> {
     if !config.is_valid() {
-        return Err("Calendar path is not configured. Set the path to your .ics files in Settings.".into());
+        return Err(
+            "Calendar path is not configured. Set the path to your .ics files in Settings.".into(),
+        );
     }
 
     let files = discover_ics_files(&config.calendar_path)?;
@@ -305,12 +307,10 @@ pub fn get_todays_events(config: &CalendarConfig) -> Result<CalendarSummary, Str
     }
 
     // Sort by start_hour (all-day events first, then by time)
-    all_events.sort_by(|a, b| {
-        match (a.all_day, b.all_day) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.start_hour.cmp(&b.start_hour),
-        }
+    all_events.sort_by(|a, b| match (a.all_day, b.all_day) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.start_hour.cmp(&b.start_hour),
     });
 
     // Detect conflicts (overlapping timed events)
@@ -334,7 +334,10 @@ pub fn get_todays_events(config: &CalendarConfig) -> Result<CalendarSummary, Str
 /// Detect overlapping events (simple interval overlap check).
 pub fn detect_conflicts(events: &[CalendarEvent]) -> Vec<TimeConflict> {
     let mut conflicts = Vec::new();
-    let timed: Vec<&CalendarEvent> = events.iter().filter(|e| !e.all_day && e.start_hour >= 0).collect();
+    let timed: Vec<&CalendarEvent> = events
+        .iter()
+        .filter(|e| !e.all_day && e.start_hour >= 0)
+        .collect();
 
     for i in 0..timed.len() {
         for j in (i + 1)..timed.len() {
@@ -425,7 +428,7 @@ fn format_hour(h: i32) -> String {
 /// Build a prompt for local LLM summarization of today's calendar.
 pub fn build_summary_prompt(summary: &CalendarSummary) -> String {
     let mut prompt = format!(
-        "You are a private calendar assistant running 100% locally. \
+        "You are a private calendar assistant in a local-first application. \
          The user has {} event(s) today. Summarize their day concisely in 2-3 sentences. \
          Highlight any conflicts, tight transitions, or important meetings. \
          Suggest how to use free time blocks effectively.\n\n",
@@ -456,14 +459,17 @@ pub fn build_summary_prompt(summary: &CalendarSummary) -> String {
     if !summary.free_blocks.is_empty() {
         prompt.push_str("\nFree blocks:\n");
         for fb in &summary.free_blocks {
-            prompt.push_str(&format!("- {} to {} ({} min)\n", fb.start, fb.end, fb.duration_minutes));
+            prompt.push_str(&format!(
+                "- {} to {} ({} min)\n",
+                fb.start, fb.end, fb.duration_minutes
+            ));
         }
     }
 
     prompt.push_str(
         "\nRespond with a brief, friendly summary of the day. \
          Start with the event count, then highlight conflicts or tight spots. \
-         Suggest the best free block for deep work. Keep it under 100 words."
+         Suggest the best free block for deep work. Keep it under 100 words.",
     );
 
     prompt
@@ -482,7 +488,15 @@ pub fn fallback_summary(summary: &CalendarSummary) -> String {
     )];
 
     if !summary.conflicts.is_empty() {
-        parts.push(format!("⚠️ {} conflict{}", summary.conflicts.len(), if summary.conflicts.len() == 1 { "" } else { "s" }));
+        parts.push(format!(
+            "⚠️ {} conflict{}",
+            summary.conflicts.len(),
+            if summary.conflicts.len() == 1 {
+                ""
+            } else {
+                "s"
+            }
+        ));
     }
 
     if let Some(first) = summary.events.first() {
@@ -494,8 +508,15 @@ pub fn fallback_summary(summary: &CalendarSummary) -> String {
     }
 
     if !summary.free_blocks.is_empty() {
-        let best = summary.free_blocks.iter().max_by_key(|b| b.duration_minutes).unwrap();
-        parts.push(format!("Best free block: {} – {} ({} min)", best.start, best.end, best.duration_minutes));
+        let best = summary
+            .free_blocks
+            .iter()
+            .max_by_key(|b| b.duration_minutes)
+            .unwrap();
+        parts.push(format!(
+            "Best free block: {} – {} ({} min)",
+            best.start, best.end, best.duration_minutes
+        ));
     }
 
     parts.join(" · ")
@@ -714,7 +735,8 @@ mod tests {
     #[test]
     fn test_check_event_date_timed() {
         let today = NaiveDate::from_ymd_opt(2026, 3, 4).unwrap();
-        let (is_today, all_day, sh, eh) = check_event_date("20260304T140000", "20260304T150000", today);
+        let (is_today, all_day, sh, eh) =
+            check_event_date("20260304T140000", "20260304T150000", today);
         assert!(is_today);
         assert!(!all_day);
         assert_eq!(sh, 14);

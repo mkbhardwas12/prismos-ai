@@ -13,58 +13,58 @@
   <rect width="880" height="520" rx="12" fill="url(#sbg)"/>
 
   <!-- Title -->
-  <text x="440" y="38" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Spectral Dimensions</text>
-  <text x="440" y="58" text-anchor="middle" fill="#5a8aa0" font-size="12">Every node carries a 7-dimensional spectral profile (0.0 – 1.0)</text>
+  <text x="440" y="38" text-anchor="middle" fill="#e0f0ff" font-size="22" font-weight="700" letter-spacing="1">Retrieval Scoring Signals</text>
+  <text x="440" y="58" text-anchor="middle" fill="#5a8aa0" font-size="12">Illustrative normalized inputs; availability varies by query and installed model</text>
 
-  <!-- Cognitive -->
-  <text x="30" y="100" fill="#00b4d8" font-size="14" font-weight="700">🧠 Cognitive</text>
+  <!-- Keyword / FTS -->
+  <text x="30" y="100" fill="#00b4d8" font-size="14" font-weight="700">🔤 Keyword / FTS</text>
   <rect x="160" y="85" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="85" width="360" height="28" rx="6" fill="#00b4d8" opacity="0.85"/>
-  <text x="530" y="104" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.8</text>
-  <text x="625" y="104" fill="#6a9ab0" font-size="12">Intellectual depth &amp; complexity</text>
+  <text x="530" y="104" text-anchor="end" fill="#fff" font-size="11" font-weight="600">example</text>
+  <text x="625" y="104" fill="#6a9ab0" font-size="12">SQLite full-text and lexical match</text>
 
-  <!-- Emotional -->
-  <text x="30" y="156" fill="#e76f51" font-size="14" font-weight="700">❤️ Emotional</text>
+  <!-- Optional embedding -->
+  <text x="30" y="156" fill="#e76f51" font-size="14" font-weight="700">🧭 Embedding</text>
   <rect x="160" y="141" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="141" width="315" height="28" rx="6" fill="#e76f51" opacity="0.85"/>
-  <text x="485" y="160" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.7</text>
-  <text x="625" y="160" fill="#6a9ab0" font-size="12">Emotional significance &amp; resonance</text>
+  <text x="485" y="160" text-anchor="end" fill="#fff" font-size="11" font-weight="600">optional</text>
+  <text x="625" y="160" fill="#6a9ab0" font-size="12">Local Ollama vector similarity when available</text>
 
-  <!-- Temporal -->
-  <text x="30" y="212" fill="#e9c46a" font-size="14" font-weight="700">⏳ Temporal</text>
+  <!-- Recency -->
+  <text x="30" y="212" fill="#e9c46a" font-size="14" font-weight="700">⏳ Recency</text>
   <rect x="160" y="197" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="197" width="270" height="28" rx="6" fill="#e9c46a" opacity="0.85"/>
-  <text x="440" y="216" text-anchor="end" fill="#1a1a1a" font-size="11" font-weight="600">0.6</text>
-  <text x="625" y="216" fill="#6a9ab0" font-size="12">Time relevance &amp; recency</text>
+  <text x="440" y="216" text-anchor="end" fill="#1a1a1a" font-size="11" font-weight="600">example</text>
+  <text x="625" y="216" fill="#6a9ab0" font-size="12">Time-based boost and temporal decay</text>
 
-  <!-- Social -->
-  <text x="30" y="268" fill="#f4a261" font-size="14" font-weight="700">👥 Social</text>
+  <!-- Graph path -->
+  <text x="30" y="268" fill="#f4a261" font-size="14" font-weight="700">🔗 Graph path</text>
   <rect x="160" y="253" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="253" width="203" height="28" rx="6" fill="#f4a261" opacity="0.85"/>
-  <text x="373" y="272" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.45</text>
-  <text x="625" y="272" fill="#6a9ab0" font-size="12">Social context &amp; relationships</text>
+  <text x="373" y="272" text-anchor="end" fill="#fff" font-size="11" font-weight="600">example</text>
+  <text x="625" y="272" fill="#6a9ab0" font-size="12">Relationship and edge-weight evidence</text>
 
-  <!-- Creative -->
-  <text x="30" y="324" fill="#2a9d8f" font-size="14" font-weight="700">🎨 Creative</text>
+  <!-- Access -->
+  <text x="30" y="324" fill="#2a9d8f" font-size="14" font-weight="700">👁 Access</text>
   <rect x="160" y="309" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="309" width="405" height="28" rx="6" fill="#2a9d8f" opacity="0.85"/>
-  <text x="575" y="328" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.9</text>
-  <text x="625" y="328" fill="#6a9ab0" font-size="12">Creative &amp; generative potential</text>
+  <text x="575" y="328" text-anchor="end" fill="#fff" font-size="11" font-weight="600">example</text>
+  <text x="625" y="328" fill="#6a9ab0" font-size="12">Local access and reinforcement counters</text>
 
-  <!-- Analytical -->
-  <text x="30" y="380" fill="#0096c7" font-size="14" font-weight="700">📊 Analytical</text>
+  <!-- Source scope -->
+  <text x="30" y="380" fill="#0096c7" font-size="14" font-weight="700">📁 Source scope</text>
   <rect x="160" y="365" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="365" width="338" height="28" rx="6" fill="#0096c7" opacity="0.85"/>
-  <text x="508" y="384" text-anchor="end" fill="#fff" font-size="11" font-weight="600">0.75</text>
-  <text x="625" y="384" fill="#6a9ab0" font-size="12">Analytical &amp; logical precision</text>
+  <text x="508" y="384" text-anchor="end" fill="#fff" font-size="11" font-weight="600">bounded</text>
+  <text x="625" y="384" fill="#6a9ab0" font-size="12">Approved project and conversation ownership</text>
 
-  <!-- Physical -->
-  <text x="30" y="436" fill="#06d6a0" font-size="14" font-weight="700">🏃 Physical</text>
+  <!-- Feedback -->
+  <text x="30" y="436" fill="#06d6a0" font-size="14" font-weight="700">👍 Feedback</text>
   <rect x="160" y="421" width="450" height="28" rx="6" fill="#0d2535"/>
   <rect x="160" y="421" width="135" height="28" rx="6" fill="#06d6a0" opacity="0.85"/>
-  <text x="305" y="440" text-anchor="end" fill="#0a2e1f" font-size="11" font-weight="600">0.3</text>
-  <text x="625" y="440" fill="#6a9ab0" font-size="12">Physical-world grounding</text>
+  <text x="305" y="440" text-anchor="end" fill="#0a2e1f" font-size="11" font-weight="600">explicit</text>
+  <text x="625" y="440" fill="#6a9ab0" font-size="12">User quality signals and edge updates</text>
 
   <!-- Footer -->
-  <text x="440" y="498" text-anchor="middle" fill="#4a7a90" font-size="11">Spectral values undergo temporal decay — older knowledge fades unless reinforced by new interactions</text>
+  <text x="440" y="498" text-anchor="middle" fill="#4a7a90" font-size="11">Heuristic retrieval features—not calibrated probabilities or a fixed per-node seven-dimensional profile</text>
 </svg>

@@ -1,4 +1,4 @@
-// PrismOS-AI — SpectrumGraphView Component Tests (Edge Prophecy + Intro Overlay)
+// PrismOS-AI — SpectrumGraphView Component Tests (Candidate Links + Intro Overlay)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
@@ -73,7 +73,7 @@ describe("SpectrumGraphView", () => {
       render(<SpectrumGraphView />);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Memory is growing/)).toBeInTheDocument();
+      expect(screen.getByText(/Local memory is ready/)).toBeInTheDocument();
     });
   });
 
@@ -112,17 +112,20 @@ describe("SpectrumGraphView", () => {
     expect(screen.queryByText(/Welcome to Your Spectrum Graph/)).not.toBeInTheDocument();
   });
 
-  it("renders Edge Prophecy panel with predictions", async () => {
+  it("renders heuristic candidate-link suggestions", async () => {
     localStorage.setItem("prismos-graph-intro-seen", "1");
     setupMocks({ hasPredictions: true });
     await act(async () => {
       render(<SpectrumGraphView />);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Edge Prophecy/)).toBeInTheDocument();
+      expect(screen.getByText(/Candidate Links/)).toBeInTheDocument();
       expect(screen.getAllByText("Node A").length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText("Node B").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Same domain")).toBeInTheDocument();
+      expect(screen.getByText("85% heuristic score")).toBeInTheDocument();
+      expect(screen.getByText(/Heuristic Need Suggestions/)).toBeInTheDocument();
+      expect(screen.getByText("70% heuristic score")).toBeInTheDocument();
     });
   });
 
@@ -215,7 +218,7 @@ describe("SpectrumGraphView", () => {
     expect(JSON.parse(localStorage.getItem("prismos-graph-expanded") || "[]")).toEqual([]);
   });
 
-  it("hides Edge Prophecy panel when no predictions", async () => {
+  it("hides candidate-link panel when no suggestions exist", async () => {
     localStorage.setItem("prismos-graph-intro-seen", "1");
     setupMocks({ hasPredictions: false });
     await act(async () => {
@@ -224,6 +227,6 @@ describe("SpectrumGraphView", () => {
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("predict_edges", { limit: 10 });
     });
-    expect(screen.queryByText(/Edge Prophecy/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Candidate Links/)).not.toBeInTheDocument();
   });
 });

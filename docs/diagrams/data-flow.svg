@@ -45,7 +45,7 @@
 
   <!-- Step 3: IPC -->
   <rect x="200" y="163" width="300" height="28" rx="6" fill="#1e293b" stroke="#475569" stroke-width="0.8"/>
-  <text x="350" y="182" text-anchor="middle" font-size="10" font-weight="500" fill="#94a3b8">⚡ invoke("process_intent") → Tauri IPC</text>
+  <text x="350" y="182" text-anchor="middle" font-size="10" font-weight="500" fill="#94a3b8">⚡ invoke("refract_intent") → Tauri IPC</text>
 
   <!-- Arrow -->
   <line x1="350" y1="191" x2="350" y2="207" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
@@ -57,10 +57,10 @@
   <!-- Arrow -->
   <line x1="350" y1="241" x2="350" y2="257" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
 
-  <!-- Step 5: Multi-Agent Pipeline (big box) -->
+  <!-- Step 5: five-role sequential workflow (big box) -->
   <rect x="80" y="259" width="540" height="175" rx="10" fill="#0f172a" stroke="#818cf8" stroke-width="1.2" filter="url(#s)"/>
-  <text x="350" y="280" text-anchor="middle" font-size="12" font-weight="700" fill="#c4b5fd">🤖 LangGraph Multi-Agent Pipeline</text>
-  <text x="350" y="295" text-anchor="middle" font-size="9" fill="#64748b">langgraph_collab.rs</text>
+  <text x="350" y="280" text-anchor="middle" font-size="12" font-weight="700" fill="#c4b5fd">🤖 Five-Role Sequential Workflow</text>
+  <text x="350" y="295" text-anchor="middle" font-size="9" fill="#64748b">agents/langgraph_workflow.rs</text>
 
   <!-- Agent flow inside -->
   <rect x="110" y="308" width="120" height="35" rx="6" fill="#312e81" fill-opacity="0.4" stroke="#818cf8" stroke-width="0.6"/>
@@ -89,27 +89,27 @@
 
   <line x1="265" y1="377" x2="233" y2="377" stroke="#818cf8" stroke-width="1" marker-end="url(#arrow)"/>
 
-  <!-- Consensus -->
+  <!-- Bounded goal loop -->
   <rect x="110" y="360" width="120" height="35" rx="6" fill="#1e1b4b" fill-opacity="0.6" stroke="#a78bfa" stroke-width="0.8"/>
-  <text x="170" y="378" text-anchor="middle" font-size="10" font-weight="700" fill="#e9d5ff">🗳️ Consensus</text>
-  <text x="170" y="391" text-anchor="middle" font-size="8" fill="#94a3b8">Debate + Vote</text>
+  <text x="170" y="378" text-anchor="middle" font-size="10" font-weight="700" fill="#e9d5ff">✓ Goal Loop</text>
+  <text x="170" y="391" text-anchor="middle" font-size="8" fill="#94a3b8">Plan · Build · Judge · Refine</text>
 
   <!-- Step 5 label -->
-  <text x="560" y="425" text-anchor="end" font-size="8" fill="#64748b">Argument types: Position · Challenge · Rebuttal · Support · Concession</text>
+  <text x="560" y="425" text-anchor="end" font-size="8" fill="#64748b">Single ordered execution path · no parallel model council</text>
 
   <!-- Arrow down from pipeline -->
   <line x1="350" y1="434" x2="350" y2="453" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
 
   <!-- Step 6: Spectrum Graph -->
   <rect x="195" y="455" width="310" height="35" rx="8" fill="#0e7490" fill-opacity="0.3" stroke="#22d3ee" stroke-width="1" filter="url(#s)"/>
-  <text x="350" y="478" text-anchor="middle" font-size="11" font-weight="600" fill="#67e8f9">📦 spectrum_graph.rs → Store Nodes + Edges</text>
+  <text x="350" y="478" text-anchor="middle" font-size="11" font-weight="600" fill="#67e8f9">📦 Spectrum Graph → Conversations + Approved Knowledge</text>
 
   <!-- Arrow -->
   <line x1="350" y1="490" x2="350" y2="506" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
 
   <!-- Step 7: Sandbox Sign -->
   <rect x="195" y="508" width="310" height="35" rx="8" fill="#166534" fill-opacity="0.3" stroke="#22c55e" stroke-width="1" filter="url(#s)"/>
-  <text x="350" y="531" text-anchor="middle" font-size="11" font-weight="600" fill="#86efac">🛡️ sandbox_prism.rs → Sign + Audit</text>
+  <text x="350" y="531" text-anchor="middle" font-size="11" font-weight="600" fill="#86efac">🛡️ sandbox_prism.rs → Policy decision + audit bookkeeping</text>
 
   <!-- Arrow -->
   <line x1="350" y1="543" x2="350" y2="559" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowAmber)"/>
@@ -124,8 +124,8 @@
   <!-- Step 9: UI Render -->
   <rect x="170" y="607" width="360" height="45" rx="8" fill="#164e63" fill-opacity="0.5" stroke="#22d3ee" stroke-width="1" filter="url(#s)"/>
   <text x="350" y="628" text-anchor="middle" font-size="11" font-weight="600" fill="#a5f3fc">💬 MainView.tsx Renders AI Response</text>
-  <text x="350" y="644" text-anchor="middle" font-size="9.5" fill="#94a3b8">+ Proactive suggestion cards auto-process on click</text>
+  <text x="350" y="644" text-anchor="middle" font-size="9.5" fill="#94a3b8">Suggested actions require an explicit user click</text>
 
   <!-- Footer -->
-  <text x="350" y="672" text-anchor="middle" font-size="9" fill="#475569">PrismOS-AI v0.2.1 · 100% Local Processing</text>
+  <text x="350" y="672" text-anchor="middle" font-size="9" fill="#475569">Local-first core · fixed-loopback inference · optional egress disclosed</text>
 </svg>

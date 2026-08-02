@@ -3,12 +3,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import IntentInput from "../components/IntentInput";
+import IntentInput, { isSensitiveAttachmentName } from "../components/IntentInput";
 
 describe("IntentInput", () => {
   it("renders the input textarea", () => {
     render(<IntentInput onSubmit={vi.fn()} isProcessing={false} />);
     expect(screen.getByPlaceholderText(/ask|type|intent/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/local loopback route/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/process it privately/i)).not.toBeInTheDocument();
   });
 
   it("calls onSubmit when user types and presses Enter", async () => {
@@ -62,5 +64,21 @@ describe("IntentInput", () => {
     render(<IntentInput onSubmit={vi.fn()} isProcessing={false} />);
     const sendBtn = screen.getByRole("button", { name: /send intent/i });
     expect(sendBtn).toBeInTheDocument();
+  });
+
+  it("excludes environment files from attachment selection and detects secret filenames", () => {
+    const { container } = render(<IntentInput onSubmit={vi.fn()} isProcessing={false} />);
+    const documentInput = container.querySelector<HTMLInputElement>('input[type="file"][accept*=".docx"]');
+
+    expect(documentInput?.accept.split(",")).not.toContain(".env");
+    expect(documentInput?.accept.split(",")).not.toContain(".pdf");
+    expect(documentInput?.accept.split(",")).not.toContain(".xls");
+    expect(documentInput?.accept.split(",")).not.toContain(".xlsx");
+    expect(isSensitiveAttachmentName(".env")).toBe(true);
+    expect(isSensitiveAttachmentName(".env.production")).toBe(true);
+    expect(isSensitiveAttachmentName("credentials.json")).toBe(true);
+    expect(isSensitiveAttachmentName("id_ed25519")).toBe(true);
+    expect(isSensitiveAttachmentName("private.pem")).toBe(true);
+    expect(isSensitiveAttachmentName("meeting-notes.md")).toBe(false);
   });
 });

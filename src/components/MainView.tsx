@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
+import AgentActivityFeed from "./AgentActivityFeed";
 import DailyBrief from "./DailyBrief";
 import UserGuide from "./UserGuide";
 import SuggestionCard from "./SuggestionCard";
@@ -17,6 +18,7 @@ import { useVoice } from "../hooks/useVoice";
 import { useOllama, RECOMMENDED_MODELS } from "../hooks/useOllama";
 import { useChat } from "../hooks/useChat";
 import { useSuggestions } from "../hooks/useSuggestions";
+import { DEFAULT_MODEL, modelMatches } from "../lib/config";
 import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative } from "../types";
 import "./MainView.css";
 
@@ -68,6 +70,7 @@ export default function MainView({
     voiceSpeak: voiceOutput.speak,
     refreshSuggestions: suggestions.refreshSuggestions,
   });
+  const selectedModelName = settings.defaultModel || DEFAULT_MODEL;
 
   return (
     <>
@@ -110,7 +113,7 @@ export default function MainView({
             >
               <span className={`status-dot ${ollamaConnected ? "connected" : ""} ${checkingConn ? "checking" : ""}`} />
               {ollamaConnected
-                ? <><span className="model-selector-label">Ollama ·</span> <strong>{settings.defaultModel}</strong> <span className="model-selector-caret">{ollama.modelDropdownOpen ? "▲" : "▼"}</span></>
+                ? <><span className="model-selector-label">Ollama ·</span> <strong>{selectedModelName}</strong> <span className="model-selector-caret">{ollama.modelDropdownOpen ? "▲" : "▼"}</span></>
                 : checkingConn
                   ? "Checking…"
                   : <>Ollama Offline <span className="retry-icon">↻</span></>}
@@ -125,12 +128,12 @@ export default function MainView({
                   ollama.availableModels.map(m => (
                     <button
                       key={m.name}
-                      className={`model-dropdown-item ${settings.defaultModel === m.name ? "active" : ""}`}
+                      className={`model-dropdown-item ${modelMatches(settings.defaultModel, m.name) ? "active" : ""}`}
                       onClick={() => ollama.selectModel(m.name)}
                     >
                       <span className="model-dropdown-name">{m.name}</span>
                       {m.size && <span className="model-dropdown-size">{(m.size / 1e9).toFixed(1)}GB</span>}
-                      {settings.defaultModel === m.name && <span className="model-dropdown-check">✓</span>}
+                      {modelMatches(settings.defaultModel, m.name) && <span className="model-dropdown-check">✓</span>}
                     </button>
                   ))
                 )}
@@ -154,14 +157,20 @@ export default function MainView({
                   </div>
                 )}
                 {/* Tiered model sections */}
-                {(["text", "vision", "power"] as const).map(tier => {
+                {(["essential", "recommended", "power", "edge"] as const).map(tier => {
                   const tierModels = RECOMMENDED_MODELS
-                    .filter(r => r.tier === tier && !ollama.availableModels.some(m => m.name.startsWith(r.name)));
+                    .filter(r => r.tier === tier && !ollama.availableModels.some(m => modelMatches(r.name, m.name)));
                   if (tierModels.length === 0) return null;
                   return (
                     <div key={tier}>
                       <div className="model-dropdown-tier">
-                        {tier === "text" ? "📝 Text & Reasoning" : tier === "vision" ? "👁️ Vision & Image" : "⚡ Power User"}
+                        {tier === "essential"
+                          ? "🧩 Essential Suggestions"
+                          : tier === "recommended"
+                            ? "📝 Recommended & Specialist"
+                            : tier === "power"
+                              ? "⚡ Larger-Memory Suggestions"
+                              : "🍃 Lightweight Suggestions"}
                       </div>
                       {tierModels.map(r => (
                         <button
@@ -173,6 +182,11 @@ export default function MainView({
                           <div className="model-download-info">
                             <span className="model-dropdown-name">{r.label}</span>
                             <span className="model-download-desc">{r.desc}</span>
+                            {r.minOllamaVersion && (
+                              <span className="model-download-desc">
+                                Prerequisite: Ollama {r.minOllamaVersion}+; installed version is not checked.
+                              </span>
+                            )}
                           </div>
                           <span className="model-dropdown-size">{r.size}</span>
                           <span className="model-download-btn">{ollama.pullingModel === r.name ? "⏳" : "⬇"}</span>
@@ -181,13 +195,13 @@ export default function MainView({
                     </div>
                   );
                 })}
-                {RECOMMENDED_MODELS.filter(r => !ollama.availableModels.some(m => m.name.startsWith(r.name))).length === 0 && (
+                {RECOMMENDED_MODELS.filter(r => !ollama.availableModels.some(m => modelMatches(r.name, m.name))).length === 0 && (
                   <div className="model-dropdown-empty">All recommended models installed ✓</div>
                 )}
 
-                {/* ── Response Length ── */}
+                {/* ── Direct document/vision output ceiling ── */}
                 <div className="model-dropdown-divider" />
-                <div className="model-dropdown-header">Response Length</div>
+                <div className="model-dropdown-header">Document &amp; Vision Output Limit</div>
                 <div className="model-tokens-control">
                   <input
                     type="range"
@@ -200,9 +214,7 @@ export default function MainView({
                   />
                   <div className="model-tokens-labels">
                     <span className="model-tokens-value">{settings.maxTokens} tokens</span>
-                    <span className="model-tokens-hint">
-                      {settings.maxTokens <= 512 ? "Concise" : settings.maxTokens <= 2048 ? "Standard" : settings.maxTokens <= 4096 ? "Detailed" : "Maximum"}
-                    </span>
+                    <span className="model-tokens-hint">Normal chat uses bounded workflow budgets</span>
                   </div>
                 </div>
               </div>
@@ -243,8 +255,9 @@ export default function MainView({
             <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS-AI" className="welcome-logo-img" /></div>
             <h1>Welcome to PrismOS-AI</h1>
             <p>
-              Your local-first agentic AI operating system. All processing
-              happens on your device — your data never leaves.
+              Your local-first desktop assistant with bounded sequential workflows.
+              Core chat uses the fixed-loopback Ollama client route; optional integrations
+              and remote model management have separate network boundaries.
             </p>
 
             {/* ── Ollama Setup Wizard ── */}
@@ -353,7 +366,7 @@ export default function MainView({
                       <div className="step-label">Pull a Model</div>
                       <div className="step-desc">
                         {ollama.hasModels
-                          ? `Model ready — ${settings.defaultModel}`
+                          ? `Model ready — ${selectedModelName}`
                           : `Download an AI model to use locally`}
                       </div>
                       {ollamaConnected && !ollama.hasModels && (
@@ -366,7 +379,7 @@ export default function MainView({
                             {ollama.isPulling ? (
                               <><span className="btn-spinner" /> Pulling…</>
                             ) : (
-                              `📦 Pull ${settings.defaultModel || "llama3.2"}`
+                              `📦 Pull ${selectedModelName}`
                             )}
                           </button>
                         </div>
@@ -390,7 +403,7 @@ export default function MainView({
             {ollama.getSetupStep() === "ready" && (
               <div className="ollama-ready-banner">
                 <span className="ready-icon">✅</span>
-                <span className="ready-text">Ollama connected · <strong>{settings.defaultModel}</strong> ready — start typing below!</span>
+                <span className="ready-text">Ollama connected · <strong>{selectedModelName}</strong> ready — start typing below!</span>
               </div>
             )}
 
@@ -453,7 +466,7 @@ export default function MainView({
               <div className="feature-card">
                 <div className="feature-card-icon">🧠</div>
                 <h3>Refractive Core</h3>
-                <p>Multi-agent orchestration with 5 specialized AI agents working in concert</p>
+                <p>Plan, draft, judge, and refine orchestration around your configured model</p>
               </div>
               <div className="feature-card">
                 <div className="feature-card-icon">🌈</div>
@@ -462,8 +475,8 @@ export default function MainView({
               </div>
               <div className="feature-card">
                 <div className="feature-card-icon">🔒</div>
-                <h3>Sandbox Prisms</h3>
-                <p>WASM-based sandboxed execution with cryptographic auto-rollback</p>
+                <h3>Action Policies</h3>
+                <p>Bounded action policy with authenticated in-process records</p>
               </div>
             </div>
           </div>
@@ -609,7 +622,7 @@ export default function MainView({
                         🤖 {msg.transparency.model_used}
                       </span>
                       {msg.transparency.domain_detected && msg.transparency.domain_detected !== "General" && (
-                        <span className="transparency-chip transparency-chip--domain" title="Detected professional domain">
+                        <span className="transparency-chip transparency-chip--domain" title="Active coarse query-topic guidance">
                           🎯 {msg.transparency.domain_detected}
                         </span>
                       )}
@@ -689,50 +702,40 @@ export default function MainView({
             </Fragment>
           ))
         )}
-        {chat.isProcessing && (
-          <div className="message message-ai" role="status" aria-label="Processing your intent">
+        {(chat.isProcessing || liveAgentSteps.length > 0) && (
+          <div className="message message-ai" aria-label={chat.isProcessing ? "Processing your intent" : "Completed workflow decision trace"}>
             <div className="message-bubble processing-bubble">
-              <div className="processing-indicator">
-                <div className="processing-spinner" aria-hidden="true">
-                  <span /><span /><span />
+              {chat.isProcessing ? (
+                <div className="processing-indicator" role="status" aria-live="polite">
+                  <div className="processing-spinner" aria-hidden="true">
+                    <span /><span /><span />
+                  </div>
+                  <div className="processing-text">
+                    <span className="processing-label">{chat.processingPhase || "Refracting your intent…"}</span>
+                    <span className="processing-detail">
+                      {liveAgentSteps.length > 0
+                        ? "Each workflow role updates live below"
+                        : chat.processingPhase ? "Processing with your configured model" : "Workflow stages · Graph context loading"}
+                    </span>
+                    {chat.processingElapsed > 0 && (
+                      <span className="processing-timer">{chat.processingElapsed}s</span>
+                    )}
+                  </div>
                 </div>
-                <div className="processing-text">
-                  <span className="processing-label">{chat.processingPhase || "Refracting your intent…"}</span>
-                  <span className="processing-detail">
-                    {liveAgentSteps.length > 0
-                      ? liveAgentSteps[liveAgentSteps.length - 1].action
-                      : chat.processingPhase ? "Processing locally · 100% private" : "Agents collaborating · Graph context loading"}
-                  </span>
-                  {chat.processingElapsed > 0 && (
-                    <span className="processing-timer">{chat.processingElapsed}s</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Phase 2: Live Agent Debate Log */}
-              {liveAgentSteps.length > 0 && (
-                <div className="live-debate-log" role="log" aria-label="Agent collaboration log">
-                  <AnimatePresence>
-                    {liveAgentSteps.map((step, i) => (
-                      <motion.div
-                        key={`step-${i}-${step.agent}-${step.action}`}
-                        className={`live-step live-step-${step.status} live-phase-${step.phase}`}
-                        initial={{ opacity: 0, x: -16, height: 0 }}
-                        animate={{ opacity: 1, x: 0, height: "auto" }}
-                        exit={{ opacity: 0, x: 16 }}
-                        transition={{ duration: 0.22, delay: i * 0.04, ease: "easeOut" }}
-                        layout
-                      >
-                        <span className={`live-step-dot ${step.status === "completed" ? "dot-done" : "dot-active"}`} />
-                        <span className="live-step-agent">{step.agent}</span>
-                        <span className="live-step-action">{step.action}</span>
-                        {step.status === "completed" && <span className="live-step-check">✓</span>}
-                        {step.status === "thinking" && <span className="live-step-pulse">…</span>}
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+              ) : (
+                <div className="processing-indicator processing-indicator-complete">
+                  <div className="processing-text">
+                    <span className="processing-label">Decision trace ready</span>
+                    <span className="processing-detail">Kept locally in memory until the next task or dismissal</span>
+                  </div>
                 </div>
               )}
+
+              <AgentActivityFeed
+                steps={liveAgentSteps}
+                isRunning={chat.isProcessing}
+                onDismiss={chat.isProcessing ? undefined : clearLiveSteps}
+              />
             </div>
           </div>
         )}
@@ -785,7 +788,6 @@ export default function MainView({
         voiceEnabled={settings.voiceInputEnabled ?? false}
         pendingIntent={chat.pendingIntent}
         onPendingConsumed={() => chat.setPendingIntent("")}
-        onScreenRead={chat.handleScreenRead}
       />
 
       <UserGuide open={showGuide} onClose={() => setShowGuide(false)} />

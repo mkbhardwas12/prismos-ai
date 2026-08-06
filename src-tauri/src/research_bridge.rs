@@ -82,13 +82,18 @@ pub async fn run(
     urls: Vec<String>,
     allow_egress: bool,
     ingest: bool,
+    search: Option<String>,
+    max_results: Option<u32>,
 ) -> Result<ResearchRun, String> {
     let script = bridge_script().ok_or_else(|| {
         "Research bridge not found (scripts/research_bridge/bridge.py). Runs only from a source checkout."
             .to_string()
     })?;
-    if urls.is_empty() {
-        return Err("no URLs given".into());
+    let search_q = search
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if urls.is_empty() && search_q.is_none() {
+        return Err("no URLs or search query given".into());
     }
     if urls.len() > MAX_URLS {
         return Err(format!("too many URLs (max {MAX_URLS} per run)"));
@@ -109,6 +114,14 @@ pub async fn run(
     }
     if ingest {
         args.push("--ingest".into());
+    }
+    // Search mode: the bridge discovers fresh sources for the query, then fetches
+    // the top results through the same guarded path.
+    if let Some(q) = &search_q {
+        args.push("--search".into());
+        args.push(q.clone());
+        args.push("--max-results".into());
+        args.push(max_results.unwrap_or(6).clamp(1, 8).to_string());
     }
     args.push("--db".into());
     args.push(db.to_string_lossy().into_owned());

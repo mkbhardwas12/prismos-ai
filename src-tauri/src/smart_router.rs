@@ -71,6 +71,38 @@ const CODE_MODEL_PRIORITY: &[&str] = &[
     "starcoder",
 ];
 
+/// User-language markers for code work. These are matched as tokens rather
+/// than substrings so ordinary words such as "capital" (`api`) and "trust"
+/// (`rust`) cannot accidentally activate the coding lane.
+const CODE_REQUEST_TOKENS: &[&str] = &[
+    "code",
+    "coding",
+    "codebase",
+    "function",
+    "debug",
+    "debugging",
+    "compile",
+    "compiler",
+    "algorithm",
+    "implement",
+    "refactor",
+    "programming",
+    "bug",
+    "api",
+    "sdk",
+    "endpoint",
+    "deploy",
+    "rust",
+    "cargo",
+    "python",
+    "javascript",
+    "typescript",
+    "react",
+    "nodejs",
+    "npm",
+    "sql",
+];
+
 /// Known reasoning-oriented model-family fragments.
 const REASONING_MODEL_PATTERNS: &[&str] = &[
     "deepseek-r1",
@@ -165,6 +197,15 @@ pub fn is_code_model(model_name: &str) -> bool {
     CODE_MODEL_PATTERNS
         .iter()
         .any(|pattern| lower.contains(pattern))
+}
+
+/// Detect a code-oriented request using normalized word boundaries.
+pub fn looks_like_code_request(input: &str) -> bool {
+    input
+        .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+        .filter(|token| !token.is_empty())
+        .map(str::to_ascii_lowercase)
+        .any(|token| CODE_REQUEST_TOKENS.contains(&token.as_str()))
 }
 
 /// Check if a model name indicates a reasoning-oriented model family.
@@ -524,6 +565,14 @@ mod tests {
         assert!(is_code_model("deepseek-coder:6.7b"));
         assert!(!is_code_model("mistral"));
         assert!(!is_code_model("llama3.1"));
+    }
+
+    #[test]
+    fn code_request_detection_uses_word_boundaries() {
+        assert!(looks_like_code_request("Design a Rust API endpoint"));
+        assert!(looks_like_code_request("debug this TypeScript function"));
+        assert!(!looks_like_code_request("What is the capital of France?"));
+        assert!(!looks_like_code_request("How can a team build trust?"));
     }
 
     #[test]

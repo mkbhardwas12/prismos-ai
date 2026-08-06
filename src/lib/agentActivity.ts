@@ -40,21 +40,26 @@ const PHASE_LABELS: Record<string, string> = {
   execute: "Finalization",
 };
 
-const ALLOWED_AGENTS = new Set([
-  "Orchestrator",
-  "Planner",
-  "Reasoner",
-  "Critic",
-  "Tool Smith",
-  "Memory Keeper",
-  "Debate",
-  "Sentinel",
-  "Consensus",
-  "Sandbox Prism",
-  "Code Reviewer",
+const ALLOWED_AGENTS = new Map([
+  ["orchestrator", "Orchestrator"],
+  ["planner", "Planner"],
+  ["reasoner", "Reasoner"],
+  ["critic", "Critic"],
+  ["tool smith", "Tool Smith"],
+  ["memory keeper", "Memory Keeper"],
+  ["debate", "Debate"],
+  ["sentinel", "Sentinel"],
+  ["consensus", "Consensus"],
+  ["sandbox prism", "Sandbox Prism"],
+  ["code reviewer", "Code Reviewer"],
 ]);
 const ALLOWED_PHASES = new Set(Object.keys(PHASE_LABELS));
-const ALLOWED_STATUSES = new Set(["started", "thinking", "completed", "failed"]);
+const ALLOWED_STATUSES: Set<AgentActivity["status"]> = new Set([
+  "started",
+  "thinking",
+  "completed",
+  "failed",
+]);
 const ALLOWED_ROLES = new Set<WorkflowRoleId>([
   "orchestrator",
   "reasoner",
@@ -97,6 +102,25 @@ function objectValue(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function hasOnlyKeys(input: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(input).every((key) => allowedKeys.has(key));
+}
+
+function looksLikeSecret(value: string): boolean {
+  const lower = value.toLocaleLowerCase();
+  if (lower.includes("-----begin") && lower.includes("private key")) return true;
+  return value.split(/\s+/).some((word) => {
+    const token = word.replace(/^[^a-z0-9_-]+|[^a-z0-9_-]+$/gi, "");
+    return token.startsWith("sk-")
+      || token.startsWith("ghp_")
+      || token.startsWith("github_pat_")
+      || token.startsWith("xoxb-")
+      || token.startsWith("xoxp-")
+      || (token.startsWith("AKIA") && token.length >= 16);
+  });
+}
+
 function stringEnum<T extends string>(value: unknown, allowed: Set<T>): T | null {
   return typeof value === "string" && allowed.has(value as T) ? value as T : null;
 }
@@ -106,7 +130,7 @@ function safeDecisionTextList(value: unknown, maxItems: number): string[] | null
   const result: string[] = [];
   for (const entry of value) {
     if (typeof entry !== "string") return null;
-    const safe = compactText(entry, 240);
+    const safe = looksLikeSecret(entry) ? "[Sensitive detail omitted]" : compactText(entry, 240);
     if (!safe) return null;
     result.push(safe);
   }
@@ -126,6 +150,7 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
 
   switch (input.kind) {
     case "work_plan": {
+      if (!hasOnlyKeys(input, ["kind", "query_type", "unit_count", "roles", "context_count"])) return undefined;
       const queryType = stringEnum(input.query_type, new Set(["query", "create", "analyze", "connect", "system"] as const));
       const unitCount = finiteInteger(input.unit_count, 0, 12);
       const roles = safeRoleList(input.roles);
@@ -134,18 +159,21 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
       return { kind: "work_plan", query_type: queryType, unit_count: unitCount, roles, context_count: contextCount };
     }
     case "routing": {
+      if (!hasOnlyKeys(input, ["kind", "lane", "auto_swapped", "basis"])) return undefined;
       const lane = stringEnum(input.lane, ALLOWED_LANES);
-      const reasonCode = stringEnum(input.reason_code, new Set(["configured_model", "capability_match", "requested_model_kept"] as const));
-      if (!lane || typeof input.auto_swapped !== "boolean" || !reasonCode) return undefined;
-      return { kind: "routing", lane, auto_swapped: input.auto_swapped, reason_code: reasonCode };
+      const basis = stringEnum(input.basis, new Set(["configured_model", "capability_match", "requested_model_kept"] as const));
+      if (!lane || typeof input.auto_swapped !== "boolean" || !basis) return undefined;
+      return { kind: "routing", lane, auto_swapped: input.auto_swapped, basis };
     }
     case "criteria": {
+      if (!hasOnlyKeys(input, ["kind", "source", "checks"])) return undefined;
       const source = stringEnum(input.source, new Set(["model", "deterministic"] as const));
       const checks = safeDecisionTextList(input.checks, 6);
       if (!source || !checks) return undefined;
       return { kind: "criteria", source, checks };
     }
     case "judge": {
+      if (!hasOnlyKeys(input, ["kind", "attempt", "graded", "passed", "score_pct", "limitations"])) return undefined;
       const attempt = finiteInteger(input.attempt, 1, 12);
       const scorePct = finiteInteger(input.score_pct, 0, 100);
       const limitations = safeDecisionTextList(input.limitations, 8);
@@ -153,6 +181,7 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
       return { kind: "judge", attempt, graded: input.graded, passed: input.passed, score_pct: scorePct, limitations };
     }
     case "review_summary": {
+      if (!hasOnlyKeys(input, ["kind", "rounds", "trace_items", "resolved", "agreement_pct"])) return undefined;
       const rounds = finiteInteger(input.rounds, 0, 12);
       const traceItems = finiteInteger(input.trace_items, 0, 64);
       const agreementPct = finiteInteger(input.agreement_pct, 0, 100);
@@ -160,12 +189,14 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
       return { kind: "review_summary", rounds, trace_items: traceItems, resolved: input.resolved, agreement_pct: agreementPct };
     }
     case "policy_check": {
+      if (!hasOnlyKeys(input, ["kind", "gate", "passed", "concern_count"])) return undefined;
       const gate = stringEnum(input.gate, new Set(["answer_candidate", "final_review"] as const));
       const concernCount = finiteInteger(input.concern_count, 0, 64);
       if (!gate || concernCount === null || typeof input.passed !== "boolean") return undefined;
       return { kind: "policy_check", gate, passed: input.passed, concern_count: concernCount };
     }
     case "vote": {
+      if (!hasOnlyKeys(input, ["kind", "role", "approved", "confidence_pct", "basis"])) return undefined;
       const role = stringEnum(input.role, ALLOWED_ROLES);
       const confidencePct = finiteInteger(input.confidence_pct, 0, 100);
       const basis = stringEnum(input.basis, ALLOWED_VOTE_BASES);
@@ -173,6 +204,7 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
       return { kind: "vote", role, approved: input.approved, confidence_pct: confidencePct, basis };
     }
     case "consensus": {
+      if (!hasOnlyKeys(input, ["kind", "approved", "approve_count", "reject_count", "total", "sentinel_required"])) return undefined;
       const approveCount = finiteInteger(input.approve_count, 0, 12);
       const rejectCount = finiteInteger(input.reject_count, 0, 12);
       const total = finiteInteger(input.total, 0, 12);
@@ -181,11 +213,13 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
       return { kind: "consensus", approved: input.approved, approve_count: approveCount, reject_count: rejectCount, total, sentinel_required: true };
     }
     case "persistence": {
+      if (!hasOnlyKeys(input, ["kind", "succeeded", "edge_count", "conversation_stored"])) return undefined;
       const edgeCount = finiteInteger(input.edge_count, 0, 100_000);
       if (edgeCount === null || typeof input.succeeded !== "boolean" || typeof input.conversation_stored !== "boolean") return undefined;
       return { kind: "persistence", succeeded: input.succeeded, edge_count: edgeCount, conversation_stored: input.conversation_stored };
     }
     case "finalization": {
+      if (!hasOnlyKeys(input, ["kind", "approved", "validated", "attempts_used", "max_attempts"])) return undefined;
       const attemptsUsed = finiteInteger(input.attempts_used, 0, 12);
       const maxAttempts = finiteInteger(input.max_attempts, 1, 12);
       if (attemptsUsed === null || maxAttempts === null || typeof input.approved !== "boolean" || typeof input.validated !== "boolean") return undefined;
@@ -200,12 +234,13 @@ export function normalizeWorkflowDecision(value: unknown): WorkflowDecision | un
 export function normalizeAgentActivity(value: unknown): AgentActivity | null {
   const input = objectValue(value);
   if (!input || input.schema_version !== 1) return null;
+  if (!hasOnlyKeys(input, ["schema_version", "task_id", "agent", "action", "status", "phase", "iteration", "elapsed_ms", "decision"])) return null;
   if (typeof input.task_id !== "string" || typeof input.agent !== "string" || typeof input.action !== "string") return null;
-  if (!ALLOWED_AGENTS.has(input.agent)) return null;
   const phase = stringEnum(input.phase, ALLOWED_PHASES);
   const status = stringEnum(input.status, ALLOWED_STATUSES);
   const taskId = compactText(input.task_id, 160);
-  const agent = compactText(input.agent, 48);
+  const normalizedAgent = compactText(input.agent, 48);
+  const agent = ALLOWED_AGENTS.get(normalizedAgent.toLocaleLowerCase());
   const action = compactText(input.action, 180);
   const iteration = input.iteration === undefined ? 0 : finiteInteger(input.iteration, 0, 12);
   const elapsedMs = finiteInteger(input.elapsed_ms, 0, 86_400_000);
@@ -289,7 +324,7 @@ export function summarizeAgentActivities(steps: AgentActivity[]): AgentActivityR
       iteration: record.iteration,
       decision: record.decision,
     });
-    const previousRecord = previous?.history.at(-1);
+    const previousRecord = previous?.history[previous.history.length - 1];
     const previousFingerprint = previousRecord
       ? JSON.stringify({
           action: previousRecord.action,

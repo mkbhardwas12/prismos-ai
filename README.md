@@ -2,7 +2,7 @@
 
 > Local-first chat, retrieval, and personal knowledge for work that should stay under your control.
 
-PrismOS-AI is a Tauri desktop application that connects to Ollama, retrieves relevant local context, and runs a bounded answer-quality loop. Core chat uses a loopback-only Ollama endpoint by default and can work without internet access after Ollama and a model are installed.
+PrismOS-AI is a Tauri desktop application that connects to Ollama, retrieves relevant local context, and adaptively chooses between a fast single-pass answer and a bounded answer-quality loop. Core chat uses a loopback-only Ollama endpoint by default and can work without internet access after Ollama and a model are installed.
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -12,7 +12,7 @@ PrismOS-AI is a Tauri desktop application that connects to Ollama, retrieves rel
 
 | Area | Current behavior |
 |---|---|
-| Chat and reasoning | Retrieval followed by a bounded, sequential `plan → build → judge → refine` loop for eligible requests |
+| Chat and reasoning | Retrieval plus an adaptive single-pass path for ordinary chat; complex and operational requests retain the bounded `plan → build → judge → refine` loop |
 | Models | Routes among models already installed in Ollama; calls are sequential, not a parallel model council |
 | Project knowledge | Metadata preview, explicit approval, bounded content indexing, likely-secret redaction, source citations, atomic refresh, and source-scoped Forget |
 | Private data | SQLite knowledge and audit data remain in the local app-data directory; the live database is not encrypted at rest by PrismOS |
@@ -20,7 +20,8 @@ PrismOS-AI is a Tauri desktop application that connects to Ollama, retrieves rel
 | Full-database recovery tooling | Settings UI, passphrase-encrypted export, validated restore staging, and restore-before-SQLite startup swap are implemented; a real clean-profile restore drill is still required before reliance |
 | Action safety | Native action policy with allow-lists, anomaly checks, process-local authenticated records, and bookkeeping checkpoints; this is not WASM or OS-level process isolation |
 | Self-improvement | Synthetic smoke validation only. Personal-data harvest/full training is disabled pending dataset consent, secret/PII review, a private output destination, and a cross-process lock |
-| Internet research | Not implemented. PrismOS does not crawl or silently ingest the internet |
+| Internet research | Optional Research Bridge with explicit per-run or standing Live knowledge consent; retrieved pages are fenced as untrusted and core inference remains loopback-only |
+| Local artifact generation | Creates bounded DOCX, PPTX, PDF, and XLSX files. Model outlines use JSON mode plus typed validation; malformed or ungrounded outlines fall back to a disclosed verification-first template before any file is written |
 | Updates | Manual release installation; there is no active in-app auto-updater |
 
 For the public/private boundary, backup design, restore procedure, research provenance, and model-orchestration roadmap, read [Private Knowledge Architecture](docs/PRIVATE_KNOWLEDGE_ARCHITECTURE.md).
@@ -33,6 +34,9 @@ flowchart LR
     IPC --> WF["Retrieval + sequential goal loop"]
     WF --> OL["Loopback Ollama"]
     WF --> DB[("Local SQLite graph")]
+    UI -.->|"explicit consent"| RB["Research Bridge sidecar"]
+    RB -.-> WEB["Approved URLs / search results"]
+    RB --> DB
     SRC["Approved local project"] -->|"preview, approve, bounded read"| WF
     DB --> PORT["Portable encrypted export"]
     DB -.-> VAULT["Full private vault backend"]
@@ -45,14 +49,17 @@ Some Ollama models can return a separate reasoning field. PrismOS requests it on
 ## Current capabilities
 
 - Fixed-loopback Ollama chat with bounded responses, capability-aware routing, and hardware-aware model-fit suggestions.
+- Adaptive orchestration: ordinary chat avoids unnecessary planner/critic generations; complex, creation, and operational work keeps the quality loop.
 - Hybrid SQLite/FTS retrieval with bounded graph expansion and recent conversation context.
 - Approval-gated Project Knowledge for allowlisted UTF-8 text/code files, with stable source IDs and `Source: <source-id>/<relative-path>` citations.
 - Bounded one-off DOCX, PPTX, and allowlisted UTF-8 text/code extraction—including CSV/TSV—with ephemeral chunking and retrieval. PDF extraction is disabled until it can be resource-isolated; convert PDFs to UTF-8 text. XLSX and legacy `.xls` fail closed before parsing; export spreadsheets as CSV/TSV.
+- Local DOCX, PPTX, PDF, and XLSX generation with bounded schemas, typed pre-write validation, non-executable spreadsheet cells, session-scoped open capabilities, and a disclosed safe fallback when a local model returns malformed or ungrounded JSON. Output generation does not enable PDF/XLSX input parsing.
 - Spectrum Graph memory, response feedback, cognitive-profile views, and model-performance tracking.
 - Local vision when a compatible Ollama vision model is installed.
 - Authenticated encrypted You-Port export/sync packages.
 - Tamper-evident audit chaining for critical local operations.
 - Explicit optional integrations with their own network boundaries.
+- Optional Live knowledge mode that runs consented web research through the separate bridge before answering freshness-sensitive prompts.
 
 Project knowledge is retrieved as untrusted source material, not as instructions. A scan never follows symlinks, rejects overly broad roots, skips common secret/vendor/build paths, applies size/depth/count limits, and requires a fresh approval if a candidate file changes before indexing. See [Project Knowledge](docs/PROJECT_KNOWLEDGE.md).
 
@@ -124,7 +131,7 @@ Use **Settings → Project Knowledge** to preview and approve a project. The fir
 
 ## Reasoning and multi-model behavior
 
-For open-ended eligible requests, PrismOS currently:
+Ordinary low-risk conversation takes a single model pass. For open-ended, complex, creation, and operational requests, PrismOS:
 
 1. Derives bounded acceptance criteria.
 2. Builds one answer candidate.
@@ -164,9 +171,9 @@ and adapters, but training requires a separately reviewed training stack; see
 
 ## Internet research status
 
-PrismOS currently has no general web-search or crawling pipeline. A safe research feature must be explicit, query-scoped, provenance-preserving, and isolated from instructions found in retrieved pages. It must record source URL, retrieval time, content hash, and applicable license/usage constraints. Robots rules matter for automated retrieval but do not grant copyright permission; see [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html).
+The optional Research Bridge is a separate egress sidecar. Manual URL research requires per-run consent; **Live knowledge** is standing consent for freshness-sensitive chat prompts and is off by default. Retrieved text is stored as untrusted research material with URL, fetch time, and content-hash receipts. Core model inference remains fixed loopback, but a research-enabled task is not an offline task.
 
-Until that boundary ships, import or approve local source material and verify citations yourself. Do not describe local model knowledge as a current internet check.
+Research retrieval does not make a source authoritative, current, complete, or licensed for reuse. Verify publication dates and important claims yourself. Robots rules matter for automated retrieval but do not grant copyright permission; see [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html).
 
 ## Testing
 

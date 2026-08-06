@@ -156,7 +156,12 @@ impl ReasonerNode {
              - Use reference material only when it is relevant to the user's request. \
                Never invent missing project facts. Say what is unknown when evidence is weak.\n\
              - When project excerpts provide a Source path, cite the most relevant path in \
-               backticks so the user can verify the answer.\n\
+               backticks so the user can verify the answer. Never invent or extend a path.\n\
+             - Never emit a citation, note/KBA identifier, URL, command, version/date, \
+               compatibility claim, or duration estimate unless it appears verbatim in \
+               current-request evidence. Personal/work memory is not vendor-authoritative evidence.\n\
+             - For operational or version-sensitive procedures without authoritative evidence, \
+               provide only a verification-first plan with explicit unknowns—never an executable runbook.\n\
              - Do not claim that you ran, changed, sent, or verified anything unless an \
                explicit tool result in the current request proves it.\n\
              - Preserve useful continuity from recent conversation excerpts, but prefer \
@@ -688,6 +693,8 @@ impl PlannerNode {
                 "Delivers the actual requested content, not a description of it".into(),
                 "Matches the requested format, scope, and constraints".into(),
                 "Is usable as-is without further prompting".into(),
+                "Makes no unsupported factual, source, compatibility, timing, or operational claims; labels verification gaps".into(),
+                "Does not invent citations, local paths, tools, commands, or work performed".into(),
             ],
             IntentType::Connect => vec![
                 "Identifies meaningful, non-obvious relationships between the topics".into(),
@@ -775,8 +782,8 @@ impl CriticNode {
         (system, user)
     }
 
-    /// Parse the Critic's strict JSON verdict. Formatting drift is treated as an
-    /// ungraded acceptance so the loop never spins on an ungradeable response.
+    /// Parse the Critic's strict JSON verdict. Formatting drift is an ungraded
+    /// rejection: inability to evaluate can never become evidence of quality.
     pub fn parse_verdict(raw: &str) -> JudgeVerdict {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
@@ -791,10 +798,13 @@ impl CriticNode {
             .and_then(|json| serde_json::from_str::<CriticOutput>(json).ok());
         let Some(parsed) = parsed.filter(|value| value.score.is_finite()) else {
             return JudgeVerdict {
-                pass: true,
-                score: 0.6,
-                deficiencies: vec![],
-                summary: "Critic output invalid — returning unjudged best-effort output".into(),
+                pass: false,
+                score: 0.0,
+                deficiencies: vec![
+                    "The quality judge returned an invalid verdict, so the answer was not validated"
+                        .into(),
+                ],
+                summary: "Critic output invalid — quality validation unavailable".into(),
                 llm_graded: false,
             };
         };
@@ -1009,10 +1019,12 @@ mod loop_tests {
     }
 
     #[test]
-    fn parse_verdict_unparseable_accepts() {
-        // Garbage in → accept (never loop blindly on an ungradeable response).
+    fn parse_verdict_unparseable_rejects() {
+        // Garbage in can never become a quality approval.
         let v = CriticNode::parse_verdict("the model rambled without any structure at all");
-        assert!(v.pass);
+        assert!(!v.pass);
+        assert_eq!(v.score, 0.0);
+        assert!(!v.deficiencies.is_empty());
         assert!(!v.llm_graded);
     }
 

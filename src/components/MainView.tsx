@@ -19,7 +19,8 @@ import { useOllama, RECOMMENDED_MODELS } from "../hooks/useOllama";
 import { useChat } from "../hooks/useChat";
 import { useSuggestions } from "../hooks/useSuggestions";
 import { DEFAULT_MODEL, modelMatches } from "../lib/config";
-import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative } from "../types";
+import { getAutoResearch, setAutoResearch } from "../lib/researchDoc";
+import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative, GraphAnswerTrace } from "../types";
 import "./MainView.css";
 
 interface MainViewProps {
@@ -28,7 +29,7 @@ interface MainViewProps {
   onRetryConnection?: () => void | Promise<void>;
   settings: AppSettings;
   onSettingsChange: (s: AppSettings) => void;
-  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
+  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null, graphTrace?: GraphAnswerTrace) => void;
   liveAgentSteps: AgentActivity[];
   clearLiveSteps: () => void;
   startupSuggestions: ProactiveSuggestion[];
@@ -48,6 +49,7 @@ export default function MainView({
 }: MainViewProps) {
   const [showGuide, setShowGuide] = useState(false);
   const [checkingConn, setCheckingConn] = useState(false);
+  const [liveKnowledge, setLiveKnowledge] = useState(() => getAutoResearch());
   const [expandedRefractions, setExpandedRefractions] = useState<Set<string>>(new Set());
   const [expandedTransparencies, setExpandedTransparencies] = useState<Set<string>>(new Set());
 
@@ -71,6 +73,13 @@ export default function MainView({
     refreshSuggestions: suggestions.refreshSuggestions,
   });
   const selectedModelName = settings.defaultModel || DEFAULT_MODEL;
+  const olderBaselineSelected = /(^|\/)(mistral|llama3\.1|gemma2|qwen2\.5)(:|$)/i.test(selectedModelName);
+  const fastModernModel = ollama.availableModels.find((model) => modelMatches("qwen3:4b", model.name));
+  const deepModernModel = ollama.availableModels.find((model) => modelMatches("qwen3:30b-a3b", model.name));
+  const modernUpgradeModels = [fastModernModel, deepModernModel]
+    .filter((model): model is NonNullable<typeof model> => Boolean(model))
+    .filter((model, index, models) => models.findIndex((candidate) => candidate.name === model.name) === index)
+    .filter((model) => !modelMatches(selectedModelName, model.name));
 
   return (
     <>
@@ -86,6 +95,22 @@ export default function MainView({
               🗑️ Clear
             </button>
           )}
+          <button
+            className={`knowledge-mode-btn ${liveKnowledge ? "active" : ""}`}
+            type="button"
+            aria-pressed={liveKnowledge}
+            onClick={() => {
+              const next = !liveKnowledge;
+              setAutoResearch(next);
+              setLiveKnowledge(next);
+            }}
+            title={liveKnowledge
+              ? "Live knowledge is on. Freshness requests may use the consented Research Bridge. Click to return to local-only knowledge."
+              : "Local knowledge only. Click to give standing consent for freshness requests to use the Research Bridge."}
+          >
+            <span aria-hidden="true">{liveKnowledge ? "🌐" : "◌"}</span>
+            {liveKnowledge ? "Live knowledge" : "Local knowledge"}
+          </button>
           <div className="ollama-status" ref={ollama.modelDropdownRef}>
             <button
               className={`model-selector-btn ${!ollamaConnected ? "offline" : ""}`}
@@ -243,6 +268,27 @@ export default function MainView({
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {ollamaConnected && olderBaselineSelected && modernUpgradeModels.length > 0 && (
+        <div className="model-modernize-banner" role="status">
+          <span className="model-modernize-icon" aria-hidden="true">✦</span>
+          <span className="model-modernize-copy">
+            <strong>Newer installed model ready.</strong> Keep the current model, or switch without downloading anything.
+          </span>
+          <div className="model-modernize-actions">
+            {fastModernModel && !modelMatches(selectedModelName, fastModernModel.name) && (
+              <button type="button" onClick={() => ollama.selectModel(fastModernModel.name)}>
+                Use {fastModernModel.name} · fast
+              </button>
+            )}
+            {deepModernModel && !modelMatches(selectedModelName, deepModernModel.name) && (
+              <button type="button" onClick={() => ollama.selectModel(deepModernModel.name)}>
+                Use {deepModernModel.name} · deep
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -539,7 +585,7 @@ export default function MainView({
                 {msg.attachment && (
                   <div className="attachment-actions">
                     <span className="attachment-chip">
-                      {msg.attachment.kind === "pptx" ? "📊" : "📄"} {msg.attachment.filename}
+                      {{ pptx: "📊", xlsx: "📈", pdf: "📕", docx: "📄" }[msg.attachment.kind]} {msg.attachment.filename}
                     </span>
                     <button
                       className="attachment-btn"

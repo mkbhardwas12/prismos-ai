@@ -14,8 +14,61 @@
 // falls back to standard scalar CPU f64 arithmetic otherwise.
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+
+static EMBEDDING_BACKFILL_RUNNING: AtomicBool = AtomicBool::new(false);
+
+struct EmbeddingBackfillGuard;
+
+impl Drop for EmbeddingBackfillGuard {
+    fn drop(&mut self) {
+        EMBEDDING_BACKFILL_RUNNING.store(false, Ordering::Release);
+    }
+}
+
+/// Backfill a small number of graph embeddings without delaying chat. Only one
+/// worker runs at a time, and no SQLite connection is held across an await.
+fn schedule_embedding_backfill(app_dir: PathBuf) {
+    if EMBEDDING_BACKFILL_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let _guard = EmbeddingBackfillGuard;
+        const EMBED_BACKFILL_PER_RUN: usize = 12;
+        let missing = match crate::spectrum_graph::SpectrumGraph::new(&app_dir) {
+            Ok(graph) => graph
+                .nodes_missing_embedding(EMBED_BACKFILL_PER_RUN)
+                .unwrap_or_default(),
+            Err(error) => {
+                eprintln!("[RefractiveCore] embedding backfill could not open graph: {error}");
+                return;
+            }
+        };
+
+        for (node_id, label, content) in missing {
+            let text: String = format!("{}\n{}", label, content)
+                .chars()
+                .take(2000)
+                .collect();
+            let embedding = match crate::ollama_bridge::embed(&text, None).await {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("[RefractiveCore] embedding backfill paused: {error}");
+                    break;
+                }
+            };
+            if let Ok(graph) = crate::spectrum_graph::SpectrumGraph::new(&app_dir) {
+                let _ = graph.set_node_embedding(&node_id, &embedding);
+            }
+        }
+    });
+}
 
 // ─── Agent Definitions ─────────────────────────────────────────────────────────
 
@@ -363,10 +416,144 @@ pub struct RefractiveEngine {
     scorer: SimdScorer,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromptContextMode {
+    /// A self-contained request. Only explicitly named nodes and consented web
+    /// research may enter the prompt; personal/project memory stays isolated.
+    Fresh,
+    /// A terse continuation that needs the bounded recent-turn window.
+    FollowUp,
+    /// The user explicitly asked to use local/project/knowledge-base material.
+    RequestedKnowledge,
+    /// The user explicitly asked about their identity, preferences, or profile.
+    PersonalProfile,
+}
+
 impl RefractiveEngine {
     pub fn new() -> Self {
         Self {
             scorer: SimdScorer::new(),
+        }
+    }
+
+    fn prompt_context_mode(raw: &str) -> PromptContextMode {
+        let lower = raw.trim().to_ascii_lowercase();
+        let personal_markers = [
+            "who am i",
+            "about me",
+            "my profile",
+            "my preferences",
+            "what do you know about me",
+            "what do you remember about me",
+            "my personal",
+        ];
+        if personal_markers.iter().any(|marker| lower.contains(marker)) {
+            return PromptContextMode::PersonalProfile;
+        }
+
+        let knowledge_markers = [
+            "use my knowledge",
+            "using my knowledge",
+            "based on my knowledge",
+            "from my knowledge",
+            "my knowledge base",
+            "knowledge base",
+            "my project",
+            "our project",
+            "this project",
+            "project files",
+            "this repo",
+            "repository",
+            "codebase",
+            "documents i added",
+            "sources i added",
+            "uploaded document",
+            "attached document",
+            "spectrum graph",
+        ];
+        if knowledge_markers
+            .iter()
+            .any(|marker| lower.contains(marker))
+        {
+            return PromptContextMode::RequestedKnowledge;
+        }
+
+        let follow_up_starts = [
+            "continue",
+            "do that",
+            "do the same",
+            "what about",
+            "and ",
+            "also ",
+            "now ",
+            "make it",
+            "turn it",
+            "add that",
+            "use that",
+        ];
+        let follow_up_references = [
+            "the previous",
+            "previous answer",
+            "earlier answer",
+            "above answer",
+            "same one",
+            "same format",
+            "as before",
+        ];
+        if follow_up_starts
+            .iter()
+            .any(|marker| lower.starts_with(marker))
+            || follow_up_references
+                .iter()
+                .any(|marker| lower.contains(marker))
+        {
+            return PromptContextMode::FollowUp;
+        }
+
+        PromptContextMode::Fresh
+    }
+
+    fn node_is_explicitly_named(raw: &str, label: &str) -> bool {
+        let raw_tokens = raw
+            .split(|character: char| !character.is_alphanumeric() && character != '_')
+            .filter(|token| !token.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect::<std::collections::HashSet<_>>();
+        let generic = [
+            "project",
+            "knowledge",
+            "reference",
+            "document",
+            "learning",
+            "profile",
+            "work",
+            "chat",
+        ];
+        label
+            .split(|character: char| {
+                character == '(' || character == ':' || character == '/' || character == '—'
+            })
+            .next()
+            .unwrap_or(label)
+            .split(|character: char| !character.is_alphanumeric() && character != '_')
+            .map(str::to_ascii_lowercase)
+            .find(|token| token.len() >= 4 && !generic.contains(&token.as_str()))
+            .is_some_and(|token| raw_tokens.contains(&token))
+    }
+
+    fn context_result_allowed(
+        mode: PromptContextMode,
+        raw: &str,
+        result: &crate::spectrum_graph::IntentQueryResult,
+    ) -> bool {
+        match mode {
+            PromptContextMode::RequestedKnowledge
+            | PromptContextMode::PersonalProfile
+            | PromptContextMode::FollowUp => true,
+            PromptContextMode::Fresh => {
+                (result.node.id.starts_with("research-") && result.node.id != "research-root")
+                    || Self::node_is_explicitly_named(raw, &result.node.label)
+            }
         }
     }
 
@@ -408,33 +595,17 @@ impl RefractiveEngine {
         let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
         let intent_type_str = intent.intent_type.to_string();
 
-        // Opportunistic backfill: embed a few not-yet-embedded nodes per query
-        // (newest first). The graph becomes semantically searchable over time
-        // with zero migrations; ~ms per node once the embed model is warm.
-        if query_embedding.is_some() {
-            const EMBED_BACKFILL_PER_QUERY: usize = 12;
-            if let Ok(missing) = graph.nodes_missing_embedding(EMBED_BACKFILL_PER_QUERY) {
-                for (node_id, label, content) in missing {
-                    let text: String = format!("{}\n{}", label, content)
-                        .chars()
-                        .take(2000)
-                        .collect();
-                    match crate::ollama_bridge::embed(&text, None).await {
-                        Ok(v) => {
-                            let _ = graph.set_node_embedding(&node_id, &v);
-                        }
-                        Err(_) => break, // embed model went away mid-loop — stop quietly
-                    }
-                }
-            }
-        }
-
-        let context_results = graph.query_intent_hybrid(
-            &intent.raw,
-            &intent_type_str,
-            &intent.entities,
-            query_embedding.as_deref(),
-        )?;
+        let context_mode = Self::prompt_context_mode(&intent.raw);
+        let context_results = graph
+            .query_intent_hybrid(
+                &intent.raw,
+                &intent_type_str,
+                &intent.entities,
+                query_embedding.as_deref(),
+            )?
+            .into_iter()
+            .filter(|result| Self::context_result_allowed(context_mode, &intent.raw, result))
+            .collect::<Vec<_>>();
 
         let mut context_node_ids: Vec<String> =
             context_results.iter().map(|r| r.node.id.clone()).collect();
@@ -489,11 +660,14 @@ impl RefractiveEngine {
         scored_context.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // ── Step 3: Build context-enriched summary ──
-        // Identity anchor first: the standing user profile is ALWAYS in the
-        // prompt, independent of retrieval. "Who am I?" has no useful keywords
-        // and no guaranteed semantic hit — a hosted assistant answers it from a
-        // pinned profile, and now so does PrismOS.
-        let pinned = graph.pinned_profile_nodes(4).unwrap_or_default();
+        // Personal profile and transcript memory are opt-in by intent. A
+        // self-contained external technical request must not inherit unrelated
+        // project names, local paths, or earlier assistant claims.
+        let pinned = if context_mode == PromptContextMode::PersonalProfile {
+            graph.pinned_profile_nodes(4).unwrap_or_default()
+        } else {
+            vec![]
+        };
         let pinned_ids: Vec<String> = pinned.iter().map(|n| n.id.clone()).collect();
         for id in &pinned_ids {
             if !context_node_ids.contains(id) {
@@ -501,11 +675,14 @@ impl RefractiveEngine {
             }
         }
 
-        // Always include a small, chronological window of recent completed
-        // turns. Semantic retrieval alone cannot resolve pronouns and terse
-        // follow-ups reliably. Stored turns are bounded and still live inside
-        // the untrusted reference envelope enforced by the Reasoner prompt.
-        let recent_conversations = graph.recent_conversation_nodes(4).unwrap_or_default();
+        // Terse continuations get a small chronological window. Fresh requests
+        // never receive prior assistant answers, so a rejected or stale answer
+        // cannot silently become evidence for the next task.
+        let recent_conversations = if context_mode == PromptContextMode::FollowUp {
+            graph.recent_conversation_nodes(4).unwrap_or_default()
+        } else {
+            vec![]
+        };
         let recent_ids: Vec<String> = recent_conversations.iter().map(|n| n.id.clone()).collect();
         for id in &recent_ids {
             if !context_node_ids.contains(id) {
@@ -660,6 +837,13 @@ impl RefractiveEngine {
             session.votes.len()
         );
 
+        // Opportunistic vector backfill is maintenance, not answer work. Start
+        // it only after the response is complete so it cannot contend with the
+        // request's graph reads or model generations.
+        if query_embedding.is_some() {
+            schedule_embedding_backfill(app_dir.to_path_buf());
+        }
+
         Ok(result)
     }
 
@@ -756,15 +940,12 @@ impl RefractiveEngine {
     }
 
     /// Render the standing user-profile block from pinned personal/core nodes.
-    /// Kept separate from retrieval so it is ALWAYS present in the prompt —
-    /// identity questions ("who am I?", "what are my rules?") never depend on
-    /// keyword or vector luck.
+    /// This is called only for an explicit identity/profile request.
     fn build_profile_block(pinned: &[crate::spectrum_graph::SpectrumNode]) -> String {
         if pinned.is_empty() {
             return String::new();
         }
-        let mut block =
-            String::from("Standing profile of the user you are assisting (always applies):");
+        let mut block = String::from("User profile requested for this task:");
         for n in pinned {
             let content: String = n.content.chars().take(700).collect();
             block.push_str(&format!("\n**{}**: {}", n.label, content.trim()));
@@ -956,6 +1137,44 @@ mod tests {
                 "Agent description should not be empty"
             );
         }
+    }
+
+    #[test]
+    fn self_contained_sap_ppt_request_does_not_opt_into_private_memory() {
+        assert_eq!(
+            RefractiveEngine::prompt_context_mode(
+                "Create a PPT for SAP PI upgrade from netweaver 7.5 SP27 to SP34"
+            ),
+            PromptContextMode::Fresh
+        );
+    }
+
+    #[test]
+    fn context_modes_require_explicit_profile_knowledge_or_follow_up_language() {
+        assert_eq!(
+            RefractiveEngine::prompt_context_mode("What do you remember about me?"),
+            PromptContextMode::PersonalProfile
+        );
+        assert_eq!(
+            RefractiveEngine::prompt_context_mode("Use my knowledge base for this report"),
+            PromptContextMode::RequestedKnowledge
+        );
+        assert_eq!(
+            RefractiveEngine::prompt_context_mode("Do the same for the test system"),
+            PromptContextMode::FollowUp
+        );
+    }
+
+    #[test]
+    fn fresh_requests_only_name_project_nodes_when_the_name_is_in_the_request() {
+        assert!(!RefractiveEngine::node_is_explicitly_named(
+            "Create a SAP PI upgrade deck",
+            "PrivateOpsKit (operations platform)"
+        ));
+        assert!(RefractiveEngine::node_is_explicitly_named(
+            "Summarize PrivateOpsKit",
+            "PrivateOpsKit (operations platform)"
+        ));
     }
 
     // ─── SimdScorer ─────────────────────────────────────────────────────────
@@ -1194,7 +1413,7 @@ mod tests {
             connections: vec![],
         };
         let block = RefractiveEngine::build_profile_block(&[node]);
-        assert!(block.contains("Standing profile"));
+        assert!(block.contains("User profile requested"));
         assert!(block.contains("Manish (owner)"));
         assert!(block.contains("Solo builder of 8 products"));
     }

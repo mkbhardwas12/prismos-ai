@@ -48,7 +48,7 @@ export type WorkflowDecision =
       kind: "routing";
       lane: WorkflowLane;
       auto_swapped: boolean;
-      reason_code: "configured_model" | "capability_match" | "requested_model_kept";
+      basis: "configured_model" | "capability_match" | "requested_model_kept";
     }
   | {
       kind: "criteria";
@@ -168,6 +168,24 @@ export interface GraphSnapshot {
   nodes: SpectrumNode[];
   edges: SpectrumEdge[];
   stats: GraphMetrics;
+  view?: GraphViewMetadata;
+}
+
+export interface GraphViewMetadata {
+  total_node_count: number;
+  total_edge_count: number;
+  shown_node_count: number;
+  shown_edge_count: number;
+  summarized_suggestion_count: number;
+  omitted_due_to_limit: number;
+}
+
+/** Bounded audit projection for the most recent answer; never model chain-of-thought. */
+export interface GraphAnswerTrace {
+  context_node_ids: string[];
+  reinforced_edge_ids: string[];
+  recorded_at: string;
+  validated: boolean;
 }
 
 export interface IntentQueryResult {
@@ -426,11 +444,15 @@ export interface ReviewRequest {
   status: "pending" | "approved" | "declined";
 }
 
-/** A file generated locally (Word/PowerPoint) and saved to disk */
+/** A file generated locally and saved to disk. */
 export interface GeneratedAttachment {
   path: string;
   filename: string;
-  kind: "docx" | "pptx";
+  kind: "docx" | "pptx" | "pdf" | "xlsx";
+  /** Whether the validated model outline or deterministic safe template was used. */
+  generationMode?: "model" | "safe_fallback";
+  /** User-facing explanation when the safe template was required. */
+  generationNotice?: string;
 }
 
 export interface RefractionAlternative {

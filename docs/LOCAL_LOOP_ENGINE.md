@@ -23,13 +23,18 @@ SECURITY GATE
     ↓
 JUDGE
   A sequential Critic call scores the candidate against the criteria and
-  returns bounded deficiencies. Invalid or unavailable judging is marked
-  ungraded instead of causing blind retries.
+  returns bounded deficiencies. Invalid or unavailable judging is an
+  ungraded rejection, never an approval.
     ↓
-  pass? ─── yes ──→ deterministic collaboration trace + persistence
+  pass? ─── yes ──→ QUALITY RELEASE GATE
     │
     no, budget remains, and score improves
-    └──────────────→ REFINE deficiencies into the next BUILD
+    └──────────────→ REFINE prior draft + deficiencies into the next BUILD
+
+QUALITY RELEASE GATE
+  A graded rejection cannot be overruled by deterministic role votes.
+  Operational/version-sensitive work also requires a valid grade.
+  Only validated, released responses may be persisted or drive follow-ons.
 ```
 
 ## Bounds and stopping rules
@@ -41,15 +46,51 @@ JUDGE
 - `PRISMOS_LOOP_MAX_ITERS` may set a value from 1 through 5; values outside that
   range are ignored.
 - A passing Critic verdict stops the loop.
-- A non-improving score stops the loop and retains the best candidate seen.
+- A non-improving score stops the loop and retains the best candidate only for
+  audit/selection; a graded rejection is not released to the user.
 - A Sentinel veto stops immediately.
 - A first BUILD inference failure is returned as a typed failure. A later BUILD
   failure retains the best earlier candidate.
 - If the Critic is unavailable or its response is invalid, the result is
-  explicitly ungraded and the loop stops instead of inventing validation.
+  explicitly ungraded. Operational/version-sensitive output is held; a low-risk
+  best-effort answer may be shown but is not spoken, persisted, reinforced,
+  used for suggestions, or used to generate an alternative.
 
 These bounds limit latency and runaway retries. A model-generated grade is still
-an estimate, not proof that an answer is correct.
+an estimate, not proof that an answer is correct. Artifact generation adds a
+separate deterministic claim gate for unsupported citations, local paths,
+commands, versions/dates, and duration estimates.
+
+## Context isolation
+
+Private memory is not injected into every task. A self-contained request receives
+only explicitly named graph nodes and consented research excerpts that match the
+request. Pinned personal profile nodes are included only for an explicit
+identity/profile request; recent chat turns are included only for detected
+follow-ups; project-wide knowledge requires explicit project/knowledge wording.
+
+This prevents unrelated personal projects or earlier assistant mistakes from
+becoming apparent vendor sources in an external technical answer.
+
+## Spectrum Graph visibility
+
+The interactive graph uses a bounded presentation projection rather than a
+newest-first dump of the database. Generated proactive suggestions are
+summarized, durable/core/context knowledge is selected first, edges are limited
+to displayed endpoints, and the UI reports shown versus summarized/omitted
+records. Reading proactive suggestions is side-effect free; opening a dashboard
+must not create new memory nodes.
+
+The graph opens as labeled family hubs. Exploring a family is capped, searchable,
+and uses a consistent grammar: color is family, shape is node kind, border is
+lifecycle, line width is relationship strength, and focused arrows show stored
+direction. Project knowledge recognizes both `project-*` source IDs and the
+`project`/`project_chunk` types.
+
+`Trace last answer` highlights the bounded `context_nodes` and
+`edges_reinforced` receipts returned for the most recent response. This is an
+audit view of recorded context and memory changes, not a verbatim transcript of
+agent messages or model chain-of-thought.
 
 ## Model routing
 
@@ -113,6 +154,15 @@ Tests should continue to cover:
 
 - bounded planner and critic parsing;
 - pass, iteration-cap, stuck, Sentinel-veto, and unavailable-model paths;
+- graded quality rejection overriding role-vote consensus;
+- zero persistence and follow-on generation for unvalidated output;
+- context isolation for self-contained, follow-up, project, and profile requests;
+- explicit Word/PPT/PDF/Excel routing to actual `.docx`, `.pptx`, `.pdf`, and
+  `.xlsx` artifacts;
+- JSON-mode artifact authoring, complete-object extraction, typed shape checks,
+  and the deterministic safe-template path for malformed or truncated output;
+- deterministic rejection or safe replacement of unsupported operational claims
+  in artifacts;
 - request/model identity propagation across Planner, Reasoner, and Critic calls;
 - prompt-injection separation for user intent, retrieved context, criteria, and
   candidate text;

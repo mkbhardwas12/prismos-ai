@@ -2,14 +2,14 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest, TextBackend } from "../types";
+import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest, TextBackend, GraphAnswerTrace } from "../types";
 import { detectDocRequest, generateDocument } from "../lib/docGen";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 import { DEFAULT_MODEL } from "../lib/config";
 
 interface UseChatOptions {
   settings: AppSettings;
-  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => void;
+  onIntentProcessed: (agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null, graphTrace?: GraphAnswerTrace) => void;
   clearLiveSteps: (taskId?: string) => void;
   voiceEnabled: boolean;
   voiceSpeak: (text: string) => void;
@@ -154,6 +154,13 @@ export async function withRetry<T>(
     }
   }
   throw new Error("Unreachable");
+}
+
+/** Optional enrichment must never keep a released answer in the loading state. */
+function runInBackground(label: string, task: () => Promise<void>): void {
+  void task().catch((error) => {
+    console.warn(`[${label}] Background task failed:`, error);
+  });
 }
 
 /**
@@ -341,7 +348,7 @@ export function useChat({
         setMessages((prev) => [...prev, aiMsg]);
 
         onIntentProcessed("Document Analyst");
-        await refreshSuggestions(input, docMsgId);
+        runInBackground("Document suggestions", () => refreshSuggestions(input, docMsgId));
 
       } else if (imageData) {
         // ── Vision path: Smart Model Routing (Phase 6) ──
@@ -384,7 +391,7 @@ export function useChat({
         };
         setMessages((prev) => [...prev, aiMsg]);
         onIntentProcessed("Vision");
-        await refreshSuggestions(input, aiMsg.id);
+        runInBackground("Vision suggestions", () => refreshSuggestions(input, aiMsg.id));
 
       } else {
         // ── Project review path (gated, READ-ONLY) ──
@@ -441,9 +448,9 @@ export function useChat({
           return;
         }
 
-        // ── Document / presentation generation path ──
-        // If the user asks to create a Word doc or PowerPoint, produce a real
-        // file locally instead of just answering in chat.
+        // ── Local artifact generation path ──
+        // Create a real Word, PowerPoint, PDF, or Excel file instead of merely
+        // printing an outline into chat.
         const docKind = detectDocRequest(input);
         if (docKind) {
           setProcessingPhase("Checking Ollama connection…");
@@ -463,19 +470,33 @@ export function useChat({
             includeReasoning,
           });
 
-          const kindLabel = docKind === "pptx" ? "PowerPoint presentation" : "Word document";
+          const kindLabel = {
+            pptx: "PowerPoint presentation",
+            docx: "Word document",
+            pdf: "PDF document",
+            xlsx: "Excel workbook",
+          }[docKind];
+          const agentLabel = {
+            pptx: "Presentation Builder",
+            docx: "Document Writer",
+            pdf: "PDF Publisher",
+            xlsx: "Workbook Builder",
+          }[docKind];
           const reasoningNote = includeReasoning ? " It ends with a Decision Record covering choices, assumptions, and verification limits." : "";
+          const fallbackNote = attachment.generationNotice
+            ? `\n\n⚠️ ${attachment.generationNotice}`
+            : "";
           const aiMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",
-            content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it locally.${reasoningNote}\n\n───\n📎 ${docKind.toUpperCase()} · generated on this device`,
+            content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it locally.${reasoningNote}${fallbackNote}\n\n───\n📎 ${docKind.toUpperCase()} · generated on this device`,
             timestamp: new Date(),
-            agent: docKind === "pptx" ? "Presentation Builder" : "Document Writer",
+            agent: agentLabel,
             attachment,
           };
           setMessages((prev) => [...prev, aiMsg]);
           onIntentProcessed(aiMsg.agent);
-          await refreshSuggestions(input, aiMsg.id);
+          runInBackground("Artifact suggestions", () => refreshSuggestions(input, aiMsg.id));
           return;
         }
 
@@ -500,10 +521,14 @@ export function useChat({
         const timeSec = result.processing_time_ms
           ? `${(result.processing_time_ms / 1000).toFixed(1)}s`
           : "";
+        const adaptiveFastPath =
+          result.judge_graded === false && result.max_iterations === 1;
         const qualityUnapproved =
           result.judge_graded === false ||
           (result.judge_graded === true && result.validated !== true);
-        const consensusIcon = qualityUnapproved
+        const consensusIcon = adaptiveFastPath
+          ? "⚡"
+          : qualityUnapproved
           ? "⚠️"
           : result.collaboration?.consensus_approved
             ? "✅"
@@ -511,7 +536,9 @@ export function useChat({
         // Goal-loop badge distinguishes a real accepted model grade from a
         // rejected/unvalidated grade and from the availability fallback.
         const loopBadge =
-          result.judge_graded === false
+          adaptiveFastPath
+            ? " · adaptive single pass"
+            : result.judge_graded === false
             ? " · ⚠ unjudged best-effort"
             : result.validated === true
             ? ` · ✓ judged${result.iterations_used && result.iterations_used > 1 ? ` (${result.iterations_used} passes)` : ""}`
@@ -523,6 +550,8 @@ export function useChat({
           : "";
 
         const aiContent = result.response + metaLine;
+        const responseCanDriveSideEffects =
+          result.validated === true && result.collaboration?.consensus_approved !== false;
         const aiMsg: Message = {
           id: crypto.randomUUID(),
           role: "ai",
@@ -543,26 +572,40 @@ export function useChat({
         };
         setMessages((prev) => [...prev, aiMsg]);
 
-        if (voiceEnabled) {
+        if (voiceEnabled && responseCanDriveSideEffects) {
           voiceSpeak(result.response);
         }
 
-        onIntentProcessed(result.agent_used, result.collaboration ?? undefined, result.collaboration?.debate ?? null);
+        onIntentProcessed(
+          result.agent_used,
+          result.collaboration ?? undefined,
+          result.collaboration?.debate ?? null,
+          {
+            context_node_ids: result.context_nodes ?? [],
+            reinforced_edge_ids: result.edges_reinforced ?? [],
+            recorded_at: new Date().toISOString(),
+            validated: result.validated === true,
+          },
+        );
 
-        // Alive Graph: auto-strengthen related edges
-        try {
-          const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
-          if (keywords.length > 0) {
-            await invoke("strengthen_related_edges", { keywords });
-          }
-        } catch { /* non-critical */ }
+        if (responseCanDriveSideEffects) {
+          // Only a validated, released response may strengthen memory, seed
+          // suggestions, or become the source for another generated variant.
+          runInBackground("Post-response enrichment", async () => {
+            try {
+              const keywords = input.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+              if (keywords.length > 0) {
+                await invoke("strengthen_related_edges", { keywords });
+              }
+            } catch { /* graph reinforcement is optional */ }
 
-        await refreshSuggestions(input, aiMsg.id);
+            await refreshSuggestions(input, aiMsg.id);
 
-        // ── Prism Refraction: generate alternative perspective in background ──
-        // Non-blocking — fires after the primary response is already displayed.
-        // The alternative appears as an expandable "See another perspective" option.
-        generateRefractionAlternative(input, aiMsg.id);
+            // The alternative perspective is optional and may arrive after the
+            // composer is ready for the next turn.
+            await generateRefractionAlternative(input, aiMsg.id);
+          });
+        }
       }
     } catch (err) {
       setMessages((prev) => [...prev, buildErrorMessage(err, settings)]);
@@ -741,12 +784,15 @@ function buildErrorMessage(err: unknown, settings: AppSettings): Message {
   const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
   const isModelError = errorStr.includes("model") || errorStr.includes("not found");
   const isVisionModelError = errorStr.toLowerCase().includes("vision-capable model");
+  const isArtifactError = /artifact|presentation spec|document spec|workbook spec|pdf spec/i.test(errorStr);
 
   let content: string;
   if (inferenceFailure?.backend === "aivm_loopback") {
     content = `⚠️ The selected storage-native model did not complete.\n\n${errorStr}\n\nNo second legacy or Ollama text-inference attempt, alternate text model, or online text service was run after this failure. Earlier embedding or retrieval work may already have used the fixed-loopback Ollama service. Your text-generation request was stopped without fallback.`;
   } else if (isVisionModelError) {
     content = `⚠️ No installed vision-capable model is available.\n\n${errorStr}\n\nPrismOS stopped before sending the image to a text-only model.`;
+  } else if (isArtifactError) {
+    content = `⚠️ The requested file could not be created.\n\n${errorStr}\n\nNo completed artifact was reported. PrismOS validates the outline before writing and will not publish a malformed or ungrounded file.`;
   } else if (isOllamaError) {
     content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${recoveryModel}\n  3. ollama serve\n\nPrivate inference always connects to:\n  http://localhost:11434\n\nThe configurable Ollama URL in Settings is only for model management/status and does not redirect private prompts. Then try your intent again.`;
   } else if (isModelError) {

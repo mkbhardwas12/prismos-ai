@@ -1,15 +1,16 @@
-// Document Generator — Local Word (.docx) + PowerPoint (.pptx) creation
+// Artifact Generator — local Word, PowerPoint, PDF, and Excel creation
 //
-// When the user asks the local chatbot to "create a Word document" or "make a
-// PowerPoint", the LLM produces a structured JSON spec (title + sections/slides)
-// and this module turns it into a real Office Open XML file on disk. This renderer
-// performs no network request; inference and model-download boundaries are handled
-// separately. Files are written to the user's Downloads folder when available.
+// The LLM produces a bounded structured spec and this module turns it into a
+// real local file. Renderers perform no network request; inference and model-
+// download boundaries are handled separately. Files are written to the user's
+// Downloads folder when available.
 //
 // - .docx is built with the `docx-rs` crate.
 // - .pptx is assembled directly as an Office Open XML package (a zip of XML
 //   parts) since there is no mature local pptx-writer crate. The package is a
 //   minimal-but-valid deck that PowerPoint, Keynote and LibreOffice all open.
+// - .pdf is emitted as a bounded PDF 1.4 document using built-in fonts.
+// - .xlsx is assembled as an Office Open XML workbook with inline strings.
 
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -86,12 +87,35 @@ pub struct DeckSpec {
     pub reasoning: Option<ReasoningAppendix>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpreadsheetSheet {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub headers: Vec<String>,
+    #[serde(default)]
+    pub rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpreadsheetSpec {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub subtitle: String,
+    #[serde(default)]
+    pub sheets: Vec<SpreadsheetSheet>,
+    /// Optional decision record (rendered as a final worksheet).
+    #[serde(default)]
+    pub reasoning: Option<ReasoningAppendix>,
+}
+
 /// Result returned to the frontend after a file is written.
 #[derive(Debug, Clone, Serialize)]
 pub struct GeneratedFile {
     pub path: String,
     pub filename: String,
-    pub kind: String, // "docx" | "pptx"
+    pub kind: String, // "docx" | "pptx" | "pdf" | "xlsx"
 }
 
 pub const MAX_SPEC_JSON_BYTES: usize = 256 * 1024;
@@ -211,6 +235,76 @@ pub fn validate_deck_spec(spec: &DeckSpec) -> Result<(), String> {
             4_000,
             &mut total,
         )?;
+    }
+    validate_decision_record(spec.reasoning.as_ref(), &mut total)
+}
+
+pub fn validate_spreadsheet_spec(spec: &SpreadsheetSpec) -> Result<(), String> {
+    if spec.title.trim().is_empty() {
+        return Err("Workbook title is required".into());
+    }
+    if spec.sheets.is_empty() || spec.sheets.len() > 8 {
+        return Err("Workbook must contain 1 to 8 worksheets".into());
+    }
+    let mut total = 0usize;
+    check_text(&spec.title, "Workbook title", 240, &mut total)?;
+    check_text(&spec.subtitle, "Workbook subtitle", 500, &mut total)?;
+    for (sheet_index, sheet) in spec.sheets.iter().enumerate() {
+        if sheet.name.trim().is_empty() {
+            return Err(format!("Worksheet {} name is required", sheet_index + 1));
+        }
+        if sheet.headers.is_empty() || sheet.headers.len() > 40 {
+            return Err(format!(
+                "Worksheet {} must contain 1 to 40 columns",
+                sheet_index + 1
+            ));
+        }
+        if sheet.rows.len() > 1_000 {
+            return Err(format!(
+                "Worksheet {} exceeds the 1000-row limit",
+                sheet_index + 1
+            ));
+        }
+        check_text(
+            &sheet.name,
+            &format!("Worksheet {} name", sheet_index + 1),
+            100,
+            &mut total,
+        )?;
+        for (column_index, header) in sheet.headers.iter().enumerate() {
+            check_text(
+                header,
+                &format!(
+                    "Worksheet {} column {} header",
+                    sheet_index + 1,
+                    column_index + 1
+                ),
+                500,
+                &mut total,
+            )?;
+        }
+        for (row_index, row) in sheet.rows.iter().enumerate() {
+            if row.len() > sheet.headers.len() {
+                return Err(format!(
+                    "Worksheet {} row {} has more cells than headers",
+                    sheet_index + 1,
+                    row_index + 1
+                ));
+            }
+            for (column_index, cell) in row.iter().enumerate() {
+                check_text(
+                    cell,
+                    &format!(
+                        "Worksheet {} row {} column {}",
+                        sheet_index + 1,
+                        row_index + 1,
+                        column_index + 1
+                    ),
+                    2_000,
+                    &mut total,
+                )?;
+            }
+        }
     }
     validate_decision_record(spec.reasoning.as_ref(), &mut total)
 }
@@ -872,6 +966,534 @@ const THEME1: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </a:themeElements>
 </a:theme>"#;
 
+// ─── PDF (.pdf) ─────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct PdfLine {
+    text: String,
+    size: f32,
+    bold: bool,
+    gap_after: f32,
+}
+
+fn pdf_ascii(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            '\u{2013}' | '\u{2014}' | '\u{2212}' => '-',
+            '\u{2018}' | '\u{2019}' => '\'',
+            '\u{201c}' | '\u{201d}' => '"',
+            '\u{2022}' | '\u{25aa}' => '-',
+            '\n' | '\r' | '\t' => ' ',
+            value if value.is_ascii() && !value.is_ascii_control() => value,
+            _ => '?',
+        })
+        .collect()
+}
+
+fn pdf_escape(value: &str) -> String {
+    pdf_ascii(value)
+        .replace('\\', "\\\\")
+        .replace('(', "\\(")
+        .replace(')', "\\)")
+}
+
+fn wrap_text(value: &str, maximum_characters: usize) -> Vec<String> {
+    let words = value.split_whitespace().collect::<Vec<_>>();
+    if words.is_empty() {
+        return vec![String::new()];
+    }
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in words {
+        let word_length = word.chars().count();
+        if word_length > maximum_characters {
+            if !current.is_empty() {
+                lines.push(std::mem::take(&mut current));
+            }
+            let characters = word.chars().collect::<Vec<_>>();
+            for chunk in characters.chunks(maximum_characters) {
+                lines.push(chunk.iter().collect());
+            }
+            continue;
+        }
+        let projected = current.chars().count() + usize::from(!current.is_empty()) + word_length;
+        if projected > maximum_characters && !current.is_empty() {
+            lines.push(std::mem::take(&mut current));
+        }
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
+fn push_wrapped_pdf_lines(
+    output: &mut Vec<PdfLine>,
+    value: &str,
+    maximum_characters: usize,
+    size: f32,
+    bold: bool,
+    gap_after: f32,
+) {
+    let wrapped = wrap_text(value, maximum_characters);
+    let final_index = wrapped.len().saturating_sub(1);
+    for (index, text) in wrapped.into_iter().enumerate() {
+        output.push(PdfLine {
+            text,
+            size,
+            bold,
+            gap_after: if index == final_index { gap_after } else { 2.0 },
+        });
+    }
+}
+
+fn pdf_lines(spec: &WordSpec) -> Vec<PdfLine> {
+    let mut lines = Vec::new();
+    push_wrapped_pdf_lines(&mut lines, &spec.title, 48, 22.0, true, 10.0);
+    if !spec.subtitle.trim().is_empty() {
+        push_wrapped_pdf_lines(&mut lines, &spec.subtitle, 78, 12.0, false, 18.0);
+    }
+    for section in &spec.sections {
+        if !section.heading.trim().is_empty() {
+            push_wrapped_pdf_lines(&mut lines, &section.heading, 66, 15.0, true, 8.0);
+        }
+        for paragraph in &section.paragraphs {
+            push_wrapped_pdf_lines(&mut lines, paragraph, 92, 10.5, false, 8.0);
+        }
+        for bullet in &section.bullets {
+            push_wrapped_pdf_lines(&mut lines, &format!("- {bullet}"), 88, 10.5, false, 4.0);
+        }
+        lines.push(PdfLine {
+            text: String::new(),
+            size: 7.0,
+            bold: false,
+            gap_after: 4.0,
+        });
+    }
+    if let Some(reasoning) = spec.reasoning.as_ref().filter(|record| !record.is_empty()) {
+        push_wrapped_pdf_lines(&mut lines, "Decision Record", 66, 15.0, true, 8.0);
+        if !reasoning.verdict.trim().is_empty() {
+            push_wrapped_pdf_lines(&mut lines, &reasoning.verdict, 88, 10.5, false, 5.0);
+        }
+        for point in &reasoning.rationale {
+            push_wrapped_pdf_lines(&mut lines, &format!("- {point}"), 88, 10.5, false, 4.0);
+        }
+    }
+    lines
+}
+
+fn write_pdf(mut file: std::fs::File, spec: &WordSpec) -> Result<(), String> {
+    let mut pages: Vec<Vec<(PdfLine, f32)>> = vec![Vec::new()];
+    let mut y = 738.0_f32;
+    for line in pdf_lines(spec) {
+        let height = line.size * 1.35 + line.gap_after;
+        if y - height < 54.0 && !pages.last().is_some_and(Vec::is_empty) {
+            pages.push(Vec::new());
+            y = 738.0;
+        }
+        pages
+            .last_mut()
+            .expect("PDF always has a page")
+            .push((line, y));
+        y -= height;
+    }
+
+    let page_count = pages.len();
+    let regular_font_id = 3 + page_count * 2;
+    let bold_font_id = regular_font_id + 1;
+    let object_count = bold_font_id;
+    let mut output = Vec::<u8>::new();
+    output.extend_from_slice(b"%PDF-1.4\n%PrismOS\n");
+    let mut offsets = vec![0usize; object_count + 1];
+
+    let mut append_object = |id: usize, body: &[u8]| {
+        offsets[id] = output.len();
+        output.extend_from_slice(format!("{id} 0 obj\n").as_bytes());
+        output.extend_from_slice(body);
+        output.extend_from_slice(b"\nendobj\n");
+    };
+
+    append_object(1, b"<< /Type /Catalog /Pages 2 0 R >>");
+    let kids = (0..page_count)
+        .map(|index| format!("{} 0 R", 3 + index * 2))
+        .collect::<Vec<_>>()
+        .join(" ");
+    append_object(
+        2,
+        format!("<< /Type /Pages /Kids [{kids}] /Count {page_count} >>").as_bytes(),
+    );
+
+    for (page_index, lines) in pages.iter().enumerate() {
+        let page_id = 3 + page_index * 2;
+        let content_id = page_id + 1;
+        append_object(
+            page_id,
+            format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {regular_font_id} 0 R /F2 {bold_font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+            )
+            .as_bytes(),
+        );
+        let mut stream = String::new();
+        for (line, line_y) in lines {
+            if line.text.is_empty() {
+                continue;
+            }
+            let font = if line.bold { "F2" } else { "F1" };
+            stream.push_str(&format!(
+                "BT /{font} {:.1} Tf 0.10 0.14 0.24 rg 54 {:.1} Td ({}) Tj ET\n",
+                line.size,
+                line_y,
+                pdf_escape(&line.text)
+            ));
+        }
+        let stream_body = format!(
+            "<< /Length {} >>\nstream\n{}endstream",
+            stream.len(),
+            stream
+        );
+        append_object(content_id, stream_body.as_bytes());
+    }
+    append_object(
+        regular_font_id,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    );
+    append_object(
+        bold_font_id,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    );
+
+    let xref_offset = output.len();
+    output.extend_from_slice(format!("xref\n0 {}\n", object_count + 1).as_bytes());
+    output.extend_from_slice(b"0000000000 65535 f \n");
+    for offset in offsets.iter().skip(1) {
+        output.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    output.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",
+            object_count + 1
+        )
+        .as_bytes(),
+    );
+    file.write_all(&output)
+        .map_err(|error| format!("Failed to write PDF: {error}"))?;
+    file.flush()
+        .map_err(|error| format!("Failed to flush PDF: {error}"))
+}
+
+pub fn generate_pdf(spec: &WordSpec) -> Result<GeneratedFile, String> {
+    generate_pdf_in_dir(spec, &output_dir())
+}
+
+fn generate_pdf_in_dir(spec: &WordSpec, directory: &Path) -> Result<GeneratedFile, String> {
+    validate_word_spec(spec)?;
+    let metadata = std::fs::symlink_metadata(directory)
+        .map_err(|error| format!("Could not inspect PDF output directory: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("PDF output must be a real, non-symlink directory".into());
+    }
+    let stem = safe_stem(&spec.title, "document");
+    let (path, file) = create_unique_file_in_dir(directory, &stem, "pdf")?;
+    write_pdf(file, spec)?;
+    Ok(GeneratedFile {
+        filename: path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        path: path.to_string_lossy().to_string(),
+        kind: "pdf".into(),
+    })
+}
+
+// ─── Excel (.xlsx) ──────────────────────────────────────────────────────────
+
+fn xlsx_column_name(mut index: usize) -> String {
+    let mut output = String::new();
+    loop {
+        output.insert(0, (b'A' + (index % 26) as u8) as char);
+        if index < 26 {
+            break;
+        }
+        index = index / 26 - 1;
+    }
+    output
+}
+
+fn safe_sheet_name(value: &str, fallback: &str) -> String {
+    let cleaned = value
+        .chars()
+        .map(|character| {
+            if matches!(character, '[' | ']' | ':' | '*' | '?' | '/' | '\\')
+                || character.is_control()
+            {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let trimmed = cleaned.trim().trim_matches('\'');
+    let candidate = if trimmed.is_empty() {
+        fallback
+    } else {
+        trimmed
+    };
+    candidate.chars().take(31).collect()
+}
+
+fn unique_sheet_names(sheets: &[SpreadsheetSheet]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::with_capacity(sheets.len());
+    for (index, sheet) in sheets.iter().enumerate() {
+        let fallback = format!("Sheet {}", index + 1);
+        let base = safe_sheet_name(&sheet.name, &fallback);
+        let mut candidate = base.clone();
+        let mut sequence = 2usize;
+        while names
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&candidate))
+        {
+            let suffix = format!(" {sequence}");
+            let keep = 31usize.saturating_sub(suffix.chars().count());
+            candidate = format!("{}{}", base.chars().take(keep).collect::<String>(), suffix);
+            sequence += 1;
+        }
+        names.push(candidate);
+    }
+    names
+}
+
+fn xlsx_cell(reference: &str, value: &str, style: usize) -> String {
+    format!(
+        r#"<c r="{reference}" t="inlineStr" s="{style}"><is><t xml:space="preserve">{}</t></is></c>"#,
+        xml_escape(value)
+    )
+}
+
+fn worksheet_xml(sheet: &SpreadsheetSheet, title: &str, subtitle: &str) -> String {
+    let last_column = xlsx_column_name(sheet.headers.len().saturating_sub(1));
+    let final_row = 4 + sheet.rows.len().max(1);
+    let mut widths = sheet
+        .headers
+        .iter()
+        .map(|header| header.chars().count())
+        .collect::<Vec<_>>();
+    for row in &sheet.rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(cell.chars().count());
+        }
+    }
+    let columns = widths
+        .iter()
+        .enumerate()
+        .map(|(index, width)| {
+            format!(
+                r#"<col min="{}" max="{}" width="{}" customWidth="1"/>"#,
+                index + 1,
+                index + 1,
+                (*width + 3).clamp(12, 45)
+            )
+        })
+        .collect::<String>();
+
+    let headers = sheet
+        .headers
+        .iter()
+        .enumerate()
+        .map(|(index, header)| xlsx_cell(&format!("{}4", xlsx_column_name(index)), header, 1))
+        .collect::<String>();
+    let rows = sheet
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(row_index, row)| {
+            let row_number = row_index + 5;
+            let cells = row
+                .iter()
+                .enumerate()
+                .map(|(column_index, value)| {
+                    xlsx_cell(
+                        &format!("{}{row_number}", xlsx_column_name(column_index)),
+                        value,
+                        0,
+                    )
+                })
+                .collect::<String>();
+            format!(r#"<row r="{row_number}">{cells}</row>"#)
+        })
+        .collect::<String>();
+    let merges = if sheet.headers.len() > 1 {
+        format!(
+            r#"<mergeCells count="2"><mergeCell ref="A1:{last_column}1"/><mergeCell ref="A2:{last_column}2"/></mergeCells>"#
+        )
+    } else {
+        String::new()
+    };
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<dimension ref="A1:{last_column}{final_row}"/>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/><cols>{columns}</cols>
+<sheetData>
+<row r="1" ht="28" customHeight="1">{}</row>
+<row r="2" ht="22" customHeight="1">{}</row>
+<row r="4" ht="24" customHeight="1">{headers}</row>
+{rows}
+</sheetData>{merges}
+<autoFilter ref="A4:{last_column}{final_row}"/>
+</worksheet>"#,
+        xlsx_cell("A1", title, 2),
+        xlsx_cell("A2", subtitle, 3),
+    )
+}
+
+fn workbook_xml(names: &[String]) -> String {
+    let sheets = names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            format!(
+                r#"<sheet name="{}" sheetId="{}" r:id="rId{}"/>"#,
+                xml_escape(name),
+                index + 1,
+                index + 1
+            )
+        })
+        .collect::<String>();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>{sheets}</sheets></workbook>"#
+    )
+}
+
+fn workbook_rels_xml(sheet_count: usize) -> String {
+    let sheets = (0..sheet_count)
+        .map(|index| {
+            format!(
+                r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{}.xml"/>"#,
+                index + 1,
+                index + 1
+            )
+        })
+        .collect::<String>();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{sheets}<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        sheet_count + 1
+    )
+}
+
+fn xlsx_content_types(sheet_count: usize) -> String {
+    let sheets = (1..=sheet_count)
+        .map(|index| {
+            format!(
+                r#"<Override PartName="/xl/worksheets/sheet{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>"#
+            )
+        })
+        .collect::<String>();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>{sheets}
+</Types>"#
+    )
+}
+
+const XLSX_ROOT_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#;
+
+const XLSX_STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="3"><font><sz val="11"/><name val="Aptos"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Aptos"/></font><font><b/><color rgb="FF1E293B"/><sz val="16"/><name val="Aptos Display"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD1D5DB"/></left><right style="thin"><color rgb="FFD1D5DB"/></right><top style="thin"><color rgb="FFD1D5DB"/></top><bottom style="thin"><color rgb="FFD1D5DB"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1"/></xf></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"#;
+
+fn write_xlsx(mut file: std::fs::File, spec: &SpreadsheetSpec) -> Result<(), String> {
+    use zip::write::SimpleFileOptions;
+
+    let mut sheets = spec.sheets.clone();
+    if let Some(reasoning) = spec.reasoning.as_ref().filter(|record| !record.is_empty()) {
+        let mut rows = Vec::new();
+        if !reasoning.verdict.trim().is_empty() {
+            rows.push(vec!["Verdict".into(), reasoning.verdict.clone()]);
+        }
+        rows.extend(
+            reasoning
+                .rationale
+                .iter()
+                .map(|point| vec!["Rationale".into(), point.clone()]),
+        );
+        sheets.push(SpreadsheetSheet {
+            name: "Decision Record".into(),
+            headers: vec!["Type".into(), "Detail".into()],
+            rows,
+        });
+    }
+    let names = unique_sheet_names(&sheets);
+    let mut zip = zip::ZipWriter::new(&mut file);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let mut write = |name: &str, value: &str| -> Result<(), String> {
+        zip.start_file(name, options)
+            .map_err(|error| format!("Could not create XLSX entry {name}: {error}"))?;
+        zip.write_all(value.as_bytes())
+            .map_err(|error| format!("Could not write XLSX entry {name}: {error}"))
+    };
+    write("[Content_Types].xml", &xlsx_content_types(sheets.len()))?;
+    write("_rels/.rels", XLSX_ROOT_RELS)?;
+    write("xl/workbook.xml", &workbook_xml(&names))?;
+    write(
+        "xl/_rels/workbook.xml.rels",
+        &workbook_rels_xml(sheets.len()),
+    )?;
+    write("xl/styles.xml", XLSX_STYLES)?;
+    for (index, sheet) in sheets.iter().enumerate() {
+        write(
+            &format!("xl/worksheets/sheet{}.xml", index + 1),
+            &worksheet_xml(sheet, &spec.title, &spec.subtitle),
+        )?;
+    }
+    zip.finish()
+        .map_err(|error| format!("Could not finalize XLSX: {error}"))?;
+    Ok(())
+}
+
+pub fn generate_xlsx(spec: &SpreadsheetSpec) -> Result<GeneratedFile, String> {
+    generate_xlsx_in_dir(spec, &output_dir())
+}
+
+fn generate_xlsx_in_dir(spec: &SpreadsheetSpec, directory: &Path) -> Result<GeneratedFile, String> {
+    validate_spreadsheet_spec(spec)?;
+    let metadata = std::fs::symlink_metadata(directory)
+        .map_err(|error| format!("Could not inspect workbook output directory: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Workbook output must be a real, non-symlink directory".into());
+    }
+    let stem = safe_stem(&spec.title, "workbook");
+    let (path, file) = create_unique_file_in_dir(directory, &stem, "xlsx")?;
+    write_xlsx(file, spec)?;
+    Ok(GeneratedFile {
+        filename: path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        path: path.to_string_lossy().to_string(),
+        kind: "xlsx".into(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -944,6 +1566,56 @@ mod tests {
         let meta = std::fs::metadata(&out.path).expect("file exists");
         assert!(meta.len() > 0);
         let _ = std::fs::remove_file(&out.path);
+    }
+
+    #[test]
+    fn pdf_generates_a_valid_bounded_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let spec = WordSpec {
+            title: "Executive Upgrade Plan".into(),
+            subtitle: "Verification-first".into(),
+            sections: vec![WordSection {
+                heading: "Scope".into(),
+                paragraphs: vec!["DEV to Test to Stage to Prod".into()],
+                bullets: vec!["Verify official sources".into()],
+            }],
+            reasoning: None,
+        };
+        let out = generate_pdf_in_dir(&spec, directory.path()).expect("PDF generation");
+        let bytes = std::fs::read(&out.path).expect("read PDF");
+        assert!(bytes.starts_with(b"%PDF-1.4"));
+        assert!(bytes.ends_with(b"%%EOF\n"));
+        assert!(String::from_utf8_lossy(&bytes).contains("Executive Upgrade Plan"));
+        assert_eq!(out.kind, "pdf");
+    }
+
+    #[test]
+    fn xlsx_generates_string_only_workbook() {
+        let directory = tempfile::tempdir().unwrap();
+        let spec = SpreadsheetSpec {
+            title: "Landscape Tracker".into(),
+            subtitle: "DEV to Prod".into(),
+            sheets: vec![SpreadsheetSheet {
+                name: "Landscape Plan".into(),
+                headers: vec!["Landscape".into(), "Status".into()],
+                rows: vec![vec!["DEV".into(), "=2+2".into()]],
+            }],
+            reasoning: None,
+        };
+        let out = generate_xlsx_in_dir(&spec, directory.path()).expect("XLSX generation");
+        let file = std::fs::File::open(&out.path).expect("open XLSX");
+        let mut archive = zip::ZipArchive::new(file).expect("valid XLSX zip");
+        let mut worksheet = String::new();
+        archive
+            .by_name("xl/worksheets/sheet1.xml")
+            .expect("worksheet XML")
+            .read_to_string(&mut worksheet)
+            .expect("read worksheet XML");
+        assert!(worksheet.contains("Landscape Tracker"));
+        assert!(worksheet.contains("=2+2"));
+        assert!(!worksheet.contains("<f>"));
+        assert!(worksheet.contains("t=\"inlineStr\""));
+        assert_eq!(out.kind, "xlsx");
     }
 
     #[test]

@@ -134,6 +134,7 @@ command groups cover:
 - Browser-provided speech controls; no production Whisper transcription IPC
 - Approval-gated Project Knowledge and bounded retrieval
 - Ephemeral one-off analysis for bounded DOCX, PPTX, and allowlisted UTF-8 text/code/CSV/TSV; PDF, XLSX, and legacy XLS parsing fail closed
+- Bounded local DOCX, PPTX, PDF, and XLSX generation with JSON-mode authoring, typed pre-write validation, grounding/request-coverage gates, and a disclosed deterministic safe fallback
 - Vision model routing and inference
 - Encrypted portable export plus full-database private-vault recovery tooling;
   a clean-profile operator restore drill remains required before sole reliance

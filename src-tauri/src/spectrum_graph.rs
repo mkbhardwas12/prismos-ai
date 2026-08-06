@@ -56,6 +56,22 @@ pub struct GraphSnapshot {
     pub nodes: Vec<SpectrumNode>,
     pub edges: Vec<SpectrumEdge>,
     pub stats: GraphMetrics,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<GraphViewMetadata>,
+}
+
+/// Explains how a bounded UI snapshot relates to the complete local store.
+/// The graph view deliberately summarizes generated suggestions and may cap
+/// very large corpora; backups and retrieval continue to use the underlying
+/// records rather than this presentation projection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphViewMetadata {
+    pub total_node_count: usize,
+    pub total_edge_count: usize,
+    pub shown_node_count: usize,
+    pub shown_edge_count: usize,
+    pub summarized_suggestion_count: usize,
+    pub omitted_due_to_limit: usize,
 }
 
 /// Extended graph metrics
@@ -2581,6 +2597,8 @@ impl SpectrumGraph {
              JOIN nodes ns ON e.source_id = ns.id
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.08
+               AND ns.node_type != 'suggestion'
+               AND nt.node_type != 'suggestion'
                AND ns.label != nt.label
                AND SUBSTR(LOWER(ns.label), 1, 40) != SUBSTR(LOWER(nt.label), 1, 40)
              ORDER BY mom DESC LIMIT 6",
@@ -2719,6 +2737,7 @@ impl SpectrumGraph {
             "SELECT n.label, n.node_type, COALESCE(n.access_count, 0) as ac
              FROM nodes n
              WHERE COALESCE(n.access_count, 0) > 2
+               AND n.node_type != 'suggestion'
                AND n.id NOT IN (SELECT source_id FROM edges UNION SELECT target_id FROM edges)
              ORDER BY ac DESC LIMIT 1",
         )?;
@@ -2755,6 +2774,7 @@ impl SpectrumGraph {
                 "SELECT label, node_type, access_count
                  FROM nodes
                  WHERE access_count > 5
+                   AND node_type != 'suggestion'
                  ORDER BY access_count DESC LIMIT 1",
             )?;
             let top_node: Vec<(String, String, u32)> = stmt4
@@ -2797,7 +2817,8 @@ impl SpectrumGraph {
         Ok(suggestions)
     }
 
-    /// Store a proactive suggestion as a node in the graph for later recall.
+    /// Store a proactive suggestion only for an explicit future save action.
+    /// Read-only suggestion endpoints must never call this method.
     pub fn store_proactive_suggestion(
         &self,
         suggestion: &ProactiveSuggestion,
@@ -2914,6 +2935,133 @@ impl SpectrumGraph {
             nodes,
             edges,
             stats,
+            view: None,
+        })
+    }
+
+    /// Build the bounded, representative projection used by the interactive
+    /// map. Generated suggestion cards are not durable knowledge and used to
+    /// overwhelm the newest-first node limit, so the map summarizes them
+    /// instead of rendering hundreds of duplicate, disconnected dots.
+    pub fn get_visualization_graph(
+        &self,
+    ) -> Result<GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+        const NODE_LIMIT: usize = 500;
+
+        let total_node_count: usize =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM nodes", [], |row| row.get(0))?;
+        let total_edge_count: usize =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
+        let summarized_suggestion_count: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE node_type = 'suggestion'",
+            [],
+            |row| row.get(0),
+        )?;
+        let eligible_node_count = total_node_count.saturating_sub(summarized_suggestion_count);
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes
+             WHERE node_type != 'suggestion'
+             ORDER BY CASE COALESCE(layer, 'context')
+                        WHEN 'core' THEN 0
+                        WHEN 'context' THEN 1
+                        WHEN 'knowledge' THEN 2
+                        ELSE 3
+                      END,
+                      COALESCE(access_count, 0) DESC,
+                      updated_at DESC
+             LIMIT ?1",
+        )?;
+        let mut nodes: Vec<SpectrumNode> = stmt
+            .query_map(params![NODE_LIMIT as i64], |row| {
+                Ok(SpectrumNode {
+                    id: row.get(0)?,
+                    label: row.get(1)?,
+                    content: row.get(2)?,
+                    node_type: row.get(3)?,
+                    layer: row.get(4)?,
+                    access_count: row.get(5)?,
+                    last_accessed: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                    connections: vec![],
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let visible_ids: HashSet<String> = nodes.iter().map(|node| node.id.clone()).collect();
+        let edges: Vec<SpectrumEdge> = self
+            .get_all_edges()?
+            .into_iter()
+            .filter(|edge| {
+                visible_ids.contains(&edge.source_id) && visible_ids.contains(&edge.target_id)
+            })
+            .collect();
+
+        let mut connection_map: HashMap<String, Vec<String>> = HashMap::new();
+        for edge in &edges {
+            connection_map
+                .entry(edge.source_id.clone())
+                .or_default()
+                .push(edge.target_id.clone());
+            connection_map
+                .entry(edge.target_id.clone())
+                .or_default()
+                .push(edge.source_id.clone());
+        }
+        for node in &mut nodes {
+            node.connections = connection_map.remove(&node.id).unwrap_or_default();
+        }
+
+        let node_count = nodes.len();
+        let edge_count = edges.len();
+        let avg_edge_weight = if edge_count == 0 {
+            0.0
+        } else {
+            edges.iter().map(|edge| edge.weight).sum::<f64>() / edge_count as f64
+        };
+        let strongest_edge_weight = edges.iter().map(|edge| edge.weight).fold(0.0_f64, f64::max);
+        let mut facet_distribution = HashMap::new();
+        for node in &nodes {
+            *facet_distribution
+                .entry(node.node_type.clone())
+                .or_insert(0) += 1;
+        }
+        let most_connected_node = nodes
+            .iter()
+            .max_by_key(|node| node.connections.len())
+            .map(|node| node.label.clone());
+        let max_edges = if node_count > 1 {
+            node_count * (node_count - 1) / 2
+        } else {
+            1
+        };
+
+        Ok(GraphSnapshot {
+            nodes,
+            edges,
+            stats: GraphMetrics {
+                node_count,
+                edge_count,
+                avg_edge_weight,
+                strongest_edge_weight,
+                facet_distribution,
+                most_connected_node,
+                graph_density: edge_count as f64 / max_edges as f64,
+            },
+            view: Some(GraphViewMetadata {
+                total_node_count,
+                total_edge_count,
+                shown_node_count: node_count,
+                shown_edge_count: edge_count,
+                summarized_suggestion_count,
+                omitted_due_to_limit: eligible_node_count.saturating_sub(node_count),
+            }),
         })
     }
 
@@ -3035,6 +3183,7 @@ impl SpectrumGraph {
                 most_connected_node,
                 graph_density: edge_count as f64 / max_edges as f64,
             },
+            view: None,
         };
         validate_import_snapshot(&snapshot)?;
         Ok(snapshot)
@@ -3469,9 +3618,12 @@ impl SpectrumGraph {
         // Serialize f64 vector as little-endian bytes
         let bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
 
+        // Embedding maintenance is derived metadata, not a content refresh.
+        // Preserve `updated_at` so temporal ranking cannot make old knowledge
+        // appear current merely because its vector was backfilled.
         self.conn.execute(
-            "UPDATE nodes SET embedding = ?1, updated_at = ?2 WHERE id = ?3",
-            params![bytes, Utc::now().to_rfc3339(), node_id],
+            "UPDATE nodes SET embedding = ?1 WHERE id = ?2",
+            params![bytes, node_id],
         )?;
         Ok(())
     }
@@ -5388,6 +5540,7 @@ mod tests {
                 most_connected_node: None,
                 graph_density: 0.0,
             },
+            view: None,
         }
     }
 
@@ -5944,6 +6097,54 @@ mod tests {
         let snapshot = g.get_full_graph().unwrap();
         assert_eq!(snapshot.nodes.len(), 1);
         assert_eq!(snapshot.stats.node_count, 1);
+        assert!(snapshot.view.is_none());
+    }
+
+    #[test]
+    fn visualization_graph_summarizes_generated_suggestions() {
+        let (g, _dir) = test_graph();
+        let durable = g.add_node("Durable topic", "kept visible", "work").unwrap();
+        let related = g
+            .add_node("Related topic", "also visible", "learning")
+            .unwrap();
+        g.add_edge(&durable.id, &related.id, "supports", 0.8)
+            .unwrap();
+        let suggestion = ProactiveSuggestion {
+            id: "generated-suggestion".into(),
+            text: "Generated card".into(),
+            action_intent: "Review something".into(),
+            icon: "✨".into(),
+            category: "patterns".into(),
+            confidence: 0.7,
+        };
+        g.store_proactive_suggestion(&suggestion).unwrap();
+        g.add_edge("generated-suggestion", &durable.id, "suggests", 0.4)
+            .unwrap();
+
+        let snapshot = g.get_visualization_graph().unwrap();
+        assert_eq!(snapshot.nodes.len(), 2);
+        assert!(snapshot.nodes.iter().any(|node| node.id == durable.id));
+        assert!(snapshot.nodes.iter().any(|node| node.id == related.id));
+        assert!(snapshot
+            .nodes
+            .iter()
+            .all(|node| node.node_type != "suggestion"));
+        assert_eq!(snapshot.edges.len(), 1);
+        assert_eq!(snapshot.edges[0].relation, "supports");
+        let visible_ids: HashSet<&str> =
+            snapshot.nodes.iter().map(|node| node.id.as_str()).collect();
+        assert!(snapshot
+            .edges
+            .iter()
+            .all(|edge| visible_ids.contains(edge.source_id.as_str())
+                && visible_ids.contains(edge.target_id.as_str())));
+        let view = snapshot.view.expect("visualization metadata");
+        assert_eq!(view.total_node_count, 3);
+        assert_eq!(view.total_edge_count, 2);
+        assert_eq!(view.shown_node_count, 2);
+        assert_eq!(view.shown_edge_count, 1);
+        assert_eq!(view.summarized_suggestion_count, 1);
+        assert_eq!(view.omitted_due_to_limit, 0);
     }
 
     #[test]
@@ -6100,6 +6301,19 @@ mod tests {
         assert_eq!(loaded.len(), 5);
         assert!((loaded[0] - 0.1).abs() < 1e-9);
         assert!((loaded[4] - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn embedding_backfill_does_not_refresh_content_timestamp() {
+        let (g, _dir) = test_graph();
+        let node = g
+            .add_node("Historical source", "old but useful", "note")
+            .unwrap();
+
+        g.set_node_embedding(&node.id, &[0.25, 0.75]).unwrap();
+
+        let loaded = g.get_node(&node.id).unwrap().unwrap();
+        assert_eq!(loaded.updated_at, node.updated_at);
     }
 
     #[test]
@@ -6778,6 +6992,17 @@ mod tests {
     }
 
     #[test]
+    fn generating_proactive_suggestions_is_read_only() {
+        let (g, _dir) = test_graph();
+        g.add_node("Durable topic", "local knowledge", "work")
+            .unwrap();
+        let before = g.stats().unwrap();
+        let _ = g.generate_proactive_suggestions().unwrap();
+        let after = g.stats().unwrap();
+        assert_eq!(after, before);
+    }
+
+    #[test]
     fn test_store_proactive_suggestion() {
         let (g, _dir) = test_graph();
         let suggestion = ProactiveSuggestion {
@@ -6949,6 +7174,7 @@ mod tests {
                 most_connected_node: None,
                 graph_density: 0.0,
             },
+            view: None,
         };
 
         let result = g.merge_graph(&incoming, &MergeStrategy::Latest).unwrap();

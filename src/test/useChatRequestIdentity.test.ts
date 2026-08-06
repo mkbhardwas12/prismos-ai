@@ -133,6 +133,213 @@ describe("refractIntentWithRetry request identity", () => {
 });
 
 describe("useChat native activation safety", () => {
+  it("routes plain PPT wording to file generation and never to refract_intent", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "search_spectrum_nodes") return "[]";
+      if (command === "check_local_inference_status") return true;
+      if (command === "generate_document_spec") {
+        return JSON.stringify({
+          title: "SAP PI upgrade planning deck",
+          subtitle: "NetWeaver 7.5 SP27 to SP34 — verification-first draft",
+          slides: [
+            { title: "Required inputs and assumptions", bullets: ["Confirm the actual landscape."] },
+            { title: "Official-source verification gates", bullets: ["Verify in SAP Maintenance Planner and the current SUM guide."] },
+            { title: "Regression test matrix", bullets: ["Test the inventoried interfaces after rehearsal."] },
+            { title: "Rollback and recovery", bullets: ["Define and rehearse the restore decision."] },
+          ],
+          decision_record: ["Version-specific facts require independent verification against approved official sources."],
+        });
+      }
+      if (command === "create_powerpoint") {
+        return JSON.stringify({
+          path: "/mock/Downloads/SAP-PI-upgrade.pptx",
+          filename: "SAP-PI-upgrade.pptx",
+          kind: "pptx",
+        });
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const { result, unmount } = renderHook(() => useChat({
+      settings: { ...DEFAULT_SETTINGS },
+      onIntentProcessed: vi.fn(),
+      clearLiveSteps: vi.fn(),
+      voiceEnabled: false,
+      voiceSpeak: vi.fn(),
+      refreshSuggestions: vi.fn(async () => undefined),
+    }));
+
+    await act(async () => {
+      await result.current.handleIntent(
+        "Create a PPT for SAP PI upgrade from netweaver 7.5 SP27 to SP34",
+      );
+    });
+
+    const commands = invokeMock.mock.calls.map(([command]) => command);
+    expect(commands).toContain("generate_document_spec");
+    expect(commands).toContain("create_powerpoint");
+    expect(commands).not.toContain("refract_intent");
+    expect(result.current.messages[result.current.messages.length - 1]?.attachment?.filename).toBe(
+      "SAP-PI-upgrade.pptx",
+    );
+
+    unmount();
+  });
+
+  it("does not speak, reinforce, suggest from, or refract an unvalidated response", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "search_spectrum_nodes") return "[]";
+      if (command === "refract_intent") {
+        return JSON.stringify({
+          response: "I stopped this draft because it did not pass the quality release gate.",
+          intent: { raw: "SAP upgrade runbook", intent_type: "Create", entities: [], confidence: 1 },
+          agent_used: "orchestrator",
+          context_nodes: [],
+          edges_reinforced: [],
+          anticipations: [],
+          processing_time_ms: 10,
+          simd_accelerated: false,
+          collaboration: {
+            session_id: "session",
+            phase: "completed",
+            pipeline_trace: [],
+            consensus_approved: false,
+            consensus_summary: "Quality gate rejected",
+            vote_count: 5,
+            approve_count: 3,
+            reject_count: 2,
+            message_count: 1,
+            debate: null,
+          },
+          conversation_id: null,
+          validated: false,
+          judge_graded: true,
+          iterations_used: 2,
+          max_iterations: 3,
+          judge_score: 0.6,
+          judge_summary: "needs work",
+          deficiencies: ["Missing authoritative sources"],
+        });
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const voiceSpeak = vi.fn();
+    const refreshSuggestions = vi.fn(async () => undefined);
+    const onIntentProcessed = vi.fn();
+    const { result, unmount } = renderHook(() => useChat({
+      settings: { ...DEFAULT_SETTINGS },
+      onIntentProcessed,
+      clearLiveSteps: vi.fn(),
+      voiceEnabled: true,
+      voiceSpeak,
+      refreshSuggestions,
+    }));
+
+    await act(async () => {
+      await result.current.handleIntent("SAP upgrade runbook");
+    });
+
+    const commands = invokeMock.mock.calls.map(([command]) => command);
+    expect(commands).not.toContain("strengthen_related_edges");
+    expect(commands).not.toContain("generate_refraction_alternative");
+    expect(voiceSpeak).not.toHaveBeenCalled();
+    expect(refreshSuggestions).not.toHaveBeenCalled();
+    expect(onIntentProcessed).toHaveBeenCalledWith(
+      "orchestrator",
+      expect.any(Object),
+      null,
+      expect.objectContaining({
+        context_node_ids: [],
+        reinforced_edge_ids: [],
+        validated: false,
+      }),
+    );
+    expect(result.current.messages[result.current.messages.length - 1]?.content).toContain(
+      "quality release gate",
+    );
+
+    unmount();
+  });
+
+  it("releases the composer before optional post-response enrichment finishes", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "search_spectrum_nodes") return "[]";
+      if (command === "strengthen_related_edges") return undefined;
+      if (command === "generate_refraction_alternative") {
+        return JSON.stringify({
+          band: "blue",
+          band_label: "Analytical",
+          band_emoji: "🔵",
+          response: "Another perspective",
+        });
+      }
+      if (command === "refract_intent") {
+        return JSON.stringify({
+          response: "Released answer",
+          intent: { raw: "hello", intent_type: "Query", entities: [], confidence: 1 },
+          agent_used: "reasoner",
+          context_nodes: [],
+          edges_reinforced: [],
+          anticipations: [],
+          processing_time_ms: 20,
+          simd_accelerated: false,
+          collaboration: {
+            session_id: "session",
+            phase: "completed",
+            pipeline_trace: [],
+            consensus_approved: true,
+            consensus_summary: "approved",
+            vote_count: 5,
+            approve_count: 5,
+            reject_count: 0,
+            message_count: 1,
+            debate: null,
+          },
+          conversation_id: "conversation",
+          validated: true,
+          judge_graded: true,
+          iterations_used: 1,
+          max_iterations: 2,
+          judge_score: 0.95,
+          judge_summary: "accepted",
+          deficiencies: [],
+        });
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    let releaseSuggestions!: () => void;
+    const refreshSuggestions = vi.fn(
+      () => new Promise<void>((resolve) => { releaseSuggestions = resolve; }),
+    );
+    const { result, unmount } = renderHook(() => useChat({
+      settings: { ...DEFAULT_SETTINGS },
+      onIntentProcessed: vi.fn(),
+      clearLiveSteps: vi.fn(),
+      voiceEnabled: false,
+      voiceSpeak: vi.fn(),
+      refreshSuggestions,
+    }));
+
+    await act(async () => {
+      await result.current.handleIntent("hello");
+    });
+
+    expect(result.current.messages.at(-1)?.content).toContain("Released answer");
+    expect(result.current.isProcessing).toBe(false);
+    expect(refreshSuggestions).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseSuggestions();
+      await Promise.resolve();
+    });
+    unmount();
+  });
+
   it("keeps one-off document analysis ephemeral and never invokes graph persistence", async () => {
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command: string) => {

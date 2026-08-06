@@ -21,11 +21,12 @@ describe("IntentInput", () => {
     expect(onSubmit).toHaveBeenCalledWith("What is PrismOS-AI?", undefined, undefined);
   });
 
-  it("does NOT submit when processing is in progress", async () => {
+  it("lets the user draft but does not submit while processing is in progress", async () => {
     const onSubmit = vi.fn();
     render(<IntentInput onSubmit={onSubmit} isProcessing={true} />);
-    const textarea = screen.getByRole("textbox");
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
     await userEvent.type(textarea, "test{enter}");
+    expect(textarea.value).toBe("test");
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

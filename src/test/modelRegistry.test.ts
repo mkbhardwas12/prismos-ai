@@ -59,6 +59,17 @@ describe("MODEL_REGISTRY", () => {
       expect(spec.capabilities.includes("long-context")).toBe(spec.context >= 32768);
     }
   });
+
+  it("includes the reviewed Qwen 3 MoE deep-work option", () => {
+    const model = MODEL_REGISTRY.find((entry) => entry.name === "qwen3:30b-a3b");
+    expect(model).toMatchObject({
+      size: "~19 GB",
+      context: 262144,
+      releaseYear: 2025,
+      tier: "power",
+    });
+    expect(model?.capabilities).toEqual(expect.arrayContaining(["text", "reasoning", "code"]));
+  });
 });
 
 // ─── Helper Functions ────────────────────────────────────────────────────────────

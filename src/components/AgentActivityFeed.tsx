@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import type { WorkflowDecision, WorkflowRoleId, WorkflowVoteBasis } from "../types";
 import {
   elapsedLabel,
@@ -54,9 +53,9 @@ function decisionFacts(decision: WorkflowDecision): DecisionFact[] {
         { label: "Model route changed", value: yesNo(decision.auto_swapped) },
         {
           label: "Routing basis",
-          value: decision.reason_code === "configured_model"
+          value: decision.basis === "configured_model"
             ? "Configured model used for a general request"
-            : decision.reason_code === "capability_match"
+            : decision.basis === "capability_match"
               ? "A locally available capability match was selected"
               : "Requested model already matched the capability lane",
         },
@@ -149,7 +148,7 @@ interface AgentActivityFeedProps {
 export default function AgentActivityFeed({ steps, isRunning = true, onDismiss }: AgentActivityFeedProps) {
   const rows = useMemo(() => summarizeAgentActivities(steps), [steps]);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
-  const taskId = steps.at(-1)?.task_id ?? "";
+  const taskId = steps[steps.length - 1]?.task_id ?? "";
   const activeCount = rows.filter((row) => row.status === "active").length;
   const completedCount = rows.filter((row) => row.status === "completed").length;
   const allExpanded = rows.length > 0 && rows.every((row) => expandedKeys.has(row.key));
@@ -175,7 +174,9 @@ export default function AgentActivityFeed({ steps, isRunning = true, onDismiss }
   };
 
   const countText = isRunning
-    ? `${activeCount} working${completedCount > 0 ? ` · ${completedCount} done` : ""}`
+    ? activeCount > 0
+      ? `${activeCount} working${completedCount > 0 ? ` · ${completedCount} done` : ""}`
+      : `Workflow finishing${completedCount > 0 ? ` · ${completedCount} done` : ""}`
     : `Trace complete · ${rows.length} role${rows.length === 1 ? "" : "s"}`;
 
   return (
@@ -197,21 +198,15 @@ export default function AgentActivityFeed({ steps, isRunning = true, onDismiss }
       </div>
       <div className="agent-activity-retention">{retainedUpdates} safe update{retainedUpdates === 1 ? "" : "s"} retained for this task</div>
       <div className="agent-activity-rows">
-        <AnimatePresence initial={false}>
-          {rows.map((row) => {
+        {rows.map((row) => {
             const expanded = expandedKeys.has(row.key);
             const displayStatus = !isRunning && row.status === "active" ? "completed" : row.status;
             const displayStatusLabel = !isRunning && row.status === "active" ? "Recorded" : row.statusLabel;
             const panelId = `agent-trace-${row.key}`;
             return (
-              <motion.div
+              <div
                 key={row.key}
                 className={`live-step-card live-phase-${row.phase}`}
-                initial={{ opacity: 0, x: -12, height: 0 }}
-                animate={{ opacity: 1, x: 0, height: "auto" }}
-                exit={{ opacity: 0, x: 12 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                layout
               >
                 <div className={`live-step live-step-${displayStatus}`} aria-label={`${row.agent}: ${row.action}. ${displayStatusLabel}`}>
                   <span className={`live-step-dot dot-${displayStatus}`} aria-hidden="true" />
@@ -238,29 +233,22 @@ export default function AgentActivityFeed({ steps, isRunning = true, onDismiss }
                     {displayStatusLabel}
                   </span>
                 </div>
-                <AnimatePresence initial={false}>
-                  {expanded && (
-                    <motion.div
+                {expanded && (
+                    <div
                       id={panelId}
                       className="agent-decision-trace"
                       role="region"
                       aria-label={`${row.agent} decision record`}
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
                     >
                       <div className="agent-decision-trace-title">What {row.agent} reported and decided</div>
                       <ol className="agent-trace-events">
                         {row.history.map((record) => <DecisionRecord key={record.id} record={record} />)}
                       </ol>
-                    </motion.div>
+                    </div>
                   )}
-                </AnimatePresence>
-              </motion.div>
+              </div>
             );
           })}
-        </AnimatePresence>
       </div>
     </section>
   );

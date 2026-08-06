@@ -169,7 +169,10 @@ mod tests {
         ));
         // All known opt-in/explicit egress paths are disclosed.
         assert_eq!(r.optional_egress.len(), 6);
-        assert!(r.optional_egress.iter().any(|e| e.feature.contains("Research bridge")));
+        assert!(r
+            .optional_egress
+            .iter()
+            .any(|e| e.feature.contains("Research bridge")));
         assert!(r.no_telemetry);
         assert!(r.no_web_crawler);
         assert!(r.ollama_endpoint.contains("localhost"));

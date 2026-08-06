@@ -9,6 +9,8 @@ import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type Drag
 import { invoke } from "@tauri-apps/api/core";
 import { useVoice } from "../hooks/useVoice";
 import "./IntentInput.css";
+import ChatResearchChip from "./ChatResearchChip";
+import { researchOnline, isResearchRequest, getAutoResearch } from "../lib/researchDoc";
 
 /** Image extensions we accept for vision analysis */
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif"];
@@ -107,6 +109,8 @@ export default function IntentInput({
 }: IntentInputProps) {
   const [input, setInput] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [researching, setResearching] = useState(false);
+  const [researchError, setResearchError] = useState("");
   // ── Vision state (Phase 5.5) ──
   const [attachedImage, setAttachedImage] = useState<string | null>(null); // base64
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null); // data URL for preview
@@ -156,10 +160,7 @@ export default function IntentInput({
 
   const voice = useVoice(handleVoiceTranscript, voiceEnabled);
 
-  function handleSubmit() {
-    const trimmed = input.trim();
-    if ((!trimmed && !attachedImage && !attachedDocument) || isProcessing) return;
-    const prompt = trimmed || (attachedImage ? "Describe this image in detail." : "Summarize this document.");
+  function finishSubmit(prompt: string) {
     onSubmit(prompt, attachedImage ?? undefined, attachedDocument ?? undefined);
     setInput("");
     clearAttachedImage();
@@ -167,6 +168,37 @@ export default function IntentInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
+  }
+
+  function handleSubmit() {
+    const trimmed = input.trim();
+    if ((!trimmed && !attachedImage && !attachedDocument) || isProcessing || researching) return;
+    const prompt = trimmed || (attachedImage ? "Describe this image in detail." : "Summarize this document.");
+
+    // One-shot "access → online → answer": if the user has turned on standing
+    // consent (auto-research, off by default) and this reads like a research
+    // request, do a consented online pass FIRST — fresh sources land in the graph —
+    // then send, so the same-message answer is grounded in the new content.
+    if (getAutoResearch() && isResearchRequest(prompt)) {
+      setResearching(true);
+      setResearchError("");
+      setInput("");
+      researchOnline(prompt)
+        .then(() => finishSubmit(prompt))
+        .catch((error) => {
+          setInput(prompt);
+          setResearchError(
+            `Live research failed, so PrismOS did not present frozen model knowledge as current. ${String(error)}`,
+          );
+        })
+        .finally(() => {
+          setResearching(false);
+        });
+      return;
+    }
+
+    setResearchError("");
+    finishSubmit(prompt);
   }
 
   /** Clear attached image state */
@@ -511,6 +543,22 @@ export default function IntentInput({
         onChange={handleDocFileSelect}
       />
 
+      {/* One-shot auto-research indicator (standing consent, off by default). */}
+      {researching && (
+        <div className="chat-research-chip busy">
+          <span className="crc-icon" aria-hidden="true">🔎</span>
+          <span className="crc-text">Researching online, then answering…</span>
+        </div>
+      )}
+      {researchError && (
+        <div className="chat-research-chip error" role="alert">
+          <span className="crc-icon" aria-hidden="true">⚠️</span>
+          <span className="crc-msg">{researchError}</span>
+        </div>
+      )}
+      {/* One-click, explicitly-consented research when the message has links. */}
+      {!researching && <ChatResearchChip text={input} />}
+
       <div className="intent-input-wrapper">
         <textarea
           ref={textareaRef}
@@ -519,6 +567,8 @@ export default function IntentInput({
           placeholder={
             voice.isListening
               ? "🎙️ Listening… speak your intent"
+              : isProcessing
+                ? "Draft your next message while PrismOS finishes…"
               : "Ask me anything — core inference uses the local loopback route…"
           }
           value={voice.isListening && voice.interimTranscript ? voice.interimTranscript : input}
@@ -528,7 +578,7 @@ export default function IntentInput({
           }}
           onKeyDown={handleKeyDown}
           rows={1}
-          disabled={isProcessing || voice.isListening}
+          disabled={researching || voice.isListening}
         />
 
         {/* Voice input button */}

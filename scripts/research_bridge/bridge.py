@@ -60,7 +60,7 @@ import sys
 import urllib.robotparser
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, quote, unquote, parse_qs
 
 DEFAULT_OUT = os.path.expanduser("~/Documents/PrismDocs/research")
 DEFAULT_DB = os.path.expanduser(
@@ -196,6 +196,43 @@ def robots_allowed(url):
         return rp.can_fetch(USER_AGENT, url)
     except Exception:
         return True
+
+
+# ─── Web search (keyless, via the same guarded fetch path) ──────────────────
+
+def _extract_result_urls(html_text, max_results):
+    """Pull organic result URLs out of a DuckDuckGo HTML results page, decoding
+    its /l/?uddg= redirect wrapper. Skips DDG-internal and ad links."""
+    urls, seen = [], set()
+    for m in re.finditer(r'href="([^"]+)"', html_text):
+        href = m.group(1)
+        if href.startswith("//"):
+            href = "https:" + href
+        if "uddg=" in href:
+            uddg = parse_qs(urlparse(href).query).get("uddg", [None])[0]
+            if uddg:
+                href = unquote(uddg)
+        if not (href.startswith("http://") or href.startswith("https://")):
+            continue
+        host = (urlparse(href).hostname or "").lower()
+        if "duckduckgo.com" in host or "duck.co" in host:
+            continue
+        if href in seen:
+            continue
+        seen.add(href)
+        urls.append(href)
+        if len(urls) >= max_results:
+            break
+    return urls
+
+
+def search_urls(query, max_results, allow_http, timeout):
+    """Find result URLs for a query via DuckDuckGo's keyless HTML endpoint. The
+    request goes through the same SSRF/pinning/TLS-verified fetch path."""
+    search_url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
+    r = fetch(search_url, [], allow_http, timeout, 2 * 1024 * 1024)
+    html_text = r["raw"].decode("utf-8", errors="replace")
+    return _extract_result_urls(html_text, max_results)
 
 
 # ─── Clean-text extraction ──────────────────────────────────────────────────
@@ -385,17 +422,36 @@ def main():
     ap.add_argument("--ingest", action="store_true", help="also seed fenced content as research-* graph nodes")
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--dry-run", action="store_true", help="validate only; never fetch")
+    ap.add_argument("--search", metavar="QUERY",
+                    help="find fresh sources for a query (keyless), then fetch the top results")
+    ap.add_argument("--max-results", type=int, default=5, help="max search results to fetch")
     args = ap.parse_args()
 
-    if not args.urls:
-        ap.error("give at least one URL")
+    if not args.urls and not args.search:
+        ap.error("give at least one URL, or --search QUERY")
     if not args.allow_egress and not args.dry_run:
         print("REFUSED: the bridge is off by default. Nothing left the machine.\n"
               "Pass --allow-egress to consent to fetching, or --dry-run to validate only.")
         sys.exit(2)
 
+    # Search mode: discover result URLs, then fetch them through the guarded path.
+    target_urls = list(args.urls)
+    if args.search:
+        if args.dry_run:
+            print(f"[dry-run] would search '{args.search}' (no network)")
+        else:
+            try:
+                found = search_urls(args.search, max(1, min(args.max_results, 8)),
+                                    args.allow_http, args.timeout)
+                print(f"[search] '{args.search}' -> {len(found)} result(s)")
+                for u in found:
+                    print(f"         · {u}")
+                target_urls = found + target_urls
+            except Exception as e:
+                print(f"[search failed] {type(e).__name__}: {e}")
+
     receipts = []
-    for url in args.urls:
+    for url in target_urls:
         r = process(url, args.out, args.allow_host, args.allow_http, args.timeout,
                     args.max_bytes, not args.ignore_robots, args.dry_run)
         receipts.append(r)

@@ -58,6 +58,18 @@ pub enum ThinkingMode {
     Deliberate,
 }
 
+/// Requested shape of the model's visible response. This is a trusted
+/// control-plane value, never inferred from prompt text. Ollama's JSON mode is
+/// used for artifact specifications so a missing bracket cannot escape into
+/// the renderer-facing contract.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseFormat {
+    #[default]
+    Text,
+    Json,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageRole {
@@ -92,6 +104,9 @@ pub struct InferenceRequest {
     /// fixtures compatible without allowing message text to select the mode.
     #[serde(default)]
     pub thinking_mode: ThinkingMode,
+    /// Defaults to plain text for backward-compatible serialized requests.
+    #[serde(default)]
+    pub response_format: ResponseFormat,
     pub target: InferenceTarget,
     pub messages: Vec<InferenceMessage>,
     pub limits: InferenceLimits,
@@ -595,6 +610,7 @@ async fn generate_with_ollama(
         request.limits.context_tokens,
         request.limits.output_tokens,
         request.thinking_mode,
+        request.response_format,
     )
     .await
     .map_err(|error| classify_ollama_error(&request.request_id, error))?;
@@ -706,6 +722,7 @@ mod tests {
             request_id: "request-1".into(),
             task: InferenceTask::Reasoner,
             thinking_mode: ThinkingMode::Standard,
+            response_format: ResponseFormat::Text,
             target: InferenceTarget {
                 backend,
                 model_id: "exact-model:1".into(),
@@ -746,8 +763,10 @@ mod tests {
         let request = request(TextBackend::Ollama);
         let mut value = serde_json::to_value(request).unwrap();
         value.as_object_mut().unwrap().remove("thinking_mode");
+        value.as_object_mut().unwrap().remove("response_format");
         let decoded: InferenceRequest = serde_json::from_value(value).unwrap();
         assert_eq!(decoded.thinking_mode, ThinkingMode::Standard);
+        assert_eq!(decoded.response_format, ResponseFormat::Text);
     }
 
     #[test]

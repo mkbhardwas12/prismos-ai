@@ -1,0 +1,51 @@
+.chat-research-chip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 4px 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(79, 195, 247, 0.35);
+  background: rgba(79, 195, 247, 0.08);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: #cbd5e1;
+}
+.chat-research-chip.done {
+  border-color: rgba(129, 199, 132, 0.4);
+  background: rgba(129, 199, 132, 0.08);
+}
+.chat-research-chip.error {
+  border-color: rgba(255, 138, 128, 0.4);
+  background: rgba(255, 138, 128, 0.08);
+}
+.crc-icon {
+  font-size: 14px;
+}
+.crc-text {
+  flex: 1;
+  min-width: 160px;
+}
+.crc-btn {
+  background: linear-gradient(180deg, #4fc3f7, #2196f3);
+  color: #001018;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.crc-msg {
+  flex-basis: 100%;
+  color: #9aa7b4;
+  font-size: 12px;
+}
+.chat-research-chip.error .crc-msg {
+  color: #ff8a80;
+}

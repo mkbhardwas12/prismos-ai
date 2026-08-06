@@ -40,8 +40,16 @@ export function runResearchBridge(
   urls: string[],
   allowEgress: boolean,
   ingest: boolean,
+  search?: string | null,
+  maxResults?: number | null,
 ): Promise<ResearchRun> {
-  return invoke<ResearchRun>("run_research_bridge", { urls, allowEgress, ingest });
+  return invoke<ResearchRun>("run_research_bridge", {
+    urls,
+    allowEgress,
+    ingest,
+    search: search ?? null,
+    maxResults: maxResults ?? null,
+  });
 }
 
 /** Read the local fetch receipts (no network) — the observable audit record. */

@@ -165,3 +165,81 @@
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   color: #9aa7b4;
 }
+
+.rp-autotoggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 143, 107, 0.3);
+  background: rgba(255, 143, 107, 0.06);
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+.rp-autotoggle input {
+  margin-top: 3px;
+}
+
+/* ── Grounded document builder ── */
+.rp-docbuilder {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 24px;
+}
+.rp-docbuilder h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.rp-sub2 {
+  color: #9aa7b4;
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin: 0 0 14px;
+  max-width: 640px;
+}
+.rp-formats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.rp-format {
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rp-format.active {
+  background: rgba(79, 195, 247, 0.15);
+  border-color: #4fc3f7;
+  color: #e6f6ff;
+}
+.rp-topic {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #e6edf3;
+  font-size: 13px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.rp-topic:focus {
+  outline: none;
+  border-color: #4fc3f7;
+}
+.rp-doc-done {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: #a5d6a7;
+}

@@ -21,7 +21,7 @@ import BrainWrapped from "./components/BrainWrapped";
 import { DEFAULT_SETTINGS } from "./lib/config";
 import { normalizeAgentActivity } from "./lib/agentActivity";
 import prismosIcon from "./assets/prismos-icon.svg";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, GraphAnswerTrace } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard" | "research";
 
@@ -64,6 +64,7 @@ function App() {
   const [ollamaConnected, setOllamaConnected] = useState(false);
   const [lastActiveAgent, setLastActiveAgent] = useState<string | null>(null);
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
+  const [lastGraphTrace, setLastGraphTrace] = useState<GraphAnswerTrace | null>(null);
   const [lastCollaboration, setLastCollaboration] = useState<CollaborationSummary | null>(null);
   const [lastDebate, setLastDebate] = useState<DebateSummary | null>(null);
   const [liveAgentSteps, setLiveAgentSteps] = useState<AgentActivity[]>([]);
@@ -184,7 +185,7 @@ function App() {
   }, []);
 
   // Called after every intent is processed — refreshes all live data
-  const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null) => {
+  const onIntentProcessed = useCallback((agentUsed?: string, collaboration?: CollaborationSummary, debate?: DebateSummary | null, graphTrace?: GraphAnswerTrace) => {
     // Store latest collaboration trace for sidebar display
     if (collaboration) {
       setLastCollaboration(collaboration);
@@ -192,6 +193,9 @@ function App() {
     // Store latest debate summary
     if (debate !== undefined) {
       setLastDebate(debate);
+    }
+    if (graphTrace !== undefined) {
+      setLastGraphTrace(graphTrace);
     }
     // Flash the active agent in the sidebar
     if (agentUsed) {
@@ -365,7 +369,7 @@ function App() {
         // to prevent tab switches from killing in-flight AI processing.
         return null;
       case "graph":
-        return <SpectrumGraphView refreshKey={graphRefreshKey} />;
+        return <SpectrumGraphView refreshKey={graphRefreshKey} lastAnswerTrace={lastGraphTrace} />;
       case "spectrum":
         return (
           <SpectrumExplorer

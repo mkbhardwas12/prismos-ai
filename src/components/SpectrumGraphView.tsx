@@ -13,7 +13,16 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ForceGraph2D from "react-force-graph-2d";
-import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed, PredictedEdge } from "../types";
+import type {
+  GraphSnapshot,
+  SpectrumNode,
+  SpectrumEdge,
+  GraphMetrics,
+  GraphViewMetadata,
+  GraphAnswerTrace,
+  AnticipatedNeed,
+  PredictedEdge,
+} from "../types";
 import prismosLogo from "../assets/prismos-logo.svg";
 import "./SpectrumGraphView.css";
 
@@ -33,6 +42,16 @@ const FACET_COLORS: Record<string, string> = {
   personal: "#f48fb1",
   document: "#aed581",
   doc_chunk: "#9ccc65",
+  project: "#4fc3f7",
+  project_chunk: "#29b6f6",
+  research: "#ff8f6b",
+  reference: "#9ccc65",
+  entity: "#81c784",
+  knowledge: "#66bb6a",
+  suggestion: "#ce93d8",
+  drift_pattern: "#ba68c8",
+  thought_current: "#ab47bc",
+  refraction: "#9575cd",
 };
 
 const LAYER_SIZES: Record<string, number> = {
@@ -54,9 +73,10 @@ interface ClusterDef {
 }
 
 const CLUSTER_DEFS: ClusterDef[] = [
-  { id: "you", name: "You", icon: "👤", color: "#f48fb1", match: (id) => id.startsWith("user-") },
+  { id: "you", name: "You", icon: "👤", color: "#f48fb1", match: (id, t) => id.startsWith("user-") || t === "personal" },
   { id: "prismos", name: "PrismOS", icon: "🔮", color: "#64b5f6", match: (id) => id.startsWith("pos-") || id === "proj-prismos" },
-  { id: "projects", name: "Projects", icon: "🗂️", color: "#4fc3f7", match: (id) => id.startsWith("proj-") },
+  { id: "projects", name: "Projects", icon: "🗂️", color: "#4fc3f7", match: (id, t) => id.startsWith("proj-") || id.startsWith("project-") || t === "project" || t === "project_chunk" },
+  { id: "research", name: "Research (web)", icon: "🌐", color: "#ff8f6b", match: (id, t) => id.startsWith("research-") || t === "research" },
   { id: "chats", name: "Chats", icon: "💬", color: "#78909c", match: (_id, t) => t === "conversation" },
   { id: "documents", name: "Documents", icon: "📄", color: "#aed581", match: (_id, t) => t === "document" || t === "doc_chunk" },
   { id: "insights", name: "Insights", icon: "✨", color: "#ce93d8", match: (_id, t) => ["suggestion", "drift_pattern", "thought_current", "refraction", "meta"].includes(t) },
@@ -67,7 +87,10 @@ function clusterOf(id: string, nodeType: string): ClusterDef {
   return CLUSTER_DEFS.find((c) => c.match(id, nodeType)) ?? CLUSTER_DEFS[CLUSTER_DEFS.length - 1];
 }
 
-const EXPANDED_STORE_KEY = "prismos-graph-expanded";
+// Versioned so older "expand all" state cannot reopen a large graph as an
+// unreadable cloud after this overview-first redesign.
+const EXPANDED_STORE_KEY = "prismos-graph-expanded-v2";
+const MAX_VISIBLE_CLUSTER_MEMBERS = 120;
 
 // ─── Force Graph Data Types ────────────────────────────────────────────────────
 
@@ -78,6 +101,10 @@ interface GraphNode {
   layer: string;
   access_count: number;
   content: string;
+  last_accessed: string;
+  created_at: string;
+  updated_at: string;
+  connections: string[];
   color: string;
   val: number;
   cluster: string;
@@ -89,6 +116,7 @@ interface GraphNode {
   isHub?: boolean;
   count?: number;
   icon?: string;
+  isOverflow?: boolean;
 }
 
 interface GraphLink {
@@ -100,6 +128,7 @@ interface GraphLink {
   edge_id: string;
   reinforcements: number;
   last_reinforced: string | null;
+  created_at: string | null;
   predicted?: boolean;
   aggregated?: number; // >1 when this link bundles many collapsed connections
 }
@@ -112,18 +141,62 @@ interface GraphData {
 const linkEndId = (end: GraphLink["source"]): string =>
   typeof end === "string" ? end : (end as unknown as GraphNode).id;
 
+function nodeOrigin(node: GraphNode): string {
+  if (node.cluster === "projects") return "Local, explicitly indexed project knowledge";
+  if (node.cluster === "research") return "Consented web research; untrusted until verified";
+  if (node.cluster === "chats") return "Local conversation memory saved by PrismOS";
+  if (node.cluster === "insights") return "Derived graph suggestion or pattern; not source evidence";
+  if (node.cluster === "you") return "Local personal memory; scoped to explicit profile requests";
+  if (node.cluster === "prismos") return "PrismOS system knowledge";
+  if (node.cluster === "documents") return "Local document knowledge";
+  return "Local knowledge graph memory";
+}
+
+function nodeUsage(node: GraphNode): string {
+  if (node.node_type === "project_chunk") {
+    return "Eligible when you explicitly ask about the related project or knowledge base.";
+  }
+  if (node.cluster === "research") {
+    return "Can support a response only as reference context; important claims still require verification.";
+  }
+  if (node.cluster === "insights") {
+    return "May prompt a suggestion, but should not be treated as factual evidence.";
+  }
+  if (node.cluster === "you") {
+    return "Eligible for explicit identity, preference, or personal-profile requests.";
+  }
+  return "May be retrieved when its text and stored relationships match your request.";
+}
+
+function formatGraphDate(value: string | null | undefined): string {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 interface SpectrumGraphViewProps {
   refreshKey?: number;
+  lastAnswerTrace?: GraphAnswerTrace | null;
 }
 
-export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps) {
+export default function SpectrumGraphView({ refreshKey, lastAnswerTrace }: SpectrumGraphViewProps) {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [metrics, setMetrics] = useState<GraphMetrics | null>(null);
+  const [viewMetadata, setViewMetadata] = useState<GraphViewMetadata | null>(null);
   const [anticipations, setAnticipations] = useState<AnticipatedNeed[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [traceLastAnswer, setTraceLastAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -161,14 +234,17 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     }
   }, []);
 
-  // Animate glow pulse for high-momentum edges (throttled, see note above).
+  // Animate only when a visible edge needs it, and respect reduced motion.
   useEffect(() => {
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const hasAnimatedEdge = recentEdges.size > 0 || graphData.links.some((link) => link.momentum > 0.1);
+    if (reducedMotion || !hasAnimatedEdge) return;
     const iv = setInterval(() => {
       glowRef.current += 0.18;
       setGlowTick((t) => (t + 1) % 1_000_000);
     }, 100);
     return () => clearInterval(iv);
-  }, []);
+  }, [recentEdges, graphData.links]);
 
   // ─── Load full graph snapshot ──────────────────────────────────────────
 
@@ -178,17 +254,26 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       const result = await invoke<string>("get_spectrum_graph");
       const snapshot: GraphSnapshot = JSON.parse(result);
 
-      const nodes: GraphNode[] = snapshot.nodes.map((n: SpectrumNode) => ({
-        id: n.id,
-        label: n.label,
-        node_type: n.node_type,
-        layer: n.layer || "context",
-        access_count: n.access_count || 0,
-        content: n.content,
-        color: FACET_COLORS[n.node_type] || "#b0bec5",
-        val: LAYER_SIZES[n.layer || "context"] || 6,
-        cluster: clusterOf(n.id, n.node_type).id,
-      }));
+      const nodes: GraphNode[] = snapshot.nodes.map((n: SpectrumNode) => {
+        const cluster = clusterOf(n.id, n.node_type);
+        return {
+          id: n.id,
+          label: n.label,
+          node_type: n.node_type,
+          layer: n.layer || "context",
+          access_count: n.access_count || 0,
+          content: n.content,
+          last_accessed: n.last_accessed || "",
+          created_at: n.created_at || "",
+          updated_at: n.updated_at || "",
+          connections: n.connections || [],
+          // Color now means one thing everywhere: knowledge family. Shape and
+          // border carry node kind and lifecycle so color is never the only cue.
+          color: cluster.color || FACET_COLORS[n.node_type] || "#b0bec5",
+          val: LAYER_SIZES[n.layer || "context"] || 6,
+          cluster: cluster.id,
+        };
+      });
 
       const nodeIds = new Set(nodes.map((n) => n.id));
       const links: GraphLink[] = snapshot.edges
@@ -202,6 +287,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           edge_id: e.id,
           reinforcements: e.reinforcements || 0,
           last_reinforced: e.last_reinforced || null,
+          created_at: e.created_at || null,
         }));
 
       // Compute recently strengthened edges (reinforced within last 5 minutes)
@@ -217,6 +303,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
 
       setGraphData({ nodes, links });
       setMetrics(snapshot.stats);
+      setViewMetadata(snapshot.view ?? null);
     } catch (e) {
       console.error("Failed to load spectrum graph:", e);
     } finally {
@@ -303,32 +390,122 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     [clusterCounts]
   );
 
+  const nodeById = useMemo(
+    () => new Map(graphData.nodes.map((node) => [node.id, node])),
+    [graphData.nodes]
+  );
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const searchMatches = useMemo(() => {
+    if (!normalizedSearch) return [];
+    return graphData.nodes
+      .filter((node) =>
+        `${node.label}\n${node.node_type}\n${node.content}`.toLowerCase().includes(normalizedSearch)
+      )
+      .sort((a, b) => {
+        const aStarts = a.label.toLowerCase().startsWith(normalizedSearch) ? 1 : 0;
+        const bStarts = b.label.toLowerCase().startsWith(normalizedSearch) ? 1 : 0;
+        return bStarts - aStarts || b.connections.length - a.connections.length || b.access_count - a.access_count;
+      });
+  }, [graphData.nodes, normalizedSearch]);
+
+  const searchMatchIds = useMemo(
+    () => new Set(searchMatches.map((node) => node.id)),
+    [searchMatches]
+  );
+
+  const answerTraceIds = useMemo(
+    () => new Set(lastAnswerTrace?.context_node_ids ?? []),
+    [lastAnswerTrace]
+  );
+
+  const answerReinforcedEdgeIds = useMemo(
+    () => new Set(lastAnswerTrace?.reinforced_edge_ids ?? []),
+    [lastAnswerTrace]
+  );
+
+  const answerTraceOrder = useMemo(
+    () => new Map((lastAnswerTrace?.context_node_ids ?? []).map((id, index) => [id, index + 1])),
+    [lastAnswerTrace]
+  );
+
+  const effectiveExpanded = useMemo(() => {
+    if (traceLastAnswer && answerTraceIds.size > 0) {
+      return new Set(
+        graphData.nodes
+          .filter((node) => answerTraceIds.has(node.id))
+          .map((node) => node.cluster)
+      );
+    }
+    if (normalizedSearch) {
+      return new Set(searchMatches.map((node) => node.cluster));
+    }
+    return expanded;
+  }, [traceLastAnswer, answerTraceIds, graphData.nodes, normalizedSearch, searchMatches, expanded]);
+
   const displayed: GraphData = useMemo(() => {
     const nodes: GraphNode[] = [];
-    const nodeById = new Map<string, GraphNode>();
-    for (const n of graphData.nodes) nodeById.set(n.id, n);
+    const visibleMemberIds = new Set<string>();
 
     // Hub bubble per collapsed cluster; member nodes for expanded clusters.
     for (const c of activeClusters) {
       const count = clusterCounts.get(c.id) ?? 0;
-      if (expanded.has(c.id)) continue;
-      nodes.push({
-        id: `cluster:${c.id}`,
-        label: c.name,
-        node_type: "cluster",
-        layer: "core",
-        access_count: 0,
-        content: `${count} items`,
-        color: c.color,
-        val: 14 + Math.sqrt(count) * 3,
-        cluster: c.id,
-        isHub: true,
-        count,
-        icon: c.icon,
-      });
-    }
-    for (const n of graphData.nodes) {
-      if (expanded.has(n.cluster)) nodes.push(n);
+      if (!effectiveExpanded.has(c.id)) {
+        nodes.push({
+          id: `cluster:${c.id}`,
+          label: c.name,
+          node_type: "cluster",
+          layer: "core",
+          access_count: 0,
+          content: `${count} items`,
+          last_accessed: "",
+          created_at: "",
+          updated_at: "",
+          connections: [],
+          color: c.color,
+          val: 14 + Math.sqrt(count) * 3,
+          cluster: c.id,
+          isHub: true,
+          count,
+          icon: c.icon,
+        });
+        continue;
+      }
+
+      const members = graphData.nodes
+        .filter((node) => node.cluster === c.id)
+        .sort((a, b) => {
+          const aPriority = (selectedNode?.id === a.id ? 8 : 0) + (answerTraceIds.has(a.id) ? 4 : 0) + (searchMatchIds.has(a.id) ? 2 : 0);
+          const bPriority = (selectedNode?.id === b.id ? 8 : 0) + (answerTraceIds.has(b.id) ? 4 : 0) + (searchMatchIds.has(b.id) ? 2 : 0);
+          return bPriority - aPriority || b.connections.length - a.connections.length || b.access_count - a.access_count || b.updated_at.localeCompare(a.updated_at);
+        });
+      const visibleMembers = members.slice(0, MAX_VISIBLE_CLUSTER_MEMBERS);
+      for (const member of visibleMembers) {
+        nodes.push(member);
+        visibleMemberIds.add(member.id);
+      }
+      const hiddenCount = members.length - visibleMembers.length;
+      if (hiddenCount > 0) {
+        nodes.push({
+          id: `cluster:${c.id}:more`,
+          label: `${hiddenCount} more`,
+          node_type: "cluster_overflow",
+          layer: "context",
+          access_count: 0,
+          content: `Use search to reveal any of the ${hiddenCount} additional ${c.name.toLowerCase()} items.`,
+          last_accessed: "",
+          created_at: "",
+          updated_at: "",
+          connections: [],
+          color: c.color,
+          val: 11 + Math.sqrt(hiddenCount),
+          cluster: c.id,
+          isHub: true,
+          isOverflow: true,
+          count: hiddenCount,
+          icon: "＋",
+        });
+      }
     }
 
     // Remap links to whichever endpoint is displayed (member or its hub),
@@ -336,7 +513,8 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     const displayId = (rawId: string): string => {
       const n = nodeById.get(rawId);
       if (!n) return rawId;
-      return expanded.has(n.cluster) ? n.id : `cluster:${n.cluster}`;
+      if (!effectiveExpanded.has(n.cluster)) return `cluster:${n.cluster}`;
+      return visibleMemberIds.has(n.id) ? n.id : `cluster:${n.cluster}:more`;
     };
 
     const allRaw: GraphLink[] = [
@@ -352,6 +530,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           edge_id: `predicted-${p.source_id}-${p.target_id}`,
           reinforcements: 0,
           last_reinforced: null,
+          created_at: null,
           predicted: true,
         })),
     ];
@@ -389,11 +568,23 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     }
 
     return { nodes, links: [...bundled.values()] };
-  }, [graphData, predictions, expanded, activeClusters, clusterCounts]);
+  }, [
+    graphData,
+    predictions,
+    effectiveExpanded,
+    activeClusters,
+    clusterCounts,
+    nodeById,
+    selectedNode,
+    answerTraceIds,
+    searchMatchIds,
+  ]);
 
   // ─── Focus set: selected member + its displayed neighbors ─────────────
 
   const focusIds = useMemo(() => {
+    if (traceLastAnswer && answerTraceIds.size > 0) return answerTraceIds;
+    if ((!selectedNode || selectedNode.isHub) && searchMatchIds.size > 0) return searchMatchIds;
     if (!selectedNode || selectedNode.isHub) return null;
     const set = new Set<string>([selectedNode.id]);
     for (const l of displayed.links) {
@@ -403,7 +594,32 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       if (t === selectedNode.id) set.add(s);
     }
     return set;
-  }, [selectedNode, displayed.links]);
+  }, [traceLastAnswer, answerTraceIds, searchMatchIds, selectedNode, displayed.links]);
+
+  const selectedConnections = useMemo(() => {
+    if (!selectedNode || selectedNode.isHub) return [];
+    return graphData.links
+      .filter((link) => {
+        const sourceId = linkEndId(link.source);
+        const targetId = linkEndId(link.target);
+        return sourceId === selectedNode.id || targetId === selectedNode.id;
+      })
+      .map((link) => {
+        const sourceId = linkEndId(link.source);
+        const outgoing = sourceId === selectedNode.id;
+        const neighborId = outgoing ? linkEndId(link.target) : sourceId;
+        return { link, outgoing, neighbor: nodeById.get(neighborId) ?? null };
+      })
+      .filter((item): item is { link: GraphLink; outgoing: boolean; neighbor: GraphNode } => item.neighbor !== null)
+      .sort((a, b) => b.link.weight - a.link.weight || b.link.reinforcements - a.link.reinforcements);
+  }, [selectedNode, graphData.links, nodeById]);
+
+  const answerTraceNodes = useMemo(
+    () => (lastAnswerTrace?.context_node_ids ?? [])
+      .map((id) => nodeById.get(id))
+      .filter((node): node is GraphNode => Boolean(node)),
+    [lastAnswerTrace, nodeById]
+  );
 
   // ─── Layout forces: cluster anchors + collision (no overlap) ───────────
 
@@ -518,9 +734,10 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
 
   const toggleCluster = useCallback(
     (clusterId: string) => {
-      const next = new Set(expanded);
-      if (next.has(clusterId)) {
-        next.delete(clusterId);
+      setSearchQuery("");
+      setTraceLastAnswer(false);
+      const next = new Set<string>();
+      if (expanded.has(clusterId)) {
         if (selectedNode && !selectedNode.isHub && selectedNode.cluster === clusterId) {
           setSelectedNode(null);
         }
@@ -533,15 +750,26 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
     [expanded, persistExpanded, selectedNode, fitView]
   );
 
-  const expandAll = useCallback(() => {
-    persistExpanded(new Set(activeClusters.map((c) => c.id)));
-    setTimeout(() => fitView(500), 350);
-  }, [activeClusters, persistExpanded, fitView]);
-
   const collapseAll = useCallback(() => {
     persistExpanded(new Set());
     setSelectedNode(null);
+    setSearchQuery("");
+    setTraceLastAnswer(false);
     setTimeout(() => fitView(500), 350);
+  }, [persistExpanded, fitView]);
+
+  const revealNode = useCallback((node: GraphNode) => {
+    persistExpanded(new Set([node.cluster]));
+    setSearchQuery("");
+    setTraceLastAnswer(false);
+    setSelectedNode(node);
+    setTimeout(() => {
+      if (typeof node.x === "number" && typeof node.y === "number") {
+        fgRef.current?.centerAt(node.x, node.y, 450);
+      } else {
+        fitView(450);
+      }
+    }, 300);
   }, [persistExpanded, fitView]);
 
   // ─── Node click: hubs expand, members focus ────────────────────────────
@@ -549,16 +777,13 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
   const handleNodeClick = useCallback(
     (node: GraphNode) => {
       if (node.isHub) {
+        if (node.isOverflow) return;
         toggleCluster(node.cluster);
         return;
       }
-      setSelectedNode(node);
-      // Bring the neighborhood into view without yanking the camera far away.
-      if (typeof node.x === "number" && typeof node.y === "number") {
-        fgRef.current?.centerAt(node.x, node.y, 500);
-      }
+      revealNode(node);
     },
-    [toggleCluster]
+    [toggleCluster, revealNode]
   );
 
   const handleBackgroundClick = useCallback(() => setSelectedNode(null), []);
@@ -633,19 +858,64 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         return;
       }
 
-      // ── Member node ── soft halo for depth, crisp core.
+      // ── Member node ── color = family, shape = kind, border = lifecycle.
       const nodeSize = (node.val || 6) / Math.max(globalScale * 0.55, 1);
+      const beginMemberPath = () => {
+        ctx.beginPath();
+        if (node.cluster === "research") {
+          ctx.moveTo(x, y - nodeSize * 1.25);
+          ctx.lineTo(x + nodeSize * 1.05, y);
+          ctx.lineTo(x, y + nodeSize * 1.25);
+          ctx.lineTo(x - nodeSize * 1.05, y);
+          ctx.closePath();
+        } else if (node.cluster === "projects" || node.cluster === "documents") {
+          ctx.roundRect(x - nodeSize, y - nodeSize, nodeSize * 2, nodeSize * 2, nodeSize * 0.3);
+        } else if (node.cluster === "chats") {
+          ctx.roundRect(x - nodeSize * 1.15, y - nodeSize * 0.85, nodeSize * 2.3, nodeSize * 1.7, nodeSize * 0.65);
+        } else if (node.cluster === "insights" || node.node_type === "entity") {
+          for (let i = 0; i < 6; i += 1) {
+            const angle = Math.PI / 3 * i - Math.PI / 2;
+            const px = x + Math.cos(angle) * nodeSize * 1.12;
+            const py = y + Math.sin(angle) * nodeSize * 1.12;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+        } else {
+          ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
+        }
+      };
 
       ctx.shadowColor = node.color;
       ctx.shadowBlur = 8 / globalScale;
-      ctx.beginPath();
-      ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
+      beginMemberPath();
       ctx.fillStyle = node.color;
+      const previousAlpha = ctx.globalAlpha;
+      if (node.layer === "ephemeral") ctx.globalAlpha *= 0.48;
+      else if (node.layer === "knowledge") ctx.globalAlpha *= 0.82;
       ctx.fill();
+      ctx.globalAlpha = previousAlpha;
       ctx.shadowBlur = 0; // keep the rings/labels below crisp
+
+      beginMemberPath();
+      ctx.strokeStyle = node.layer === "ephemeral" ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.28)";
+      ctx.lineWidth = (node.layer === "core" ? 1.8 : 1) / globalScale;
+      if (node.layer === "ephemeral") ctx.setLineDash([1.5 / globalScale, 2.5 / globalScale]);
+      else if (node.layer === "knowledge") ctx.setLineDash([4 / globalScale, 2 / globalScale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (node.layer === "core") {
+        ctx.beginPath();
+        ctx.arc(x, y, nodeSize + 2.4 / globalScale, 0, 2 * Math.PI);
+        ctx.strokeStyle = node.color;
+        ctx.lineWidth = 1 / globalScale;
+        ctx.stroke();
+      }
 
       // Highlight selected
       if (selectedNode?.id === node.id) {
+        beginMemberPath();
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2 / globalScale;
         ctx.stroke();
@@ -658,6 +928,22 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         ctx.strokeStyle = "rgba(255,255,255,0.3)";
         ctx.lineWidth = 1 / globalScale;
         ctx.stroke();
+      }
+
+      const traceStep = traceLastAnswer ? answerTraceOrder.get(node.id) : undefined;
+      if (traceStep !== undefined) {
+        const badgeRadius = 4.8 / globalScale;
+        const badgeX = x + nodeSize * 0.85;
+        const badgeY = y - nodeSize * 0.85;
+        ctx.beginPath();
+        ctx.arc(badgeX, badgeY, badgeRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = "#f8fafc";
+        ctx.fill();
+        ctx.fillStyle = "#0b1220";
+        ctx.font = `700 ${Math.max(3, 7 / globalScale)}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(traceStep), badgeX, badgeY);
       }
 
       // Label only when it can actually be read — this is what kills the pile-up:
@@ -692,7 +978,7 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       }
       ctx.restore();
     },
-    [selectedNode, hoverNode, focusIds]
+    [selectedNode, hoverNode, focusIds, traceLastAnswer, answerTraceOrder]
   );
 
   // ─── Custom link rendering ────────────────────────────────────────────
@@ -802,9 +1088,35 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       ctx.strokeStyle = grad;
       ctx.lineWidth = width;
       ctx.stroke();
+
+      if (traceLastAnswer && answerReinforcedEdgeIds.has(link.edge_id)) {
+        arc();
+        ctx.strokeStyle = "rgba(251, 191, 36, 0.95)";
+        ctx.lineWidth = Math.max(width * 1.8, 2 / globalScale);
+        ctx.stroke();
+      }
+
+      // Direction appears only on a focused trace so the overview stays calm.
+      if (focused) {
+        const t = 0.72;
+        const oneMinusT = 1 - t;
+        const px = oneMinusT * oneMinusT * sx + 2 * oneMinusT * t * cx + t * t * tx;
+        const py = oneMinusT * oneMinusT * sy + 2 * oneMinusT * t * cy + t * t * ty;
+        const dx = 2 * oneMinusT * (cx - sx) + 2 * t * (tx - cx);
+        const dy = 2 * oneMinusT * (cy - sy) + 2 * t * (ty - cy);
+        const angle = Math.atan2(dy, dx);
+        const arrowSize = 4.5 / globalScale;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px - Math.cos(angle - Math.PI / 6) * arrowSize, py - Math.sin(angle - Math.PI / 6) * arrowSize);
+        ctx.lineTo(px - Math.cos(angle + Math.PI / 6) * arrowSize, py - Math.sin(angle + Math.PI / 6) * arrowSize);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+        ctx.fill();
+      }
       ctx.restore();
     },
-    [glowTick, recentEdges, focusIds]
+    [glowTick, recentEdges, focusIds, traceLastAnswer, answerReinforcedEdgeIds]
   );
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -835,15 +1147,43 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
         ) : (
           <>
             <div className="sg-toolbar">
-              <button className="sg-tool-btn" onClick={expandAll} title="Expand every cluster">
-                ⊕ Expand all
-              </button>
-              <button className="sg-tool-btn" onClick={collapseAll} title="Collapse back to cluster bubbles">
-                ⊖ Collapse all
+              <div className="sg-search" role="search">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setTraceLastAnswer(false);
+                    setSelectedNode(null);
+                  }}
+                  placeholder="Find a node…"
+                  aria-label="Search graph nodes"
+                />
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear graph search">×</button>
+                )}
+              </div>
+              <button className="sg-tool-btn" onClick={collapseAll} title="Return to the labeled cluster map">
+                ◉ Overview
               </button>
               <button className="sg-tool-btn" onClick={() => fitView(500)} title="Frame the whole graph">
                 ⌖ Fit
               </button>
+              {(lastAnswerTrace?.context_node_ids.length ?? 0) > 0 && (
+                <button
+                  className={`sg-tool-btn sg-trace-btn ${traceLastAnswer ? "active" : ""}`}
+                  onClick={() => {
+                    setTraceLastAnswer((value) => !value);
+                    setSearchQuery("");
+                    setSelectedNode(null);
+                    setTimeout(() => fitView(450), 250);
+                  }}
+                  aria-pressed={traceLastAnswer}
+                  title="Show the recorded context supplied to the most recent answer"
+                >
+                  ◎ Trace last answer · {lastAnswerTrace?.context_node_ids.length}
+                </button>
+              )}
               {selectedNode && !selectedNode.isHub && (
                 <button className="sg-tool-btn sg-tool-focus" onClick={() => setSelectedNode(null)} title="Clear focus">
                   ✕ Unfocus
@@ -869,13 +1209,15 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
               onEngineStop={handleEngineStop}
               nodeLabel={(node: GraphNode) =>
                 node.isHub
-                  ? `${node.icon} ${node.label} — ${node.count} items\nClick to ${expanded.has(node.cluster) ? "collapse" : "expand"}`
-                  : `${node.label}\n[${node.node_type}] Layer: ${node.layer}\nAccessed: ${node.access_count}x`
+                  ? node.isOverflow
+                    ? `${node.label}\nUse search to reveal a specific item.`
+                    : `${node.icon} ${node.label} — ${node.count} items\nClick to ${effectiveExpanded.has(node.cluster) ? "collapse" : "explore"}`
+                  : `${node.label}\n${clusterOf(node.id, node.node_type).name} · ${node.node_type} · ${node.layer}\n${nodeOrigin(node)}\nUsed ${node.access_count} times`
               }
               linkLabel={(link: GraphLink) =>
                 link.edge_id.startsWith("agg:")
                   ? `${link.aggregated} connection${(link.aggregated ?? 1) > 1 ? "s" : ""} between groups`
-                  : `${link.relation} (weight: ${link.weight.toFixed(2)}, momentum: ${link.momentum.toFixed(2)})`
+                  : `${nodeById.get(linkEndId(link.source))?.label ?? "Node"} → ${link.relation} → ${nodeById.get(linkEndId(link.target))?.label ?? "Node"}\nStrength ${link.weight.toFixed(2)} · trend ${link.momentum.toFixed(2)}`
               }
               cooldownTicks={220}
               warmupTicks={60}
@@ -892,13 +1234,13 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
       {metrics && (
         <div className="sg-metrics-bar">
           <span className="sg-metric">
-            <strong>{metrics.node_count}</strong> nodes
+            <strong>{metrics.node_count}</strong> shown nodes
           </span>
           <span className="sg-metric">
             <strong>{metrics.edge_count}</strong> edges
           </span>
           <span className="sg-metric">
-            avg w: <strong>{metrics.avg_edge_weight.toFixed(2)}</strong>
+            avg strength: <strong>{metrics.avg_edge_weight.toFixed(2)}</strong>
           </span>
           <span className="sg-metric">
             density: <strong>{(metrics.graph_density * 100).toFixed(1)}%</strong>
@@ -906,6 +1248,16 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           {metrics.most_connected_node && (
             <span className="sg-metric">
               hub: <strong>{metrics.most_connected_node}</strong>
+            </span>
+          )}
+          {viewMetadata && viewMetadata.summarized_suggestion_count > 0 && (
+            <span className="sg-metric sg-metric-summary" title="Generated suggestion cards are summarized so they cannot crowd durable knowledge out of the map.">
+              <strong>{viewMetadata.summarized_suggestion_count}</strong> suggestions summarized
+            </span>
+          )}
+          {viewMetadata && viewMetadata.omitted_due_to_limit > 0 && (
+            <span className="sg-metric sg-metric-summary">
+              <strong>{viewMetadata.omitted_due_to_limit}</strong> more available by search
             </span>
           )}
           <button className="sg-refresh-btn" onClick={loadGraph}>
@@ -916,15 +1268,15 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
 
       {/* ── Graph Intro Overlay ── */}
       {showIntro && graphData.nodes.length > 0 && (
-        <div className="sg-intro-overlay">
+        <div className="sg-intro-overlay" role="dialog" aria-modal="true" aria-labelledby="sg-intro-title">
           <div className="sg-intro-card">
-            <h3>🌈 Welcome to Your Spectrum Graph</h3>
-            <p>This is your living knowledge graph, organized into clusters. It grows as you chat.</p>
+            <h3 id="sg-intro-title">🌈 Your memory map</h3>
+            <p>Start with labeled families, then open one family and follow a selected node’s named connections.</p>
             <ul>
-              <li><strong>Click a bubble</strong> to expand that cluster</li>
-              <li><strong>Click a node</strong> to focus it — neighbors light up</li>
-              <li><strong>+/−</strong> buttons reinforce or weaken edges</li>
-              <li><strong>Dashed lines</strong> are heuristic link candidates</li>
+              <li><strong>Color</strong> = knowledge family</li>
+              <li><strong>Shape</strong> = memory kind; <strong>border</strong> = lifecycle</li>
+              <li><strong>Click a node</strong> = lock its one-hop trace and inspect named relations</li>
+              <li><strong>Trace last answer</strong> = context PrismOS recorded as supplied—not hidden reasoning</li>
             </ul>
             <button className="sg-intro-dismiss" onClick={() => { localStorage.setItem("prismos-graph-intro-seen", "1"); setShowIntro(false); }}>
               Got it! →
@@ -935,6 +1287,77 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
 
       {/* ── Side Panel ── */}
       <div className="sg-side-panel">
+        <section className="sg-map-summary" aria-labelledby="sg-map-title">
+          <div className="sg-panel-eyebrow">LOCAL MEMORY MAP</div>
+          <h3 id="sg-map-title">Know where everything lives</h3>
+          <p>{metrics?.node_count ?? graphData.nodes.length} meaningful nodes are shown as labeled families. Generated suggestion history is summarized, not mixed into durable knowledge.</p>
+          <details className="sg-how-to-read">
+            <summary>How to read this graph</summary>
+            <div className="sg-visual-key">
+              <div><span className="sg-key-symbol sg-key-color" /> <strong>Color</strong><span>knowledge family</span></div>
+              <div><span className="sg-key-symbol sg-key-shape" /> <strong>Shape</strong><span>memory kind</span></div>
+              <div><span className="sg-key-symbol sg-key-ring" /> <strong>Border</strong><span>core, context, knowledge, or ephemeral lifecycle</span></div>
+              <div><span className="sg-key-symbol sg-key-line" /> <strong>Line</strong><span>stored relationship; width is strength</span></div>
+              <div><span className="sg-key-symbol sg-key-dash" /> <strong>Dashed</strong><span>unconfirmed candidate link</span></div>
+              <div><span className="sg-key-symbol sg-key-gold" /> <strong>Gold</strong><span>memory changed by the traced answer</span></div>
+            </div>
+            <p className="sg-safety-note">Trace shows recorded context and relationship changes. It does not expose private model chain-of-thought.</p>
+          </details>
+        </section>
+
+        {normalizedSearch && (
+          <section className="sg-search-results" aria-live="polite" aria-label="Graph search results">
+            <div className="sg-section-heading">
+              <h4>Search results</h4>
+              <span>{searchMatches.length}</span>
+            </div>
+            {searchMatches.length === 0 ? (
+              <p className="sg-panel-empty">No local nodes match “{searchQuery.trim()}”.</p>
+            ) : (
+              searchMatches.slice(0, 12).map((node) => (
+                <button key={node.id} className="sg-node-result" onClick={() => revealNode(node)}>
+                  <span className="sg-dot" style={{ background: node.color }} />
+                  <span className="sg-node-result-copy">
+                    <strong>{node.label}</strong>
+                    <small>{clusterOf(node.id, node.node_type).name} · {node.node_type}</small>
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </button>
+              ))
+            )}
+            {searchMatches.length > 12 && <p className="sg-panel-footnote">Showing the 12 strongest matches. Refine the search to narrow it.</p>}
+          </section>
+        )}
+
+        {traceLastAnswer && lastAnswerTrace && (
+          <section className="sg-answer-trace" aria-labelledby="sg-answer-trace-title">
+            <div className="sg-section-heading">
+              <h4 id="sg-answer-trace-title">◎ Last answer trace</h4>
+              <span className={lastAnswerTrace.validated ? "sg-trace-status valid" : "sg-trace-status limited"}>
+                {lastAnswerTrace.validated ? "validated" : "not released"}
+              </span>
+            </div>
+            <p>Context recorded as supplied to the response, in retrieval order.</p>
+            <ol className="sg-trace-list">
+              {answerTraceNodes.map((node) => (
+                <li key={node.id}>
+                  <button onClick={() => setSelectedNode(node)}>
+                    <span className="sg-dot" style={{ background: node.color }} />
+                    <span>{node.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {answerTraceNodes.length < lastAnswerTrace.context_node_ids.length && (
+              <p className="sg-panel-footnote">{lastAnswerTrace.context_node_ids.length - answerTraceNodes.length} recorded context node(s) are outside this bounded map snapshot.</p>
+            )}
+            <div className="sg-trace-change-count">
+              <strong>{lastAnswerTrace.reinforced_edge_ids.length}</strong> recorded relationship changes
+            </div>
+            <p className="sg-safety-note">This is an audit trail of inputs and memory changes—not the model’s hidden reasoning.</p>
+          </section>
+        )}
+
         {/* Selected Node Detail */}
         {selectedNode && !selectedNode.isHub && (
           <div className="sg-node-detail">
@@ -946,44 +1369,70 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
               {selectedNode.label}
             </h4>
             <div className="sg-detail-meta">
+              <span className="sg-tag">{clusterOf(selectedNode.id, selectedNode.node_type).name}</span>
               <span className="sg-tag">{selectedNode.node_type}</span>
               <span className="sg-tag">{selectedNode.layer}</span>
-              <span className="sg-tag">👁 {selectedNode.access_count}</span>
+              <span className="sg-tag">used {selectedNode.access_count}×</span>
             </div>
-            <p className="sg-detail-content">{selectedNode.content}</p>
+            <div className="sg-provenance-block">
+              <span>ORIGIN</span>
+              <strong>{nodeOrigin(selectedNode)}</strong>
+            </div>
+            <div className="sg-provenance-block">
+              <span>HOW PRISMOS MAY USE IT</span>
+              <strong>{nodeUsage(selectedNode)}</strong>
+            </div>
+            <dl className="sg-node-timestamps">
+              <div><dt>Updated</dt><dd>{formatGraphDate(selectedNode.updated_at)}</dd></div>
+              <div><dt>Last used</dt><dd>{formatGraphDate(selectedNode.last_accessed)}</dd></div>
+            </dl>
+            <details className="sg-content-reveal">
+              <summary>Reveal stored content</summary>
+              <p className="sg-detail-content">{selectedNode.content}</p>
+            </details>
 
             {/* Show connected edges with reinforce buttons */}
             <div className="sg-connected-edges">
-              <h5>Connected Edges</h5>
-              {graphData.links
-                .filter(
-                  (l) =>
-                    linkEndId(l.source) === selectedNode.id ||
-                    linkEndId(l.target) === selectedNode.id
-                )
-                .slice(0, 5)
-                .map((l) => (
-                  <div key={l.edge_id} className="sg-edge-item">
-                    <span className="sg-edge-relation">{l.relation}</span>
-                    <span className="sg-edge-weight">
-                      w:{l.weight.toFixed(2)} m:{l.momentum.toFixed(2)}
-                    </span>
+              <div className="sg-section-heading">
+                <h5>Connections</h5>
+                <span>{selectedConnections.length}</span>
+              </div>
+              {selectedConnections.length === 0 && (
+                <p className="sg-panel-empty">No stored relationships for this node yet.</p>
+              )}
+              {selectedConnections.slice(0, 12).map(({ link, outgoing, neighbor }) => (
+                  <div key={link.edge_id} className="sg-edge-item">
+                    <button className="sg-edge-path" onClick={() => revealNode(neighbor)} title={`Inspect ${neighbor.label}`}>
+                      <span className="sg-edge-direction">{outgoing ? "OUT" : "IN"}</span>
+                      <span className="sg-edge-path-copy">
+                        <strong>{outgoing ? "→" : "←"} {link.relation}</strong>
+                        <span>{neighbor.label}</span>
+                      </span>
+                    </button>
+                    <div className="sg-edge-facts">
+                      <span>strength {link.weight.toFixed(2)}</span>
+                      <span>trend {link.momentum > 0.05 ? "rising" : link.momentum < -0.05 ? "falling" : "steady"}</span>
+                      <span>{link.reinforcements} reinforcements</span>
+                    </div>
+                    <div className="sg-edge-actions">
                     <button
                       className="sg-reinforce-btn positive"
-                      onClick={() => reinforceEdge(l.edge_id, 1.0)}
-                      title="Reinforce (strengthen)"
+                      onClick={() => reinforceEdge(link.edge_id, 1.0)}
+                      title={`Strengthen relationship with ${neighbor.label}`}
                     >
                       +
                     </button>
                     <button
                       className="sg-reinforce-btn negative"
-                      onClick={() => reinforceEdge(l.edge_id, -0.5)}
-                      title="Weaken"
+                      onClick={() => reinforceEdge(link.edge_id, -0.5)}
+                      title={`Weaken relationship with ${neighbor.label}`}
                     >
                       −
                     </button>
+                    </div>
                   </div>
                 ))}
+              {selectedConnections.length > 12 && <p className="sg-panel-footnote">Showing 12 strongest connections.</p>}
             </div>
 
             <button
@@ -1056,14 +1505,15 @@ export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps
           {activeClusters.map((c) => (
             <button
               key={c.id}
-              className={`sg-legend-item sg-cluster-item ${expanded.has(c.id) ? "expanded" : ""}`}
+              className={`sg-legend-item sg-cluster-item ${effectiveExpanded.has(c.id) ? "expanded" : ""}`}
               onClick={() => toggleCluster(c.id)}
-              title={expanded.has(c.id) ? "Collapse" : "Expand"}
+              title={expanded.has(c.id) ? "Return to overview" : `Explore ${c.name}`}
+              aria-expanded={effectiveExpanded.has(c.id)}
             >
               <span className="sg-dot" style={{ background: c.color }} />
               <span className="sg-cluster-name">{c.icon} {c.name}</span>
               <span className="sg-cluster-count">{clusterCounts.get(c.id) ?? 0}</span>
-              <span className="sg-cluster-state">{expanded.has(c.id) ? "−" : "+"}</span>
+              <span className="sg-cluster-state">{effectiveExpanded.has(c.id) ? "−" : "+"}</span>
             </button>
           ))}
         </div>

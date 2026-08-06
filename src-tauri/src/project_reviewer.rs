@@ -898,6 +898,7 @@ fn llm_review_request(
         request_id: format!("project-review.{}.{}", uuid::Uuid::new_v4(), batch_number),
         task: crate::inference_bridge::InferenceTask::Reasoner,
         thinking_mode: crate::inference_bridge::ThinkingMode::Standard,
+        response_format: crate::inference_bridge::ResponseFormat::Json,
         target: crate::inference_bridge::InferenceTarget {
             backend: crate::inference_bridge::TextBackend::Ollama,
             model_id: model.to_string(),

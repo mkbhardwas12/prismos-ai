@@ -123,6 +123,17 @@ Project Knowledge is narrower: it indexes only allowlisted UTF-8 source, documen
 configuration, and manifest text after preview and approval; it does not parse Office or
 PDF attachments.
 
+Generated artifacts use a separate outbound path. Explicit creation requests route to a
+bounded DOCX, PPTX, PDF, or XLSX semantic schema. Ollama is asked for JSON at temperature
+zero, Rust extracts one complete object and validates the kind-specific shape, and the
+frontend applies request-coverage and grounding gates before calling a local renderer. If
+the model response is malformed, truncated, structurally weak, or ungrounded, PrismOS uses
+a disclosed deterministic verification-first template built only from the request. XLSX
+cells are emitted as inline strings rather than formulas. Completed files are atomically
+reserved, registered as session capabilities, and only registered generated paths can be
+opened by the UI. This outbound support does not relax the fail-closed PDF/XLSX ingestion
+boundary above.
+
 ## Storage
 
 The Spectrum Graph uses SQLite under the platform app-data directory. Regular tables cover

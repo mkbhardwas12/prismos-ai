@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings } from "../types";
 
 const useChatMock = vi.hoisted(() => vi.fn());
+const useOllamaMock = vi.hoisted(() => vi.fn());
 
 // Mock all child components to isolate MainView logic
 vi.mock("../components/IntentInput", () => ({
@@ -36,20 +37,7 @@ vi.mock("../hooks/useSuggestions", () => ({
   }),
 }));
 vi.mock("../hooks/useOllama", () => ({
-  useOllama: () => ({
-    availableModels: [],
-    modelDropdownOpen: false,
-    modelDropdownRef: { current: null },
-    wizardExpanded: false,
-    pullingModel: null,
-    pullProgress: "",
-    pullPercent: 0,
-    setModelDropdownOpen: vi.fn(),
-    setWizardExpanded: vi.fn(),
-    selectModel: vi.fn(),
-    pullModelFromDropdown: vi.fn(),
-    getSetupStep: () => "ready",
-  }),
+  useOllama: useOllamaMock,
   RECOMMENDED_MODELS: [],
 }));
 vi.mock("framer-motion", () => ({
@@ -94,7 +82,22 @@ const defaultProps = {
 describe("MainView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     vi.mocked(invoke).mockImplementation(async () => "{}");
+    useOllamaMock.mockReturnValue({
+      availableModels: [],
+      modelDropdownOpen: false,
+      modelDropdownRef: { current: null },
+      wizardExpanded: false,
+      pullingModel: null,
+      pullProgress: "",
+      pullPercent: 0,
+      setModelDropdownOpen: vi.fn(),
+      setWizardExpanded: vi.fn(),
+      selectModel: vi.fn(),
+      pullModelFromDropdown: vi.fn(),
+      getSetupStep: () => "ready",
+    });
     useChatMock.mockReturnValue({
       messages: [
         {
@@ -193,6 +196,53 @@ describe("MainView", () => {
     expect(screen.getByText(/Intent Console/)).toBeInTheDocument();
   });
 
+  it("makes Live knowledge an explicit persistent consent control", async () => {
+    await act(async () => {
+      render(<MainView {...defaultProps} />);
+    });
+
+    const control = screen.getByRole("button", { name: /Local knowledge/i });
+    expect(control).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(control);
+    expect(screen.getByRole("button", { name: /Live knowledge/i })).toHaveAttribute("aria-pressed", "true");
+    expect(localStorage.getItem("prismos-auto-research")).toBe("true");
+  });
+
+  it("offers already-installed modern models without downloading them", async () => {
+    const selectModel = vi.fn();
+    useOllamaMock.mockReturnValue({
+      availableModels: [
+        { name: "mistral:latest", size: 4_400_000_000 },
+        { name: "qwen3:4b", size: 2_500_000_000 },
+        { name: "qwen3:30b-a3b", size: 19_000_000_000 },
+      ],
+      modelDropdownOpen: false,
+      modelDropdownRef: { current: null },
+      wizardExpanded: false,
+      pullingModel: null,
+      pullProgress: "",
+      pullPercent: 0,
+      setModelDropdownOpen: vi.fn(),
+      setWizardExpanded: vi.fn(),
+      selectModel,
+      pullModelFromDropdown: vi.fn(),
+      getSetupStep: () => "ready",
+    });
+
+    await act(async () => {
+      render(
+        <MainView
+          {...defaultProps}
+          settings={{ ...defaultSettings, defaultModel: "mistral:latest" }}
+        />,
+      );
+    });
+
+    expect(screen.getByText(/Newer installed model ready/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /qwen3:30b-a3b.*deep/i }));
+    expect(selectModel).toHaveBeenCalledWith("qwen3:30b-a3b");
+  });
+
   it("renders DailyBrief component", async () => {
     await act(async () => {
       render(<MainView {...defaultProps} />);
@@ -257,5 +307,48 @@ describe("MainView", () => {
     expect(screen.getByText("Reasoner")).toBeInTheDocument();
     expect(screen.getByText("Drafting the answer…")).toBeInTheDocument();
     expect(screen.getByText("1 working · 1 done")).toBeInTheDocument();
+  });
+
+  it("keeps the completed decision trace inspectable until it is dismissed or a new task starts", async () => {
+    useChatMock.mockReturnValue({
+      messages: [{ id: "done", role: "ai", content: "Finished", timestamp: new Date() }],
+      isProcessing: false,
+      processingPhase: "",
+      processingElapsed: 0,
+      handleIntent: vi.fn(),
+      clearConversation: vi.fn(),
+      conversationRef: { current: null },
+    });
+
+    await act(async () => {
+      render(
+        <MainView
+          {...defaultProps}
+          liveAgentSteps={[
+            {
+              schema_version: 1,
+              task_id: "task-finished",
+              agent: "Sandbox Prism",
+              action: "Workflow complete — response finalized",
+              status: "completed",
+              phase: "execute",
+              iteration: 0,
+              elapsed_ms: 2_500,
+              decision: {
+                kind: "finalization",
+                approved: true,
+                validated: true,
+                attempts_used: 2,
+                max_attempts: 3,
+              },
+            },
+          ]}
+        />,
+      );
+    });
+
+    expect(screen.getByText("Decision trace ready")).toBeInTheDocument();
+    expect(screen.getByText("Trace complete · 1 role")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dismiss decision trace" })).toBeInTheDocument();
   });
 });

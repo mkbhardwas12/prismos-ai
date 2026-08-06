@@ -7,7 +7,7 @@ use futures_util::{stream, StreamExt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::inference_bridge::ThinkingMode;
+use crate::inference_bridge::{ResponseFormat, ThinkingMode};
 
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 /// Reviewed cross-surface fallback for callers that omit a model. Frontend
@@ -443,6 +443,10 @@ struct ChatRequest {
     /// Typed Ollama reasoning control for documented thinking-capable models.
     #[serde(skip_serializing_if = "Option::is_none")]
     think: Option<ThinkWireValue>,
+    /// Ollama's structured-output mode. Omitted for ordinary chat so existing
+    /// behavior remains unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<ChatOptions>,
     /// How long to keep the model resident after this request (e.g. "30m").
@@ -477,6 +481,8 @@ struct ChatResponse {
     #[serde(default)]
     #[allow(dead_code)]
     done: bool,
+    #[serde(default)]
+    done_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -766,6 +772,7 @@ pub async fn chat(
         num_ctx(),
         output_tokens_for(model),
         ThinkingMode::Standard,
+        ResponseFormat::Text,
     )
     .await
 }
@@ -783,6 +790,7 @@ pub async fn chat_with_limits(
     context_tokens: u32,
     output_tokens: u32,
     thinking_mode: ThinkingMode,
+    response_format: ResponseFormat,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     validate_model_name(model)?;
     let url = validated_base_url(base_url)?;
@@ -832,8 +840,17 @@ pub async fn chat_with_limits(
         messages,
         stream: false,
         think: think_wire_value(model, thinking_mode, capabilities.thinking),
+        format: match response_format {
+            ResponseFormat::Text => None,
+            ResponseFormat::Json => Some("json"),
+        },
         options: Some(ChatOptions {
-            temperature: Some(0.7), // Balanced: focused but not robotic
+            // Structured contracts should be deterministic; ordinary chat
+            // retains the existing balanced setting.
+            temperature: Some(match response_format {
+                ResponseFormat::Text => 0.7,
+                ResponseFormat::Json => 0.0,
+            }),
             num_ctx: Some(context_tokens),
             num_predict: Some(output_tokens),
         }),
@@ -854,6 +871,11 @@ pub async fn chat_with_limits(
     }
 
     let chat_response: ChatResponse = read_bounded_json(response, "Ollama chat response").await?;
+    if chat_response.done_reason.as_deref() == Some("length") {
+        return Err(
+            "Ollama stopped at the output-token limit before completing the response".into(),
+        );
+    }
     visible_response(
         &chat_response.message.content,
         chat_response.message.thinking.as_deref(),
@@ -1246,6 +1268,35 @@ mod tests {
         assert!(request.get("prompt").is_none());
         assert!(request.get("messages").is_none());
         assert!(request.get("images").is_none());
+    }
+
+    #[test]
+    fn chat_request_serializes_structured_output_only_when_requested() {
+        let request = |format| ChatRequest {
+            model: "qwen3:4b".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "artifact".into(),
+                images: None,
+            }],
+            stream: false,
+            think: None,
+            format,
+            options: Some(ChatOptions {
+                temperature: Some(if format.is_some() { 0.0 } else { 0.7 }),
+                num_ctx: Some(8_192),
+                num_predict: Some(4_096),
+            }),
+            keep_alive: None,
+        };
+
+        let json = serde_json::to_value(request(Some("json"))).unwrap();
+        assert_eq!(json["format"], "json");
+        assert_eq!(json["options"]["temperature"], 0.0);
+
+        let text = serde_json::to_value(request(None)).unwrap();
+        assert!(text.get("format").is_none());
+        assert_eq!(text["options"]["temperature"], 0.7);
     }
 
     #[test]

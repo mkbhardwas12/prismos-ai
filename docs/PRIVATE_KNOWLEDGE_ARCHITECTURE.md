@@ -20,7 +20,8 @@ Status reflects the current repository. “Implemented” means the code path ex
 | Private-vault startup restore | Implemented | Pending restore is applied before the Spectrum Graph opens |
 | Private-vault Settings UI | Implemented | In-memory path/passphrase entry, passphrase confirmation, exact restore phrase, and restart guidance |
 | Real restore drill | Next release gate | Must pass before the vault is treated as the only recovery copy |
-| General internet research | Not implemented | No crawler or automatic web-to-knowledge ingestion |
+| Consent-gated URL research bridge | Implemented | Isolated sidecar; explicit URL + per-run egress consent, bounded fetch, receipts, optional fenced ingestion |
+| General internet search/crawl | Not implemented | No autonomous discovery, crawler, or silent web-to-knowledge ingestion |
 | Sequential plan/build/judge/refine | Implemented | Bounded calls through one inference bridge |
 | Parallel model council | Proposed | Must be opt-in and resource bounded |
 | Flywheel training | Synthetic smoke only | Personal-data harvest/full training is disabled pending consent and security controls |
@@ -38,6 +39,7 @@ Status reflects the current repository. “Implemented” means the code path ex
 9. Model reasoning is not proof. User-visible results carry rationale, assumptions, sources, and verification.
 10. Training and model promotion require separate human decisions.
 11. Network research, remote inference, downloads, and integrations are separate opt-in trust boundaries.
+12. Fresh external tasks do not receive personal profile, recent chat, or project-wide memory unless the request explicitly selects that scope.
 
 ## Data classification and ownership
 
@@ -215,11 +217,23 @@ Never add a private remote to the public PrismOS source worktree and assume bran
 
 ### Current
 
-PrismOS does not perform general web search, crawling, or automatic internet ingestion. Local Project Knowledge is the implemented way to add a controlled corpus.
+PrismOS does not perform general web search, crawling, or automatic internet
+discovery. It does provide an explicit URL-only Research Bridge: the user supplies
+HTTP(S) URLs and consents to that run; an isolated sidecar applies SSRF, redirect,
+size, content-type, timeout, and robots controls; each result gets a receipt and can
+optionally be ingested as fenced, untrusted evidence. The core never silently
+initiates that egress.
+
+Artifact generation does not yet treat those research receipts as a complete
+authoritative evidence manifest. Until that source-binding stage ships,
+version-sensitive artifacts must remain verification-first drafts and must not
+invent citations, commands, timing, or compatibility claims.
 
 ### Proposed
 
-A future Research Mode should be opt-in per task and keep web evidence separate from private project sources. Each retrieved item should carry:
+A future search/discovery mode should build on the URL bridge, remain opt-in per
+task, and keep web evidence separate from private project sources. Each retrieved
+item should carry:
 
 ```text
 source_id

@@ -41,9 +41,32 @@ export type ModelCapability =
 export const MODEL_REGISTRY: ModelSpec[] = [
   // ══════════ ESSENTIAL (Tier 1 — works on most machines) ══════════
   {
+    name: "qwen3.5:27b",
+    label: "Qwen 3.5 27B",
+    desc: "Newest-generation dense flagship; strong text, code, reasoning and math. Default on 64GB-class machines (~20 tok/s, fully offline)",
+    size: "~17 GB",
+    suggestedVramGB: 24,
+    suggestedRamGB: 32,
+    context: 262144,
+    tier: "power",
+    capabilities: [
+      "text",
+      "code",
+      "reasoning",
+      "multilingual",
+      "math",
+      "long-context",
+    ],
+    license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3.5",
+    isDefault: true,
+    priority: 1,
+    releaseYear: 2026,
+  },
+  {
     name: "qwen3:4b",
     label: "Qwen 3 4B",
-    desc: "Default compact multilingual thinking model; PrismOS discards its raw reasoning trace",
+    desc: "Compact multilingual thinking model; PrismOS discards its raw reasoning trace",
     size: "~2.5 GB",
     suggestedVramGB: 0,
     suggestedRamGB: 4,
@@ -52,8 +75,7 @@ export const MODEL_REGISTRY: ModelSpec[] = [
     capabilities: ["text", "reasoning", "multilingual", "math", "long-context"],
     license: "Apache-2.0",
     sourceUrl: "https://ollama.com/library/qwen3",
-    isDefault: true,
-    priority: 1,
+    priority: 2,
     releaseYear: 2025,
   },
   {
@@ -215,6 +237,28 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   },
 
   // ══════════ POWER USER (24GB+ VRAM) ══════════
+  {
+    name: "qwen3:30b-a3b",
+    label: "Qwen 3 30B-A3B",
+    desc: "Modern mixture-of-experts reasoning model with 30.5B total parameters, about 3B active, and a 256K listed context window",
+    size: "~19 GB",
+    suggestedVramGB: 20,
+    suggestedRamGB: 32,
+    context: 262144,
+    tier: "power",
+    capabilities: [
+      "text",
+      "code",
+      "reasoning",
+      "multilingual",
+      "long-context",
+      "math",
+    ],
+    license: "Apache-2.0",
+    sourceUrl: "https://ollama.com/library/qwen3",
+    priority: 29,
+    releaseYear: 2025,
+  },
   {
     name: "qwen3:32b",
     label: "Qwen 3 32B",

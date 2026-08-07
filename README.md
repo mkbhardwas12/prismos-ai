@@ -24,6 +24,42 @@ PrismOS-AI is a Tauri desktop app that talks to a local Ollama model over a loop
 
 *A note on the pitch: this README says what PrismOS does today, plainly. No "operating system," no "patent-pending magic," no claim that eight LLMs debate — just a local RAG assistant that's careful with your data. The [status table](#status-at-a-glance) below is deliberately honest about limits.*
 
+## Quick start
+
+### Requirements
+
+- Node.js and npm
+- Rust toolchain
+- Ollama with at least one local model
+- Platform prerequisites required by Tauri 2
+
+```bash
+git clone https://github.com/mkbhardwas12/prismos-ai.git
+cd prismos-ai
+npm ci
+ollama pull qwen3:4b
+npm run tauri dev
+```
+
+Review any installer script before running it. Prebuilt packages, when published,
+are available from [GitHub Releases](https://github.com/mkbhardwas12/prismos-ai/releases/latest),
+but install only an independently verified package whose source revision, checksum,
+publisher signature, and macOS notarization (when applicable) match the release
+evidence. The current candidate workflow does not publish trusted installers, and
+upgrades are manual.
+
+### CLI
+
+The standalone CLI talks directly to Ollama and does not run the complete GUI retrieval/workflow pipeline.
+
+```bash
+cd src-tauri
+cargo build --release --bin prismos-cli
+./target/release/prismos-cli ask "summarize the capability boundaries"
+./target/release/prismos-cli models
+./target/release/prismos-cli health
+```
+
 ## Status at a glance
 
 | Area | Current behavior |
@@ -93,42 +129,6 @@ This repository is public source code. Personal prompts, project excerpts, trend
 | Private vault | Complete SQLite database and optional audit log, including private project-derived data | User passphrase | Full-database replacement candidate; complete a clean-profile restore drill before relying on it |
 
 Even encrypted backups are private. Keep the vault and passphrase in separate places. Do not commit either backup packages or secrets to this public repository. If Git is deliberately used for encrypted off-site redundancy, use a separate private repository, commit ciphertext only, and accept that Git still exposes filenames, timestamps, repository membership, and durable history. GitHub's guidance explains why removing leaked secrets or private data from history is difficult: [Removing sensitive data from a repository](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
-
-## Quick start
-
-### Requirements
-
-- Node.js and npm
-- Rust toolchain
-- Ollama with at least one local model
-- Platform prerequisites required by Tauri 2
-
-```bash
-git clone https://github.com/mkbhardwas12/prismos-ai.git
-cd prismos-ai
-npm ci
-ollama pull qwen3:4b
-npm run tauri dev
-```
-
-Review any installer script before running it. Prebuilt packages, when published,
-are available from [GitHub Releases](https://github.com/mkbhardwas12/prismos-ai/releases/latest),
-but install only an independently verified package whose source revision, checksum,
-publisher signature, and macOS notarization (when applicable) match the release
-evidence. The current candidate workflow does not publish trusted installers, and
-upgrades are manual.
-
-### CLI
-
-The standalone CLI talks directly to Ollama and does not run the complete GUI retrieval/workflow pipeline.
-
-```bash
-cd src-tauri
-cargo build --release --bin prismos-cli
-./target/release/prismos-cli ask "summarize the capability boundaries"
-./target/release/prismos-cli models
-./target/release/prismos-cli health
-```
 
 ## Configuration
 

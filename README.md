@@ -1,12 +1,28 @@
 # PrismOS-AI
 
-> Local-first chat, retrieval, and personal knowledge for work that should stay under your control.
+> **Ask your laptop, not the cloud.** A local-first desktop AI that answers over your own files and notes — running entirely on your machine, with citations and a memory that grows.
 
-PrismOS-AI is a Tauri desktop application that connects to Ollama, retrieves relevant local context, and adaptively chooses between a fast single-pass answer and a bounded answer-quality loop. Core chat uses a loopback-only Ollama endpoint by default and can work without internet access after Ollama and a model are installed.
+<p align="center">
+  <img src="docs/media/prismos-demo.gif" width="760" alt="PrismOS-AI — ask questions over your own documents, fully local, with source citations" />
+</p>
+
+PrismOS-AI is a Tauri desktop app that talks to a local Ollama model over a loopback-only connection. Point it at your documents, ask in plain language, and it retrieves the relevant context, answers **with source citations**, and remembers what matters in a **local knowledge graph** — no account, no cloud by default, your data stays on your laptop.
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/inference-Ollama%20(local)-blueviolet)](https://ollama.com)
+
+### What it does
+
+- 🔌 **Local & offline** — inference runs through loopback-only Ollama; after setup it works with no internet.
+- 📄 **Answers over *your* files** — approval-gated indexing of your text/code/docs, with `Source:` citations you can check.
+- 🧠 **A memory that grows** — a local SQLite knowledge graph accumulates context across conversations.
+- 📝 **Makes real artifacts** — generates bounded DOCX / PPTX / PDF / XLSX locally, with typed validation.
+- 🌐 **Web only if you ask** — an optional, consent-gated research bridge; core inference stays loopback-only.
+
+**[→ Quick start](#quick-start)**  ·  **[Honest status of what's actually implemented](#status-at-a-glance)**  ·  MIT licensed
+
+*A note on the pitch: this README says what PrismOS does today, plainly. No "operating system," no "patent-pending magic," no claim that eight LLMs debate — just a local RAG assistant that's careful with your data. The [status table](#status-at-a-glance) below is deliberately honest about limits.*
 
 ## Status at a glance
 

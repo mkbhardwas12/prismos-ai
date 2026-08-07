@@ -69,6 +69,8 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 
 **What's inside:** a local-first agentic AI built with Tauri 2.0 + React 18 + Rust. Eight collaborative agents — Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper — work through a LangGraph debate pipeline and persist everything to a 7-dimensional Spectrum Graph (SQLite, 14 tables). Other things in the box: Brain Wrapped (a Spotify-Wrapped-style story of how *you* think), an adaptive personality engine, multi-band reasoning, recurring-pattern discovery, predicted knowledge connections, 15 curated 2025-2026 models with hardware-aware recommendations, smart routing to vision/code models, local vision + document RAG, a global Ctrl+Space hotkey, and a defense-in-depth security stack (AES-256-GCM, WASM isolation, HMAC, tamper-evident audit chain, Secure Enclave key derivation).
 
+> 🔬 **We measure the models we run.** [**quant-truth**](https://github.com/mkbhardwas12/quant-truth) is our open, reproducible benchmark of how quantization actually affects a local model's answers — because on-device inference is only as good as the quant you ship.
+
 ---
 
 ## 📑 Table of Contents

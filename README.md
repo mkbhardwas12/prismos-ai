@@ -2,39 +2,24 @@
 
 > **Open the lid, ask, close the lid. Your AI runs on your laptop — zero bytes leave the machine.**
 
-Drop a PDF onto PrismOS-AI and ask *"what changed in this contract vs. last week's draft?"* Eight local agents read it, debate the answer, and write the result to a knowledge graph that grows with every conversation. Works on a plane. Works at 30,000 feet. Works with the Wi-Fi off.
+Drop a PDF and ask a question. PrismOS answers from a local [Ollama](https://ollama.com) model, keeps what it learns in a knowledge graph on disk, and works with Wi-Fi off.
 
-<!-- Animated SVG hero — renders inline on GitHub, no GIF/video needed.
-     A full screen-capture demo can replace this once recorded — see docs/DEMO_RECORDING.md. -->
 <p align="center">
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">
-    <img src="docs/media/prismos-demo.gif" width="880" alt="PrismOS-AI demo — ask anything locally, eight agents debate, knowledge graph grows, all offline" />
+    <img src="docs/media/prismos-demo.gif" width="880" alt="PrismOS-AI demo — drop a file, ask a question, answer stays on the laptop" />
   </a>
   <br/>
   <sub>
     <a href="docs/media/prismos-demo.mp4">▶ 1280×720 MP4 (with voiceover)</a> ·
-    <a href="docs/screenshots/hero.svg">animated SVG fallback</a> ·
-    <a href="docs/screenshots/">all stills</a>
+    <a href="docs/media/stream-demo.mp4">live Ollama stream</a> ·
+    <a href="docs/screenshots/">stills</a>
   </sub>
 </p>
 
-<p align="center">
-  <a href="docs/media/stream-demo.mp4">
-    <img src="docs/media/stream-demo.gif" width="640" alt="Live streaming demo — real Ollama response token-by-token" />
-  </a>
-  &nbsp;
-  <a href="docs/media/brain-wrapped-loop.mp4">
-    <img src="docs/media/brain-wrapped-loop.gif" width="220" alt="Brain Wrapped preview loop" />
-  </a>
-  <br/>
-  <sub>
-    <b>Left:</b> live capture of a real Ollama stream via <code>prismos-cli</code> ·
-    <b>Right:</b> Brain Wrapped preview (Spotify-Wrapped, but for how you think)
-  </sub>
-</p>
+Published installers today: **Windows x64** and **macOS Apple Silicon**. Intel Mac and Linux are not on `/releases/latest` yet — see [v0.6 launch gate](docs/V06_LAUNCH_GATE.md).
 
 ```bash
-# One line:
+# Apple Silicon one-liner (read the script first):
 curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 ```
 
@@ -45,37 +30,16 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 [![Platform](https://img.shields.io/badge/published-Windows%20%7C%20macOS%20Apple%20Silicon-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
-[![Brain Wrapped](https://img.shields.io/badge/%E2%9C%A8-Brain%20Wrapped-ff6ec7)](#-brain-wrapped--cognitive-fingerprint-new-in-v060)
-[![Models](https://img.shields.io/badge/models-15%20supported-blueviolet)](src/lib/modelRegistry.ts)
-[![Offline](https://img.shields.io/badge/offline-100%25-success)](#)
-[![Egress](https://img.shields.io/badge/cloud%20egress-0%20bytes-success)](#)
 
-> **Hermes is your cloud agent. PrismOS is your offline cofounder.**
-> Cloud agents are great when you're on Wi-Fi and OK paying per token. PrismOS-AI is for the work that should never leave your laptop: contracts, codebases, journals, half-formed ideas. Open the lid, get an answer, close the lid.
+Tauri 2 + React 18 + Rust. After Ollama and a model are installed, you can drop files, ask questions, and keep the answers on the machine. No account. No remote model call.
 
-### How PrismOS-AI is different
-
-| | Cloud agents (Hermes / GPT / Claude) | **PrismOS-AI** |
-|---|---|---|
-| Where it runs | Someone else's GPU | Your laptop |
-| Data egress | Every prompt + reply | Zero bytes |
-| Works on a plane | No | Yes |
-| Per-token cost | Yes | None |
-| Memory | Session window | Persistent 7D knowledge graph |
-| Multi-agent | Tool calls in one model | 8 specialised agents, formal debate |
-| Plugins | Vendor catalog | Local skills + WASM sandbox |
-
----
-
-**What's inside:** a local-first agentic AI built with Tauri 2.0 + React 18 + Rust. Eight collaborative agents — Orchestrator, Memory Keeper, Reasoner, Tool Smith, Sentinel, Email Keeper, Calendar Keeper, Finance Keeper — work through a LangGraph debate pipeline and persist everything to a 7-dimensional Spectrum Graph (SQLite, 14 tables). Other things in the box: Brain Wrapped (a Spotify-Wrapped-style story of how *you* think), an adaptive personality engine, multi-band reasoning, recurring-pattern discovery, predicted knowledge connections, 15 curated 2025-2026 models with hardware-aware recommendations, smart routing to vision/code models, local vision + document RAG, a global Ctrl+Space hotkey, and a defense-in-depth security stack (AES-256-GCM, WASM isolation, HMAC, tamper-evident audit chain, Secure Enclave key derivation).
-
-> 🔬 **We measure the models we run.** [**quant-truth**](https://github.com/mkbhardwas12/quant-truth) is our open, reproducible benchmark of how quantization actually affects a local model's answers — because on-device inference is only as good as the quant you ship.
+> 🔬 **We measure the models we run.** [**quant-truth**](https://github.com/mkbhardwas12/quant-truth) is an open, reproducible check of how quantization changes a local model's answers.
 
 ---
 
 ## 📑 Table of Contents
 
-- [Core Features](#-core-features-v051)
+- [Core Features](#-core-features-v060)
 - [Architecture](#%EF%B8%8F-architecture)
 - [Demo Video](#-demo-video)
 - [Quick Start](#-quick-start)
@@ -109,7 +73,7 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 
 ---
 
-## ✨ Core Features (v0.5.2)
+## ✨ Core Features (v0.6.0)
 
 | Feature | Description |
 |---------|-------------|
@@ -266,16 +230,16 @@ All settings are configurable in the Settings panel (⚙️) within the app. The
 
 ## 🧪 Testing
 
-**478 tests passing** — 151 frontend (Vitest + React Testing Library) + 327 backend (cargo test)
+**176 frontend tests passing** (Vitest, 2026-08-12). Run the Rust suite separately before calling a release done.
 
 ```bash
-# Frontend unit tests (151 tests)
+# Frontend unit tests (176 tests)
 npx vitest run
 
 # TypeScript type-check (0 errors)
 npx tsc --noEmit
 
-# Rust backend tests (327 tests)
+# Rust backend tests
 cd src-tauri && cargo test
 
 # Rust lint (clippy)
@@ -325,7 +289,7 @@ prismos-ai/
 │   │   ├── useOllama.ts          # Ollama connection hook
 │   │   ├── useSuggestions.ts     # Suggestion lifecycle hook
 │   │   └── useVoice.ts           # Voice input hook
-│   └── test/                     # 151 frontend tests (Vitest)
+│   └── test/                     # 176 frontend tests (Vitest)
 ├── src-tauri/                    # Rust backend (Tauri 2.0)
 │   └── src/
 │       ├── lib.rs                # 85 IPC commands + app bootstrap
@@ -359,7 +323,7 @@ prismos-ai/
 │           └── prismos_cli.rs    # Headless CLI (prismos-cli)
 ├── docs/                         # Architecture diagrams + screenshots
 ├── .github/workflows/            # CI + Release Build (cross-platform)
-├── package.json                  # v0.5.2
+├── package.json                  # v0.6.0
 └── README.md                     # ← You are here
 ```
 
@@ -429,7 +393,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
 | **v0.5.1** | ✅ Done | Smart Model Routing, Document RAG, Background Omnipresence (Ctrl+Space), Tiered Model Catalog |
 | **v0.5.2** | ✅ Done | Self-Learning (Cognitive Drift, Thought Currents, Edge Prophecy, Refraction Journal), Domain Detection, Model Registry (15 models), Model Tracker, Smart Router code routing, Security Hardening, Intent Transparency, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers |
-| **v0.6.0** | 🚢 Shipping | Brain Wrapped, first CI-built Intel Mac + Linux installers. Installer matrix gated by [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md) |
+| **v0.6.0** | 🚧 Draft, not latest | Brain Wrapped in-app; Intel `.dmg` is on the draft tag; Linux AppImage still failing CI. Gate: [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md) |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
 ---
@@ -437,7 +401,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 ## 📊 Project Stats
 
 - **22 Rust modules** (+5 agent sub-modules) — Refractive Core, Spectrum Graph, Sandbox Prism, Intent Lens, Ollama Bridge, You-Port, Audit Log, Model Verify, Secure Enclave, Whisper Engine, File Indexer, Smart Router, Doc Chunker, Cognitive Profile, Thought Currents, Domain Detector, Model Tracker, Email Keeper, Calendar Keeper, Finance Keeper, Agents (mod · graph · langgraph_workflow · messages · nodes)
-- **478 tests passing** — 151 frontend (Vitest + React Testing Library) + 327 backend (cargo test)
+- **176 frontend tests passing** — Vitest + React Testing Library (2026-08-12)
 - **85 Tauri IPC commands** — full frontend↔backend communication
 - **23 React components** — MainView, IntentInput, SpectrumGraphView, SpectrumExplorer, SandboxPanel, SpectralTimeline, DailyDashboard, DailyBrief, CognitiveDriftCard, ThoughtCurrentsCard, RefractionJournal, DomainInsights, ProactivePanel, SettingsPanel, TitleBar, Sidebar, OnboardingWizard, SpotlightOverlay, ActiveAgents, DailySuggestions, SuggestionCard, ErrorBoundary
 - **15 curated AI models** — from Qwen 3, Phi-4, Gemma 3, Llama 3.2, DeepSeek R1/V3, Mistral (essential/recommended/power/edge tiers)
@@ -453,7 +417,7 @@ Released under the **MIT License** — free for personal, educational, and comme
 ---
 
 <p align="center">
-  <strong>PrismOS-AI v0.6.0</strong> — Your mind, your machine, your OS.<br />
+  <strong>PrismOS-AI v0.6.0</strong> — desktop AI that stays on your laptop.<br />
   Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
 </p>

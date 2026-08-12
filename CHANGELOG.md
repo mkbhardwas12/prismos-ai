@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Highlights
 
-**Brain Wrapped + Cognitive Fingerprint** — the world's first privacy-preserving, deterministic cognitive identity primitive. A Spotify-Wrapped-style 7-slide animated story refracted entirely from on-device data, with a SHA-256 fingerprint hash that lets two PrismOS users compute "cognitive twin" compatibility without ever sharing raw data. **No prior art.**
+**Brain Wrapped + Cognitive Fingerprint** — a 7-slide on-device recap of how you have been using PrismOS, plus a SHA-256 fingerprint of the 5-axis cognitive profile. Treat it as a post-use recap, not the install wedge.
 
 ### Added
 
@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Distribution
 
-- First CI-built release matrix: Windows `.msi`/`.exe`, macOS Apple Silicon `.dmg`, macOS Intel `.dmg`, Linux `.AppImage` + `.deb`.
-- `scripts/install.sh` matches published asset names and refuses Linux ARM instead of failing on a missing glob.
+- CI matrix *attempts* Windows `.msi`/`.exe`, macOS Apple Silicon `.dmg`, macOS Intel `.dmg`, Linux `.AppImage` + `.deb`. Draft `v0.6.0` is not `/releases/latest` until [docs/V06_LAUNCH_GATE.md](docs/V06_LAUNCH_GATE.md) is green.
+- `scripts/install.sh` matches published asset names and refuses Linux ARM instead of failing on a missing glob. Linux AppImage was still red on ubuntu-22.04 (`libspa` vs PipeWire headers) as of 2026-08-12.
 
 ### Changed
 

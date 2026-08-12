@@ -37,7 +37,9 @@ jobs:
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin --bundles dmg'
             rust-targets: 'x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04'
+          # 22.04 PipeWire headers do not match crates.io libspa 0.9.2
+          # (missing spa_video_info_raw.flags). 24.04 is what CI already tests.
+          - platform: 'ubuntu-24.04'
             args: '--bundles appimage,deb'
             rust-targets: ''
 
@@ -47,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -101,10 +103,15 @@ jobs:
             Desktop AI that runs on your laptop. Drop a file, ask a question, it remembers. Nothing leaves the machine.
 
             ### Downloads
-            - **Windows x64**: `.msi` (recommended) or `.exe`
-            - **macOS Apple Silicon**: `*_aarch64.dmg`
-            - **macOS Intel**: `*_x64.dmg`
-            - **Linux x64**: `.AppImage` or `.deb`
+
+            List only assets actually attached to this tag. Do not mark latest
+            until docs/V06_LAUNCH_GATE.md is green.
+
+            Expected names when the matrix succeeds:
+            - Windows x64: `.msi` / `.exe`
+            - macOS Apple Silicon: `*_aarch64.dmg`
+            - macOS Intel: `*_x64.dmg`
+            - Linux x64: `.AppImage` / `.deb` (ubuntu-24.04)
 
             Linux ARM AppImages are not published. Build from source or use x64.
 

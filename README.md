@@ -65,10 +65,6 @@ Tauri 2 + React 18 + Rust. After Ollama and a model are installed, you can drop 
 |:-:|:-:|
 | <img src="docs/screenshots/Sandbox-Prisms.png" width="400" alt="Sandbox Prisms — WASM-isolated execution" /> | <img src="docs/screenshots/Spectral-Timeline.png" width="400" alt="Spectral Timeline — knowledge evolution over time" /> |
 
-| Voice Input | Security Audit Log |
-|:-:|:-:|
-| *Screenshot coming soon — speak your intents via local voice engine* | *Screenshot coming soon — tamper-proof SHA-256 hash chain audit trail* |
-
 </details>
 
 ---

@@ -53,6 +53,8 @@ failed; not a desktop-launch blocker.
 - [x] `cd src-tauri && cargo test` — 370 tests (pre-tag)
 - [x] GitHub homepage is the repo URL
 - [x] Demo links `docs/media/prismos-demo.mp4`
+- [x] Root `LAUNCH_POST.md` no longer ships the v0.5.1 “AI operating system” paste
+- [x] README no longer advertises missing Voice / Audit screenshots
 
 ## After the binaries exist (not before)
 

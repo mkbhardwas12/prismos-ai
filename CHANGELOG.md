@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Distribution
 
-- CI matrix *attempts* Windows `.msi`/`.exe`, macOS Apple Silicon `.dmg`, macOS Intel `.dmg`, Linux `.AppImage` + `.deb`. Draft `v0.6.0` is not `/releases/latest` until [docs/V06_LAUNCH_GATE.md](docs/V06_LAUNCH_GATE.md) is green.
-- `scripts/install.sh` matches published asset names and refuses Linux ARM instead of failing on a missing glob. Linux AppImage was still red on ubuntu-22.04 (`libspa` vs PipeWire headers) as of 2026-08-12.
+- CI-built `/releases/latest` **v0.6.0**: Windows `.msi`/`.exe`, macOS Apple Silicon `.dmg`, macOS Intel `.dmg`, Linux x64 AppImage + `.deb`.
+- `scripts/install.sh` matches those names and refuses unpublished Linux ARM. Linux is built on ubuntu-24.04 (22.04 PipeWire headers break `libspa` 0.9.2).
 
 ### Changed
 

@@ -16,10 +16,10 @@ Drop a PDF and ask a question. PrismOS answers from a local [Ollama](https://oll
   </sub>
 </p>
 
-Published installers today: **Windows x64** and **macOS Apple Silicon**. Intel Mac and Linux are not on `/releases/latest` yet — see [v0.6 launch gate](docs/V06_LAUNCH_GATE.md).
+Published installers on [v0.6.0](https://github.com/mkbhardwas12/prismos-ai/releases/latest): Windows x64, macOS Apple Silicon, macOS Intel, Linux x64. Linux ARM is not published.
 
 ```bash
-# Apple Silicon one-liner (read the script first):
+# macOS / Linux x64 (read the script first):
 curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 ```
 
@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 [![Version](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
-[![Platform](https://img.shields.io/badge/published-Windows%20%7C%20macOS%20Apple%20Silicon-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+[![Platform](https://img.shields.io/badge/published-Windows%20%7C%20macOS%20%7C%20Linux%20x64-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
 
 Tauri 2 + React 18 + Rust. After Ollama and a model are installed, you can drop files, ask questions, and keep the answers on the machine. No account. No remote model call.
@@ -154,29 +154,25 @@ See [docs/diagrams/](docs/diagrams/) for more SVG diagrams (data flow, security 
 
 ## 🚀 Quick Start
 
-### What `/releases/latest` actually ships today
+### What `/releases/latest` ships (v0.6.0)
 
-| Platform | Asset | One-liner works? |
+| Platform | Asset | One-liner |
 |---|---|---|
-| Windows x64 | `.msi` / `.exe` | yes (`install.ps1`) |
-| macOS Apple Silicon | `*aarch64.dmg` | yes (`install.sh`) |
-| macOS Intel | `*x64.dmg` | **not published yet** |
-| Linux x64 / ARM | `*amd64.AppImage` / `*arm64.AppImage` / `.deb` | **not published yet** |
+| Windows x64 | `.msi` / `.exe` | `install.ps1` |
+| macOS Apple Silicon | `PrismOS-AI_0.6.0_aarch64.dmg` | `install.sh` |
+| macOS Intel | `PrismOS-AI_0.6.0_x64.dmg` | `install.sh` |
+| Linux x64 | `PrismOS-AI_0.6.0_amd64.AppImage` / `.deb` | `install.sh` |
+| Linux ARM | — | not published; build from source |
 
-CI already builds Intel + Linux; they are not on the latest GitHub Release.
-Until they are, download a published installer or build from source. The
-checklist that gates v0.6 is in [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md).
-
-### One-line install (macOS Apple Silicon)
+### One-line install (macOS / Linux x64)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 ```
 
 Read the script first: [`scripts/install.sh`](scripts/install.sh). It downloads
-the latest `*aarch64.dmg` and bootstraps [Ollama](https://ollama.com) with
-`qwen3:4b` if needed. Intel Mac and Linux globs are in the script but will fail
-until those assets are published.
+the matching `.dmg` or AppImage and bootstraps [Ollama](https://ollama.com)
+with `qwen3:4b` if needed.
 
 ### One-line install (Windows · PowerShell)
 
@@ -207,7 +203,8 @@ Published installers are on the [Releases page](https://github.com/mkbhardwas12/
 
 - **Windows**: `.msi` (recommended) or `.exe`
 - **macOS Apple Silicon**: `*_aarch64.dmg`
-- **macOS Intel / Linux**: not on the latest release yet — build from source or wait for v0.6 (see [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md))
+- **macOS Intel**: `*_x64.dmg`
+- **Linux x64**: `*_amd64.AppImage` or `*_amd64.deb`
 
 ---
 
@@ -377,7 +374,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **File Watching** | notify 6.1 · walkdir 2 |
 | **Security** | AES-256-GCM · HMAC-SHA256 · WASM sandboxing |
 | **CI/CD** | GitHub Actions — TypeScript check, Vitest, cargo check/clippy/test, release builds |
-| **Platforms** | Published: Windows (.msi/.exe), macOS Apple Silicon (`.dmg`). Intel Mac + Linux are in CI, not on `/releases/latest` yet. |
+| **Platforms** | Published: Windows (.msi/.exe), macOS Apple Silicon + Intel (`.dmg`), Linux x64 (AppImage + `.deb`) |
 
 ---
 
@@ -393,7 +390,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
 | **v0.5.1** | ✅ Done | Smart Model Routing, Document RAG, Background Omnipresence (Ctrl+Space), Tiered Model Catalog |
 | **v0.5.2** | ✅ Done | Self-Learning (Cognitive Drift, Thought Currents, Edge Prophecy, Refraction Journal), Domain Detection, Model Registry (15 models), Model Tracker, Smart Router code routing, Security Hardening, Intent Transparency, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers |
-| **v0.6.0** | 🚧 Draft, not latest | Brain Wrapped in-app; Intel `.dmg` is on the draft tag; Linux AppImage still failing CI. Gate: [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md) |
+| **v0.6.0** | ✅ Latest | Brain Wrapped; first CI-built Intel Mac `.dmg` + Linux AppImage/`.deb`. Gate: [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md) |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
 ---

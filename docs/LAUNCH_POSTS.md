@@ -1,79 +1,74 @@
-# Launch posts — Show HN, r/LocalLLaMA, Twitter/X
+# Launch posts — Show HN, r/LocalLLaMA, X
 
-Three ready-to-post drafts for the v0.6 launch push, all built around the same narrative: **PrismOS is the offline counterpart to cloud agents** (Hermes, GPT, Claude). Each one is tuned to the platform's voice and the audience's BS-detector.
+Rewritten 2026-08-12 after the deep-research report. The old drafts led with
+"agentic OS", "7D", Hermes contrast, and Brain Wrapped. Those get roasted.
+These lead with installers, file formats, and what runs with Wi-Fi off.
 
-For long-form (LinkedIn) see `LAUNCH_POST.md` in the repo root.
+Do **not** quote 236★ / 214 forks. Honest figures (2026-08-12): 47 lifetime
+installer downloads, 2 watchers, empty issues until the seed batch, 1 contributor.
 
-Posting order suggestion (Tuesday or Wednesday, 9am ET):
+Post only after you have read the post out loud. Do not paste LLM cadence
+("Not X — but Y"). One human post, not three platforms in 30 minutes.
 
-1. Show HN at 9:00 ET (HN front-page window).
-2. r/LocalLLaMA at 9:15 — links back to the HN thread for "discussion".
-3. Twitter/X thread at 9:30 — links to both.
+Suggested order (weekday morning in US time):
 
-The single decisive asset is the demo GIF — get that right first (see `DEMO_RECORDING.md`).
+1. Show HN
+2. r/LocalLLaMA, after the HN thread exists, asking what broke
+3. Skip X unless you already have a real account people follow
+
+Demo file that actually exists: `docs/media/prismos-demo.gif`
+(not `docs/screenshots/prismos-demo.gif`).
 
 ---
 
 ## 1. Show HN
 
-**Title** (HN cuts at 80 chars, this is 78):
+**Title** (78 chars):
 
-> Show HN: PrismOS-AI – Local-first agentic OS with 8 AI agents that debate offline
+> Show HN: PrismOS-AI – desktop AI that answers over your files, fully offline
 
-**Body** (HN strips Markdown — keep it plain, short, link the GIF):
+**Body** (plain text; HN strips Markdown):
 
 ```
-Hi HN — I've been building PrismOS-AI for about a year and just shipped v0.6.
+Hi HN — I shipped PrismOS-AI v0.6.0, a desktop app that talks to a local
+Ollama model. Drop a PDF (or DOCX/PPTX/XLSX), ask a question, get an answer
+that stays on the laptop. Works with Wi-Fi off.
 
-Demo (30s GIF): https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/docs/screenshots/prismos-demo.gif
+Installers on the GitHub release (v0.6.0):
+  Windows x64: .msi / .exe
+  macOS: Apple Silicon .dmg and Intel .dmg
+  Linux x64: .AppImage and .deb
+  Linux ARM: not published; build from source
 
-The thing I wanted didn't exist: a desktop AI that
+https://github.com/mkbhardwas12/prismos-ai/releases/latest
 
-  - keeps all my data on my laptop,
-  - has persistent memory across conversations (not just a session window),
-  - actually uses multiple agents that disagree with each other, not "agentic mode" that's one model doing tool calls.
+macOS / Linux x64 one-liner (read the script first):
+  curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 
-So I built it. Tauri 2.0 + React 18 + Rust. All inference goes through a local
-Ollama daemon. Eight agents (Orchestrator, Memory Keeper, Reasoner, Tool Smith,
-Sentinel, Email/Calendar/Finance Keepers) run a LangGraph-style debate and a
-consensus vote. Everything they produce lands in a 7-dimensional SQLite
-"Spectrum Graph" that grows over time.
+Windows:
+  irm https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.ps1 | iex
 
-A few things that I think are actually interesting:
+Demo (GIF): https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/docs/media/prismos-demo.gif
+MP4: https://github.com/mkbhardwas12/prismos-ai/blob/main/docs/media/prismos-demo.mp4
 
-  - WASM Sandbox Prism: every agent action runs inside wasmtime with a per-agent
-    allow-list and CPU fuel limit. Restricted ops get auto-rolled back with a
-    plain-English explanation.
-  - Smart Router: detects when you've attached an image or asked a code
-    question, swaps to llava / a code model, swaps back after. You set this once,
-    not per-conversation.
-  - Brain Wrapped: a Spotify-Wrapped-style 7-slide story of how YOU think,
-    generated entirely from local cognitive data. You can export the whole
-    thing as a single PNG.
-  - One-line install: `curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh`
-    bootstraps Ollama if it's not already there, pulls qwen3:4b, drops the
-    signed binary in /Applications or /usr/local/bin.
+Stack: Tauri 2 + React 18 + Rust. Inference is loopback Ollama only
+(default qwen3:4b). Answers and notes land in a local SQLite knowledge graph
+so the next conversation can use them. MIT.
 
-What it isn't: a Hermes / Claude / GPT replacement when you want frontier
-quality. Local models top out around qwen3:4b / phi-4 / llama 3.2 on most
-laptops — fine for "summarize this", "what changed", "draft this email" but
-not for "write me a 10k-word research report". Pick the right tool for the
-job; sometimes that tool should run on your machine.
+It is not a cloud-model replacement. Local 4B-class models are fine for
+"what changed in this contract" and a bad fit for a 10k-word research report.
 
-Repo (MIT): https://github.com/mkbhardwas12/prismos-ai
-CLI (no GUI required): `cargo install --path src-tauri --bin prismos-cli`
-
-Happy to answer questions about the sandbox model, the LangGraph workflow, or
-why I picked SQLite over a real graph DB. Roast away — that's why I'm here.
+Repo: https://github.com/mkbhardwas12/prismos-ai
+What broke on first run? That is the useful comment.
 ```
 
-**Reply playbook** — pre-drafts for the comments you'll definitely get:
+**Reply playbook**
 
 | Comment | Reply |
 |---|---|
-| "Why not just use Ollama directly?" | Ollama is the inference backend. PrismOS is the layer above: persistent memory, multi-agent debate, sandboxing, the cognitive graph. You can still drop down to raw Ollama via `prismos-cli`. |
-| "How is this different from $other_local_agent?" | Three things: persistent 7D knowledge graph, formal multi-agent debate (not tool calls), WASM sandbox with auto-rollback. Most others are wrappers around a single model. |
-| "Does it work without a GPU?" | Yes — qwen3:4b runs at conversational speed on an M1 or a recent Intel. We auto-recommend a model based on detected hardware. |
+| "Why not just use Ollama?" | Ollama is the model server. This is the desktop shell: file drop, a local graph that persists, and an installer. `prismos-cli` still talks to the same daemon. |
+| "Is inference actually local?" | Yes. After Ollama and a model are on the machine, prompts go to `localhost:11434`. The install script may hit the network once to fetch Ollama and the model. |
+| "GPU?" | qwen3:4b is usable on an M1 and on recent 16GB x64 boxes. The onboarding wizard picks a smaller model if RAM is tight. |
 
 ---
 
@@ -81,122 +76,45 @@ why I picked SQLite over a real graph DB. Roast away — that's why I'm here.
 
 **Title**:
 
-> [Release] PrismOS-AI v0.6 — 8-agent debate, persistent 7D memory, all offline (MIT + Rust)
+> [Release] PrismOS-AI v0.6 — Win / macOS / Linux x64 installers, local Ollama, works with Wi-Fi off
 
-**Body** (Markdown OK on Reddit):
+**Body**:
 
-> **Hermes is your cloud agent. PrismOS is your offline cofounder.**
+I shipped v0.6.0 of PrismOS-AI. Desktop app on top of your Ollama install.
+Drop a file, ask a question, the answer stays on disk. No account.
 
-I lurked here for months while building this. Posting now because v0.6 is the first version I'd actually use myself.
+**Installers** (GitHub release v0.6.0): Windows `.msi`/`.exe`, macOS arm64 +
+Intel `.dmg`, Linux x64 `.AppImage` + `.deb`. Linux ARM is not published.
 
-**What it is.** Local-first desktop app (Tauri + Rust + React) that runs on top of your existing Ollama install. Eight agents collaborate through a LangGraph debate pipeline, with everything persisted to a 7-dimensional SQLite "Spectrum Graph" that grows over time.
-
-**What it gives you that a single-model setup doesn't:**
-
-- **Memory across sessions.** Every intent lands in the graph. The next conversation can reference it without you re-pasting.
-- **Smart Router.** Auto-swaps to a vision model (llava / llama3.2-vision) when you attach an image, swaps back after. Same for code-heavy queries.
-- **Per-agent WASM sandbox.** Every action runs inside wasmtime with a per-agent capability list. Anomalous actions get auto-rolled back.
-- **Brain Wrapped.** Spotify-Wrapped-but-for-your-mind: 7-slide animated story of how you think, generated entirely from local data, exports as a single shareable PNG.
-
-**What it doesn't do.** Replace Claude / GPT for frontier-quality work. Local models cap out where they cap out. PrismOS is for the work that should never leave your laptop in the first place.
-
-**Hardware notes.**
-- M1/M2: qwen3:4b is conversational speed, phi-4 is fine, llama3.2 is comfortable.
-- 16GB intel: qwen3:4b / llama3.2:3b are the sweet spot.
-- 8GB intel: qwen3:1.7b or phi-3:mini, expect slower responses on long contexts.
-
-The onboarding wizard auto-recommends based on `sysinfo`-detected hardware.
-
-**One-line install** (macOS + Linux):
+https://github.com/mkbhardwas12/prismos-ai/releases/latest
 
 ```bash
+# read it first
 curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 ```
 
-Windows: `.msi` on the [releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest).
+**Hardware I actually use**
+- Apple Silicon: `qwen3:4b` is the default
+- 16GB x64: same, or `llama3.2:3b`
+- 8GB: `qwen3:1.7b` / `phi-3:mini` — expect it to feel slow
 
-**Source + license**: MIT, [github.com/mkbhardwas12/prismos-ai](https://github.com/mkbhardwas12/prismos-ai). Code is fully open.
+Onboarding reads `sysinfo` and suggests a tier. Swap models in Settings.
 
-**Demo GIF**: ↑ at top of the README.
+**What I want from this thread:** what broke on first run. Model too big,
+AppImage not executable, Windows SmartScreen, Ollama already on a weird
+port — those reports are more useful than stars.
 
-Open to feedback — particularly interested in what models you'd want as defaults at each hardware tier, and whether the WASM sandbox model is too restrictive for the workflows you actually run.
-
----
-
-## 3. Twitter / X thread
-
-8 tweets. Each one stands alone — if someone retweets just tweet 3, it still says something.
-
-> **1/** Hermes is your cloud agent.
->
-> PrismOS is your offline cofounder.
->
-> Built it because I wanted an AI that worked on a plane, kept everything on my laptop, and actually remembered me from yesterday.
->
-> v0.6 just shipped. MIT + Rust. ↓
->
-> [attach: demo.gif]
-
-> **2/** What it does, in one sentence:
->
-> Ask anything. Eight local agents debate it, remember it, and refract it — all on your laptop, offline.
->
-> No round-trip to anyone's cloud. No per-token cost. No "we may use your data to improve the model."
-
-> **3/** A side-by-side, because the question is always "vs Hermes / GPT / Claude":
->
-> Cloud agents → great when you have Wi-Fi + are OK paying per token.
->
-> PrismOS → for the work that should never leave your laptop in the first place. Contracts. Codebases. Journals. Half-finished ideas.
-
-> **4/** Three things I think are actually new:
->
-> • Spectrum Graph — 7-dimensional persistent memory
-> • Refractive Core — multi-agent debate w/ formal consensus
-> • Sandbox Prism — WASM-isolated action execution + auto-rollback
-
-> **5/** Brain Wrapped 🪐
->
-> Spotify Wrapped, but for your mind. 7-slide animated story generated entirely from local cognitive data. Export the whole thing as one PNG.
->
-> Yours, mathematically unique, never uploaded.
->
-> [attach: brain-wrapped-poster.png]
-
-> **6/** Install in one line (mac/linux):
->
-> ```
-> curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
-> ```
->
-> It detects your OS, pulls the latest signed binary, and bootstraps Ollama if it's not already installed.
-
-> **7/** CLI mode for devs who don't want a GUI:
->
-> ```
-> prismos-cli ask "explain WASM sandboxing in one paragraph"
-> cat notes.md | prismos-cli ask --stdin --model qwen3:4b
-> ```
->
-> Talks straight to your local Ollama. Zero ceremony.
-
-> **8/** Repo (MIT): https://github.com/mkbhardwas12/prismos-ai
->
-> Discussion on HN: [link]
->
-> What you'd build with it: replies welcome.
+MIT: https://github.com/mkbhardwas12/prismos-ai
+Demo: the GIF at the top of the README (`docs/media/prismos-demo.gif`).
 
 ---
 
-## Bonus — Comparison table (paste into any post that needs it)
+## 3. X (optional, last)
 
-```
-                          Hermes / GPT / Claude   |   PrismOS-AI
-Runs where                Someone else's GPU      |   Your laptop
-Data egress               Every prompt + reply    |   Zero bytes
-Works on a plane          No                      |   Yes
-Per-token cost            Yes                     |   None
-Memory                    Session window          |   Persistent 7D graph
-Multi-agent               Tool calls, one model   |   8 agents, formal debate
-Plugins                   Vendor catalog          |   Local skills + WASM
-```
+Do not lead with a coined metaphor. One post is enough:
+
+> PrismOS-AI v0.6.0 is on GitHub Releases: Windows .msi, macOS arm64+Intel
+> .dmg, Linux x64 AppImage/.deb. Drop a file, ask locally, Wi-Fi can be off.
+> https://github.com/mkbhardwas12/prismos-ai/releases/latest
+
+Attach `docs/media/prismos-demo.gif` if the client will play it.

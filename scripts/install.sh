@@ -2,8 +2,8 @@
 # PrismOS-AI one-line installer
 # Usage:  curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 #
-# Detects your OS + arch, downloads the latest signed release from GitHub,
-# and bootstraps Ollama with a small default model if it isn't already present.
+# Detects your OS + arch, downloads the latest GitHub Release asset,
+# checks SHA-256 against the API digest, and bootstraps Ollama.
 #
 # Safe to re-run. Idempotent. Will never overwrite an existing install without asking.
 # All data stays on your machine.
@@ -66,19 +66,51 @@ require_tools() {
   need sed
 }
 
-# ─── 2. resolve latest release URL ───────────────────────────────────────────
-latest_asset_url() {
+file_sha256() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    die "need shasum or sha256sum to verify the download"
+  fi
+}
+
+# ─── 2. resolve latest release URL + digest ──────────────────────────────────
+latest_asset() {
   local api="https://api.github.com/repos/$REPO/releases/latest"
   info "querying latest release …"
-  # Use the GitHub redirect for assets when possible; fall back to API parsing.
-  local url
-  url=$(curl -fsSL "$api" \
-        | grep -Eo '"browser_download_url":\s*"[^"]+"' \
-        | sed -E 's/.*"([^"]+)"/\1/' \
-        | grep -E "$ASSET_RE" \
-        | head -n1 || true)
-  [ -n "$url" ] || die "couldn't find a release asset matching $ASSET_RE"
-  echo "$url"
+  ASSET_URL=""
+  ASSET_DIGEST=""
+  if command -v python3 >/dev/null 2>&1; then
+    local parsed
+    parsed=$(ASSET_RE="$ASSET_RE" python3 - "$api" <<'PY'
+import json, os, re, sys, urllib.request
+pat = os.environ["ASSET_RE"]
+req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "prismos-installer"})
+data = json.load(urllib.request.urlopen(req))
+rx = re.compile(pat)
+for a in data.get("assets") or []:
+    name = a.get("name") or ""
+    if rx.search(name):
+        print(a.get("browser_download_url") or "")
+        digest = a.get("digest") or ""
+        print(digest[7:] if digest.startswith("sha256:") else digest)
+        sys.exit(0)
+sys.exit(1)
+PY
+) || true
+    ASSET_URL=$(printf '%s\n' "$parsed" | sed -n '1p')
+    ASSET_DIGEST=$(printf '%s\n' "$parsed" | sed -n '2p')
+  fi
+  if [ -z "$ASSET_URL" ]; then
+    ASSET_URL=$(curl -fsSL -A prismos-installer "$api" \
+          | grep -Eo '"browser_download_url":\s*"[^"]+"' \
+          | sed -E 's/.*"([^"]+)"/\1/' \
+          | grep -E "$ASSET_RE" \
+          | head -n1 || true)
+  fi
+  [ -n "$ASSET_URL" ] || die "couldn't find a release asset matching $ASSET_RE"
 }
 
 # ─── 3. download + install the app ───────────────────────────────────────────
@@ -90,6 +122,18 @@ install_app() {
   tmp=$(mktemp -d)
   info "downloading $fname …"
   curl -fL --progress-bar -o "$tmp/$fname" "$url"
+
+  local got
+  got=$(file_sha256 "$tmp/$fname")
+  info "sha256 $got"
+  if [ -n "${ASSET_DIGEST:-}" ]; then
+    [ "$got" = "$ASSET_DIGEST" ] || die "SHA-256 mismatch for $fname
+  expected $ASSET_DIGEST
+  got      $got"
+    ok "checksum matches GitHub digest"
+  else
+    warn "GitHub digest unavailable; left the file hash above for manual check"
+  fi
 
   case "$OS" in
     mac)
@@ -167,7 +211,7 @@ EOF
 # ─── go ──────────────────────────────────────────────────────────────────────
 require_tools
 detect_platform
-ASSET_URL=$(latest_asset_url)
+latest_asset
 install_app "$ASSET_URL"
 bootstrap_ollama
 done_msg

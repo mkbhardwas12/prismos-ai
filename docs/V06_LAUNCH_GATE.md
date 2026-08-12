@@ -15,10 +15,14 @@ all live globs against that tag.
 |---|---|---|
 | Apple Silicon `.dmg` | `aarch64\.dmg` | `PrismOS-AI_0.6.0_aarch64.dmg` (valid UDIF; contains `PrismOS-AI.app`) |
 | Intel Mac `.dmg` | `_x64\.dmg` | `PrismOS-AI_0.6.0_x64.dmg` |
-| Windows `.exe` / `.msi` | `install.ps1` | `PrismOS-AI_0.6.0_x64-setup.exe`, `_x64_en-US.msi` |
+| Windows `.exe` / `.msi` | `install.ps1` `*x64*.msi` | `PrismOS-AI_0.6.0_x64-setup.exe`, `_x64_en-US.msi` |
 | Linux x64 AppImage | `(amd64\|x86_64)\.AppImage` | `PrismOS-AI_0.6.0_amd64.AppImage` (ELF x86-64) |
 | Linux `.deb` | n/a (manual download) | `PrismOS-AI_0.6.0_amd64.deb` |
 | Linux ARM AppImage | refused in `install.sh` | not published |
+
+`install.ps1` now matches `*x64*.msi` (the published name is
+`PrismOS-AI_0.6.0_x64_en-US.msi`). Windows ARM is refused. Both
+installers check SHA-256 against the GitHub `digest` field.
 
 Linux is built on **ubuntu-24.04**. ubuntu-22.04 fails: crates.io `libspa` 0.9.2
 vs old PipeWire headers (`spa_video_info_raw.flags` missing). Android APK job
@@ -42,6 +46,7 @@ failed; not a desktop-launch blocker.
 - [x] Linux x64 AppImage attached (`*amd64.AppImage`)
 - [x] Linux ARM: `install.sh` refuses with a clear message
 - [x] Linux `.deb` attached
+- [x] Windows one-liner: `*x64*.msi` + SHA-256 digest check on `main`
 - [ ] Full clean-machine GUI smoke (Ollama bootstrap + first ask) not run here
 - [x] `npx tsc --noEmit` clean
 - [x] `npx vitest run` — 176 tests
@@ -51,21 +56,23 @@ failed; not a desktop-launch blocker.
 
 ## After the binaries exist (not before)
 
-- [ ] Show HN — lead with install command, file formats, and what runs with
-      Wi-Fi off. Do not lead with star/fork counts.
+- [ ] Show HN — use the rewritten copy in [`LAUNCH_POSTS.md`](LAUNCH_POSTS.md).
+      Human posts this. Lead with installers and what runs with Wi-Fi off.
 - [ ] r/LocalLLaMA — hardware notes + model tiers. Ask what broke.
-- [ ] One GitHub Discussion that invites first-run reports
-- [ ] Seed 5–8 labeled issues (`good first issue`, `help wanted`) so the
-      issues tab is not empty
+- [x] GitHub Discussion: [v0.6.0 first-run reports](https://github.com/mkbhardwas12/prismos-ai/discussions/8)
+- [x] Seeded issues #2–#7 (`help wanted` / `good first issue` / `bug`)
+
+Downloads re-counted 2026-08-12 this loop: v0.6.0 = 4, lifetime published
+binaries = **47** (was 43 before this tag).
 
 ## Do not do this month
 
 - Buy or farm stars. HN treats that as fraud.
-- Quote 236★ / 214 forks as traction. Honest figures: 43 lifetime installer
-  downloads, 2 watchers, 0 issues, 1 contributor.
+- Quote 236★ / 214 forks as traction. Honest figures: 47 lifetime installer
+  downloads, 2 watchers, 1 contributor.
 - Lead with Brain Wrapped. Treat it as a post-use recap, not the install wedge.
-- Launch the existing `docs/LAUNCH_POSTS.md` drafts before the missing
-  installers exist.
+- Post the pre-rewrite `LAUNCH_POSTS.md` (agentic OS / 7D / Hermes). That
+  file was rewritten; post only the new copy, and only as a human.
 - Pretend Android shipped. The APK job is still red.
 
 ## Commands

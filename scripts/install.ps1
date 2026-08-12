@@ -2,9 +2,9 @@
 #
 #   irm https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.ps1 | iex
 #
-# Detects arch, downloads the latest signed .msi release from GitHub, installs
-# it silently, then bootstraps Ollama and pulls the default model. No admin
-# required for the per-user MSI path. Re-runnable / idempotent.
+# Detects arch, downloads the latest .msi from GitHub Releases, checks the
+# SHA-256 against the API digest, installs it silently, then bootstraps
+# Ollama. No admin required for the per-user MSI path. Re-runnable.
 
 [CmdletBinding()]
 param(
@@ -26,13 +26,19 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 }
 
 $arch = (Get-CimInstance Win32_Processor).Architecture
-# 9 = x64, 12 = ARM64
+# 9 = x64, 12 = ARM64. Published asset is PrismOS-AI_*_x64_en-US.msi
+# (not *_x64.msi). Windows ARM is not on /releases/latest.
 $assetGlob = switch ($arch) {
-    9  { '*_x64.msi'   ; break }
-    12 { '*_arm64.msi' ; break }
+    9  { '*x64*.msi' ; break }
+    12 {
+        Die @"
+Windows ARM installers are not published. Use an x64 machine, or grab the x64 .msi from
+https://github.com/$Repo/releases/latest and build from source if you need ARM.
+"@
+    }
     default { Die "Unsupported CPU architecture code: $arch" }
 }
-Info "platform: windows ($($assetGlob -replace '\*|_|\.msi',''))"
+Info "platform: windows x64"
 
 # ─── 1. resolve latest release asset ─────────────────────────────────────────
 $api = "https://api.github.com/repos/$Repo/releases/latest"
@@ -49,6 +55,22 @@ if (-not $asset) { Die "no release asset matched $assetGlob" }
 $dest = Join-Path $env:TEMP $asset.name
 Info "downloading $($asset.name) …"
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing
+
+$got = (Get-FileHash -Algorithm SHA256 -Path $dest).Hash.ToLowerInvariant()
+Info "sha256 $got"
+$want = $null
+if ($asset.PSObject.Properties.Name -contains 'digest' -and $asset.digest) {
+    $want = ($asset.digest -replace '^sha256:', '').ToLowerInvariant()
+}
+if ($want) {
+    if ($got -ne $want) {
+        Remove-Item -Force $dest -ErrorAction SilentlyContinue
+        Die "SHA-256 mismatch for $($asset.name)`n  expected $want`n  got      $got"
+    }
+    Ok "checksum matches GitHub digest"
+} else {
+    Warn "GitHub API did not return a digest; left the file hash above for manual check"
+}
 
 # ─── 2. install MSI (per-user, no admin) ─────────────────────────────────────
 Info "installing $($asset.name) (silent, per-user) …"

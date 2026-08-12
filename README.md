@@ -40,11 +40,11 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 
 [![CI](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mkbhardwas12/prismos-ai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai?label=download)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.6.0-0ea5e9)](https://github.com/mkbhardwas12/prismos-ai)
+[![Version](https://img.shields.io/github/v/release/mkbhardwas12/prismos-ai)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
-[![Tests](https://img.shields.io/badge/tests-499%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
+[![Platform](https://img.shields.io/badge/published-Windows%20%7C%20macOS%20Apple%20Silicon-lightgrey)](https://github.com/mkbhardwas12/prismos-ai/releases/latest)
+[![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen)](https://github.com/mkbhardwas12/prismos-ai)
 [![Brain Wrapped](https://img.shields.io/badge/%E2%9C%A8-Brain%20Wrapped-ff6ec7)](#-brain-wrapped--cognitive-fingerprint-new-in-v060)
 [![Models](https://img.shields.io/badge/models-15%20supported-blueviolet)](src/lib/modelRegistry.ts)
 [![Offline](https://img.shields.io/badge/offline-100%25-success)](#)
@@ -180,21 +180,39 @@ See [docs/diagrams/](docs/diagrams/) for more SVG diagrams (data flow, security 
 
 ## 🎬 Demo Video
 
-> *30-second walkthrough — from first launch to proactive suggestions*
+> *30-second walkthrough — from first launch to an answer, all on-device*
 
-[![PrismOS-AI Demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube)](https://youtube.com)
+[![PrismOS-AI Demo](docs/media/prismos-demo.gif)](docs/media/prismos-demo.mp4)
 
-<!-- Replace the link above with your unlisted YouTube URL when the demo is recorded -->
+[▶ 1280×720 MP4](docs/media/prismos-demo.mp4) · [live Ollama stream](docs/media/stream-demo.mp4)
 
 ---
 
 ## 🚀 Quick Start
 
-### One-line install (macOS + Linux)
+### What `/releases/latest` actually ships today
+
+| Platform | Asset | One-liner works? |
+|---|---|---|
+| Windows x64 | `.msi` / `.exe` | yes (`install.ps1`) |
+| macOS Apple Silicon | `*aarch64.dmg` | yes (`install.sh`) |
+| macOS Intel | `*x64.dmg` | **not published yet** |
+| Linux x64 / ARM | `*amd64.AppImage` / `*arm64.AppImage` / `.deb` | **not published yet** |
+
+CI already builds Intel + Linux; they are not on the latest GitHub Release.
+Until they are, download a published installer or build from source. The
+checklist that gates v0.6 is in [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md).
+
+### One-line install (macOS Apple Silicon)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.sh | sh
 ```
+
+Read the script first: [`scripts/install.sh`](scripts/install.sh). It downloads
+the latest `*aarch64.dmg` and bootstraps [Ollama](https://ollama.com) with
+`qwen3:4b` if needed. Intel Mac and Linux globs are in the script but will fail
+until those assets are published.
 
 ### One-line install (Windows · PowerShell)
 
@@ -202,7 +220,8 @@ curl -fsSL https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/script
 irm https://raw.githubusercontent.com/mkbhardwas12/prismos-ai/main/scripts/install.ps1 | iex
 ```
 
-Both installers detect your OS/arch, download the latest signed release, and bootstrap Ollama with a sensible default model (`qwen3:4b`) if it isn't already on your machine. Per-user install on Windows — **no admin required**. Safe to re-run; nothing is ever overwritten without asking. Read the scripts first if you'd like: [`scripts/install.sh`](scripts/install.sh) · [`scripts/install.ps1`](scripts/install.ps1).
+Per-user install — **no admin required**. Safe to re-run. Read it first:
+[`scripts/install.ps1`](scripts/install.ps1).
 
 ### CLI mode (no GUI required)
 
@@ -220,11 +239,11 @@ Set `PRISMOS_MODEL` / `PRISMOS_OLLAMA_URL` to change defaults. The full agent-de
 
 ### Download pre-built installers
 
-Pre-built installers are also available on the [Releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest):
+Published installers are on the [Releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest):
 
-- **Windows**: `.msi` or `.exe` installer
-- **macOS**: `.dmg` (Apple Silicon & Intel)
-- **Linux**: `.deb` or `.AppImage`
+- **Windows**: `.msi` (recommended) or `.exe`
+- **macOS Apple Silicon**: `*_aarch64.dmg`
+- **macOS Intel / Linux**: not on the latest release yet — build from source or wait for v0.6 (see [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md))
 
 ---
 
@@ -394,7 +413,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **File Watching** | notify 6.1 · walkdir 2 |
 | **Security** | AES-256-GCM · HMAC-SHA256 · WASM sandboxing |
 | **CI/CD** | GitHub Actions — TypeScript check, Vitest, cargo check/clippy/test, release builds |
-| **Platforms** | Windows (.msi/.exe) · macOS (.dmg) · Linux (.deb/.AppImage) · Android (.apk) |
+| **Platforms** | Published: Windows (.msi/.exe), macOS Apple Silicon (`.dmg`). Intel Mac + Linux are in CI, not on `/releases/latest` yet. |
 
 ---
 
@@ -409,8 +428,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and co
 | **v0.4.0** | ✅ Done | Local Voice Engine, Spotlight Overlay, File Indexer (RAG), Deep Motion Polish |
 | **v0.5.0** | ✅ Done | Frameless Window, System Tray, Drag & Drop File Ingest, Auto-Updater, Local Vision, Document Analysis |
 | **v0.5.1** | ✅ Done | Smart Model Routing, Document RAG, Background Omnipresence (Ctrl+Space), Tiered Model Catalog |
-| **v0.5.2** | ✅ Current | Self-Learning (Cognitive Drift, Thought Currents, Edge Prophecy, Refraction Journal), Domain Detection, Model Registry (15 models), Model Tracker, Smart Router code routing, Security Hardening (sandbox enforcement, audit logging, WASM validation fix), Intent Transparency, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers, 478 tests |
-| **v0.6.0** | 🔜 Next | Whisper.cpp transcription, Plugin Marketplace, GPU VRAM detection |
+| **v0.5.2** | ✅ Done | Self-Learning (Cognitive Drift, Thought Currents, Edge Prophecy, Refraction Journal), Domain Detection, Model Registry (15 models), Model Tracker, Smart Router code routing, Security Hardening, Intent Transparency, Daily Dashboard, ProactivePanel, Email/Calendar/Finance Keepers |
+| **v0.6.0** | 🚢 Shipping | Brain Wrapped, first CI-built Intel Mac + Linux installers. Installer matrix gated by [`docs/V06_LAUNCH_GATE.md`](docs/V06_LAUNCH_GATE.md) |
 | **v0.7.0** | 📋 Planned | Federated learning, P2P sync, mobile companion, custom spectral dimensions |
 
 ---
@@ -434,7 +453,7 @@ Released under the **MIT License** — free for personal, educational, and comme
 ---
 
 <p align="center">
-  <strong>PrismOS-AI v0.5.2</strong> — Your mind, your machine, your OS.<br />
+  <strong>PrismOS-AI v0.6.0</strong> — Your mind, your machine, your OS.<br />
   Built by <a href="https://github.com/mkbhardwas12">Manish Kumar</a><br /><br />
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">📥 Download</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">🐛 Report Bug</a> · <a href="https://github.com/mkbhardwas12/prismos-ai/issues">💡 Request Feature</a> · <a href="CHANGELOG.md">📋 Changelog</a>
 </p>

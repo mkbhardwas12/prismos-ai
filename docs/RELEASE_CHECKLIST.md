@@ -2,6 +2,11 @@
 
 > Complete checklist for releasing new versions across all platforms
 
+**Current launch gate (v0.6):** see [V06_LAUNCH_GATE.md](V06_LAUNCH_GATE.md).
+That file is the source of truth for which installers actually ship vs what
+`scripts/install.sh` looks for. Do not advertise Linux / Intel Mac until those
+assets are on `/releases/latest`.
+
 ---
 
 ## Pre-Release Phase

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.6.0] — 2026-04-18
+## [0.6.0] — 2026-08-12
 
 ### 🎯 Highlights
 
@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Auto-advance, pause, keyboard nav (←/→/Space/Esc), PNG export via `html2canvas`, X (Twitter) share button, "◆ PrismOS-AI · prismos.ai · local · private" watermark
 - **3 new Tauri commands** (96 → **99**): `generate_brain_snapshot`, `compute_cognitive_compatibility`, `get_cognitive_fingerprint`
 - **Sidebar entry** "✨ Brain Wrapped" with shimmer hover gradient
+
+### Distribution
+
+- First CI-built release matrix: Windows `.msi`/`.exe`, macOS Apple Silicon `.dmg`, macOS Intel `.dmg`, Linux `.AppImage` + `.deb`.
+- `scripts/install.sh` matches published asset names and refuses Linux ARM instead of failing on a missing glob.
 
 ### Changed
 

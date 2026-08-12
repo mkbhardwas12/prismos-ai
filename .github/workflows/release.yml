@@ -28,16 +28,17 @@ jobs:
       matrix:
         include:
           - platform: 'windows-latest'
-            args: ''
+            args: '--bundles msi,nsis'
             rust-targets: ''
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
+            args: '--target aarch64-apple-darwin --bundles dmg'
             rust-targets: 'aarch64-apple-darwin'
-          - platform: 'macos-13'
-            args: '--target x86_64-apple-darwin'
+          # macos-13 (Intel hardware) retired Dec 2025. Cross-compile x64 from Apple Silicon.
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin --bundles dmg'
             rust-targets: 'x86_64-apple-darwin'
           - platform: 'ubuntu-22.04'
-            args: ''
+            args: '--bundles appimage,deb'
             rust-targets: ''
 
     runs-on: ${{ matrix.platform }}
@@ -95,31 +96,23 @@ jobs:
           tagName: ${{ github.ref_name || inputs.version || 'draft' }}
           releaseName: "PrismOS-AI ${{ github.ref_name || inputs.version || 'draft' }}"
           releaseBody: |
-            ## PrismOS-AI — Local-First Agentic Personal AI Operating System
+            ## PrismOS-AI v0.6.0
 
-            ### What's New in v0.5.1
-            - 🧠 8-Agent Collaborative AI System (Orchestrator, MemoryKeeper, Reasoner, ToolSmith, Sentinel + Email/Calendar/Finance Keepers)
-            - 🌈 7D Alive Spectrum Graph — persistent knowledge memory, visualized and growing
-            - 📊 Daily Dashboard — Morning Brief & Evening Recap with proactive insights
-            - 📧 Email / Calendar / Finance Keeper agents for local-first productivity
-            - 🎨 Animated SVG logo with live prism light refraction
-            - 🖥️ Frameless window with system tray, drag-drop file ingest, auto-updater
-            - 🔍 Smart Model Routing + Document RAG + Background Omnipresence (Alt+Space)
-            - 👁️ Local Vision Engine — multimodal image analysis via llava/llama3.2-vision
-            - 📄 Document Analysis Engine — PDF, DOCX, PPTX, XLSX upload & AI analysis
-            - 🎤 Local Voice Engine + Spotlight Overlay + File Indexer
-            - 🏖️ WASM Sandbox for safe code execution with cryptographic signing
-            - 🔒 Fully local: your data never leaves your machine — no cloud, no telemetry
-            - ✅ 162 tests (97 frontend + 65 Rust) · 83 IPC commands · 17 Rust modules
+            Desktop AI that runs on your laptop. Drop a file, ask a question, it remembers. Nothing leaves the machine.
 
-            ### Installation
-            - **Windows**: Download `.msi` (recommended) or `.exe` installer
-            - **macOS**: Download `.dmg` for Apple Silicon or Intel
-            - **Linux**: Download `.deb` or `.AppImage`
+            ### Downloads
+            - **Windows x64**: `.msi` (recommended) or `.exe`
+            - **macOS Apple Silicon**: `*_aarch64.dmg`
+            - **macOS Intel**: `*_x64.dmg`
+            - **Linux x64**: `.AppImage` or `.deb`
+
+            Linux ARM AppImages are not published. Build from source or use x64.
 
             ### Requirements
-            - [Ollama](https://ollama.com) installed locally with at least one model (`ollama pull llama3.2`)
-          releaseDraft: false
+            - [Ollama](https://ollama.com) with a local model (`ollama pull qwen3:4b`)
+
+            See [CHANGELOG.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/CHANGELOG.md) and [docs/V06_LAUNCH_GATE.md](https://github.com/mkbhardwas12/prismos-ai/blob/main/docs/V06_LAUNCH_GATE.md).
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
 

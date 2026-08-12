@@ -31,15 +31,19 @@ detect_platform() {
   case "$uname_s" in
     Darwin)
       case "$uname_m" in
-        arm64|aarch64) ASSET_GLOB='*aarch64.dmg';  OS=mac    ;;
-        x86_64)        ASSET_GLOB='*x64.dmg';      OS=mac    ;;
+        arm64|aarch64) ASSET_RE='aarch64\.dmg'; OS=mac ;;
+        x86_64)        ASSET_RE='_x64\.dmg';    OS=mac ;;
         *) die "Unsupported macOS arch: $uname_m" ;;
       esac
       ;;
     Linux)
       case "$uname_m" in
-        x86_64)  ASSET_GLOB='*amd64.AppImage'; OS=linux ;;
-        aarch64) ASSET_GLOB='*arm64.AppImage'; OS=linux ;;
+        x86_64)  ASSET_RE='(amd64|x86_64)\.AppImage'; OS=linux ;;
+        aarch64)
+          die "Linux ARM AppImages are not published. Build from source:
+    git clone https://github.com/$REPO.git && cd prismos-ai && npm install && npm run tauri build
+  or use an x86_64 machine. See https://github.com/$REPO/releases/latest"
+          ;;
         *) die "Unsupported Linux arch: $uname_m" ;;
       esac
       ;;
@@ -71,9 +75,9 @@ latest_asset_url() {
   url=$(curl -fsSL "$api" \
         | grep -Eo '"browser_download_url":\s*"[^"]+"' \
         | sed -E 's/.*"([^"]+)"/\1/' \
-        | grep -E "$ASSET_GLOB" \
+        | grep -E "$ASSET_RE" \
         | head -n1 || true)
-  [ -n "$url" ] || die "couldn't find a release asset matching $ASSET_GLOB"
+  [ -n "$url" ] || die "couldn't find a release asset matching $ASSET_RE"
   echo "$url"
 }
 

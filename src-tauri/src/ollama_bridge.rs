@@ -116,26 +116,36 @@ fn is_hybrid_thinking(model: &str) -> bool {
     (m.contains("qwen3") && !m.contains("coder")) || m.contains("smollm3")
 }
 
+/// A `/think` / `/no_think` directive counts ONLY as a standalone trailing
+/// token (start-of-content or whitespace-preceded, at the very end). A prompt
+/// that merely *mentions* the switch — "what does /think do?", a file path
+/// like `src/no_think.rs`, RAG text quoting the docs — is content, not a
+/// command, and must pass through untouched.
+fn split_trailing_directive(content: &str) -> (Option<bool>, &str) {
+    let trimmed = content.trim_end();
+    for (tok, val) in [("/no_think", false), ("/think", true)] {
+        if let Some(rest) = trimmed.strip_suffix(tok) {
+            if rest.is_empty() || rest.ends_with(char::is_whitespace) {
+                return (Some(val), rest.trim_end());
+            }
+        }
+    }
+    (None, content)
+}
+
 /// Resolve the `think` flag for this call and return the cleaned content.
-/// `/think` / `/no_think` directives in the content win, and are removed from
-/// what we send — the model shouldn't see switch syntax it no longer honours.
+/// A trailing `/think` / `/no_think` directive wins and is removed from what
+/// we send — the model shouldn't see switch syntax it no longer honours.
 fn resolve_think(model: &str, content: &str) -> (Option<bool>, String) {
-    let explicit_no = content.contains("/no_think");
-    let without_no = content.replace("/no_think", "");
-    let explicit_yes = without_no.contains("/think");
-    let flag = if explicit_no {
-        Some(false)
-    } else if explicit_yes {
-        Some(true)
-    } else if is_hybrid_thinking(model) {
+    let (directive, cleaned) = split_trailing_directive(content);
+    let flag = directive.or(if is_hybrid_thinking(model) {
         Some(false)
     } else {
         None // dedicated reasoners & plain chat models: daemon default
-    };
-    if explicit_no || explicit_yes {
-        (flag, without_no.replace("/think", "").trim().to_string())
-    } else {
-        (flag, content.to_string())
+    });
+    match directive {
+        Some(_) => (flag, cleaned.to_string()),
+        None => (flag, content.to_string()),
     }
 }
 
@@ -853,6 +863,24 @@ mod tests {
         // Directives work on non-hybrid models too.
         let (flag, _) = resolve_think("deepseek-r1:8b", "no trace please /no_think");
         assert_eq!(flag, Some(false));
+    }
+
+    #[test]
+    fn test_resolve_think_ignores_mid_text_mentions() {
+        // Asking ABOUT the switch is content, not a command (PR #9 review).
+        let (flag, content) = resolve_think("qwen3:4b", "What does /think do in qwen?");
+        assert_eq!(flag, Some(false)); // hybrid default, not an opt-in
+        assert_eq!(content, "What does /think do in qwen?"); // untouched
+        // File paths and RAG text survive verbatim.
+        let (flag, content) = resolve_think("qwen3:4b", "summarize src/no_think.rs please");
+        assert_eq!(flag, Some(false));
+        assert_eq!(content, "summarize src/no_think.rs please");
+        // A trailing token glued to a path is not a directive either.
+        let (_, content) = resolve_think("qwen3:4b", "open docs/think");
+        assert_eq!(content, "open docs/think");
+        // On a dedicated reasoner, a mid-text mention changes nothing.
+        let (flag, _) = resolve_think("deepseek-r1:8b", "explain /no_think semantics");
+        assert_eq!(flag, None);
     }
 
     #[test]

@@ -324,6 +324,69 @@ async fn post_generate(
     Ok(resp)
 }
 
+/// Incremental <think> filter for the streaming path: emits only display-safe
+/// text, holding back any tail that could be a tag split across chunks.
+struct ThinkFilter {
+    in_think: bool,
+    pending: String,
+}
+
+const THINK_OPEN: &str = "<think>";
+const THINK_CLOSE: &str = "</think>";
+
+impl ThinkFilter {
+    fn new() -> Self {
+        Self { in_think: false, pending: String::new() }
+    }
+
+    fn push(&mut self, token: &str) -> String {
+        self.pending.push_str(token);
+        let mut out = String::new();
+        loop {
+            if self.in_think {
+                if let Some(pos) = self.pending.find(THINK_CLOSE) {
+                    self.pending.drain(..pos + THINK_CLOSE.len());
+                    self.in_think = false;
+                } else {
+                    let keep = partial_suffix_len(&self.pending, THINK_CLOSE);
+                    let drop_to = self.pending.len() - keep;
+                    self.pending.drain(..drop_to);
+                    return out;
+                }
+            } else if let Some(pos) = self.pending.find(THINK_OPEN) {
+                out.push_str(&self.pending[..pos]);
+                self.pending.drain(..pos + THINK_OPEN.len());
+                self.in_think = true;
+            } else {
+                let keep = partial_suffix_len(&self.pending, THINK_OPEN);
+                let emit_to = self.pending.len() - keep;
+                out.push_str(&self.pending[..emit_to]);
+                self.pending.drain(..emit_to);
+                return out;
+            }
+        }
+    }
+
+    fn finish(&mut self) -> String {
+        if self.in_think {
+            self.pending.clear();
+            return String::new();
+        }
+        std::mem::take(&mut self.pending)
+    }
+}
+
+/// Longest suffix of `s` that is a (proper) prefix of `tag`.
+fn partial_suffix_len(s: &str, tag: &str) -> usize {
+    let max = tag.len().saturating_sub(1).min(s.len());
+    for k in (1..=max).rev() {
+        if s.is_char_boundary(s.len() - k) && s.ends_with(&tag[..k]) {
+            return k;
+        }
+    }
+    0
+}
+
 /// Strip inline <think>…</think> blocks (older daemons leak them into the text).
 fn strip_think(s: &str) -> String {
     let (mut out, mut rest) = (String::with_capacity(s.len()), s);
@@ -363,6 +426,7 @@ async fn generate_streaming(a: &Args) -> Result<(), Box<dyn std::error::Error + 
 
     let mut stream = resp.bytes_stream();
     let mut buf: Vec<u8> = Vec::new();
+    let mut filter = ThinkFilter::new();
     let stdout = io::stdout();
     let mut out = stdout.lock();
     while let Some(chunk) = stream.next().await {
@@ -379,10 +443,17 @@ async fn generate_streaming(a: &Args) -> Result<(), Box<dyn std::error::Error + 
                         return Err(format!("ollama stream error: {err}").into());
                     }
                     if !c.response.is_empty() {
-                        out.write_all(c.response.as_bytes())?;
-                        out.flush()?;
+                        let clean = filter.push(&c.response);
+                        if !clean.is_empty() {
+                            out.write_all(clean.as_bytes())?;
+                            out.flush()?;
+                        }
                     }
                     if c.done {
+                        let tail = filter.finish();
+                        if !tail.is_empty() {
+                            out.write_all(tail.as_bytes())?;
+                        }
                         writeln!(out)?;
                         if c.done_reason.as_deref() == Some("length") {
                             eprintln!("[prismos-cli] note: answer hit the token ceiling and may be incomplete");

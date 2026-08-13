@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "PrismOS-AI — Local AI Operating System",
+        "title": "PrismOS-AI",
         "width": 1200,
         "height": 800,
         "resizable": true,
@@ -26,7 +26,7 @@
       "id": "prismos-tray",
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true,
-      "tooltip": "PrismOS-AI — Local AI Operating System"
+      "tooltip": "PrismOS-AI — local, offline"
     }
   },
   "bundle": {

@@ -1,5 +1,11 @@
 # PrismOS Local Loop Engine — design
 
+> **Status (2026-08-13):** rollout phases 1 & 4 are shipped (reasoning lane in
+> `smart_router`, `keep_alive` + think control in `ollama_bridge`). The judge
+> (phase 2) and the loop itself (phase 3) are **designed here, not yet built** —
+> `execute_goal_loop`, `JudgeVerdict`, and `AcceptanceCriteria` do not exist in
+> the codebase yet.
+
 > Turn the single-pass multi-agent pipeline into a real **plan → build → judge → refine**
 > goal loop that runs **entirely on-device** (Ollama), with explicit stopping criteria and
 > per-role model routing. Inspired by "loop engineering" (Boris Cherny / Anthropic plan-build-judge),

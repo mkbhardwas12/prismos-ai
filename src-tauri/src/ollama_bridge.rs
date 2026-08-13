@@ -16,6 +16,10 @@ const EMBED_TIMEOUT: Duration = Duration::from_secs(30); // embeddings are ms-fa
 /// warm means follow-up queries skip the multi-second model reload — essential
 /// for a snappy daily-driver feel. Override with the `OLLAMA_KEEP_ALIVE` env var
 /// (e.g. "60m", "-1" to keep loaded indefinitely, "0" to unload immediately).
+///
+/// Note: because we send `keep_alive` on every request, this value takes
+/// precedence over any `OLLAMA_KEEP_ALIVE` configured on the *daemon* — set the
+/// override in PrismOS's environment, not the server's.
 const DEFAULT_KEEP_ALIVE: &str = "30m";
 
 /// Resolve the keep-alive window from the environment, falling back to 30 min.
@@ -39,8 +43,8 @@ fn keep_alive() -> String {
 const DEFAULT_NUM_CTX: u32 = 16384;
 /// Default response ceiling for a normal answer.
 const DEFAULT_OUTPUT_TOKENS: u32 = 8192;
-/// Reasoning models (deepseek-r1, qwq, qwen3 thinking) spend output budget on the
-/// `<think>` trace BEFORE the answer — give them more headroom so a long deliberation
+/// When a model will actually emit a `<think>` trace, that trace spends output
+/// budget BEFORE the answer — give it more headroom so a long deliberation
 /// can't get cut off mid-thought and never reach the conclusion.
 const REASONING_OUTPUT_TOKENS: u32 = 16384;
 
@@ -53,10 +57,26 @@ fn num_ctx() -> u32 {
         .unwrap_or(DEFAULT_NUM_CTX)
 }
 
-/// Per-model output ceiling: bigger for reasoning models. `OLLAMA_NUM_PREDICT`
-/// overrides the floor for every model when set.
-fn output_tokens_for(model: &str) -> u32 {
-    let base = if crate::smart_router::is_reasoning_model(model) {
+/// Context window for a specific call. When the model will emit a thinking
+/// trace, trace + answer share the window with the prompt — 16k is not enough
+/// for a 16k output budget, so widen to 32k (qwen3 / deepseek-r1 / qwq / gpt-oss
+/// all support ≥32k). phi4's trained window is 16k — never over-allocate it.
+/// KV-cache cost is why this is per-call: an everyday qwen3 answer with
+/// thinking off stays at 16k and doesn't pay ~GBs of cache for headroom it
+/// won't use.
+fn ctx_for(model: &str, will_think: bool) -> u32 {
+    let base = num_ctx();
+    if will_think && !model.to_lowercase().contains("phi4") {
+        base.max(32768)
+    } else {
+        base
+    }
+}
+
+/// Per-call output ceiling: bigger only when a thinking trace will actually be
+/// generated. `OLLAMA_NUM_PREDICT` overrides the floor for every model when set.
+fn output_tokens_for(will_think: bool) -> u32 {
+    let base = if will_think {
         REASONING_OUTPUT_TOKENS
     } else {
         DEFAULT_OUTPUT_TOKENS
@@ -65,27 +85,174 @@ fn output_tokens_for(model: &str) -> u32 {
         .ok()
         .and_then(|s| s.trim().parse::<u32>().ok())
         .filter(|n| *n >= 64);
-    // Honor an explicit env override, but never below the model's sensible floor.
+    // Honor an explicit env override, but never below the call's sensible floor.
     env.map(|n| n.max(base)).unwrap_or(base)
 }
 
-/// Hybrid "thinking" models (qwen3 family) emit chain-of-thought into the
-/// response by default, which leaks "Okay, the user is asking…" preamble into
-/// user-facing answers. They honour an inline `/no_think` directive (the
-/// `think:false` request flag is NOT respected by qwen3 on Ollama 0.24).
-///
-/// Policy: for a thinking-toggle model, append `/no_think` so everyday answers
-/// are clean and fast — UNLESS the caller already specified `/think` or
-/// `/no_think` (the reasoning lane opts back into thinking by passing `/think`).
-fn apply_think_control(model: &str, content: &str) -> String {
-    let lower = model.to_lowercase();
-    let supports_toggle = lower.contains("qwen3");
-    let already_directed = content.contains("/think") || content.contains("/no_think");
-    if supports_toggle && !already_directed {
-        format!("{} /no_think", content)
+// ─── Thinking control ──────────────────────────────────────────────────────────
+//
+// History, because this changed under us and the old code was wrong on modern
+// daemons: qwen3's inline `/no_think` soft switch stopped working on hybrid
+// models around Ollama v0.12.3 (ollama/ollama#12575) — appending it to the
+// prompt is now an inert token that pollutes the context. The supported control
+// is the top-level `think: bool` request field (Ollama ≥ 0.9), and thinking
+// content arrives in a separate `thinking` response field, not inline.
+//
+// Policy (unchanged in spirit): hybrid everyday models (qwen3 chat family)
+// default to thinking OFF so answers are clean and fast; dedicated reasoning
+// models (deepseek-r1, qwq, gpt-oss, …) are left alone — thinking is their
+// whole point, and Ollama already separates the trace out of `response`.
+// Callers can still write `/think` or `/no_think` in the content: we translate
+// the directive to the API flag and strip it from the prompt.
+//
+// Older daemons (or model tags that reject the flag) return 4xx — the request
+// layer retries once without `think`, so behavior degrades gracefully instead
+// of erroring.
+
+/// Hybrid models whose thinking should default OFF for everyday answers.
+/// qwen3-coder (and any *-coder tag) is a non-thinking family — excluded.
+fn is_hybrid_thinking(model: &str) -> bool {
+    let m = model.to_lowercase();
+    (m.contains("qwen3") && !m.contains("coder")) || m.contains("smollm3")
+}
+
+/// Resolve the `think` flag for this call and return the cleaned content.
+/// `/think` / `/no_think` directives in the content win, and are removed from
+/// what we send — the model shouldn't see switch syntax it no longer honours.
+fn resolve_think(model: &str, content: &str) -> (Option<bool>, String) {
+    let explicit_no = content.contains("/no_think");
+    let without_no = content.replace("/no_think", "");
+    let explicit_yes = without_no.contains("/think");
+    let flag = if explicit_no {
+        Some(false)
+    } else if explicit_yes {
+        Some(true)
+    } else if is_hybrid_thinking(model) {
+        Some(false)
     } else {
-        content.to_string()
+        None // dedicated reasoners & plain chat models: daemon default
+    };
+    if explicit_no || explicit_yes {
+        (flag, without_no.replace("/think", "").trim().to_string())
+    } else {
+        (flag, content.to_string())
     }
+}
+
+/// Dedicated reasoning models: thinking is their default mode and their whole
+/// point — we never suppress it, and we budget for the trace. Deliberately
+/// narrower than the router's `is_reasoning_model` (which also matches hybrid
+/// qwen3 tags, including non-thinking ones like qwen3-coder).
+fn is_dedicated_reasoner(model: &str) -> bool {
+    let m = model.to_lowercase();
+    ["deepseek-r1", "qwq", "gpt-oss", "magistral", "openthinker", "marco-o1", "exaone-deep", "smallthinker"]
+        .iter()
+        .any(|p| m.contains(p))
+}
+
+/// Whether this call will actually produce a thinking trace (drives budgets).
+fn will_think(model: &str, think: Option<bool>) -> bool {
+    match think {
+        Some(b) => b,
+        // No explicit flag: only dedicated reasoners think by default.
+        None => is_dedicated_reasoner(model),
+    }
+}
+
+const THINK_OPEN: &str = "<think>";
+const THINK_CLOSE: &str = "</think>";
+
+/// Remove inline `<think>…</think>` blocks from a complete response. Modern
+/// Ollama separates thinking into its own field, so this is defense-in-depth
+/// for older daemons and models that leak the tags into `response`/`content`.
+/// An unclosed `<think>` (stream cut mid-thought) drops the dangling block.
+fn strip_think_blocks(s: &str) -> String {
+    if !s.contains(THINK_OPEN) {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    loop {
+        match rest.find(THINK_OPEN) {
+            None => {
+                out.push_str(rest);
+                break;
+            }
+            Some(start) => {
+                out.push_str(&rest[..start]);
+                let after = &rest[start + THINK_OPEN.len()..];
+                match after.find(THINK_CLOSE) {
+                    Some(end) => rest = &after[end + THINK_CLOSE.len()..],
+                    None => break, // unclosed block → drop the remainder
+                }
+            }
+        }
+    }
+    out.trim_start().to_string()
+}
+
+/// Incremental `<think>` filter for token streams: emits only display-safe
+/// text, holding back any tail that could be the start of a tag split across
+/// token boundaries.
+struct ThinkFilter {
+    in_think: bool,
+    pending: String,
+}
+
+impl ThinkFilter {
+    fn new() -> Self {
+        Self { in_think: false, pending: String::new() }
+    }
+
+    /// Feed a raw token; returns the text safe to display now.
+    fn push(&mut self, token: &str) -> String {
+        self.pending.push_str(token);
+        let mut out = String::new();
+        loop {
+            if self.in_think {
+                if let Some(pos) = self.pending.find(THINK_CLOSE) {
+                    self.pending.drain(..pos + THINK_CLOSE.len());
+                    self.in_think = false;
+                } else {
+                    let keep = partial_suffix_len(&self.pending, THINK_CLOSE);
+                    let drop_to = self.pending.len() - keep;
+                    self.pending.drain(..drop_to);
+                    return out;
+                }
+            } else if let Some(pos) = self.pending.find(THINK_OPEN) {
+                out.push_str(&self.pending[..pos]);
+                self.pending.drain(..pos + THINK_OPEN.len());
+                self.in_think = true;
+            } else {
+                let keep = partial_suffix_len(&self.pending, THINK_OPEN);
+                let emit_to = self.pending.len() - keep;
+                out.push_str(&self.pending[..emit_to]);
+                self.pending.drain(..emit_to);
+                return out;
+            }
+        }
+    }
+
+    /// End of stream: flush held-back text (it never became a tag). Text
+    /// inside an unclosed think block is dropped.
+    fn finish(&mut self) -> String {
+        if self.in_think {
+            self.pending.clear();
+            return String::new();
+        }
+        std::mem::take(&mut self.pending)
+    }
+}
+
+/// Length of the longest suffix of `s` that is a (proper) prefix of `tag`.
+fn partial_suffix_len(s: &str, tag: &str) -> usize {
+    let max = tag.len().saturating_sub(1).min(s.len());
+    for k in (1..=max).rev() {
+        if s.is_char_boundary(s.len() - k) && s.ends_with(&tag[..k]) {
+            return k;
+        }
+    }
+    0
 }
 
 // ─── Request / Response Types ──────────────────────────────────────────────────
@@ -103,6 +270,10 @@ struct GenerateRequest {
     /// How long to keep the model resident after this request (e.g. "30m").
     #[serde(skip_serializing_if = "Option::is_none")]
     keep_alive: Option<String>,
+    /// Thinking toggle (Ollama ≥ 0.9). Omitted entirely for models where we
+    /// have no opinion — see the Thinking control section above.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    think: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -127,6 +298,9 @@ struct ChatRequest {
     /// How long to keep the model resident after this request (e.g. "30m").
     #[serde(skip_serializing_if = "Option::is_none")]
     keep_alive: Option<String>,
+    /// Thinking toggle (Ollama ≥ 0.9) — see the Thinking control section.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    think: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,6 +330,10 @@ struct ChatResponse {
     #[serde(default)]
     #[allow(dead_code)]
     done: bool,
+    /// "stop" on normal completion, "length" when num_predict was hit.
+    #[serde(default)]
+    #[allow(dead_code)]
+    done_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -163,6 +341,11 @@ struct ChatResponseMessage {
     #[allow(dead_code)]
     role: String,
     content: String,
+    /// Thinking trace, separated out by Ollama ≥ 0.9 for thinking models.
+    /// Deliberately dropped — never shown as answer text.
+    #[serde(default)]
+    #[allow(dead_code)]
+    thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,6 +354,12 @@ struct GenerateResponse {
     #[serde(default)]
     #[allow(dead_code)]
     done: bool,
+    #[serde(default)]
+    #[allow(dead_code)]
+    done_reason: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -185,6 +374,33 @@ pub struct ModelInfo {
     pub size: Option<u64>,
     #[serde(default)]
     pub modified_at: Option<String>,
+}
+
+// ─── Request plumbing ──────────────────────────────────────────────────────────
+
+/// POST a JSON body; if the daemon rejects the `think` field (older Ollama, or
+/// a model tag that doesn't support toggling), retry once without it so we
+/// degrade to the daemon's default instead of failing the whole call.
+async fn post_with_think_fallback(
+    client: &reqwest::Client,
+    url: &str,
+    mut body: serde_json::Value,
+    timeout: Duration,
+) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
+    let had_think = body.get("think").is_some();
+    let resp = client.post(url).json(&body).timeout(timeout).send().await?;
+    if resp.status().is_success() || !had_think {
+        return Ok(resp);
+    }
+    let status = resp.status().as_u16();
+    if (400..=422).contains(&status) {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("think");
+        }
+        let retry = client.post(url).json(&body).timeout(timeout).send().await?;
+        return Ok(retry);
+    }
+    Ok(resp)
 }
 
 // ─── Ollama API Functions ──────────────────────────────────────────────────────
@@ -215,28 +431,29 @@ pub async fn generate(
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
+    let (think, prompt) = resolve_think(model, prompt);
+    let thinking = will_think(model, think);
     // Always set num_ctx (Ollama's default is far too small for documents); honor
     // the caller's max_tokens (the UI "Response Length" slider) for the response,
-    // falling back to a model-aware budget when unset.
+    // falling back to a think-aware budget when unset.
     let options = Some(GenerateOptions {
-        num_ctx: Some(num_ctx()),
-        num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(model))),
+        num_ctx: Some(ctx_for(model, thinking)),
+        num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(thinking))),
     });
     let request = GenerateRequest {
         model: model.to_string(),
-        prompt: apply_think_control(model, prompt),
+        prompt,
         stream: false,
         options,
         images,
         keep_alive: Some(keep_alive()),
+        think,
     };
 
-    let response = client
-        .post(format!("{}/api/generate", url))
-        .json(&request)
-        .timeout(GENERATE_TIMEOUT)
-        .send()
-        .await?;
+    let body = serde_json::to_value(&request)?;
+    let response =
+        post_with_think_fallback(&client, &format!("{}/api/generate", url), body, GENERATE_TIMEOUT)
+            .await?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -245,7 +462,7 @@ pub async fn generate(
     }
 
     let gen_response: GenerateResponse = response.json().await?;
-    Ok(gen_response.response)
+    Ok(strip_think_blocks(&gen_response.response))
 }
 
 /// Chat completion using Ollama's /api/chat endpoint with proper role separation.
@@ -293,11 +510,13 @@ pub async fn chat(
         }
     }
 
-    // User message — the actual question with context.
-    // Keep answers clean on hybrid thinking models (qwen3) by default.
+    // User message — the actual question with context. Thinking is controlled
+    // via the `think` request flag; any inline directive is translated+stripped.
+    let (think, user_content) = resolve_think(model, user_content);
+    let thinking = will_think(model, think);
     messages.push(ChatMessage {
         role: "user".to_string(),
-        content: apply_think_control(model, user_content),
+        content: user_content,
         images,
     });
 
@@ -306,19 +525,18 @@ pub async fn chat(
         messages,
         stream: false,
         options: Some(ChatOptions {
-            temperature: Some(0.7),                  // Balanced: focused but not robotic
-            num_ctx: Some(num_ctx()),                // 16k default — room for docs/code/RAG
-            num_predict: Some(output_tokens_for(model)), // 8k, or 16k for reasoning models
+            temperature: Some(0.7),                       // Balanced: focused but not robotic
+            num_ctx: Some(ctx_for(model, thinking)),      // 16k default; 32k when a trace will run
+            num_predict: Some(output_tokens_for(thinking)), // 8k, or 16k when thinking
         }),
         keep_alive: Some(keep_alive()),
+        think,
     };
 
-    let response = client
-        .post(format!("{}/api/chat", url))
-        .json(&request)
-        .timeout(GENERATE_TIMEOUT)
-        .send()
-        .await?;
+    let body = serde_json::to_value(&request)?;
+    let response =
+        post_with_think_fallback(&client, &format!("{}/api/chat", url), body, GENERATE_TIMEOUT)
+            .await?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -327,7 +545,7 @@ pub async fn chat(
     }
 
     let chat_response: ChatResponse = response.json().await?;
-    Ok(chat_response.message.content)
+    Ok(strip_think_blocks(&chat_response.message.content))
 }
 
 /// List all locally available models
@@ -454,15 +672,31 @@ pub async fn embed(
 
 #[derive(Debug, Deserialize)]
 struct StreamChunk {
+    #[serde(default)]
     response: String,
     #[serde(default)]
     done: bool,
+    /// "stop" normally; "length" when the num_predict ceiling was hit.
+    #[serde(default)]
+    done_reason: Option<String>,
+    /// Separated thinking trace (Ollama ≥ 0.9) — never displayed.
+    #[serde(default)]
+    #[allow(dead_code)]
+    thinking: Option<String>,
+    /// Mid-stream error line from the daemon.
+    #[serde(default)]
+    error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StreamEvent {
     pub token: String,
     pub done: bool,
+    /// True on the final event when the response hit the token ceiling
+    /// (done_reason == "length") — the answer is incomplete, and the UI can
+    /// say so instead of presenting a silently truncated reply.
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 /// Generate a completion with streaming — sends tokens via a callback
@@ -480,28 +714,29 @@ where
 {
     let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
     let client = reqwest::Client::new();
+    let (think, prompt) = resolve_think(model, prompt);
+    let thinking = will_think(model, think);
     // Always set num_ctx (Ollama's default is far too small for documents); honor
     // the caller's max_tokens (the UI "Response Length" slider) for the response,
-    // falling back to a model-aware budget when unset.
+    // falling back to a think-aware budget when unset.
     let options = Some(GenerateOptions {
-        num_ctx: Some(num_ctx()),
-        num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(model))),
+        num_ctx: Some(ctx_for(model, thinking)),
+        num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(thinking))),
     });
     let request = GenerateRequest {
         model: model.to_string(),
-        prompt: apply_think_control(model, prompt),
+        prompt,
         stream: true,
         options,
         images,
         keep_alive: Some(keep_alive()),
+        think,
     };
 
-    let response = client
-        .post(format!("{}/api/generate", url))
-        .json(&request)
-        .timeout(GENERATE_TIMEOUT)
-        .send()
-        .await?;
+    let body = serde_json::to_value(&request)?;
+    let response =
+        post_with_think_fallback(&client, &format!("{}/api/generate", url), body, GENERATE_TIMEOUT)
+            .await?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -511,25 +746,59 @@ where
 
     let mut full_response = String::new();
     let mut stream = response.bytes_stream();
+    // NDJSON lines can split across network chunks (and multi-byte UTF-8 can
+    // split across reads) — buffer bytes and only parse complete lines. The
+    // old per-chunk parse silently dropped any line that straddled a chunk
+    // boundary, losing tokens mid-answer.
+    let mut buf: Vec<u8> = Vec::new();
+    let mut filter = ThinkFilter::new();
+    let mut truncated = false;
 
     while let Some(chunk_result) = stream.next().await {
         let chunk_bytes = chunk_result?;
-        // Ollama sends newline-delimited JSON
-        let chunk_str = String::from_utf8_lossy(&chunk_bytes);
-        for line in chunk_str.lines() {
-            if line.trim().is_empty() {
+        buf.extend_from_slice(&chunk_bytes);
+        while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = buf.drain(..=pos).collect();
+            let line = &line[..line.len() - 1];
+            if line.iter().all(|b| b.is_ascii_whitespace()) {
                 continue;
             }
-            if let Ok(parsed) = serde_json::from_str::<StreamChunk>(line) {
-                full_response.push_str(&parsed.response);
-                on_token(StreamEvent {
-                    token: parsed.response,
-                    done: parsed.done,
-                });
+            let parsed: StreamChunk = match serde_json::from_slice(line) {
+                Ok(p) => p,
+                Err(_) => continue, // tolerate unknown control lines
+            };
+            if let Some(err) = parsed.error {
+                return Err(format!("Ollama stream error: {}", err).into());
+            }
+            if parsed.done_reason.as_deref() == Some("length") {
+                truncated = true;
+            }
+            if !parsed.response.is_empty() {
+                let clean = filter.push(&parsed.response);
+                if !clean.is_empty() {
+                    full_response.push_str(&clean);
+                    on_token(StreamEvent { token: clean, done: false, truncated: false });
+                }
+            }
+            if parsed.done {
+                let tail = filter.finish();
+                if !tail.is_empty() {
+                    full_response.push_str(&tail);
+                    on_token(StreamEvent { token: tail, done: false, truncated: false });
+                }
+                on_token(StreamEvent { token: String::new(), done: true, truncated });
+                return Ok(full_response);
             }
         }
     }
 
+    // Stream ended without a done marker (connection dropped) — flush and close.
+    let tail = filter.finish();
+    if !tail.is_empty() {
+        full_response.push_str(&tail);
+        on_token(StreamEvent { token: tail, done: false, truncated: false });
+    }
+    on_token(StreamEvent { token: String::new(), done: true, truncated });
     Ok(full_response)
 }
 
@@ -546,33 +815,59 @@ mod tests {
         assert_eq!(keep_alive(), DEFAULT_KEEP_ALIVE);
     }
 
+    // ── thinking control ──
+
     #[test]
-    fn test_think_control_appends_no_think_for_qwen3() {
-        let out = apply_think_control("qwen3:30b-a3b", "What is 2+2?");
-        assert_eq!(out, "What is 2+2? /no_think");
+    fn test_resolve_think_defaults_off_for_hybrid_qwen3() {
+        let (flag, content) = resolve_think("qwen3:30b-a3b", "What is 2+2?");
+        assert_eq!(flag, Some(false));
+        assert_eq!(content, "What is 2+2?"); // prompt no longer polluted
     }
 
     #[test]
-    fn test_think_control_skips_non_thinking_models() {
-        // Non-qwen3 models are untouched.
-        assert_eq!(apply_think_control("llama3.3:70b", "hello"), "hello");
-        assert_eq!(apply_think_control("qwen2.5-coder:7b", "hello"), "hello");
-        assert_eq!(apply_think_control("mistral", "hello"), "hello");
+    fn test_resolve_think_leaves_dedicated_reasoners_alone() {
+        // deepseek-r1 / qwq think by default — that's their point. No flag sent.
+        assert_eq!(resolve_think("deepseek-r1:32b", "hard problem").0, None);
+        assert_eq!(resolve_think("qwq:latest", "hard problem").0, None);
+        // Plain chat models: no opinion either.
+        assert_eq!(resolve_think("llama3.1:8b", "hello").0, None);
+        assert_eq!(resolve_think("mistral", "hello").0, None);
     }
 
     #[test]
-    fn test_think_control_respects_explicit_directive() {
-        // Reasoning lane opts into thinking by passing /think — we must not override.
-        assert_eq!(
-            apply_think_control("qwen3:30b-a3b", "Solve this carefully /think"),
-            "Solve this carefully /think"
-        );
-        // Already /no_think → not doubled.
-        assert_eq!(
-            apply_think_control("qwen3:30b-a3b", "quick q /no_think"),
-            "quick q /no_think"
-        );
+    fn test_resolve_think_excludes_qwen3_coder() {
+        // qwen3-coder is a non-thinking family — no flag, no risk of a 4xx.
+        assert_eq!(resolve_think("qwen3-coder:30b", "write a parser").0, None);
     }
+
+    #[test]
+    fn test_resolve_think_translates_directives() {
+        // /think opts in and is stripped from the content.
+        let (flag, content) = resolve_think("qwen3:30b-a3b", "Solve this carefully /think");
+        assert_eq!(flag, Some(true));
+        assert_eq!(content, "Solve this carefully");
+        // /no_think is honoured and stripped.
+        let (flag, content) = resolve_think("qwen3:30b-a3b", "quick q /no_think");
+        assert_eq!(flag, Some(false));
+        assert_eq!(content, "quick q");
+        // Directives work on non-hybrid models too.
+        let (flag, _) = resolve_think("deepseek-r1:8b", "no trace please /no_think");
+        assert_eq!(flag, Some(false));
+    }
+
+    #[test]
+    fn test_will_think() {
+        assert!(!will_think("qwen3:4b", Some(false)));
+        assert!(will_think("qwen3:4b", Some(true)));
+        assert!(will_think("deepseek-r1:32b", None)); // dedicated reasoner default
+        assert!(will_think("gpt-oss:20b", None));
+        assert!(!will_think("llama3.1:8b", None));
+        // qwen3-coder matches the router's reasoning pattern but must NOT be
+        // budgeted for a trace it will never produce.
+        assert!(!will_think("qwen3-coder:30b", None));
+    }
+
+    // ── budgets ──
 
     #[test]
     fn test_num_ctx_default() {
@@ -582,24 +877,86 @@ mod tests {
     }
 
     #[test]
+    fn test_ctx_widens_only_when_thinking() {
+        std::env::remove_var("OLLAMA_NUM_CTX");
+        // Everyday qwen3 answer with thinking off: no KV-cache tax.
+        assert_eq!(ctx_for("qwen3:4b", false), 16384);
+        // A real trace needs room for trace + answer + prompt.
+        assert_eq!(ctx_for("deepseek-r1:32b", true), 32768);
+        assert_eq!(ctx_for("qwen3:30b-a3b", true), 32768);
+        // phi4's trained window is 16k — never over-allocate it.
+        assert_eq!(ctx_for("phi4:latest", true), 16384);
+    }
+
+    #[test]
     fn test_output_tokens_budgets() {
         // Single test owns OLLAMA_NUM_PREDICT end-to-end so parallel tests can't
         // race on the shared env var.
         std::env::remove_var("OLLAMA_NUM_PREDICT");
-        // Reasoning models spend budget on <think> → larger ceiling.
-        assert_eq!(output_tokens_for("deepseek-r1:32b"), REASONING_OUTPUT_TOKENS);
-        assert_eq!(output_tokens_for("qwq:32b"), REASONING_OUTPUT_TOKENS);
-        // Plain chat / code models use the standard ceiling.
-        assert_eq!(output_tokens_for("llama3.1:8b"), DEFAULT_OUTPUT_TOKENS);
-        assert_eq!(output_tokens_for("qwen2.5-coder:7b"), DEFAULT_OUTPUT_TOKENS);
+        // A call that will think spends budget on the trace → larger ceiling.
+        assert_eq!(output_tokens_for(true), REASONING_OUTPUT_TOKENS);
+        assert_eq!(output_tokens_for(false), DEFAULT_OUTPUT_TOKENS);
         assert!(REASONING_OUTPUT_TOKENS > DEFAULT_OUTPUT_TOKENS);
 
-        // An env override raises the ceiling but can't drop a reasoning model below
-        // its sensible floor (guards against starving the <think> trace).
+        // An env override raises the ceiling but can't drop a thinking call below
+        // its sensible floor (guards against starving the trace).
         std::env::set_var("OLLAMA_NUM_PREDICT", "2048");
-        assert_eq!(output_tokens_for("deepseek-r1:32b"), REASONING_OUTPUT_TOKENS);
+        assert_eq!(output_tokens_for(true), REASONING_OUTPUT_TOKENS);
         std::env::set_var("OLLAMA_NUM_PREDICT", "20000");
-        assert_eq!(output_tokens_for("llama3.1:8b"), 20000);
+        assert_eq!(output_tokens_for(false), 20000);
         std::env::remove_var("OLLAMA_NUM_PREDICT");
+    }
+
+    // ── think-tag hygiene ──
+
+    #[test]
+    fn test_strip_think_blocks() {
+        assert_eq!(
+            strip_think_blocks("<think>hmm, 2 plus 2…</think>\n\n4"),
+            "4"
+        );
+        // No tags → untouched.
+        assert_eq!(strip_think_blocks("plain answer"), "plain answer");
+        // Unclosed block (stream cut mid-thought) → dangling trace dropped.
+        assert_eq!(strip_think_blocks("partial <think>never closed"), "partial ");
+        // Multiple blocks.
+        assert_eq!(
+            strip_think_blocks("<think>a</think>x<think>b</think>y"),
+            "xy"
+        );
+    }
+
+    #[test]
+    fn test_think_filter_across_token_boundaries() {
+        // The opening tag arrives split across three tokens — nothing inside
+        // the block may reach the display stream.
+        let mut f = ThinkFilter::new();
+        let mut shown = String::new();
+        for tok in ["<th", "ink>secret reasoning", " more secrets</th", "ink>the answer", " is 4"] {
+            shown.push_str(&f.push(tok));
+        }
+        shown.push_str(&f.finish());
+        assert_eq!(shown, "the answer is 4");
+    }
+
+    #[test]
+    fn test_think_filter_passes_plain_text() {
+        let mut f = ThinkFilter::new();
+        let mut shown = String::new();
+        for tok in ["hello", " wor", "ld"] {
+            shown.push_str(&f.push(tok));
+        }
+        shown.push_str(&f.finish());
+        assert_eq!(shown, "hello world");
+    }
+
+    #[test]
+    fn test_think_filter_flushes_false_alarm_prefix() {
+        // A lone '<' that never becomes a tag must still be emitted at finish.
+        let mut f = ThinkFilter::new();
+        let mut shown = String::new();
+        shown.push_str(&f.push("a < b"));
+        shown.push_str(&f.finish());
+        assert_eq!(shown, "a < b");
     }
 }

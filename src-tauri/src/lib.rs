@@ -1351,7 +1351,7 @@ async fn get_refraction_insights(db: tauri::State<'_, DbState>) -> Result<String
     serde_json::to_string(&insights).map_err(|e| e.to_string())
 }
 
-// ─── Brain Wrapped™ + Cognitive Fingerprint™ ──────────────
+// ─── Brain Wrapped + Cognitive Fingerprint ──────────────
 //
 // THE INNOVATION: A shareable, animated story of HOW you think — generated
 // entirely from local cognitive data. Includes a deterministic visual
@@ -3095,7 +3095,7 @@ pub fn run() {
             dismiss_predicted_edge,
             // Refraction Journal
             get_refraction_insights,
-            // Brain Wrapped™ + Cognitive Fingerprint™
+            // Brain Wrapped + Cognitive Fingerprint
             generate_brain_snapshot,
             compute_cognitive_compatibility,
             get_cognitive_fingerprint,

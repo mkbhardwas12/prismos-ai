@@ -23,16 +23,20 @@ const VISION_MODEL_PATTERNS: &[&str] = &[
     "qwen2.5-vl",
     "qwen3-vl",
     "gemma3",
+    "llama4",
+    "mistral-small3",
     "internvl",
     "phi3.5-vision",
 ];
 
 /// Priority order for auto-selecting a vision model when none is specified
 const VISION_MODEL_PRIORITY: &[&str] = &[
+    "qwen3-vl",
     "qwen2.5vl",
     "qwen2.5-vl",
-    "qwen3-vl",
+    "llama4",
     "llama3.2-vision",
+    "mistral-small3",
     "gemma3",
     "qwen2-vl",
     "llava",
@@ -47,6 +51,9 @@ const VISION_MODEL_PRIORITY: &[&str] = &[
 
 /// Known code-specialized model name fragments (case-insensitive matching)
 const CODE_MODEL_PATTERNS: &[&str] = &[
+    "qwen3-coder",
+    "devstral",
+    "codeqwen",
     "codellama",
     "deepseek-coder",
     "starcoder",
@@ -58,6 +65,8 @@ const CODE_MODEL_PATTERNS: &[&str] = &[
 
 /// Priority order for auto-selecting a code model
 const CODE_MODEL_PRIORITY: &[&str] = &[
+    "qwen3-coder",
+    "devstral",
     "qwen2.5-coder",
     "deepseek-coder",
     "codellama",
@@ -71,8 +80,14 @@ const CODE_MODEL_PRIORITY: &[&str] = &[
 const REASONING_MODEL_PATTERNS: &[&str] = &[
     "deepseek-r1",
     "qwq",
+    "gpt-oss",
+    "magistral",
     "qwen3",
     "phi4",
+    "deepseek-v3.1",
+    "exaone-deep",
+    "cogito",
+    "smallthinker",
     "marco-o1",
     "openthinker",
     "mathstral",
@@ -83,11 +98,16 @@ const REASONING_MODEL_PATTERNS: &[&str] = &[
 const REASONING_MODEL_PRIORITY: &[&str] = &[
     "deepseek-r1",
     "qwq",
+    "gpt-oss",
+    "magistral",
     "qwen3",
     "phi4",
+    "exaone-deep",
     "openthinker",
     "marco-o1",
     "mathstral",
+    "cogito",
+    "smallthinker",
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -178,7 +198,7 @@ pub fn detect_capabilities(model_name: &str) -> ModelCapabilities {
         name: model_name.to_string(),
         is_vision: is_vision_model(model_name),
         is_code: is_code_model(model_name),
-        is_reasoning: lower.contains("deepseek-r1") || lower.contains("qwen3") || lower.contains("phi4"),
+        is_reasoning: is_reasoning_model(model_name),
         is_multilingual,
         is_math,
         is_agentic,
@@ -686,6 +706,32 @@ mod tests {
         let d = route_for_task("qwen3:30b-a3b", TaskKind::General, &models);
         assert!(!d.auto_swapped);
         assert_eq!(d.model, "qwen3:30b-a3b");
+    }
+
+    #[test]
+    fn test_qwen3_coder_is_a_code_model_and_not_swapped_away() {
+        // Regression: before qwen3-coder was in CODE_MODEL_PATTERNS, the router
+        // treated it as "not a code model" and swapped a user's qwen3-coder:30b
+        // to an older qwen2.5-coder for code tasks.
+        assert!(is_code_model("qwen3-coder:30b"));
+        assert!(is_code_model("devstral:24b"));
+        let models = vec!["qwen3-coder:30b".to_string(), "qwen2.5-coder:7b".to_string()];
+        let d = route_for_task("qwen3-coder:30b", TaskKind::Code, &models);
+        assert!(!d.auto_swapped);
+        assert_eq!(d.model, "qwen3-coder:30b");
+        // And when auto-picking, the newer family wins.
+        assert_eq!(find_best_code_model(&models), Some("qwen3-coder:30b".to_string()));
+    }
+
+    #[test]
+    fn test_2026_reasoning_and_vision_patterns() {
+        assert!(is_reasoning_model("gpt-oss:20b"));
+        assert!(is_reasoning_model("magistral:24b"));
+        assert!(is_vision_model("llama4:scout"));
+        assert!(is_vision_model("mistral-small3.2:24b"));
+        // qwen3-vl outranks qwen2.5vl now.
+        let models = vec!["qwen2.5vl:7b".to_string(), "qwen3-vl:8b".to_string()];
+        assert_eq!(find_best_vision_model(&models), Some("qwen3-vl:8b".to_string()));
     }
 
     #[test]

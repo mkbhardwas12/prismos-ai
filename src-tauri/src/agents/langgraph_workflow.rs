@@ -867,6 +867,15 @@ impl WorkflowEngine {
                             .and_then(|g| g.get_good_examples(&intent.raw, 2).ok())
                             .filter(|v| !v.is_empty());
 
+                        // Reasoning lane opts into a thinking trace: the bridge
+                        // translates the /think directive into Ollama's `think`
+                        // flag and strips it from the prompt. Everyday lanes on
+                        // hybrid models keep thinking off for fast, clean answers.
+                        let user_content = if matches!(reasoner_task, crate::smart_router::TaskKind::Reasoning) {
+                            format!("{} /think", user_content)
+                        } else {
+                            user_content
+                        };
                         match crate::ollama_bridge::chat(&model_name, &system_prompt, &user_content, None, None, few_shots).await {
                             Ok(r) => r,
                             Err(e) => {

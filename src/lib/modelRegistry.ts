@@ -64,7 +64,7 @@ export const MODEL_REGISTRY: ModelSpec[] = [
     size: "~2.5 GB",
     vramMin: 0,
     ramMin: 4,
-    context: 8192,
+    context: 131072,
     tier: "essential",
     capabilities: ["text", "code"],
     license: "Gemma",

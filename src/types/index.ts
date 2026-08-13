@@ -515,7 +515,7 @@ export interface SystemInfo {
   arch: string;
 }
 
-// ─── Brain Wrapped™ + Cognitive Fingerprint™ ──────────────
+// ─── Brain Wrapped + Cognitive Fingerprint ──────────────
 
 /** Deterministic visual signature of a cognitive profile. */
 export interface CognitiveFingerprint {

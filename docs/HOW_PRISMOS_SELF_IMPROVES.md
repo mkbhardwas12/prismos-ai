@@ -29,7 +29,7 @@ answers as **few-shot exemplars** (`get_good_examples`), then applies your
 cognitive profile. So a 👍 you give today literally shapes tomorrow's prompts —
 the cheapest, fastest improvement, and it's already wired in the app.
 
-## ② Response Loop + Council — better *answer* (seconds · in the pending PR)
+## ② Response Loop + Council — better *answer* (seconds · designed, not yet implemented)
 For hard questions the one-pass pipeline becomes **plan → build → judge → refine**,
 with the **Council** (several local models answer, peer-review each other
 *anonymously*, a chairman synthesizes) acting as the judge. An ensemble of local
@@ -65,7 +65,7 @@ single byte leaving your laptop.
 | Layer | State |
 |---|---|
 | ① RAG + 👍 few-shot retrieval | **live in the app** |
-| ② Loop + Council | **in the pending cloud PR** (default-off) |
+| ② Loop + Council | **designed, not yet implemented** — see `docs/LOCAL_LOOP_ENGINE.md`; will land default-off |
 | ③ Flywheel | **runnable prototype** — needs a validated corpus (keep rating answers 👍) |
 
 > Round-one fuel is measured by `scripts/flywheel/harvest.py` against your local

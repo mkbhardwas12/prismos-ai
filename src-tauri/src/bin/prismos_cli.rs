@@ -25,10 +25,37 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 const GENERATE_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Serialize)]
+struct GenerateOptions {
+    /// Without this Ollama falls back to a 2048–4096 window and silently
+    /// truncates piped-in files.
+    num_ctx: u32,
+    num_predict: u32,
+}
+
+#[derive(Debug, Serialize)]
 struct GenerateRequest<'a> {
     model: &'a str,
     prompt: String,
     stream: bool,
+    options: GenerateOptions,
+    /// Thinking toggle (Ollama ≥ 0.9). Hybrid qwen3 chat models default OFF so
+    /// answers are clean and fast; --think opts in. The inline /no_think soft
+    /// switch stopped working around Ollama 0.12.3 (ollama/ollama#12575).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    think: Option<bool>,
+}
+
+const CLI_NUM_CTX: u32 = 16384;
+const CLI_NUM_PREDICT: u32 = 8192;
+
+/// Hybrid thinking models (qwen3 chat family; *-coder tags are non-thinking).
+fn auto_think(model: &str) -> Option<bool> {
+    let m = model.to_lowercase();
+    if (m.contains("qwen3") && !m.contains("coder")) || m.contains("smollm3") {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +64,11 @@ struct GenerateChunk {
     response: String,
     #[serde(default)]
     done: bool,
+    /// "length" when the answer hit the num_predict ceiling.
+    #[serde(default)]
+    done_reason: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +92,7 @@ struct Args {
     base_url: String,
     no_stream: bool,
     from_stdin: bool,
+    think: Option<bool>,
     prompt: String,
 }
 
@@ -93,6 +126,7 @@ fn parse_args() -> Result<Args, String> {
         base_url:  std::env::var("PRISMOS_OLLAMA_URL").unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string()),
         no_stream: false,
         from_stdin: false,
+        think: None,
         prompt: String::new(),
     };
 
@@ -110,6 +144,8 @@ fn parse_args() -> Result<Args, String> {
             }
             "--no-stream" => args.no_stream = true,
             "--stdin"     => args.from_stdin = true,
+            "--think"     => args.think = Some(true),
+            "--no-think"  => args.think = Some(false),
             "--help" | "-h" => {
                 args.cmd = Cmd::Help;
             }
@@ -145,6 +181,7 @@ impl Args {
             base_url: DEFAULT_OLLAMA_URL.to_string(),
             no_stream: false,
             from_stdin: false,
+            think: None,
             prompt: String::new(),
         }
     }
@@ -169,6 +206,8 @@ OPTIONS
                        env: PRISMOS_OLLAMA_URL)
       --no-stream      Print the full answer at the end instead of streaming.
       --stdin          Read the prompt from stdin (lets you pipe in files).
+      --think          Ask a thinking-capable model for a reasoning trace.
+      --no-think       Force thinking off (default for qwen3 chat models).
 
 EXAMPLES
   prismos-cli health
@@ -255,38 +294,139 @@ async fn list_models(url: &str) -> Result<Vec<ModelEntry>, Box<dyn std::error::E
     Ok(list.models)
 }
 
-async fn generate_blocking(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn build_request(a: &Args, stream: bool) -> GenerateRequest<'_> {
+    GenerateRequest {
+        model: &a.model,
+        prompt: a.prompt.clone(),
+        stream,
+        options: GenerateOptions { num_ctx: CLI_NUM_CTX, num_predict: CLI_NUM_PREDICT },
+        think: a.think.or_else(|| auto_think(&a.model)),
+    }
+}
+
+/// POST the request; if the daemon rejects the `think` field (older Ollama or a
+/// model that can't toggle), retry once without it.
+async fn post_generate(
+    a: &Args,
+    stream: bool,
+) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
     let client = reqwest::Client::new();
-    let body = GenerateRequest { model: &a.model, prompt: a.prompt.clone(), stream: false };
-    let resp = client
-        .post(format!("{}/api/generate", a.base_url))
-        .json(&body)
-        .timeout(GENERATE_TIMEOUT)
-        .send()
-        .await?;
+    let url = format!("{}/api/generate", a.base_url);
+    let mut body = serde_json::to_value(build_request(a, stream))?;
+    let had_think = body.get("think").is_some();
+    let resp = client.post(&url).json(&body).timeout(GENERATE_TIMEOUT).send().await?;
+    if !resp.status().is_success() && had_think && (400..=422).contains(&resp.status().as_u16()) {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("think");
+        }
+        return Ok(client.post(&url).json(&body).timeout(GENERATE_TIMEOUT).send().await?);
+    }
+    Ok(resp)
+}
+
+/// Incremental <think> filter for the streaming path: emits only display-safe
+/// text, holding back any tail that could be a tag split across chunks.
+struct ThinkFilter {
+    in_think: bool,
+    pending: String,
+}
+
+const THINK_OPEN: &str = "<think>";
+const THINK_CLOSE: &str = "</think>";
+
+impl ThinkFilter {
+    fn new() -> Self {
+        Self { in_think: false, pending: String::new() }
+    }
+
+    fn push(&mut self, token: &str) -> String {
+        self.pending.push_str(token);
+        let mut out = String::new();
+        loop {
+            if self.in_think {
+                if let Some(pos) = self.pending.find(THINK_CLOSE) {
+                    self.pending.drain(..pos + THINK_CLOSE.len());
+                    self.in_think = false;
+                } else {
+                    let keep = partial_suffix_len(&self.pending, THINK_CLOSE);
+                    let drop_to = self.pending.len() - keep;
+                    self.pending.drain(..drop_to);
+                    return out;
+                }
+            } else if let Some(pos) = self.pending.find(THINK_OPEN) {
+                out.push_str(&self.pending[..pos]);
+                self.pending.drain(..pos + THINK_OPEN.len());
+                self.in_think = true;
+            } else {
+                let keep = partial_suffix_len(&self.pending, THINK_OPEN);
+                let emit_to = self.pending.len() - keep;
+                out.push_str(&self.pending[..emit_to]);
+                self.pending.drain(..emit_to);
+                return out;
+            }
+        }
+    }
+
+    fn finish(&mut self) -> String {
+        if self.in_think {
+            self.pending.clear();
+            return String::new();
+        }
+        std::mem::take(&mut self.pending)
+    }
+}
+
+/// Longest suffix of `s` that is a (proper) prefix of `tag`.
+fn partial_suffix_len(s: &str, tag: &str) -> usize {
+    let max = tag.len().saturating_sub(1).min(s.len());
+    for k in (1..=max).rev() {
+        if s.is_char_boundary(s.len() - k) && s.ends_with(&tag[..k]) {
+            return k;
+        }
+    }
+    0
+}
+
+/// Strip inline <think>…</think> blocks (older daemons leak them into the text).
+fn strip_think(s: &str) -> String {
+    let (mut out, mut rest) = (String::with_capacity(s.len()), s);
+    loop {
+        match rest.find("<think>") {
+            None => { out.push_str(rest); break; }
+            Some(start) => {
+                out.push_str(&rest[..start]);
+                match rest[start + 7..].find("</think>") {
+                    Some(end) => rest = &rest[start + 7 + end + 8..],
+                    None => break,
+                }
+            }
+        }
+    }
+    out.trim_start().to_string()
+}
+
+async fn generate_blocking(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let resp = post_generate(a, false).await?;
     if !resp.status().is_success() {
         return Err(format!("ollama returned {}: {}", resp.status(), resp.text().await.unwrap_or_default()).into());
     }
     let parsed: GenerateChunk = resp.json().await?;
-    println!("{}", parsed.response);
+    println!("{}", strip_think(&parsed.response));
+    if parsed.done_reason.as_deref() == Some("length") {
+        eprintln!("[prismos-cli] note: answer hit the token ceiling and may be incomplete");
+    }
     Ok(())
 }
 
 async fn generate_streaming(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let body = GenerateRequest { model: &a.model, prompt: a.prompt.clone(), stream: true };
-    let resp = client
-        .post(format!("{}/api/generate", a.base_url))
-        .json(&body)
-        .timeout(GENERATE_TIMEOUT)
-        .send()
-        .await?;
+    let resp = post_generate(a, true).await?;
     if !resp.status().is_success() {
         return Err(format!("ollama returned {}: {}", resp.status(), resp.text().await.unwrap_or_default()).into());
     }
 
     let mut stream = resp.bytes_stream();
     let mut buf: Vec<u8> = Vec::new();
+    let mut filter = ThinkFilter::new();
     let stdout = io::stdout();
     let mut out = stdout.lock();
     while let Some(chunk) = stream.next().await {
@@ -299,12 +439,25 @@ async fn generate_streaming(a: &Args) -> Result<(), Box<dyn std::error::Error + 
             if line.is_empty() { continue; }
             match serde_json::from_slice::<GenerateChunk>(line) {
                 Ok(c) => {
+                    if let Some(err) = c.error {
+                        return Err(format!("ollama stream error: {err}").into());
+                    }
                     if !c.response.is_empty() {
-                        out.write_all(c.response.as_bytes())?;
-                        out.flush()?;
+                        let clean = filter.push(&c.response);
+                        if !clean.is_empty() {
+                            out.write_all(clean.as_bytes())?;
+                            out.flush()?;
+                        }
                     }
                     if c.done {
+                        let tail = filter.finish();
+                        if !tail.is_empty() {
+                            out.write_all(tail.as_bytes())?;
+                        }
                         writeln!(out)?;
+                        if c.done_reason.as_deref() == Some("length") {
+                            eprintln!("[prismos-cli] note: answer hit the token ceiling and may be incomplete");
+                        }
                         return Ok(());
                     }
                 }

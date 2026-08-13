@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Why this matters
 
-A cognitive fingerprint hash is to 2026 what an SSH public key was to 1995: a small string you can publish that proves identity-of-a-mind without revealing anything sensitive. PrismOS-AI is shipping the primitive first.
+A cognitive fingerprint is a short hash over five aggregate stats about how you have used the app. It is a shareable summary, not a credential: it proves nothing, verifies nothing, and is trivially forgeable. It exists because it is a fun thing to post, and for no stronger reason than that.
 
 ---
 
@@ -385,12 +385,12 @@ and full release polish with accessibility improvements.
 
 ### Added
 
-- **Spectrum Graph™** — Multi-layered knowledge graph with 7-dimensional spectral embeddings (cognitive, emotional, temporal, social, creative, analytical, physical)
-- **Refractive Core™** — AI reasoning engine that refracts intents through the Spectrum Graph
+- **Spectrum Graph** — Multi-layered knowledge graph with 7-dimensional spectral embeddings (cognitive, emotional, temporal, social, creative, analytical, physical)
+- **Refractive Core** — AI reasoning engine that refracts intents through the Spectrum Graph
 - **SQLite Persistence** — Full graph persistence with 3-table schema (nodes, edges, spectra)
 - **Multi-Agent Collaboration** — 5 specialized agents (Planner, Researcher, Coder, Reviewer, Executor) with structured messaging, voting, and consensus
 - **Sandbox Prisms** — Isolated execution with HMAC-SHA256 signing, allow-list enforcement, anomaly detection, and auto-rollback
-- **You-Port™** — Device-bound encrypted state migration for session handoff
+- **You-Port** — Device-bound encrypted state migration for session handoff
 - **Ollama Integration** — Local LLM inference via Ollama (Mistral, Llama, etc.)
 - **React UI** — Intent Console with conversation history, Spectrum Explorer, Force-directed Graph Visualization, Sandbox Panel, Settings Panel
 - **Startup Loading Screen** — Progress animation with status updates

@@ -293,13 +293,22 @@ If not prompted:
 2. Microphone → Enable PrismOS-AI
 3. Accessibility → Enable PrismOS-AI
 
-**Notarization**
+**Code signing (important)**
 
-Pre-built DMG files are notarized and stapled. If building from source, you'll see a warning on first launch. To bypass:
+The pre-built DMG files are **not code-signed and not notarized.** On first
+launch macOS will say *"PrismOS-AI is damaged and can't be opened"* or *"Apple
+could not verify PrismOS-AI is free of malware."* The app is not damaged — macOS
+quarantines anything downloaded from a browser and refuses to run unsigned
+bundles. Clear the quarantine flag:
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
+xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
 ```
+
+On macOS Sequoia (15) and later the old Control-click -> Open bypass was removed,
+so use the command above or System Settings -> Privacy & Security -> *Open Anyway*.
+
+If you would rather not run an unsigned binary, build from source instead.
 
 ### Linux: Desktop Integration
 

@@ -25,10 +25,10 @@ PrismOS-AI is a **local-first agentic personal AI operating system** that runs e
 
 ### Key Innovations
 
-- **Spectrum Graph™**: 7-dimensional knowledge representation (cognitive, emotional, temporal, social, creative, analytical, physical)
-- **Refractive Core™**: Intent processing pipeline that refracts user inputs through the knowledge graph
-- **Sandbox Prism™**: WASM-isolated execution environment with cryptographic signing
-- **You-Port™**: Encrypted state migration for cross-device synchronization
+- **Spectrum Graph**: 7-dimensional knowledge representation (cognitive, emotional, temporal, social, creative, analytical, physical)
+- **Refractive Core**: Intent processing pipeline that refracts user inputs through the knowledge graph
+- **Sandbox Prism**: WASM-isolated execution environment with cryptographic signing
+- **You-Port**: Encrypted state migration for cross-device synchronization
 
 ### Current Version
 

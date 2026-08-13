@@ -1,4 +1,4 @@
-// Brain Wrapped™ + Cognitive Fingerprint™ — Shareable Mind Snapshot Engine
+// Brain Wrapped + Cognitive Fingerprint — Shareable Mind Snapshot Engine
 //
 // THE INNOVATION (no prior art):
 //   Most AI tools are stateless — they have no memory of WHO you are.

@@ -96,6 +96,13 @@ bootstraps [Ollama](https://ollama.com) with `qwen3:4b` if you don't have it.
 + ~2.5 GB of model weights. Budget 5–15 minutes on a decent connection. You
 need roughly 4 GB of free RAM to run `qwen3:4b` comfortably.
 
+On macOS you can also install through the tap:
+
+```bash
+brew tap mkbhardwas12/prismos
+brew install --cask prismos-ai   # add --no-quarantine to skip the Gatekeeper dance
+```
+
 Prefer to click? Grab an installer from the
 [Releases page](https://github.com/mkbhardwas12/prismos-ai/releases/latest):
 
@@ -127,9 +134,29 @@ cat notes.md | ./target/release/prismos-cli ask --stdin --model qwen3:4b
 `PRISMOS_MODEL` and `PRISMOS_OLLAMA_URL` override the defaults. It's pipeable,
 so it composes with the rest of your shell.
 
-<!-- TODO(manish): paste one real transcript here — the exact question, the
-     model, the wall-clock time, and the verbatim answer. A single real
-     example is worth more than every feature row below it. -->
+Here's a real run — unedited, `qwen3:4b` (Q4_K_M, 2.5 GB) on an M5 Max, 64 GB:
+
+```console
+$ prismos-cli ask "explain WASM sandboxing in one paragraph"
+WebAssembly (WASM) modules themselves do not include built-in sandboxing;
+instead, **browsers enforce strict security policies that isolate WASM
+execution within a secure sandbox** to prevent malicious behavior. This
+sandbox restricts WASM from directly accessing the DOM, file system, network
+resources, or other system-level features, enforces memory isolation via
+linear memory with strict access controls (preventing memory corruption or
+unauthorized reads/writes), and requires code signing to verify module
+integrity before execution. By design, browsers treat WASM as a confined,
+trusted environment that minimizes attack surfaces while enabling
+high-performance web applications without compromising security—effectively
+acting as a critical layer of defense against exploits like cross-site
+scripting (XSS) or resource theft when WASM code is deployed in the browser
+context.
+```
+
+8.4 s wall-clock (including the model's hidden reasoning pass), 134 tokens/s.
+And an honesty note: the answer has a small-model wobble — WASM does *not*
+require code signing. That's what a 2.5 GB model really sounds like; bigger
+local models sharpen it, and nothing leaves the machine either way.
 
 ---
 

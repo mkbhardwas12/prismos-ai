@@ -8,10 +8,12 @@
 export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 
 /** Default AI model to use if none is configured in settings.
- *  qwen3:30b-a3b is an MoE model (~3B active params/token) — Claude-class quality
- *  for everyday use while staying fast on Apple-silicon unified memory. The smart
- *  router auto-swaps to a code/vision/reasoning specialist per task when relevant. */
-export const DEFAULT_MODEL = "qwen3:30b-a3b";
+ *  qwen3.5:27b is the newest-generation dense flagship — strong text, code and
+ *  reasoning at ~20 tok/s fully offline on 64GB-class unified memory, and its
+ *  current template cleanly honours the `think:false` flag (no trace tax).
+ *  resolveDefaultModel falls back gracefully on machines that don't have it
+ *  pulled; the smart router still swaps to specialists per task. */
+export const DEFAULT_MODEL = "qwen3.5:27b";
 
 /** True if a saved model name refers to the same model as an installed one,
  *  tolerating the implicit `:latest` tag (Ollama lists `llama3.2:latest` but a

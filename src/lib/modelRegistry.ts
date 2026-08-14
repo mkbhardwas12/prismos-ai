@@ -29,10 +29,10 @@ export type ModelCapability =
 export const MODEL_REGISTRY: ModelSpec[] = [
   // ══════════ FLAGSHIP DEFAULT (64GB-class machines) ══════════
   {
-    name: "qwen3.5:27b",
-    label: "Qwen 3.5 27B",
-    desc: "🏆 Default on 64GB-class machines — newest-gen dense flagship, ~20 tok/s fully offline",
-    size: "~17 GB",
+    name: "qwen3.8:27b",
+    label: "Qwen 3.8 27B",
+    desc: "🏆 Default on 64GB-class machines — newest-gen dense flagship, 256K context (needs latest Ollama)",
+    size: "~18 GB",
     vramMin: 0,
     ramMin: 32,
     context: 262144,
@@ -45,10 +45,10 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   },
 
   {
-    name: "qwen3.8:27b",
-    label: "Qwen 3.8 27B",
-    desc: "Newest-gen dense flagship (Aug 2026) — 256K context; needs the latest Ollama",
-    size: "~18 GB",
+    name: "qwen3.5:27b",
+    label: "Qwen 3.5 27B",
+    desc: "Previous-gen dense flagship — ~20 tok/s fully offline, cleanly honours think:false",
+    size: "~17 GB",
     vramMin: 0,
     ramMin: 32,
     context: 262144,

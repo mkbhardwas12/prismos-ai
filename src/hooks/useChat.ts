@@ -299,10 +299,18 @@ export function useChat({
             throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
           }
 
+          // Recent conversation, so "create a doc on this" knows what "this" is.
+          const recentContext = messages
+            .slice(-4)
+            .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+            .join("\n")
+            .slice(-1600);
+
           const attachment = await generateDocument(docKind, input, {
             model: settings.defaultModel || "mistral",
             ollamaUrl: settings.ollamaUrl || null,
             maxTokens: settings.maxTokens || 4096,
+            context: recentContext || undefined,
             onPhase: setProcessingPhase,
           });
 

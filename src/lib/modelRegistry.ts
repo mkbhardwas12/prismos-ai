@@ -27,11 +27,28 @@ export type ModelCapability =
   | "long-context";
 
 export const MODEL_REGISTRY: ModelSpec[] = [
+  // ══════════ FLAGSHIP DEFAULT (64GB-class machines) ══════════
+  {
+    name: "qwen3.5:27b",
+    label: "Qwen 3.5 27B",
+    desc: "🏆 Default on 64GB-class machines — newest-gen dense flagship, ~20 tok/s fully offline",
+    size: "~17 GB",
+    vramMin: 0,
+    ramMin: 32,
+    context: 262144,
+    tier: "power",
+    capabilities: ["text", "code", "reasoning", "multilingual", "math", "long-context"],
+    license: "Apache-2.0",
+    isDefault: true,
+    priority: 1,
+    releaseYear: 2026,
+  },
+
   // ══════════ ESSENTIAL (Tier 1 — works on most machines) ══════════
   {
     name: "qwen3:4b",
     label: "Qwen 3 4B",
-    desc: "🏆 New Default — better than Llama 3.2 at same size, 128K context",
+    desc: "Compact all-rounder — better than Llama 3.2 at same size, 128K context",
     size: "~2.5 GB",
     vramMin: 0,
     ramMin: 4,
@@ -39,7 +56,6 @@ export const MODEL_REGISTRY: ModelSpec[] = [
     tier: "essential",
     capabilities: ["text", "multilingual", "agentic"],
     license: "Apache-2.0",
-    isDefault: true,
     priority: 1,
     releaseYear: 2025,
   },
@@ -189,6 +205,20 @@ export const MODEL_REGISTRY: ModelSpec[] = [
   },
 
   // ══════════ POWER USER (24GB+ VRAM) ══════════
+  {
+    name: "qwen3:30b-a3b",
+    label: "Qwen 3 30B-A3B",
+    desc: "MoE — 30.5B total, ~3B active: near-flagship quality at small-model speed",
+    size: "~19 GB",
+    vramMin: 0,
+    ramMin: 32,
+    context: 262144,
+    tier: "power",
+    capabilities: ["text", "code", "reasoning", "multilingual", "agentic"],
+    license: "Apache-2.0",
+    priority: 29,
+    releaseYear: 2025,
+  },
   {
     name: "qwen3:32b",
     label: "Qwen 3 32B",

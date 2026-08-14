@@ -164,7 +164,7 @@ local models sharpen it, and nothing leaves the machine either way.
 
 | | |
 |---|---|
-| **Ask a local model** | Streaming chat against any Ollama model, with a curated registry of 15 models and hardware-aware recommendations on first run. |
+| **Ask a local model** | Streaming chat against any Ollama model, with a curated registry of 17 models and hardware-aware recommendations on first run. |
 | **Drop in documents** | PDF, DOCX, PPTX, XLSX. Text is extracted on-device, chunked, and retrieved with TF-IDF instead of naively truncated. |
 | **Remember across sessions** | Answers and the concepts in them persist to a local SQLite knowledge graph you can browse, search, and view as a timeline. |
 | **Route to the right model** | Attach an image and it swaps to a vision model, then swaps back. Same for code-heavy prompts. |

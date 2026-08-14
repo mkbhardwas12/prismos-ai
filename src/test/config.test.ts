@@ -25,7 +25,7 @@ describe("modelMatches", () => {
 });
 
 describe("resolveDefaultModel", () => {
-  const installed = ["qwen3.5:27b", "qwen3:30b-a3b", "qwen2.5-coder:7b", "llama3.1:8b"];
+  const installed = ["qwen3.8:27b", "qwen3.5:27b", "qwen3:30b-a3b", "qwen2.5-coder:7b", "llama3.1:8b"];
 
   it("keeps the saved model when it is installed (no fallback)", () => {
     const r = resolveDefaultModel("qwen2.5-coder:7b", installed);
@@ -36,7 +36,7 @@ describe("resolveDefaultModel", () => {
     // The exact bug: a saved deepseek-v3:16b that was never pulled.
     const r = resolveDefaultModel("deepseek-v3:16b", installed);
     expect(r.fellBack).toBe(true);
-    expect(r.model).toBe(DEFAULT_MODEL); // qwen3.5:27b is installed
+    expect(r.model).toBe(DEFAULT_MODEL); // qwen3.8:27b is installed
   });
 
   it("falls back to the first installed model when DEFAULT_MODEL is also absent", () => {

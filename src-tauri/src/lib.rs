@@ -858,6 +858,17 @@ async fn pull_ollama_model(app: tauri::AppHandle, model: String, ollama_url: Opt
     }
 
     if let Some(err) = stream_error {
+        // A 412 from the registry means the local Ollama is too old for this
+        // model's manifest — the tag is fine, the daemon needs an update. Say
+        // that instead of sending the user off to double-check the model name.
+        if err.contains("412") || err.contains("newer version of Ollama") {
+            return Err(format!(
+                "Couldn't pull '{}': your Ollama is too old for this model. \
+                 Update Ollama (brew upgrade ollama, or ollama.com/download), \
+                 then pull again.",
+                model
+            ));
+        }
         return Err(format!(
             "Couldn't pull '{}': {}. Check the model name/tag exists on ollama.com \
              (e.g. DeepSeek reasoning is `deepseek-r1:32b`, not `deepseek-v3:16b`).",

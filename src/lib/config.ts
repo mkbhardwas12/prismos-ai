@@ -8,12 +8,12 @@
 export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 
 /** Default AI model to use if none is configured in settings.
- *  qwen3.5:27b is the newest-generation dense flagship — strong text, code and
- *  reasoning at ~20 tok/s fully offline on 64GB-class unified memory, and its
- *  current template cleanly honours the `think:false` flag (no trace tax).
- *  resolveDefaultModel falls back gracefully on machines that don't have it
- *  pulled; the smart router still swaps to specialists per task. */
-export const DEFAULT_MODEL = "qwen3.5:27b";
+ *  qwen3.8:27b (Aug 2026) is the newest-generation dense flagship — 256K
+ *  context, strong text/code/reasoning on 64GB-class unified memory. Requires
+ *  a current Ollama build; resolveDefaultModel falls back gracefully (e.g. to
+ *  an installed qwen3.5:27b) on machines that don't have it pulled, and the
+ *  smart router still swaps to specialists per task. */
+export const DEFAULT_MODEL = "qwen3.8:27b";
 
 /** True if a saved model name refers to the same model as an installed one,
  *  tolerating the implicit `:latest` tag (Ollama lists `llama3.2:latest` but a

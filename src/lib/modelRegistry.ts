@@ -44,6 +44,21 @@ export const MODEL_REGISTRY: ModelSpec[] = [
     releaseYear: 2026,
   },
 
+  {
+    name: "qwen3.8:27b",
+    label: "Qwen 3.8 27B",
+    desc: "Newest-gen dense flagship (Aug 2026) — 256K context; needs the latest Ollama",
+    size: "~18 GB",
+    vramMin: 0,
+    ramMin: 32,
+    context: 262144,
+    tier: "power",
+    capabilities: ["text", "code", "reasoning", "multilingual", "math", "long-context"],
+    license: "Apache-2.0",
+    priority: 1,
+    releaseYear: 2026,
+  },
+
   // ══════════ ESSENTIAL (Tier 1 — works on most machines) ══════════
   {
     name: "qwen3:4b",

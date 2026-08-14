@@ -108,6 +108,16 @@ fn output_tokens_for(will_think: bool) -> u32 {
 // Older daemons (or model tags that reject the flag) return 4xx — the request
 // layer retries once without `think`, so behavior degrades gracefully instead
 // of erroring.
+//
+// Empirically verified against a live daemon (Ollama 0.24.0, qwen3:4b blob
+// pulled 2026-05): `think:false` is ACCEPTED (200) but ignored by the old
+// template — worse, sending it disables Ollama's trace separation, so the
+// trace lands raw in `response`/`content` with a bare `</think>` close tag
+// and NO opening tag (the template pre-fills `<think>`). Omitting the field
+// keeps separation working but pays full trace latency everywhere. We keep
+// sending `think:false` (correct + fast on current daemons/blobs) and harden
+// the strippers below to catch the bare-close artifact on old combos.
+// Upgrading Ollama / re-pulling the model restores real suppression.
 
 /// Hybrid models whose thinking should default OFF for everyday answers.
 /// qwen3-coder (and any *-coder tag) is a non-thinking family — excluded.
@@ -178,6 +188,12 @@ const THINK_CLOSE: &str = "</think>";
 /// An unclosed `<think>` (stream cut mid-thought) drops the dangling block.
 fn strip_think_blocks(s: &str) -> String {
     if !s.contains(THINK_OPEN) {
+        // Bare `</think>` with no opening tag (see the Thinking control notes:
+        // old template + `think:false` pre-fills the open tag) — everything
+        // before the close is trace.
+        if let Some(close) = s.find(THINK_CLOSE) {
+            return s[close + THINK_CLOSE.len()..].trim_start().to_string();
+        }
         return s.to_string();
     }
     let mut out = String::with_capacity(s.len());
@@ -797,7 +813,11 @@ where
                     on_token(StreamEvent { token: tail, done: false, truncated: false });
                 }
                 on_token(StreamEvent { token: String::new(), done: true, truncated });
-                return Ok(full_response);
+                // The live filter can't retroactively unsee a bare-`</think>`
+                // leak (no opening tag → tokens already emitted); the returned
+                // value is stripped again so persisted/agent-facing text is
+                // clean regardless of daemon quirks.
+                return Ok(strip_think_blocks(&full_response));
             }
         }
     }
@@ -809,7 +829,7 @@ where
         on_token(StreamEvent { token: tail, done: false, truncated: false });
     }
     on_token(StreamEvent { token: String::new(), done: true, truncated });
-    Ok(full_response)
+    Ok(strip_think_blocks(&full_response))
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────
@@ -952,6 +972,15 @@ mod tests {
             strip_think_blocks("<think>a</think>x<think>b</think>y"),
             "xy"
         );
+        // Bare close tag, no opening (Ollama 0.24 + old qwen3 blob with
+        // think:false — template pre-fills <think>, model emits only the
+        // close): everything before it is trace.
+        assert_eq!(
+            strip_think_blocks("Okay, the user wants...</think>\n\nThe answer."),
+            "The answer."
+        );
+        // A close tag with no trace before it — degenerate but clean.
+        assert_eq!(strip_think_blocks("</think>hi"), "hi");
     }
 
     #[test]

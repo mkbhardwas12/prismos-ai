@@ -9,6 +9,11 @@ import type { GeneratedAttachment } from "../types";
 
 export type DocKind = "docx" | "pptx";
 
+/** Doc specs need room for full paragraphs (and reasoning-model traces count
+ *  against the same budget) — never let the chat response-length slider starve
+ *  them. */
+const MIN_SPEC_TOKENS = 8192;
+
 /**
  * Detect whether the user is asking to CREATE a Word document or PowerPoint.
  * Requires a creation verb plus a document/presentation noun to avoid firing
@@ -23,11 +28,11 @@ export function detectDocRequest(input: string): DocKind | null {
   if (!createVerb) return null;
 
   const pptWords =
-    /\b(power\s?point|pptx|presentation|slide\s?deck|slides?|slideshow|deck)\b/.test(
+    /\b(power\s?point|pptx?|presentation|slide\s?deck|slides?|slideshow|deck)\b/.test(
       t,
     );
   const docWords =
-    /\b(word\s+document|word\s+doc|docx|word\s+file|\bdocument\b|report|write-?up|essay|letter|memo|brief)\b/.test(
+    /\b(word\s+document|word\s+doc|docx?|word\s+file|\bdocument\b|report|write-?up|essay|letter|memo|brief)\b/.test(
       t,
     );
 
@@ -37,11 +42,19 @@ export function detectDocRequest(input: string): DocKind | null {
 }
 
 /** Build the system-style prompt that makes the model emit a strict JSON spec. */
-function specPrompt(kind: DocKind, input: string): string {
+function specPrompt(kind: DocKind, input: string, context?: string): string {
+  const contextBlock = context
+    ? [
+        "Recent conversation (the request may refer to it — e.g. \"this\", \"that\", \"the above\"):",
+        context,
+        "",
+      ]
+    : [];
   if (kind === "pptx") {
     return [
       "You are a presentation generator. Based on the user request below, output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
       "",
+      ...contextBlock,
       `User request: "${input}"`,
       "",
       "JSON schema:",
@@ -57,6 +70,7 @@ function specPrompt(kind: DocKind, input: string): string {
   return [
     "You are a document generator. Based on the user request below, output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
     "",
+    ...contextBlock,
     `User request: "${input}"`,
     "",
     "JSON schema:",
@@ -71,22 +85,80 @@ function specPrompt(kind: DocKind, input: string): string {
 }
 
 /** Pull the first balanced JSON object out of a model response. */
-function extractJson(raw: string): string {
+export function extractJson(raw: string): string {
   let text = raw.trim();
   // Strip code fences if the model added them despite instructions.
   text = text.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
+  if (start === -1) {
     throw new Error("Model did not return a JSON document spec.");
   }
-  return text.slice(start, end + 1);
+  const end = text.lastIndexOf("}");
+  // A truncated response may lack the closing brace entirely — hand the tail
+  // to the repair pass rather than failing here.
+  return text.slice(start, end > start ? end + 1 : undefined);
+}
+
+/**
+ * Best-effort repair of a truncated JSON object: walks the text respecting
+ * string/escape state, drops a dangling partial token, strips a trailing
+ * comma, and closes any still-open brackets/braces. Returns null when the
+ * result still doesn't parse.
+ */
+export function repairJson(candidate: string): string | null {
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+  let lastComplete = -1;
+  for (let i = 0; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') { inString = false; lastComplete = i; }
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch === "{" ? "}" : "]"); continue; }
+    if (ch === "}" || ch === "]") { stack.pop(); lastComplete = i; continue; }
+    if (!/\s/.test(ch)) lastComplete = i;
+  }
+  // Cut back to the last complete token (drops an unterminated string or a
+  // dangling `"key":` fragment), then strip a trailing comma or colon-fragment.
+  let text = candidate.slice(0, lastComplete + 1);
+  text = text.replace(/,\s*$/, "").replace(/"[^"]*"\s*:\s*$/, "").replace(/,\s*$/, "");
+  // Re-scan what remains to find which brackets are still open.
+  inString = false;
+  escaped = false;
+  stack.length = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") stack.push(ch === "{" ? "}" : "]");
+    else if (ch === "}" || ch === "]") stack.pop();
+  }
+  if (inString) text += '"';
+  while (stack.length) text += stack.pop();
+  try {
+    JSON.parse(text);
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 interface GenerateOptions {
   model: string;
   ollamaUrl?: string | null;
   maxTokens?: number;
+  /** Recent conversation snippet so requests like "…on this" resolve. */
+  context?: string;
   onPhase?: (phase: string) => void;
 }
 
@@ -103,15 +175,28 @@ export async function generateDocument(
   opts.onPhase?.(`Drafting ${label} outline with ${opts.model}…`);
 
   const raw = await invoke<string>("query_ollama", {
-    prompt: specPrompt(kind, input),
+    prompt: specPrompt(kind, input, opts.context),
     model: opts.model,
     ollamaUrl: opts.ollamaUrl ?? null,
-    maxTokens: opts.maxTokens ?? 4096,
+    maxTokens: Math.max(opts.maxTokens ?? 0, MIN_SPEC_TOKENS),
   });
 
-  const specJson = extractJson(raw);
-  // Validate it parses before sending to the backend for a clearer error.
-  JSON.parse(specJson);
+  const candidate = extractJson(raw);
+  let specJson: string;
+  try {
+    JSON.parse(candidate);
+    specJson = candidate;
+  } catch {
+    const repaired = repairJson(candidate);
+    if (!repaired) {
+      throw new Error(
+        `The ${label} outline from ${opts.model} came back incomplete or malformed ` +
+          "(often a truncated response). Try again, ask for a shorter " +
+          `${label}, or raise Max Tokens in Settings.`,
+      );
+    }
+    specJson = repaired;
+  }
 
   opts.onPhase?.(`Writing ${kind === "pptx" ? "PowerPoint" : "Word"} file…`);
   const command = kind === "pptx" ? "create_powerpoint" : "create_word_document";

@@ -389,6 +389,14 @@ fn partial_suffix_len(s: &str, tag: &str) -> usize {
 
 /// Strip inline <think>…</think> blocks (older daemons leak them into the text).
 fn strip_think(s: &str) -> String {
+    // Bare `</think>` with no opening tag (old daemon/template combos with
+    // think:false — the template pre-fills the open tag): everything before
+    // the close is trace.
+    if !s.contains("<think>") {
+        if let Some(close) = s.find("</think>") {
+            return s[close + 8..].trim_start().to_string();
+        }
+    }
     let (mut out, mut rest) = (String::with_capacity(s.len()), s);
     loop {
         match rest.find("<think>") {

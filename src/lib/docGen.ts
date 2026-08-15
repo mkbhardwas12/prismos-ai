@@ -5,7 +5,7 @@
 // backend which writes a real .docx / .pptx to the Downloads folder. 100% local.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { GeneratedAttachment } from "../types";
+import type { GeneratedAppInfo, GeneratedAttachment } from "../types";
 
 export type DocKind = "docx" | "pptx";
 
@@ -230,6 +230,96 @@ export async function generateTextFile(
   return JSON.parse(resultJson) as GeneratedAttachment;
 }
 
+// ─── App Builder — multi-file static web apps ────────────────────────────────
+
+/** App specs are big (every file's full source rides in one JSON) — give the
+ *  model real room. */
+const MIN_APP_TOKENS = 16384;
+
+/**
+ * Detect a request to BUILD an app/website/game — the multi-file lane.
+ * Checked after detectDocRequest (presentation/report words keep priority)
+ * and before detectFileRequest (a bare "web page" stays a single file).
+ */
+export function detectAppRequest(input: string): boolean {
+  const t = input.toLowerCase().trim();
+  if (looksLikeReadRequest(t)) return false;
+  // Multi-file signals. A lone "page" or "html file" is NOT an app.
+  const appNoun =
+    /\b(web\s?app|webapp|app|application|website|web\s?site|landing\s+page|game|dashboard|tool|calculator|tracker|portfolio\s+site|store(front)?|e-?commerce|clone)\b/.test(t);
+  if (!appNoun) return false;
+  // Documents/presentations about apps must not trigger the builder.
+  if (/\b(power\s?point|pptx?|presentation|slide|deck|docx?|word\s+doc|report|memo|essay|letter)\b/.test(t)) return false;
+  return hasCreateVerb(t);
+}
+
+/** Prompt for a complete multi-file static web app spec. */
+function appSpecPrompt(input: string, context?: string): string {
+  const contextBlock = context
+    ? [
+        "Recent conversation (the request may refer to it):",
+        context,
+        "",
+      ]
+    : [];
+  return [
+    "You are a senior front-end engineer. Build a COMPLETE, WORKING static web app for the user request below. Output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
+    "",
+    ...contextBlock,
+    `User request: "${input}"`,
+    "",
+    "JSON schema:",
+    '{"name":"string","description":"string","entry":"index.html","files":[{"path":"string","content":"string"}]}',
+    "",
+    "Rules:",
+    "- Static web tech ONLY: index.html plus separate styles.css and app.js (ES modules allowed). Optional extra pages/assets. 3 to 12 files.",
+    "- The app must be fully self-contained and OFFLINE: no CDNs, no external fonts, no fetch() to remote hosts, no build step. localStorage is fine for persistence.",
+    "- Make it genuinely usable and polished: real interactions, real sample data, responsive layout, coherent styling.",
+    '- Relative paths only ("index.html", "styles.css", "js/app.js") — never absolute paths and never "..".',
+    "- Every file's full source goes in \"content\" as a JSON string (escape newlines as \\n).",
+    "- Output JSON only, nothing else.",
+  ].join("\n");
+}
+
+/**
+ * Generate a multi-file app project end-to-end: model → JSON spec → project
+ * folder on disk. Returns the written project's metadata.
+ */
+export async function generateAppProject(
+  input: string,
+  opts: GenerateOptions,
+): Promise<GeneratedAppInfo> {
+  opts.onPhase?.(`Designing the app with ${opts.model}…`);
+
+  const raw = await invoke<string>("query_ollama", {
+    prompt: appSpecPrompt(input, opts.context),
+    model: opts.model,
+    ollamaUrl: opts.ollamaUrl ?? null,
+    maxTokens: Math.max(opts.maxTokens ?? 0, MIN_APP_TOKENS),
+  });
+
+  const candidate = extractJson(raw);
+  let specJson: string;
+  try {
+    JSON.parse(candidate);
+    specJson = candidate;
+  } catch {
+    const repaired = repairJson(candidate);
+    if (!repaired) {
+      throw new Error(
+        `The app plan from ${opts.model} came back incomplete or malformed ` +
+          "(often a truncated response). Try again, ask for a simpler app, " +
+          "or raise Max Tokens in Settings.",
+      );
+    }
+    specJson = repaired;
+  }
+
+  opts.onPhase?.("Writing project files…");
+  const resultJson = await invoke<string>("build_app_project", { specJson });
+  return JSON.parse(resultJson) as GeneratedAppInfo;
+}
+
 /** Build the system-style prompt that makes the model emit a strict JSON spec. */
 function specPrompt(kind: DocKind, input: string, context?: string): string {
   const contextBlock = context
@@ -241,18 +331,24 @@ function specPrompt(kind: DocKind, input: string, context?: string): string {
     : [];
   if (kind === "pptx") {
     return [
-      "You are a presentation generator. Based on the user request below, output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
+      "You are a presentation designer. Based on the user request below, output ONLY a single valid minified JSON object — no markdown, no code fences, no commentary.",
       "",
       ...contextBlock,
       `User request: "${input}"`,
       "",
-      "JSON schema:",
-      '{"title":"string","subtitle":"string","slides":[{"title":"string","bullets":["string"]}]}',
+      "JSON schema (every slide field except title is optional):",
+      '{"title":"string","subtitle":"string","slides":[{"title":"string","layout":"bullets|section|two_column|big_fact|quote","bullets":["string"],"left_title":"string","left":["string"],"right_title":"string","right":["string"],"fact":"string","caption":"string","quote":"string","attribution":"string","notes":"string"}]}',
       "",
       "Rules:",
-      "- Produce 5 to 8 slides with real, substantive content for the topic.",
-      "- Each slide has a short title and 3 to 5 concise bullet points.",
-      "- Keep bullets under ~15 words each.",
+      "- Produce 6 to 10 slides with real, substantive content for the topic.",
+      '- VARY the layouts — a deck of identical bullet slides is a failure:',
+      '  - open each major chapter with a "section" slide (title + one-line description in bullets[0]),',
+      '  - use "big_fact" when one number or short phrase carries the message (fact + caption),',
+      '  - use "two_column" for comparisons, pros/cons, before/after (left_title/right_title + left/right),',
+      '  - use "quote" at most once (quote + attribution),',
+      '  - use "bullets" for everything else: 3 to 5 bullets, each under ~12 words.',
+      '- Where natural, start bullets with a short label then a colon, e.g. "Speed: 36 tok/s locally" — the label is rendered bold.',
+      '- EVERY slide gets "notes": 2 to 3 spoken sentences a presenter would actually say.',
       "- Output JSON only, nothing else.",
     ].join("\n");
   }

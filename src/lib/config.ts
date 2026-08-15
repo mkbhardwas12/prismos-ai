@@ -58,6 +58,7 @@ export const DEFAULT_SETTINGS = {
   voiceInputEnabled: false,
   voiceOutputEnabled: false,
   emailSummaryEnabled: false,
+  webResearchEnabled: false,
   calendarEnabled: false,
   financeEnabled: false,
   defaultView: "chat",

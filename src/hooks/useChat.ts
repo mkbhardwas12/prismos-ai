@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
 import { detectDocRequest, detectFileRequest, generateDocument, generateTextFile } from "../lib/docGen";
+import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 
 interface UseChatOptions {
@@ -362,6 +363,102 @@ export function useChat({
           };
           setMessages((prev) => [...prev, aiMsg]);
           onIntentProcessed(aiMsg.agent);
+          await refreshSuggestions(input, aiMsg.id);
+          return;
+        }
+
+        // ── Research path — explore live data and conclude ──
+        // Screen lane: zero network, local vision reads whatever is open.
+        // Web lane: opt-in (Settings + Rust gate), fetches only named URLs.
+        const research = detectResearchRequest(input);
+        if (research) {
+          if (research.mode === "screen") {
+            setProcessingPhase("Reading your screen…");
+            const resultJson = await invoke<string>("read_screen", {
+              prompt: `${input}\n\nAfter describing the relevant on-screen information, end with a clear conclusion.`,
+              ollamaUrl: settings.ollamaUrl || null,
+            });
+            const result: { context: string; model: string; auto_routed: boolean } =
+              JSON.parse(resultJson);
+            const aiMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "ai",
+              content: `${result.context}\n\n───\n🖥️ Screen Research · ${result.model} · 100% local`,
+              timestamp: new Date(),
+              agent: "Screen Reader",
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+            onIntentProcessed("Screen Reader");
+            await refreshSuggestions(input, aiMsg.id);
+            return;
+          }
+
+          // Web lane. Off by default — PrismOS stays offline unless opted in.
+          if (!settings.webResearchEnabled) {
+            const offMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "ai",
+              content: [
+                "🌐 Web Research is **off** — PrismOS ships fully offline by default.",
+                "",
+                "Two ways to get live info:",
+                "1. **Zero network:** open the page on your screen and ask me to *\"read my screen and conclude\"* — local vision only, nothing leaves your machine.",
+                `2. **Opt in:** enable Settings → 🌐 Web Research, then re-send this with up to ${MAX_RESEARCH_URLS} links. HTTPS-only, and I fetch *only* the URLs you name — no search engine, no background traffic.`,
+              ].join("\n"),
+              timestamp: new Date(),
+              agent: "Web Researcher",
+            };
+            setMessages((prev) => [...prev, offMsg]);
+            onIntentProcessed("Web Researcher");
+            return;
+          }
+          if (research.urls.length === 0) {
+            const askMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "ai",
+              content: [
+                `Web Research is on, but I need the addresses — I don't use a search engine (that would send your query to a third party). Paste up to ${MAX_RESEARCH_URLS} links, e.g.:`,
+                "",
+                "`research the latest from https://ollama.com/library/qwen3.8 and conclude`",
+                "",
+                "Or open the page and ask me to *\"read my screen\"* — that lane uses zero network.",
+              ].join("\n"),
+              timestamp: new Date(),
+              agent: "Web Researcher",
+            };
+            setMessages((prev) => [...prev, askMsg]);
+            onIntentProcessed("Web Researcher");
+            return;
+          }
+
+          setProcessingPhase("Checking Ollama connection…");
+          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+          if (!ollamaOk) {
+            throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+          }
+
+          const result = await runWebResearch(input, research.urls, {
+            model: settings.defaultModel || "mistral",
+            ollamaUrl: settings.ollamaUrl || null,
+            maxTokens: settings.maxTokens || 4096,
+            onPhase: setProcessingPhase,
+          });
+
+          const sourceLines = result.pages
+            .map((p, i) => `[${i + 1}] ${p.title} — ${p.url}`)
+            .join("\n");
+          const failNote = result.failures.length
+            ? `\n⚠️ Could not fetch: ${result.failures.join("; ")}`
+            : "";
+          const aiMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: `${result.answer}\n\n───\n🌐 Web Research (opt-in) · fetched only the ${result.pages.length} link${result.pages.length > 1 ? "s" : ""} you gave\n${sourceLines}${failNote}`,
+            timestamp: new Date(),
+            agent: "Web Researcher",
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          onIntentProcessed("Web Researcher");
           await refreshSuggestions(input, aiMsg.id);
           return;
         }

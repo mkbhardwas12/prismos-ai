@@ -96,6 +96,7 @@ function App() {
           voiceInputEnabled: parsed.voiceInputEnabled ?? DEFAULT_SETTINGS.voiceInputEnabled,
           voiceOutputEnabled: parsed.voiceOutputEnabled ?? DEFAULT_SETTINGS.voiceOutputEnabled,
           emailSummaryEnabled: parsed.emailSummaryEnabled ?? DEFAULT_SETTINGS.emailSummaryEnabled,
+          webResearchEnabled: parsed.webResearchEnabled ?? DEFAULT_SETTINGS.webResearchEnabled,
           calendarEnabled: parsed.calendarEnabled ?? DEFAULT_SETTINGS.calendarEnabled,
           financeEnabled: parsed.financeEnabled ?? DEFAULT_SETTINGS.financeEnabled,
           defaultView: parsed.defaultView ?? DEFAULT_SETTINGS.defaultView,
@@ -117,6 +118,15 @@ function App() {
     // Apply theme change immediately
     document.documentElement.setAttribute("data-theme", newSettings.theme);
   }, []);
+
+  // ── Web Research gate sync ──
+  // The Rust-side gate always boots OFF (offline by default); re-apply the
+  // persisted Settings choice on launch and whenever the toggle changes.
+  useEffect(() => {
+    invoke("set_web_research_enabled", { enabled: settings.webResearchEnabled }).catch(() => {
+      /* backend not ready yet — the gate simply stays off */
+    });
+  }, [settings.webResearchEnabled]);
 
   const loadAgents = useCallback(async (activeAgent?: string | null) => {
     try {

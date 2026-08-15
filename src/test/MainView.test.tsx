@@ -85,6 +85,7 @@ const defaultSettings: AppSettings = {
   voiceInputEnabled: false,
   voiceOutputEnabled: false,
   emailSummaryEnabled: false,
+  webResearchEnabled: false,
   calendarEnabled: false,
   financeEnabled: false,
   defaultView: "chat",

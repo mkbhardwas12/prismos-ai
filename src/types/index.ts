@@ -289,6 +289,7 @@ export interface AppSettings {
   voiceInputEnabled: boolean;
   voiceOutputEnabled: boolean;
   emailSummaryEnabled: boolean;
+  webResearchEnabled: boolean;
   calendarEnabled: boolean;
   financeEnabled: boolean;
   defaultView: string;

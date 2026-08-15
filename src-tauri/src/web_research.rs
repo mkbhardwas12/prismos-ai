@@ -279,56 +279,26 @@ pub async fn fetch_url_as_text(url: &str) -> Result<FetchedPage, String> {
     })
 }
 
-/// Origin ("https://host[:port]") of an https URL.
-fn url_origin(url: &str) -> Option<String> {
-    let rest = url.trim().strip_prefix("https://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    if authority.is_empty() {
-        None
-    } else {
-        Some(format!("https://{authority}"))
-    }
-}
-
-/// Directory base of a URL (through the last '/') for resolving relative hrefs.
-fn url_dir(url: &str) -> String {
-    let no_q = url.split(['?', '#']).next().unwrap_or(url);
-    match no_q.rfind('/') {
-        Some(i) if i >= "https://".len() => no_q[..=i].to_string(),
-        _ => format!("{}/", no_q.trim_end_matches('/')),
-    }
-}
-
-/// Resolve an href against its page URL. Returns None for fragments,
-/// non-web schemes, and anything that fails the https/public-host checks.
+/// Resolve an href against its page URL with real RFC 3986 reference
+/// semantics (the url crate that ships with reqwest) — "next" on
+/// ".../articles/current" is a SIBLING, "?page=2" keeps the current path.
+/// Returns None for fragments, non-web schemes, and anything that fails the
+/// https/public-host checks; http:// upgrades (the backend is https-only).
 fn absolutize(href: &str, base_url: &str) -> Option<String> {
     let h = href.trim();
-    if h.is_empty() {
+    if h.is_empty() || h.starts_with('#') {
         return None;
     }
-    let hl = ascii_lower(h);
-    if hl.starts_with('#')
-        || hl.starts_with("mailto:")
-        || hl.starts_with("javascript:")
-        || hl.starts_with("tel:")
-        || hl.starts_with("data:")
-    {
-        return None;
+    let base = reqwest::Url::parse(base_url).ok()?;
+    let mut joined = base.join(h).ok()?;
+    if joined.scheme() == "http" {
+        joined.set_scheme("https").ok()?;
     }
-    let abs = if hl.starts_with("https://") {
-        h.to_string()
-    } else if hl.starts_with("http://") {
-        format!("https://{}", &h[7..]) // upgrade — the backend is https-only
-    } else if h.starts_with("//") {
-        format!("https:{h}")
-    } else if h.starts_with('/') {
-        format!("{}{}", url_origin(base_url)?, h)
-    } else if h.split('/').next().unwrap_or("").contains(':') {
-        return None; // some other scheme (ftp:, chrome:, …)
-    } else {
-        format!("{}{}", url_dir(base_url), h)
-    };
-    let abs = abs.split('#').next().unwrap_or(&abs).to_string();
+    if joined.scheme() != "https" {
+        return None; // mailto:, javascript:, tel:, data:, ftp:, …
+    }
+    joined.set_fragment(None);
+    let abs = joined.to_string();
     validate_url(&abs).ok()?;
     Some(abs)
 }
@@ -591,7 +561,9 @@ mod tests {
 
     #[test]
     fn extract_links_absolutizes_filters_and_dedupes() {
-        let html = r#"<a href="/docs">Docs</a>
+        // NOTE the r##…## delimiter: the HTML contains `"#` (href="#section"),
+        // which would terminate a single-# raw string.
+        let html = r##"<a href="/docs">Docs</a>
             <a href="page2.html">Next <span>page</span></a>
             <a href="https://other.example.org/deep">Other</a>
             <a href="http://insecure.example.com/x">Upgraded</a>
@@ -600,7 +572,7 @@ mod tests {
             <a href="mailto:a@b.c">Mail</a>
             <a href="javascript:void(0)">JS</a>
             <a href="https://192.168.1.1/router">LAN</a>
-            <a href="/docs">Dup</a>"#;
+            <a href="/docs">Dup</a>"##;
         let links = extract_links(html, "https://example.com/blog/post.html");
         let urls: Vec<&str> = links.iter().map(|l| l.url.as_str()).collect();
         assert!(urls.contains(&"https://example.com/docs"));
@@ -614,6 +586,27 @@ mod tests {
     }
 
     #[test]
+    fn absolutize_follows_rfc3986_reference_semantics() {
+        // Codex regression: relative refs resolve against the full URL, not a
+        // naive directory concatenation.
+        assert_eq!(
+            absolutize("next", "https://example.com/articles/current").unwrap(),
+            "https://example.com/articles/next"
+        );
+        assert_eq!(
+            absolutize("?page=2", "https://example.com/articles/current").unwrap(),
+            "https://example.com/articles/current?page=2"
+        );
+        assert_eq!(
+            absolutize("../up", "https://example.com/a/b/c").unwrap(),
+            "https://example.com/a/up"
+        );
+        assert!(absolutize("#frag", "https://example.com/x").is_none());
+        assert!(absolutize("mailto:a@b.c", "https://example.com/x").is_none());
+        assert!(absolutize("javascript:void(0)", "https://example.com/x").is_none());
+    }
+
+    #[test]
     fn extract_links_caps_output_and_skips_a_lookalike_tags() {
         let mut html = String::from("<article><p>no links here</p></article>");
         for i in 0..40 {
@@ -621,13 +614,6 @@ mod tests {
         }
         let links = extract_links(&html, "https://x.example.com/");
         assert_eq!(links.len(), 30);
-    }
-
-    #[test]
-    fn url_dir_and_origin_resolve_correctly() {
-        assert_eq!(url_dir("https://a.com/x/y.html"), "https://a.com/x/");
-        assert_eq!(url_dir("https://a.com"), "https://a.com/");
-        assert_eq!(url_origin("https://a.com:8443/x/y").unwrap(), "https://a.com:8443");
     }
 
     #[test]

@@ -363,8 +363,18 @@ pub fn route_model(
 
     // ── Priority 1: Vision routing (images require a vision model) ──
     if has_image {
-        // If user already selected a vision model, use it
-        if is_vision_model(user_model) {
+        // If user already selected a vision model, use it — but only when it
+        // is actually installed. An empty `available_models` means the model
+        // list could not be fetched (Ollama briefly unreachable); stay
+        // optimistic then rather than second-guessing the user. A vision-NAMED
+        // model that is visibly absent must not be trusted: sending it to
+        // Ollama just returns `model '…' not found` (the read_screen
+        // regression this guards against).
+        let user_vision_installed = available_models.is_empty()
+            || available_models
+                .iter()
+                .any(|m| m.eq_ignore_ascii_case(user_model));
+        if is_vision_model(user_model) && user_vision_installed {
             return RoutingDecision {
                 model: user_model.to_string(),
                 auto_swapped: false,
@@ -741,5 +751,44 @@ mod tests {
         let d = route_for_task("mistral", TaskKind::Code, &models);
         assert!(!d.auto_swapped);
         assert_eq!(d.model, "mistral");
+    }
+
+    #[test]
+    fn route_model_swaps_when_named_vision_model_is_not_installed() {
+        // Regression: read_screen used to pass a hardcoded "llama3.2-vision",
+        // and the router trusted any vision-named user model without checking
+        // the installed list — a guaranteed `model not found` on every machine
+        // without that exact model.
+        let available = vec!["qwen3-vl:32b".to_string(), "qwen3.8:27b".to_string()];
+        let route = route_model("llama3.2-vision", true, false, false, &available);
+        assert_eq!(route.model, "qwen3-vl:32b");
+        assert!(route.auto_swapped);
+        assert!(route.is_vision);
+    }
+
+    #[test]
+    fn route_model_keeps_user_vision_model_when_installed() {
+        let available = vec!["qwen2.5vl:7b".to_string(), "qwen3.8:27b".to_string()];
+        let route = route_model("qwen2.5vl:7b", true, false, false, &available);
+        assert_eq!(route.model, "qwen2.5vl:7b");
+        assert!(!route.auto_swapped);
+    }
+
+    #[test]
+    fn route_model_stays_optimistic_when_model_list_is_unavailable() {
+        // Empty list = the tags fetch failed; don't second-guess the user then.
+        let available: Vec<String> = vec![];
+        let route = route_model("llama3.2-vision", true, false, false, &available);
+        assert_eq!(route.model, "llama3.2-vision");
+        assert!(!route.auto_swapped);
+    }
+
+    #[test]
+    fn route_model_with_empty_user_model_auto_detects_installed_vision() {
+        // read_screen now passes "" — always resolve from what's installed.
+        let available = vec!["qwen3.8:27b".to_string(), "qwen2.5vl:7b".to_string()];
+        let route = route_model("", true, false, false, &available);
+        assert_eq!(route.model, "qwen2.5vl:7b");
+        assert!(route.auto_swapped);
     }
 }

@@ -50,9 +50,13 @@ Two honest caveats, because "100% offline" gets thrown around too loosely:
   you explicitly type into chat, over HTTPS, with localhost/LAN addresses
   refused. It is off by default, double-gated (a Settings toggle plus a
   Rust-side gate that hard-refuses fetches while disabled), uses no search
-  engine, and sends nothing in the background. The zero-network alternative is
-  built in: open the page and ask PrismOS to *read your screen* — local vision
-  only.
+  engine, and sends nothing in the background. Fetches run in parallel, and
+  saying *"explore"* additionally follows the most relevant links found on the
+  pages you named — bounded, and every followed link passes the same gates.
+  What it reads is indexed into the local knowledge graph so later answers can
+  retrieve it; that indexing is local SQLite, not telemetry. The zero-network
+  alternative is built in: open the page and ask PrismOS to *read your
+  screen* — local vision only.
 
 Email Keeper and Web Research are the only two features that can talk to
 anything beyond localhost. Leave both off — the default — and the app has no

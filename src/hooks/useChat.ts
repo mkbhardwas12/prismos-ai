@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
-import { detectDocRequest, detectFileRequest, generateDocument, generateTextFile } from "../lib/docGen";
+import { detectAppRequest, detectDocRequest, detectFileRequest, generateAppProject, generateDocument, generateTextFile } from "../lib/docGen";
 import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 import { buildErrorMessage } from "../lib/errors";
@@ -324,6 +324,49 @@ export function useChat({
             timestamp: new Date(),
             agent: docKind === "pptx" ? "Presentation Builder" : "Document Writer",
             attachment,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          onIntentProcessed(aiMsg.agent);
+          await refreshSuggestions(input, aiMsg.id);
+          return;
+        }
+
+        // ── App Builder path — multi-file static web apps, built and opened ──
+        if (detectAppRequest(input)) {
+          setProcessingPhase("Checking Ollama connection…");
+          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+          if (!ollamaOk) {
+            throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+          }
+
+          const recentContext = messages
+            .slice(-4)
+            .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+            .join("\n")
+            .slice(-1600);
+
+          const appInfo = await generateAppProject(input, {
+            model: settings.defaultModel || "mistral",
+            ollamaUrl: settings.ollamaUrl || null,
+            maxTokens: settings.maxTokens || 4096,
+            context: recentContext || undefined,
+            onPhase: setProcessingPhase,
+          });
+
+          setProcessingPhase("Opening in your browser…");
+          try {
+            await invoke("open_generated_file", { path: appInfo.entry_path, reveal: false });
+          } catch {
+            // Opening is a courtesy — the project is on disk either way.
+          }
+
+          const fileList = appInfo.files.map((f) => `  • ${f}`).join("\n");
+          const aiMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: `🚀 Built **${appInfo.name}** — ${appInfo.files.length} files, opened in your browser.\n\nProject folder: Downloads/prismos-apps\n${fileList}\n\nWant changes? Describe them and I'll rebuild. For a quick review, say *"read my screen and conclude"* with it open.\n\n───\n🛠️ App Builder · generated locally · 100% private`,
+            timestamp: new Date(),
+            agent: "App Builder",
           };
           setMessages((prev) => [...prev, aiMsg]);
           onIntentProcessed(aiMsg.agent);

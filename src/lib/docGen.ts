@@ -243,7 +243,11 @@ const MIN_APP_TOKENS = 16384;
  */
 export function detectAppRequest(input: string): boolean {
   const t = input.toLowerCase().trim();
-  if (looksLikeReadRequest(t)) return false;
+  // Advice and questions about building are chat, not build orders — but a
+  // polite "can you build me…" IS a build order, so unlike the doc lane we
+  // exclude only genuinely informational openers and how-to phrasings.
+  if (/^(what|why|where|when|who|how)\b/.test(t)) return false;
+  if (/\bhow (do|does|would|can|could|should) (i|we|you)\b/.test(t)) return false;
   // Multi-file signals. A lone "page" or "html file" is NOT an app.
   const appNoun =
     /\b(web\s?app|webapp|app|application|website|web\s?site|landing\s+page|game|dashboard|tool|calculator|tracker|portfolio\s+site|store(front)?|e-?commerce|clone)\b/.test(t);
@@ -272,7 +276,8 @@ function appSpecPrompt(input: string, context?: string): string {
     '{"name":"string","description":"string","entry":"index.html","files":[{"path":"string","content":"string"}]}',
     "",
     "Rules:",
-    "- Static web tech ONLY: index.html plus separate styles.css and app.js (ES modules allowed). Optional extra pages/assets. 3 to 12 files.",
+    "- Static web tech ONLY: index.html plus separate styles.css and app.js. Optional extra pages/assets. 3 to 12 files.",
+    '- CLASSIC scripts only: <script src="app.js"> or inline — NEVER type="module", NEVER import/export. The app opens from a file:// page where module scripts are blocked by the browser.',
     "- The app must be fully self-contained and OFFLINE: no CDNs, no external fonts, no fetch() to remote hosts, no build step. localStorage is fine for persistence.",
     "- Make it genuinely usable and polished: real interactions, real sample data, responsive layout, coherent styling.",
     '- Relative paths only ("index.html", "styles.css", "js/app.js") — never absolute paths and never "..".',

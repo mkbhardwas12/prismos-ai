@@ -109,6 +109,37 @@ fn unique_path(stem: &str, ext: &str) -> PathBuf {
     candidate
 }
 
+// ─── Generic text files (.html / .md / .txt / .csv / .json / .svg) ───────────
+
+/// Extensions create_text_file may write. Plain renderable/text formats only —
+/// never executables or scripts.
+const TEXT_EXTS: &[&str] = &["html", "md", "txt", "csv", "json", "svg"];
+
+/// Write a plain-text file (HTML page, Markdown note, CSV, …) to the output
+/// dir. Same non-clobbering, Downloads-first behavior as docx/pptx generation.
+pub fn generate_text_file(title: &str, ext: &str, content: &str) -> Result<GeneratedFile, String> {
+    let ext = ext.trim_start_matches('.').to_lowercase();
+    if !TEXT_EXTS.contains(&ext.as_str()) {
+        return Err(format!(
+            "Unsupported file type '.{ext}'. Supported: html, md, txt, csv, json, svg."
+        ));
+    }
+    if content.trim().is_empty() {
+        return Err("Refusing to write an empty file.".to_string());
+    }
+    let stem = safe_stem(title, "generated-file");
+    let path = unique_path(&stem, &ext);
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {e}"))?;
+    Ok(GeneratedFile {
+        path: path.to_string_lossy().to_string(),
+        filename: path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("{stem}.{ext}")),
+        kind: ext,
+    })
+}
+
 // ─── Word (.docx) ────────────────────────────────────────────────────────────
 
 /// Generate a Word document from a spec. Returns the written file's metadata.

@@ -90,6 +90,146 @@ export function detectDocRequest(input: string): DocKind | null {
   return "docx";
 }
 
+// ─── Generic text files (.html / .md / .txt / .csv / .json / .svg) ────────────
+
+export type FileKind = "html" | "md" | "txt" | "csv" | "json" | "svg";
+
+/** Lighter read-guard for file requests: "open in browser" is a CREATION
+ *  phrasing here, so unlike documents we only exclude questions and
+ *  clearly analytical verbs. */
+function looksLikeFileReadRequest(t: string): boolean {
+  return (
+    /^(what|who|where|when|why|how|is|are|does|do|could|should|would|did)\b/.test(t) ||
+    /\b(summariz|explain|analyz|review|translate)/.test(t)
+  );
+}
+
+/**
+ * Detect a request to create a generic text-format file (HTML page, Markdown
+ * note, CSV, …). Checked AFTER detectDocRequest so docx/pptx keep priority.
+ */
+export function detectFileRequest(input: string): FileKind | null {
+  const t = input.toLowerCase().trim();
+  if (looksLikeFileReadRequest(t)) return null;
+
+  const kind: FileKind | null =
+    /\.html\b|\bhtml\s+(file|page)\b|\bweb\s?page\b|\bopen(able)?\s+in\s+(a\s+|the\s+)?browser\b/.test(t)
+      ? "html"
+      : /\.md\b|\bmarkdown\b/.test(t)
+        ? "md"
+        : /\.txt\b|\btext\s+file\b/.test(t)
+          ? "txt"
+          : /\.csv\b|\bcsv\b/.test(t)
+            ? "csv"
+            : /\.json\b|\bjson\s+file\b/.test(t)
+              ? "json"
+              : /\.svg\b|\bsvg\s+(file|image|icon)\b/.test(t)
+                ? "svg"
+                : null;
+  if (!kind) return null;
+
+  // Require an actual (typo-tolerant) creation verb — merely mentioning a file
+  // ("open the CSV file", "I have an HTML file") must not trigger generation.
+  if (!hasCreateVerb(t)) return null;
+  return kind;
+}
+
+/** Prompt for raw file content (not JSON — these formats ARE the payload). */
+function filePrompt(kind: FileKind, input: string, context?: string): string {
+  const contextBlock = context
+    ? [
+        "Recent conversation (the request may refer to it — e.g. \"this\", \"that\", \"the above\"):",
+        context,
+        "",
+      ]
+    : [];
+  const kindHint: Record<FileKind, string> = {
+    html: "a complete, self-contained HTML5 document (inline CSS/JS, no external assets)",
+    md: "a well-structured Markdown document",
+    txt: "a plain-text document",
+    csv: "a CSV table with a header row",
+    json: "a single valid JSON document",
+    svg: "a single valid standalone SVG image",
+  };
+  return [
+    `You are a file generator. Produce ${kindHint[kind]} for the user request below.`,
+    "",
+    ...contextBlock,
+    `User request: "${input}"`,
+    "",
+    "Output format — follow EXACTLY:",
+    `Line 1: FILENAME: <short-kebab-case-name>.${kind}`,
+    "Line 2 onward: ONLY the raw file contents. No code fences, no commentary before or after.",
+  ].join("\n");
+}
+
+/** Strip an outer ``` wrapper ONLY as a matched pair — a document that merely
+ *  ENDS with a fenced code block must keep its closing delimiter. */
+function stripWrapperFence(text: string): string {
+  const t = text.trim();
+  if (!/^```[a-z]*\n/i.test(t)) return t;
+  const body = t.replace(/^```[a-z]*\n/i, "");
+  return body.replace(/\n?```\s*$/, "").trim();
+}
+
+/** Parse the FILENAME contract; fall back to a slug of the request. */
+export function splitFileResponse(
+  raw: string,
+  kind: FileKind,
+  input: string,
+): { title: string; content: string } {
+  let text = stripWrapperFence(raw);
+  const m = text.match(/^FILENAME:\s*(\S+)\s*\n/i);
+  let title: string;
+  if (m) {
+    title = m[1].replace(new RegExp(`\\.${kind}$`, "i"), "");
+    text = text.slice(m[0].length);
+  } else {
+    title = input
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "generated-file";
+  }
+  // The content may itself be wrapper-fenced if the model ignored instructions
+  // — strip only a matched pair so legitimate trailing fences survive.
+  text = stripWrapperFence(text);
+  return { title, content: text };
+}
+
+/**
+ * Generate a generic text-format file end-to-end: model → raw content → file.
+ */
+export async function generateTextFile(
+  kind: FileKind,
+  input: string,
+  opts: GenerateOptions,
+): Promise<GeneratedAttachment> {
+  opts.onPhase?.(`Drafting .${kind} file with ${opts.model}…`);
+
+  const raw = await invoke<string>("query_ollama", {
+    prompt: filePrompt(kind, input, opts.context),
+    model: opts.model,
+    ollamaUrl: opts.ollamaUrl ?? null,
+    maxTokens: Math.max(opts.maxTokens ?? 0, MIN_SPEC_TOKENS),
+  });
+
+  const { title, content } = splitFileResponse(raw, kind, input);
+  if (!content) {
+    throw new Error(
+      `The model returned no usable content for the .${kind} file. Try again or rephrase.`,
+    );
+  }
+
+  opts.onPhase?.(`Writing .${kind} file…`);
+  const resultJson = await invoke<string>("create_text_file", {
+    title,
+    ext: kind,
+    content,
+  });
+  return JSON.parse(resultJson) as GeneratedAttachment;
+}
+
 /** Build the system-style prompt that makes the model emit a strict JSON spec. */
 function specPrompt(kind: DocKind, input: string, context?: string): string {
   const contextBlock = context

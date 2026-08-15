@@ -5,7 +5,7 @@
 // `SyntaxError: JSON Parse error: Expected ']'` surfaced to the user.
 
 import { describe, it, expect } from "vitest";
-import { detectDocRequest, extractJson, repairJson } from "../lib/docGen";
+import { detectDocRequest, detectFileRequest, extractJson, repairJson, splitFileResponse } from "../lib/docGen";
 
 describe("detectDocRequest", () => {
   it("detects classic phrasings", () => {
@@ -103,5 +103,62 @@ describe("repairJson", () => {
 
   it("returns null for hopeless input", () => {
     expect(repairJson("not json at all")).toBeNull();
+  });
+});
+
+describe("detectFileRequest", () => {
+  it("detects the two field inputs from tonight", () => {
+    expect(detectFileRequest("Create a .html")).toBe("html");
+    expect(detectFileRequest("Create a file that i can open  in browser")).toBe("html");
+  });
+
+  it("detects other text formats", () => {
+    expect(detectFileRequest("make a markdown file of my notes")).toBe("md");
+    expect(detectFileRequest("generate a csv of the results")).toBe("csv");
+    expect(detectFileRequest("create an svg icon of a prism")).toBe("svg");
+    expect(detectFileRequest("write a webpage about the launch")).toBe("html");
+  });
+
+  it("stays quiet on questions and analysis", () => {
+    expect(detectFileRequest("what is an html file?")).toBeNull();
+    expect(detectFileRequest("explain this json file")).toBeNull();
+    expect(detectFileRequest("how do browsers parse html")).toBeNull();
+  });
+
+  it("requires an actual creation verb (review finding)", () => {
+    expect(detectFileRequest("open the CSV file")).toBeNull();
+    expect(detectFileRequest("delete this JSON file")).toBeNull();
+    expect(detectFileRequest("I have an HTML file")).toBeNull();
+  });
+});
+
+describe("splitFileResponse", () => {
+  it("honors the FILENAME contract and strips it from content", () => {
+    const raw = "FILENAME: launch-page.html\n<!DOCTYPE html><html></html>";
+    const r = splitFileResponse(raw, "html", "create a .html");
+    expect(r.title).toBe("launch-page");
+    expect(r.content.startsWith("<!DOCTYPE html>")).toBe(true);
+  });
+
+  it("falls back to a slug of the request when the contract is missing", () => {
+    const raw = "<!DOCTYPE html><html></html>";
+    const r = splitFileResponse(raw, "html", "Create a file that i can open in browser");
+    expect(r.title).toBe("create-a-file-that-i-can-open-in-browser");
+    expect(r.content).toContain("<!DOCTYPE html>");
+  });
+
+  it("strips code fences the model added anyway", () => {
+    const raw = "```html\nFILENAME: page.html\n<html></html>\n```";
+    const r = splitFileResponse(raw, "html", "x");
+    expect(r.title).toBe("page");
+    expect(r.content).toBe("<html></html>");
+  });
+
+  it("preserves a legitimate closing fence in Markdown content (review finding)", () => {
+    const raw = "FILENAME: notes.md\n# Notes\n\n```ts\nconst x = 1;\n```";
+    const r = splitFileResponse(raw, "md", "make a markdown file");
+    expect(r.title).toBe("notes");
+    expect(r.content.endsWith("```")).toBe(true);
+    expect(r.content).toContain("const x = 1;");
   });
 });

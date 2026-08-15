@@ -124,6 +124,12 @@ describe("detectFileRequest", () => {
     expect(detectFileRequest("explain this json file")).toBeNull();
     expect(detectFileRequest("how do browsers parse html")).toBeNull();
   });
+
+  it("requires an actual creation verb (review finding)", () => {
+    expect(detectFileRequest("open the CSV file")).toBeNull();
+    expect(detectFileRequest("delete this JSON file")).toBeNull();
+    expect(detectFileRequest("I have an HTML file")).toBeNull();
+  });
 });
 
 describe("splitFileResponse", () => {
@@ -146,5 +152,13 @@ describe("splitFileResponse", () => {
     const r = splitFileResponse(raw, "html", "x");
     expect(r.title).toBe("page");
     expect(r.content).toBe("<html></html>");
+  });
+
+  it("preserves a legitimate closing fence in Markdown content (review finding)", () => {
+    const raw = "FILENAME: notes.md\n# Notes\n\n```ts\nconst x = 1;\n```";
+    const r = splitFileResponse(raw, "md", "make a markdown file");
+    expect(r.title).toBe("notes");
+    expect(r.content.endsWith("```")).toBe(true);
+    expect(r.content).toContain("const x = 1;");
   });
 });

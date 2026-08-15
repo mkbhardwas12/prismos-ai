@@ -19,13 +19,55 @@ const MIN_SPEC_TOKENS = 8192;
  * Requires a creation verb plus a document/presentation noun to avoid firing
  * on ordinary questions that merely mention the word "document".
  */
-export function detectDocRequest(input: string): DocKind | null {
-  const t = input.toLowerCase();
-  const createVerb =
+const CREATE_VERBS = [
+  "create", "make", "generate", "build", "write", "draft", "prepare",
+  "produce", "design", "give",
+];
+
+/** Edit distance ≤ 1 (one substitution, insertion, or deletion). Catches the
+ *  imperative-typo class — "reate a word document…", "mke a ppt…" — that a
+ *  strict word-boundary regex silently drops into plain chat. */
+function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (la === lb) { i++; j++; }        // substitution
+    else if (la > lb) { i++; }           // deletion from a
+    else { j++; }                        // insertion into a
+  }
+  return edits + (la - i) + (lb - j) <= 1;
+}
+
+function hasCreateVerb(t: string): boolean {
+  if (
     /\b(create|make|generate|build|write|draft|prepare|produce|design|put together|give me)\b/.test(
       t,
-    );
-  if (!createVerb) return null;
+    )
+  ) {
+    return true;
+  }
+  // Fuzzy pass over the first few tokens for one-letter typos.
+  const tokens = t.split(/[^a-z]+/).filter(Boolean).slice(0, 3);
+  return tokens.some(
+    (tok) => tok.length >= 3 && CREATE_VERBS.some((v) => withinOneEdit(tok, v)),
+  );
+}
+
+/** Questions and read-style requests about an existing document must never
+ *  trigger generation. */
+function looksLikeReadRequest(t: string): boolean {
+  return (
+    /^(what|who|where|when|why|how|is|are|does|do|can|could|should|would|did)\b/.test(t) ||
+    /\b(read|open|summariz|explain|analyz|review|check|look at|compare|translate)/.test(t)
+  );
+}
+
+export function detectDocRequest(input: string): DocKind | null {
+  const t = input.toLowerCase().trim();
 
   const pptWords =
     /\b(power\s?point|pptx?|presentation|slide\s?deck|slides?|slideshow|deck)\b/.test(
@@ -35,10 +77,17 @@ export function detectDocRequest(input: string): DocKind | null {
     /\b(word\s+document|word\s+doc|docx?|word\s+file|\bdocument\b|report|write-?up|essay|letter|memo|brief)\b/.test(
       t,
     );
+  if (!pptWords && !docWords) return null;
+
+  if (looksLikeReadRequest(t)) return null;
+
+  // A recognized (or one-typo-off) creation verb is the primary signal; a
+  // verb-less "word document on/about X" style request is accepted too.
+  const topicMarker = /\b(pptx?|docx?|power\s?point|presentation|document|doc|report|slide\s?deck|slides|deck|memo|letter|essay|brief)\b\s+(on|about|for|of|covering|regarding)\b/.test(t);
+  if (!hasCreateVerb(t) && !topicMarker) return null;
 
   if (pptWords) return "pptx";
-  if (docWords) return "docx";
-  return null;
+  return "docx";
 }
 
 /** Build the system-style prompt that makes the model emit a strict JSON spec. */

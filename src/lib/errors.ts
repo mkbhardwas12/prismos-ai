@@ -29,7 +29,7 @@ export function buildErrorMessage(err: unknown, settings: AppSettings): Message 
 
   let content: string;
   if (isCaptureError) {
-    content = `⚠️ Couldn't capture your screen.\n\nOn macOS this is almost always the Screen Recording permission:\n  1. System Settings → Privacy & Security → Screen Recording\n  2. Enable PrismOS-AI, then relaunch the app\n\nDetails: ${errorStr}`;
+    content = `⚠️ Couldn't capture your screen.\n\nThis is a capture-permission or display problem, not a model problem:\n  • macOS: System Settings → Privacy & Security → Screen Recording → enable PrismOS-AI, then relaunch the app\n  • Windows/Linux: check the app has screen-capture permission and a display is connected (headless sessions can't capture)\n\nDetails: ${errorStr}`;
   } else if (isOllamaError) {
     content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`;
   } else if (namedModel) {

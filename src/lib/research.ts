@@ -57,11 +57,26 @@ export function extractUrls(input: string): string[] {
   return urls.slice(0, MAX_RESEARCH_URLS);
 }
 
-/** Screen phrasing: "read my screen and conclude", "what I'm looking at"… */
+/** Screen phrasing — requires EXPLICIT intent to inspect on-screen content.
+ *  Merely mentioning the screen ("explain why my screen is flickering") must
+ *  never trigger a capture: the verb has to target the screen itself, or the
+ *  request has to be about what is ON the screen. */
 function looksLikeScreenRequest(t: string): boolean {
+  // "read/scan/analyze/describe… my screen", "screen share"
+  if (
+    /\b(read|scan|capture|look\s+at|analy[sz]e|summari[sz]e|describe|see|watch)\b[^.?!\n]{0,30}\b(my|the|this)\s+screen\b/.test(t) ||
+    /\bscreen\s?share\b/.test(t)
+  ) {
+    return true;
+  }
+  // "what's on my screen", "what am I looking at"
+  if (/\bwhat(?:'s|\s+is)?\s+(?:on\s+(?:my|the)\s+screen|i'?\s?a?m\s+looking\s+at)\b/.test(t)) {
+    return true;
+  }
+  // "research/gather/conclude … on/from my screen" — content sourced FROM the screen
   return (
-    /\b(my|the|this)\s+screen\b|\bon\s+screen\b|\bwhat\s+i'?\s?a?m\s+looking\s+at\b|\bscreen\s?share\b/.test(t) &&
-    /\b(read|research|analy[sz]e|summari[sz]e|check|look|gather|explore|explain|conclude|describe|review|tell)\b/.test(t)
+    /\b(?:on|from)\s+(?:my|the)\s+screen\b/.test(t) &&
+    /\b(read|research|analy[sz]e|summari[sz]e|gather|explore|conclude|describe|review)\b/.test(t)
   );
 }
 

@@ -481,6 +481,40 @@ async fn research_fetch_url(app: tauri::AppHandle, url: String) -> Result<String
     serde_json::to_string(&page).map_err(|e| e.to_string())
 }
 
+/// open_url_in_browser — Open a user-named https:// URL in the system's
+/// default browser (the "open and explore" lane). The app itself makes NO
+/// network request here — the browser does — so this works even with Web
+/// Research disabled. The same public-host validation applies: no localhost,
+/// no LAN addresses. Audit-logged.
+#[tauri::command]
+async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    let host = web_research::validate_url(&url)?;
+
+    #[cfg(target_os = "macos")]
+    let (cmd, args): (&str, Vec<String>) = ("open", vec![url.clone()]);
+
+    #[cfg(target_os = "windows")]
+    let (cmd, args): (&str, Vec<String>) = (
+        "cmd",
+        vec!["/C".to_string(), "start".to_string(), "".to_string(), url.clone()],
+    );
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let (cmd, args): (&str, Vec<String>) = ("xdg-open", vec![url.clone()]);
+
+    std::process::Command::new(cmd)
+        .args(&args)
+        .spawn()
+        .map_err(|e| format!("Failed to open browser: {e}"))?;
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append("open_url_in_browser", "user", &url);
+    }
+
+    Ok(host)
+}
+
 /// open_generated_file — Open a generated file (or reveal its folder) with the
 /// OS default handler. Only allows opening files that actually exist on disk.
 #[tauri::command]
@@ -3244,6 +3278,7 @@ pub fn run() {
             // Web Research — opt-in, user-directed HTTPS fetching
             set_web_research_enabled,
             research_fetch_url,
+            open_url_in_browser,
             // Project Review — gated, read-only whole-project review
             scan_project_for_review,
             run_project_review,

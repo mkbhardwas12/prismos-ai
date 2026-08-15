@@ -263,6 +263,14 @@ export interface GeneratedAttachment {
   kind: "docx" | "pptx";
 }
 
+/** A multi-file web-app project generated locally and saved to disk */
+export interface GeneratedAppInfo {
+  dir: string;
+  entry_path: string;
+  name: string;
+  files: string[];
+}
+
 export interface RefractionAlternative {
   band: string;
   band_label: string;

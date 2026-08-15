@@ -37,7 +37,7 @@ pub struct WordSpec {
     pub sections: Vec<WordSection>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SlideSpec {
     #[serde(default)]
     pub title: String,
@@ -45,6 +45,31 @@ pub struct SlideSpec {
     pub bullets: Vec<String>,
     #[serde(default)]
     pub notes: String,
+    /// Layout selector: "" / "bullets" (default), "section", "two_column",
+    /// "big_fact", "quote". Unknown values fall back to bullets — old specs
+    /// keep working unchanged.
+    #[serde(default)]
+    pub layout: String,
+    /// two_column layout: optional column headers + per-column bullets.
+    #[serde(default)]
+    pub left_title: String,
+    #[serde(default)]
+    pub right_title: String,
+    #[serde(default)]
+    pub left: Vec<String>,
+    #[serde(default)]
+    pub right: Vec<String>,
+    /// big_fact layout: the one number/phrase that carries the slide, plus a
+    /// one-line caption under it.
+    #[serde(default)]
+    pub fact: String,
+    #[serde(default)]
+    pub caption: String,
+    /// quote layout.
+    #[serde(default)]
+    pub quote: String,
+    #[serde(default)]
+    pub attribution: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,8 +101,52 @@ fn xml_escape(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+/// Split a bullet like "Speed: 36 tok/s on an M-series MacBook" into a short
+/// lead-in (kept bold) and the rest. Only fires on a compact lead followed by
+/// ": ", " — " or " – " — long or sentence-like leads stay unstyled. This is
+/// what turns a wall of uniform bullets into scannable label → detail lines.
+fn split_lead(text: &str) -> Option<(String, String)> {
+    for sep in [": ", " — ", " – "] {
+        if let Some(pos) = text.find(sep) {
+            let lead = &text[..pos];
+            let rest = &text[pos + sep.len()..];
+            if !lead.is_empty()
+                && lead.chars().count() <= 42
+                && !lead.contains('.')
+                && !rest.trim().is_empty()
+            {
+                return Some((
+                    format!("{lead}{}", sep.trim_end()),
+                    rest.trim_start().to_string(),
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// One bulleted paragraph with the shared indent/spacing/marker style, bold
+/// lead-in when the text carries one, at the given font size (OOXML hundredths
+/// of a point).
+fn bullet_para(text: &str, size: u32) -> String {
+    let runs = match split_lead(text) {
+        Some((lead, rest)) => format!(
+            r#"<a:r><a:rPr lang="en-US" sz="{size}" b="1" dirty="0"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{} </a:t></a:r><a:r><a:rPr lang="en-US" sz="{size}" dirty="0"><a:solidFill><a:srgbClr val="334155"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{}</a:t></a:r>"#,
+            xml_escape(&lead),
+            xml_escape(&rest)
+        ),
+        None => format!(
+            r#"<a:r><a:rPr lang="en-US" sz="{size}" dirty="0"><a:solidFill><a:srgbClr val="334155"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{}</a:t></a:r>"#,
+            xml_escape(text)
+        ),
+    };
+    format!(
+        r#"<a:p><a:pPr marL="342900" indent="-342900"><a:lnSpc><a:spcPct val="130000"/></a:lnSpc><a:spcBef><a:spcPts val="1000"/></a:spcBef><a:buClr><a:srgbClr val="6366F1"/></a:buClr><a:buSzPct val="80000"/><a:buFont typeface="Arial"/><a:buChar char="&#9642;"/></a:pPr>{runs}</a:p>"#
+    )
+}
+
 /// Turn a document title into a safe file stem (no path separators / weird chars).
-fn safe_stem(title: &str, fallback: &str) -> String {
+pub(crate) fn safe_stem(title: &str, fallback: &str) -> String {
     let cleaned: String = title
         .chars()
         .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { ' ' })
@@ -90,7 +159,7 @@ fn safe_stem(title: &str, fallback: &str) -> String {
 }
 
 /// Resolve the output directory, preferring Downloads, then Desktop, then home.
-fn output_dir() -> PathBuf {
+pub(crate) fn output_dir() -> PathBuf {
     dirs::download_dir()
         .or_else(dirs::desktop_dir)
         .or_else(dirs::home_dir)
@@ -190,10 +259,15 @@ pub fn generate_docx(spec: &WordSpec) -> Result<GeneratedFile, String> {
             if bullet.trim().is_empty() {
                 continue;
             }
-            docx = docx.add_paragraph(
-                Paragraph::new()
+            // Bold lead-in ("Label: detail") when the bullet carries one.
+            let para = match split_lead(bullet) {
+                Some((lead, rest)) => Paragraph::new()
+                    .add_run(Run::new().add_text(format!("▪  {lead} ")).bold().size(24).color("0F172A"))
+                    .add_run(Run::new().add_text(rest).size(24).color("334155")),
+                None => Paragraph::new()
                     .add_run(Run::new().add_text(format!("▪  {bullet}")).size(24).color("334155")),
-            );
+            };
+            docx = docx.add_paragraph(para);
         }
         // Blank line between sections
         docx = docx.add_paragraph(Paragraph::new());
@@ -226,18 +300,19 @@ pub fn generate_pptx(spec: &DeckSpec) -> Result<GeneratedFile, String> {
     let mut slides: Vec<RenderSlide> = Vec::new();
     if !spec.title.trim().is_empty() {
         slides.push(RenderSlide {
-            title: spec.title.clone(),
             subtitle: spec.subtitle.clone(),
-            bullets: Vec::new(),
             is_title: true,
+            spec: SlideSpec {
+                title: spec.title.clone(),
+                ..Default::default()
+            },
         });
     }
     for s in &spec.slides {
         slides.push(RenderSlide {
-            title: s.title.clone(),
             subtitle: String::new(),
-            bullets: s.bullets.clone(),
             is_title: false,
+            spec: s.clone(),
         });
     }
     if slides.is_empty() {
@@ -261,10 +336,9 @@ pub fn generate_pptx(spec: &DeckSpec) -> Result<GeneratedFile, String> {
 
 /// A slide prepared for rendering, tagged with which layout to use.
 struct RenderSlide {
-    title: String,
     subtitle: String,
-    bullets: Vec<String>,
     is_title: bool,
+    spec: SlideSpec,
 }
 
 /// Write the full OOXML presentation package to `path`.
@@ -285,11 +359,19 @@ fn write_pptx(path: &Path, slides: &[RenderSlide]) -> Result<(), String> {
     };
 
     let n = slides.len();
+    // Slides carrying speaker notes each get a notesSlide part. The notes
+    // infrastructure (notesMaster + its theme) is only emitted when at least
+    // one slide has notes, so note-free decks stay byte-identical in shape.
+    let has_notes: Vec<bool> = slides.iter().map(|s| !s.spec.notes.trim().is_empty()).collect();
+    let any_notes = has_notes.iter().any(|b| *b);
 
-    write("[Content_Types].xml", &content_types_xml(n))?;
+    write("[Content_Types].xml", &content_types_xml(n, &has_notes))?;
     write("_rels/.rels", ROOT_RELS)?;
-    write("ppt/presentation.xml", &presentation_xml(n))?;
-    write("ppt/_rels/presentation.xml.rels", &presentation_rels_xml(n))?;
+    write("ppt/presentation.xml", &presentation_xml(n, any_notes))?;
+    write(
+        "ppt/_rels/presentation.xml.rels",
+        &presentation_rels_xml(n, any_notes),
+    )?;
     write("ppt/presProps.xml", PRES_PROPS)?;
     write("ppt/theme/theme1.xml", THEME1)?;
     write("ppt/slideMasters/slideMaster1.xml", SLIDE_MASTER)?;
@@ -302,6 +384,14 @@ fn write_pptx(path: &Path, slides: &[RenderSlide]) -> Result<(), String> {
         "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
         SLIDE_LAYOUT_RELS,
     )?;
+    if any_notes {
+        write("ppt/theme/theme2.xml", &THEME1.replace("Office Theme", "Notes Theme"))?;
+        write("ppt/notesMasters/notesMaster1.xml", NOTES_MASTER)?;
+        write(
+            "ppt/notesMasters/_rels/notesMaster1.xml.rels",
+            NOTES_MASTER_RELS,
+        )?;
+    }
 
     let total = slides.len();
     for (i, slide) in slides.iter().enumerate() {
@@ -309,20 +399,103 @@ fn write_pptx(path: &Path, slides: &[RenderSlide]) -> Result<(), String> {
         write(&format!("ppt/slides/slide{idx}.xml"), &slide_xml(slide, idx, total))?;
         write(
             &format!("ppt/slides/_rels/slide{idx}.xml.rels"),
-            SLIDE_RELS,
+            &slide_rels_xml(has_notes[i], idx),
         )?;
+        if has_notes[i] {
+            write(
+                &format!("ppt/notesSlides/notesSlide{idx}.xml"),
+                &notes_slide_xml(&slide.spec.notes),
+            )?;
+            write(
+                &format!("ppt/notesSlides/_rels/notesSlide{idx}.xml.rels"),
+                &notes_slide_rels_xml(idx),
+            )?;
+        }
     }
 
     zip.finish().map_err(|e| format!("zip finish: {e}"))?;
     Ok(())
 }
 
-fn content_types_xml(slide_count: usize) -> String {
+/// Per-slide relationships: always the layout; plus the notes slide when the
+/// slide carries speaker notes.
+fn slide_rels_xml(has_notes: bool, idx: usize) -> String {
+    let notes_rel = if has_notes {
+        format!(
+            r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide{idx}.xml"/>"#
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>{notes_rel}</Relationships>"#
+    )
+}
+
+/// A speaker-notes page: the body placeholder with one paragraph per line of
+/// the spec's notes text.
+fn notes_slide_xml(notes: &str) -> String {
+    let mut paras = String::new();
+    for line in notes.lines().filter(|l| !l.trim().is_empty()) {
+        paras.push_str(&format!(
+            r#"<a:p><a:r><a:rPr lang="en-US" sz="1200" dirty="0"/><a:t>{}</a:t></a:r></a:p>"#,
+            xml_escape(line.trim())
+        ));
+    }
+    if paras.is_empty() {
+        paras.push_str(r#"<a:p><a:endParaRPr lang="en-US"/></a:p>"#);
+    }
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+{SPTREE_HEAD}
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Notes Placeholder"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="685800" y="1143000"/><a:ext cx="5486400" cy="6858000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>
+{paras}
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:notes>"#
+    )
+}
+
+fn notes_slide_rels_xml(idx: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide{idx}.xml"/>
+</Relationships>"#
+    )
+}
+
+fn content_types_xml(slide_count: usize, has_notes: &[bool]) -> String {
     let mut overrides = String::new();
     for i in 1..=slide_count {
         overrides.push_str(&format!(
             "<Override PartName=\"/ppt/slides/slide{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>"
         ));
+    }
+    let any_notes = has_notes.iter().any(|b| *b);
+    if any_notes {
+        overrides.push_str("<Override PartName=\"/ppt/notesMasters/notesMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml\"/>");
+        overrides.push_str("<Override PartName=\"/ppt/theme/theme2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>");
+        for (i, has) in has_notes.iter().enumerate() {
+            if *has {
+                let idx = i + 1;
+                overrides.push_str(&format!(
+                    "<Override PartName=\"/ppt/notesSlides/notesSlide{idx}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml\"/>"
+                ));
+            }
+        }
     }
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -338,7 +511,7 @@ fn content_types_xml(slide_count: usize) -> String {
     )
 }
 
-fn presentation_xml(slide_count: usize) -> String {
+fn presentation_xml(slide_count: usize, any_notes: bool) -> String {
     let mut sld_ids = String::new();
     for i in 0..slide_count {
         // r:id for slides starts at rId2 (rId1 is the slide master)
@@ -346,18 +519,26 @@ fn presentation_xml(slide_count: usize) -> String {
         let sld_id = 256 + i;
         sld_ids.push_str(&format!("<p:sldId id=\"{sld_id}\" r:id=\"rId{rid}\"/>"));
     }
+    // Schema order matters: notesMasterIdLst sits between sldMasterIdLst and
+    // sldIdLst. Its r:id is allocated after theme + presProps.
+    let notes_master_lst = if any_notes {
+        let rid = slide_count + 4;
+        format!("<p:notesMasterIdLst><p:notesMasterId r:id=\"rId{rid}\"/></p:notesMasterIdLst>")
+    } else {
+        String::new()
+    };
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
-<p:sldIdLst>{sld_ids}</p:sldIdLst>
+{notes_master_lst}<p:sldIdLst>{sld_ids}</p:sldIdLst>
 <p:sldSz cx="12192000" cy="6858000"/>
 <p:notesSz cx="6858000" cy="9144000"/>
 </p:presentation>"#
     )
 }
 
-fn presentation_rels_xml(slide_count: usize) -> String {
+fn presentation_rels_xml(slide_count: usize, any_notes: bool) -> String {
     let mut rels = String::new();
     // rId1 -> slide master
     rels.push_str(r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>"#);
@@ -378,19 +559,244 @@ fn presentation_rels_xml(slide_count: usize) -> String {
     rels.push_str(&format!(
         r#"<Relationship Id="rId{props_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps" Target="presProps.xml"/>"#
     ));
+    if any_notes {
+        let nm_rid = slide_count + 4;
+        rels.push_str(&format!(
+            r#"<Relationship Id="rId{nm_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/>"#
+        ));
+    }
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>"#
     )
 }
 
-/// Route a slide to the hero (title) layout or the content layout.
-fn slide_xml(slide: &RenderSlide, index: usize, _total: usize) -> String {
+/// Route a slide to its layout. Unknown layout strings fall back to the
+/// bullets layout so older specs (and model improvisation) degrade gracefully.
+fn slide_xml(slide: &RenderSlide, index: usize, total: usize) -> String {
     if slide.is_title {
-        title_slide_xml(slide)
-    } else {
-        content_slide_xml(slide, index)
+        return title_slide_xml(slide);
     }
+    match slide.spec.layout.trim() {
+        "section" => section_slide_xml(&slide.spec),
+        "two_column" => two_column_slide_xml(&slide.spec, index, total),
+        "big_fact" => big_fact_slide_xml(&slide.spec, index, total),
+        "quote" => quote_slide_xml(&slide.spec, index, total),
+        _ => content_slide_xml(slide, index, total),
+    }
+}
+
+/// Shared footer: hairline rule + "index / total" page marker.
+fn footer_shapes(index: usize, total: usize) -> String {
+    format!(
+        r#"<p:sp>
+<p:nvSpPr><p:cNvPr id="20" name="FooterLine"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="685800" y="6416040"/><a:ext cx="10820400" cy="12700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="21" name="PageNum"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="10287000" y="6479540"/><a:ext cx="1219200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/>
+<a:p><a:pPr algn="r"/><a:r><a:rPr lang="en-US" sz="1100" dirty="0"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{index} / {total}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>"#
+    )
+}
+
+/// Shared white-canvas chrome: left gradient sidebar, dark bold title with an
+/// accent underline. Body content is supplied by the caller.
+fn white_slide_shell(title: &str, body_shapes: &str, index: usize, total: usize) -> String {
+    let title = xml_escape(title);
+    let footer = footer_shapes(index, total);
+    format!(
+        r#"{SLD_OPEN}
+<p:cSld>
+<p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+<p:spTree>
+{SPTREE_HEAD}
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="SideBar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="137160" cy="6858000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="4F46E5"/></a:gs><a:gs pos="100000"><a:srgbClr val="7C3AED"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/></a:gradFill><a:ln><a:noFill/></a:ln></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="3" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="685800" y="502920"/><a:ext cx="10820400" cy="925200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr anchor="t"><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:r><a:rPr lang="en-US" sz="3600" b="1" dirty="0"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:latin typeface="+mj-lt"/></a:rPr><a:t>{title}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="4" name="Underline"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="693420" y="1508760"/><a:ext cx="1188720" cy="51435"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="6366F1"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
+</p:sp>
+{body_shapes}
+{footer}
+</p:spTree>
+</p:cSld>
+<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>"#
+    )
+}
+
+/// Section divider: full-bleed gradient, small kicker, huge centered title.
+/// Bullets (if any) become a single sub-line under the title.
+fn section_slide_xml(spec: &SlideSpec) -> String {
+    let title = xml_escape(&spec.title);
+    let subline = spec
+        .bullets
+        .iter()
+        .find(|b| !b.trim().is_empty())
+        .map(|b| {
+            format!(
+                r#"<p:sp>
+<p:nvSpPr><p:cNvPr id="4" name="SubLine"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="1219200" y="4038600"/><a:ext cx="9753600" cy="685800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="2000" dirty="0"><a:solidFill><a:srgbClr val="E0E7FF"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>"#,
+                xml_escape(b)
+            )
+        })
+        .unwrap_or_default();
+    format!(
+        r#"{SLD_OPEN}
+<p:cSld>
+<p:bg><p:bgPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="4F46E5"/></a:gs><a:gs pos="100000"><a:srgbClr val="7C3AED"/></a:gs></a:gsLst><a:lin ang="2700000" scaled="1"/></a:gradFill><a:effectLst/></p:bgPr></p:bg>
+<p:spTree>
+{SPTREE_HEAD}
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Kicker"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="1219200" y="2286000"/><a:ext cx="9753600" cy="457200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="1400" b="1" spc="300" dirty="0"><a:solidFill><a:srgbClr val="C7D2FE"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>SECTION</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="3" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="914400" y="2743200"/><a:ext cx="10363200" cy="1219200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="4800" b="1" dirty="0"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:latin typeface="+mj-lt"/></a:rPr><a:t>{title}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+{subline}
+</p:spTree>
+</p:cSld>
+<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>"#
+    )
+}
+
+/// Two-column comparison: shared shell + two bullet columns with optional
+/// accent column headers.
+fn two_column_slide_xml(spec: &SlideSpec, index: usize, total: usize) -> String {
+    let col = |x: i64, header: &str, items: &[String], id: u32| -> String {
+        let mut paras = String::new();
+        if !header.trim().is_empty() {
+            paras.push_str(&format!(
+                r#"<a:p><a:r><a:rPr lang="en-US" sz="2000" b="1" dirty="0"><a:solidFill><a:srgbClr val="4F46E5"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{}</a:t></a:r></a:p>"#,
+                xml_escape(header)
+            ));
+        }
+        for item in items {
+            if item.trim().is_empty() {
+                continue;
+            }
+            paras.push_str(&bullet_para(item, 1800));
+        }
+        if paras.is_empty() {
+            paras.push_str(r#"<a:p><a:endParaRPr lang="en-US"/></a:p>"#);
+        }
+        format!(
+            r#"<p:sp>
+<p:nvSpPr><p:cNvPr id="{id}" name="Column"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="{x}" y="1783080"/><a:ext cx="5219700" cy="4419600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>
+{paras}
+</p:txBody>
+</p:sp>"#
+        )
+    };
+    let body = format!(
+        "{}{}",
+        col(685800, &spec.left_title, &spec.left, 5),
+        col(6286500, &spec.right_title, &spec.right, 6)
+    );
+    white_slide_shell(&spec.title, &body, index, total)
+}
+
+/// Big-fact slide: one huge accent number/phrase with a caption under it.
+fn big_fact_slide_xml(spec: &SlideSpec, index: usize, total: usize) -> String {
+    let fact = xml_escape(if spec.fact.trim().is_empty() { "—" } else { &spec.fact });
+    let caption = xml_escape(&spec.caption);
+    let body = format!(
+        r#"<p:sp>
+<p:nvSpPr><p:cNvPr id="5" name="Fact"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="685800" y="2286000"/><a:ext cx="10820400" cy="2286000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr anchor="ctr"><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="9600" b="1" dirty="0"><a:solidFill><a:srgbClr val="4F46E5"/></a:solidFill><a:latin typeface="+mj-lt"/></a:rPr><a:t>{fact}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="6" name="Caption"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="1219200" y="4724400"/><a:ext cx="9753600" cy="762000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="2000" dirty="0"><a:solidFill><a:srgbClr val="334155"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{caption}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>"#
+    );
+    white_slide_shell(&spec.title, &body, index, total)
+}
+
+/// Quote slide: soft background, oversized decorative quote mark, the quote
+/// in large italics, and an accent attribution line.
+fn quote_slide_xml(spec: &SlideSpec, index: usize, total: usize) -> String {
+    let quote = xml_escape(if spec.quote.trim().is_empty() { &spec.title } else { &spec.quote });
+    let attribution = if spec.attribution.trim().is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<p:sp>
+<p:nvSpPr><p:cNvPr id="6" name="Attribution"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="1524000" y="4876800"/><a:ext cx="9144000" cy="533400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="1800" b="1" dirty="0"><a:solidFill><a:srgbClr val="4F46E5"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>— {}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>"#,
+            xml_escape(&spec.attribution)
+        )
+    };
+    let footer = footer_shapes(index, total);
+    format!(
+        r#"{SLD_OPEN}
+<p:cSld>
+<p:bg><p:bgPr><a:solidFill><a:srgbClr val="F8FAFC"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+<p:spTree>
+{SPTREE_HEAD}
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="QuoteMark"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="990600" y="990600"/><a:ext cx="1524000" cy="1524000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/>
+<a:p><a:r><a:rPr lang="en-US" sz="14400" b="1" dirty="0"><a:solidFill><a:srgbClr val="C7D2FE"/></a:solidFill><a:latin typeface="+mj-lt"/></a:rPr><a:t>&#8220;</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="5" name="Quote"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="1524000" y="2133600"/><a:ext cx="9144000" cy="2590800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+<p:txBody><a:bodyPr anchor="ctr"><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="3200" i="1" dirty="0"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:latin typeface="+mj-lt"/></a:rPr><a:t>{quote}</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+{attribution}
+{footer}
+</p:spTree>
+</p:cSld>
+<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>"#
+    )
 }
 
 const SLD_OPEN: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -402,7 +808,7 @@ const SPTREE_HEAD: &str = r#"<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr
 /// Hero title slide: full-bleed indigo→violet gradient, accent bar, big title,
 /// subtitle, and a subtle local-privacy footer.
 fn title_slide_xml(slide: &RenderSlide) -> String {
-    let title = xml_escape(&slide.title);
+    let title = xml_escape(&slide.spec.title);
 
     let subtitle_shape = if slide.subtitle.trim().is_empty() {
         String::new()
@@ -452,72 +858,29 @@ fn title_slide_xml(slide: &RenderSlide) -> String {
     )
 }
 
-/// Content slide: white canvas, left gradient accent bar, dark bold title with
-/// an accent underline, square accent bullets, footer rule + slide number.
-fn content_slide_xml(slide: &RenderSlide, index: usize) -> String {
-    let title = xml_escape(&slide.title);
-
+/// Content slide: shared white shell + auto-fitting bullet body with bold
+/// lead-ins.
+fn content_slide_xml(slide: &RenderSlide, index: usize, total: usize) -> String {
     let mut body_paras = String::new();
-    for bullet in &slide.bullets {
+    for bullet in &slide.spec.bullets {
         if bullet.trim().is_empty() {
             continue;
         }
-        let text = xml_escape(bullet);
-        body_paras.push_str(&format!(
-            r#"<a:p><a:pPr marL="342900" indent="-342900"><a:lnSpc><a:spcPct val="130000"/></a:lnSpc><a:spcBef><a:spcPts val="1000"/></a:spcBef><a:buClr><a:srgbClr val="6366F1"/></a:buClr><a:buSzPct val="80000"/><a:buFont typeface="Arial"/><a:buChar char="&#9642;"/></a:pPr><a:r><a:rPr lang="en-US" sz="2000" dirty="0"><a:solidFill><a:srgbClr val="334155"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{text}</a:t></a:r></a:p>"#
-        ));
+        body_paras.push_str(&bullet_para(bullet, 2000));
     }
     if body_paras.is_empty() {
         body_paras.push_str(r#"<a:p><a:endParaRPr lang="en-US"/></a:p>"#);
     }
-
-    format!(
-        r#"{SLD_OPEN}
-<p:cSld>
-<p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
-<p:spTree>
-{SPTREE_HEAD}
-<p:sp>
-<p:nvSpPr><p:cNvPr id="2" name="SideBar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="137160" cy="6858000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="4F46E5"/></a:gs><a:gs pos="100000"><a:srgbClr val="7C3AED"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/></a:gradFill><a:ln><a:noFill/></a:ln></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
-</p:sp>
-<p:sp>
-<p:nvSpPr><p:cNvPr id="3" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="685800" y="502920"/><a:ext cx="10820400" cy="925200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
-<p:txBody><a:bodyPr anchor="t"/><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="3600" b="1" dirty="0"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:latin typeface="+mj-lt"/></a:rPr><a:t>{title}</a:t></a:r></a:p>
-</p:txBody>
-</p:sp>
-<p:sp>
-<p:nvSpPr><p:cNvPr id="4" name="Underline"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="693420" y="1508760"/><a:ext cx="1188720" cy="51435"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="6366F1"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
-</p:sp>
-<p:sp>
+    let body = format!(
+        r#"<p:sp>
 <p:nvSpPr><p:cNvPr id="5" name="Content"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
 <p:spPr><a:xfrm><a:off x="685800" y="1783080"/><a:ext cx="10820400" cy="4419600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/>
+<p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>
 {body_paras}
 </p:txBody>
-</p:sp>
-<p:sp>
-<p:nvSpPr><p:cNvPr id="6" name="FooterLine"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="685800" y="6416040"/><a:ext cx="10820400" cy="12700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
-</p:sp>
-<p:sp>
-<p:nvSpPr><p:cNvPr id="7" name="PageNum"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="10820400" y="6479540"/><a:ext cx="685800" cy="304800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/>
-<a:p><a:pPr algn="r"/><a:r><a:rPr lang="en-US" sz="1100" dirty="0"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill><a:latin typeface="+mn-lt"/></a:rPr><a:t>{index}</a:t></a:r></a:p>
-</p:txBody>
-</p:sp>
-</p:spTree>
-</p:cSld>
-<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-</p:sld>"#
-    )
+</p:sp>"#
+    );
+    white_slide_shell(&slide.spec.title, &body, index, total)
 }
 
 // ─── Static OOXML parts (master / layout / theme / props / rels) ─────────────
@@ -576,9 +939,24 @@ const SLIDE_LAYOUT_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalo
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
 </Relationships>"#;
 
-const SLIDE_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+const NOTES_MASTER: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notesMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>
+<p:spTree>
+<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+</p:spTree>
+</p:cSld>
+<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+<p:notesStyle>
+<a:lvl1pPr><a:defRPr sz="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/></a:defRPr></a:lvl1pPr>
+</p:notesStyle>
+</p:notesMaster>"#;
+
+const NOTES_MASTER_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme2.xml"/>
 </Relationships>"#;
 
 const THEME1: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -666,14 +1044,110 @@ mod tests {
             title: "Deck".into(),
             subtitle: "Sub".into(),
             slides: vec![
-                SlideSpec { title: "Slide 1".into(), bullets: vec!["A".into(), "B".into()], notes: String::new() },
-                SlideSpec { title: "Slide 2".into(), bullets: vec!["C".into()], notes: String::new() },
+                SlideSpec { title: "Slide 1".into(), bullets: vec!["A".into(), "B".into()], ..Default::default() },
+                SlideSpec { title: "Slide 2".into(), bullets: vec!["C".into()], ..Default::default() },
             ],
         };
         let out = generate_pptx(&spec).expect("pptx generation");
         assert!(out.path.ends_with(".pptx"));
         let meta = std::fs::metadata(&out.path).expect("file exists");
         assert!(meta.len() > 0);
+        let _ = std::fs::remove_file(&out.path);
+    }
+
+    #[test]
+    fn split_lead_detects_compact_labels_only() {
+        assert_eq!(
+            split_lead("Speed: 36 tok/s on an M-series MacBook"),
+            Some(("Speed:".to_string(), "36 tok/s on an M-series MacBook".to_string()))
+        );
+        assert_eq!(
+            split_lead("Privacy — nothing leaves the machine"),
+            Some(("Privacy —".to_string(), "nothing leaves the machine".to_string()))
+        );
+        // A full sentence before the colon must NOT become a lead-in.
+        assert_eq!(split_lead("This is a long sentence. It mentions: something"), None);
+        assert_eq!(split_lead("No separator here at all"), None);
+    }
+
+    #[test]
+    fn pptx_layouts_and_notes_roundtrip() {
+        let spec = DeckSpec {
+            title: "Layout Deck".into(),
+            subtitle: "All five layouts".into(),
+            slides: vec![
+                SlideSpec { title: "Chapter One".into(), layout: "section".into(), bullets: vec!["What this chapter covers".into()], ..Default::default() },
+                SlideSpec {
+                    title: "Bullets".into(),
+                    bullets: vec!["Speed: very fast".into(), "plain bullet".into()],
+                    notes: "Say hello.\nMention speed.".into(),
+                    ..Default::default()
+                },
+                SlideSpec {
+                    title: "Compare".into(),
+                    layout: "two_column".into(),
+                    left_title: "Pros".into(),
+                    right_title: "Cons".into(),
+                    left: vec!["local".into()],
+                    right: vec!["big download".into()],
+                    ..Default::default()
+                },
+                SlideSpec { title: "The number".into(), layout: "big_fact".into(), fact: "36.2".into(), caption: "tokens per second".into(), ..Default::default() },
+                SlideSpec { title: "Quote".into(), layout: "quote".into(), quote: "It just works".into(), attribution: "A user".into(), ..Default::default() },
+            ],
+        };
+        let out = generate_pptx(&spec).expect("pptx generation");
+
+        // Re-open the package and verify structure: notes parts exist for the
+        // one slide that has notes (slide index 3 = title slide + 2), the
+        // notes master is registered, and autofit made it into the slide XML.
+        let file = std::fs::File::open(&out.path).expect("open pptx");
+        let mut zip = zip::ZipArchive::new(file).expect("read zip");
+        let names: Vec<String> = (0..zip.len()).map(|i| zip.by_index(i).unwrap().name().to_string()).collect();
+        assert!(names.iter().any(|n| n == "ppt/notesSlides/notesSlide3.xml"), "notes slide part missing: {names:?}");
+        assert!(names.iter().any(|n| n == "ppt/notesMasters/notesMaster1.xml"));
+        assert!(names.iter().any(|n| n == "ppt/theme/theme2.xml"));
+
+        let read = |zip: &mut zip::ZipArchive<std::fs::File>, name: &str| -> String {
+            use std::io::Read;
+            let mut s = String::new();
+            zip.by_name(name).unwrap().read_to_string(&mut s).unwrap();
+            s
+        };
+        let pres = read(&mut zip, "ppt/presentation.xml");
+        assert!(pres.contains("notesMasterIdLst"));
+        let content = read(&mut zip, "ppt/slides/slide3.xml");
+        assert!(content.contains("normAutofit"), "autofit missing from content slide");
+        assert!(content.contains("<a:t>Speed:</a:t>") || content.contains("Speed:"), "bold lead-in missing");
+        assert!(content.contains("3 / 6"), "page marker missing");
+        let notes = read(&mut zip, "ppt/notesSlides/notesSlide3.xml");
+        assert!(notes.contains("Say hello."));
+        assert!(notes.contains("Mention speed."));
+        let section = read(&mut zip, "ppt/slides/slide2.xml");
+        assert!(section.contains("SECTION"));
+        let fact = read(&mut zip, "ppt/slides/slide5.xml");
+        assert!(fact.contains("36.2"));
+        let quote = read(&mut zip, "ppt/slides/slide6.xml");
+        assert!(quote.contains("It just works"));
+
+        let _ = std::fs::remove_file(&out.path);
+    }
+
+    #[test]
+    fn pptx_without_notes_has_no_notes_parts() {
+        let spec = DeckSpec {
+            title: "Plain".into(),
+            subtitle: String::new(),
+            slides: vec![SlideSpec { title: "S".into(), bullets: vec!["a".into()], ..Default::default() }],
+        };
+        let out = generate_pptx(&spec).expect("pptx generation");
+        let file = std::fs::File::open(&out.path).expect("open pptx");
+        let mut zip = zip::ZipArchive::new(file).expect("read zip");
+        let names: Vec<String> = (0..zip.len())
+            .map(|i| zip.by_index(i).unwrap().name().to_string())
+            .collect();
+        assert!(!names.iter().any(|n| n.contains("notesSlide")), "unexpected notes parts: {names:?}");
+        assert!(!names.iter().any(|n| n.contains("notesMaster")));
         let _ = std::fs::remove_file(&out.path);
     }
 }

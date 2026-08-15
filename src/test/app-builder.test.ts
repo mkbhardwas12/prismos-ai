@@ -17,6 +17,12 @@ describe("detectAppRequest", () => {
     expect(detectAppRequest("make a calculator tool")).toBe(true);
   });
 
+  it("treats polite and purpose-laden build requests as build orders (Codex P2)", () => {
+    expect(detectAppRequest("can you build me a todo app?")).toBe(true);
+    expect(detectAppRequest("could you make a website for my portfolio")).toBe(true);
+    expect(detectAppRequest("build an app to analyze my expenses")).toBe(true);
+  });
+
   it("stays quiet on documents and presentations about apps", () => {
     expect(detectAppRequest("create a presentation about my app")).toBe(false);
     expect(detectAppRequest("write a report on website performance")).toBe(false);

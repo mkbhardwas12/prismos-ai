@@ -128,8 +128,9 @@ export function detectFileRequest(input: string): FileKind | null {
                 : null;
   if (!kind) return null;
 
-  // Require a creation verb (typo-tolerant) or a "file …" noun phrase.
-  if (!hasCreateVerb(t) && !/\b(file|page)\b/.test(t)) return null;
+  // Require an actual (typo-tolerant) creation verb — merely mentioning a file
+  // ("open the CSV file", "I have an HTML file") must not trigger generation.
+  if (!hasCreateVerb(t)) return null;
   return kind;
 }
 
@@ -162,14 +163,22 @@ function filePrompt(kind: FileKind, input: string, context?: string): string {
   ].join("\n");
 }
 
+/** Strip an outer ``` wrapper ONLY as a matched pair — a document that merely
+ *  ENDS with a fenced code block must keep its closing delimiter. */
+function stripWrapperFence(text: string): string {
+  const t = text.trim();
+  if (!/^```[a-z]*\n/i.test(t)) return t;
+  const body = t.replace(/^```[a-z]*\n/i, "");
+  return body.replace(/\n?```\s*$/, "").trim();
+}
+
 /** Parse the FILENAME contract; fall back to a slug of the request. */
 export function splitFileResponse(
   raw: string,
   kind: FileKind,
   input: string,
 ): { title: string; content: string } {
-  let text = raw.trim();
-  text = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+  let text = stripWrapperFence(raw);
   const m = text.match(/^FILENAME:\s*(\S+)\s*\n/i);
   let title: string;
   if (m) {
@@ -182,8 +191,9 @@ export function splitFileResponse(
       .replace(/^-+|-+$/g, "")
       .slice(0, 40) || "generated-file";
   }
-  // The content may itself be fenced if the model ignored instructions.
-  text = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+  // The content may itself be wrapper-fenced if the model ignored instructions
+  // — strip only a matched pair so legitimate trailing fences survive.
+  text = stripWrapperFence(text);
   return { title, content: text };
 }
 

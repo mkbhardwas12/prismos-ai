@@ -493,10 +493,13 @@ async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<Strin
     #[cfg(target_os = "macos")]
     let (cmd, args): (&str, Vec<String>) = ("open", vec![url.clone()]);
 
+    // Shell-free on Windows: cmd.exe would interpret metacharacters like `&`
+    // in the URL as command separators (Codex finding). rundll32's
+    // FileProtocolHandler opens the default browser without any shell parsing.
     #[cfg(target_os = "windows")]
     let (cmd, args): (&str, Vec<String>) = (
-        "cmd",
-        vec!["/C".to_string(), "start".to_string(), "".to_string(), url.clone()],
+        "rundll32",
+        vec!["url.dll,FileProtocolHandler".to_string(), url.clone()],
     );
 
     #[cfg(all(unix, not(target_os = "macos")))]

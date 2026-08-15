@@ -49,8 +49,10 @@ pub struct GeneratedApp {
 // ─── Limits & allowlist ──────────────────────────────────────────────────────
 
 /// File types an app project may contain. Inert text + web assets only —
-/// nothing directly executable by the OS.
-const APP_EXTS: &[&str] = &["html", "css", "js", "mjs", "json", "svg", "md", "txt"];
+/// nothing directly executable by the OS. No `.mjs`: apps open from file://
+/// where module scripts are blocked by module-CORS, so only classic scripts
+/// can actually run.
+const APP_EXTS: &[&str] = &["html", "css", "js", "json", "svg", "md", "txt"];
 const MAX_FILES: usize = 20;
 const MAX_TOTAL_BYTES: usize = 1_000_000; // 1 MB across the whole project
 const MAX_PATH_DEPTH: usize = 3;
@@ -86,6 +88,47 @@ fn validate_rel_path(p: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Case-insensitive ASCII substring search (byte-safe: ASCII needles only).
+fn find_ci(hay: &str, needle: &str) -> Option<usize> {
+    let h = hay.as_bytes();
+    let n = needle.as_bytes();
+    if n.is_empty() || h.len() < n.len() {
+        return None;
+    }
+    (0..=h.len() - n.len()).find(|&i| h[i..i + n.len()].eq_ignore_ascii_case(n))
+}
+
+/// Content-Security-Policy injected into every generated HTML page.
+/// Defense-in-depth for the offline promise: even if the model disobeys the
+/// prompt and references a remote script/style/image/beacon, the browser
+/// refuses to load it. Inline code and local (file:/data:/blob:) assets keep
+/// working; fetch/XHR/WebSocket and form posts are blocked outright.
+const APP_CSP_META: &str = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'unsafe-inline' data: blob: file:; connect-src 'none'; form-action 'none'; base-uri 'none'\">";
+
+/// Insert the CSP meta right after `<head…>` (or prepend when there is no
+/// head). Pages that already carry a CSP are left alone.
+fn inject_csp(html: &str) -> String {
+    if find_ci(html, "content-security-policy").is_some() {
+        return html.to_string();
+    }
+    if let Some(head_pos) = find_ci(html, "<head") {
+        if let Some(rel_close) = html.as_bytes()[head_pos..].iter().position(|&b| b == b'>') {
+            let insert_at = head_pos + rel_close + 1;
+            let mut out = String::with_capacity(html.len() + APP_CSP_META.len());
+            out.push_str(&html[..insert_at]);
+            out.push_str(APP_CSP_META);
+            out.push_str(&html[insert_at..]);
+            return out;
+        }
+    }
+    format!("{APP_CSP_META}{html}")
+}
+
+fn is_html_path(p: &str) -> bool {
+    let lower = p.to_lowercase();
+    lower.ends_with(".html") || lower.ends_with(".htm")
 }
 
 // ─── Generation ──────────────────────────────────────────────────────────────
@@ -130,6 +173,11 @@ pub fn generate_app(spec: &AppSpec) -> Result<GeneratedApp, String> {
     if !spec.files.iter().any(|f| f.path == entry) {
         return Err(format!("Entry file '{entry}' is not among the project files."));
     }
+    // The entry is handed to the OS opener as "open in browser" — a non-HTML
+    // entry would launch an editor (or nothing) while we report success.
+    if !is_html_path(&entry) {
+        return Err(format!("Entry file must be an .html page (got '{entry}')."));
+    }
 
     // Project folder: Downloads/prismos-apps/<stem>[-n]
     let stem = safe_stem(&spec.name, "web-app");
@@ -150,7 +198,13 @@ pub fn generate_app(spec: &AppSpec) -> Result<GeneratedApp, String> {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create folder for {}: {e}", f.path))?;
         }
-        std::fs::write(&target, &f.content)
+        // HTML pages get the offline CSP injected — see APP_CSP_META.
+        let content = if is_html_path(&f.path) {
+            inject_csp(&f.content)
+        } else {
+            f.content.clone()
+        };
+        std::fs::write(&target, &content)
             .map_err(|e| format!("Failed to write {}: {e}", f.path))?;
         written.push(f.path.clone());
     }
@@ -215,5 +269,38 @@ mod tests {
 
         let dup = spec_with(vec![("index.html", "a"), ("INDEX.html", "b")]);
         assert!(generate_app(&dup).is_err());
+    }
+
+    #[test]
+    fn refuses_non_html_entry() {
+        let mut spec = spec_with(vec![("index.html", "<html/>"), ("app.js", "x()")]);
+        spec.entry = "app.js".into();
+        let err = generate_app(&spec).unwrap_err();
+        assert!(err.contains(".html"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn injects_offline_csp_into_html_only() {
+        let spec = spec_with(vec![
+            ("index.html", "<!DOCTYPE html><html><head><title>t</title></head><body>hi</body></html>"),
+            ("styles.css", "body{}"),
+        ]);
+        let out = generate_app(&spec).expect("app generation");
+        let html = std::fs::read_to_string(&out.entry_path).unwrap();
+        assert!(html.contains("Content-Security-Policy"), "CSP missing");
+        assert!(html.find("<head>").unwrap() < html.find("Content-Security-Policy").unwrap());
+        let css = std::fs::read_to_string(std::path::Path::new(&out.dir).join("styles.css")).unwrap();
+        assert!(!css.contains("Content-Security-Policy"));
+        let _ = std::fs::remove_dir_all(&out.dir);
+    }
+
+    #[test]
+    fn csp_injection_handles_missing_head_and_existing_policy() {
+        // no <head>: meta is prepended
+        let no_head = inject_csp("<p>bare</p>");
+        assert!(no_head.starts_with(APP_CSP_META));
+        // existing policy is respected, not duplicated
+        let existing = "<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'\"></head></html>";
+        assert_eq!(inject_csp(existing), existing);
     }
 }

@@ -45,9 +45,18 @@ Two honest caveats, because "100% offline" gets thrown around too loosely:
 - The **installer** downloads from GitHub, and **Ollama** downloads model
   weights the first time. After that, no network is required or used.
 - The optional **Email Keeper** agent connects to *your* IMAP server if you
-  configure it. It is off by default and it is the only feature that talks to
-  anything beyond localhost. Leave it off and the app has no reason to open a
-  socket.
+  configure it. It is off by default.
+- The optional **Web Research** feature fetches web pages — but only the URLs
+  you explicitly type into chat, over HTTPS, with localhost/LAN addresses
+  refused. It is off by default, double-gated (a Settings toggle plus a
+  Rust-side gate that hard-refuses fetches while disabled), uses no search
+  engine, and sends nothing in the background. The zero-network alternative is
+  built in: open the page and ask PrismOS to *read your screen* — local vision
+  only.
+
+Email Keeper and Web Research are the only two features that can talk to
+anything beyond localhost. Leave both off — the default — and the app has no
+reason to open a socket.
 
 ---
 

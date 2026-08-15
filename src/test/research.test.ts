@@ -78,6 +78,19 @@ describe("detectResearchRequest — screen lane", () => {
   it("does not fire without a research-ish verb", () => {
     expect(detectResearchRequest("my screen is flickering")).toBeNull();
   });
+
+  it("does NOT capture the screen for support questions that merely mention it", () => {
+    // Regression (Codex review): "explain" + "my screen" used to satisfy the
+    // old two-regex AND and silently trigger a screenshot.
+    expect(detectResearchRequest("explain why my screen is flickering")).toBeNull();
+    expect(detectResearchRequest("check why my screen keeps going black")).toBeNull();
+    expect(detectResearchRequest("tell me how to clean my screen")).toBeNull();
+  });
+
+  it("still fires on explicit inspect-intent phrasings", () => {
+    expect(detectResearchRequest("look at my screen and explain the error")?.mode).toBe("screen");
+    expect(detectResearchRequest("gather the info from my screen and conclude")?.mode).toBe("screen");
+  });
 });
 
 describe("extractUrls", () => {

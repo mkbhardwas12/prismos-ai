@@ -31,6 +31,24 @@ describe("detectDocRequest", () => {
     expect(detectDocRequest("create a shopping list")).toBeNull();
     expect(detectDocRequest("how do you work")).toBeNull();
   });
+
+  it("survives one-letter verb typos (the field failure)", () => {
+    expect(detectDocRequest("reate a word document on this")).toBe("docx");
+    expect(detectDocRequest("mke a ppt about sales")).toBe("pptx");
+    expect(detectDocRequest("creat a presentation on Q3")).toBe("pptx");
+  });
+
+  it("accepts verb-less topic phrasings", () => {
+    expect(detectDocRequest("word document on climate change")).toBe("docx");
+    expect(detectDocRequest("a presentation about our roadmap")).toBe("pptx");
+  });
+
+  it("never fires on questions or read-style requests about documents", () => {
+    expect(detectDocRequest("what's in the word document on my desk?")).toBeNull();
+    expect(detectDocRequest("summarize the report about Q3")).toBeNull();
+    expect(detectDocRequest("can you read the document about the merger")).toBeNull();
+    expect(detectDocRequest("review the presentation for errors")).toBeNull();
+  });
 });
 
 describe("extractJson", () => {

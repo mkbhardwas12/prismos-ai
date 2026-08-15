@@ -931,6 +931,35 @@ export default function SettingsPanel({
           </>)}
         </div>
 
+        {/* ── Web Research ── */}
+        <div className="settings-group">
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("webresearch")}>
+            🌐 Web Research
+            <span className={`settings-group-chevron${expandedSections.has("webresearch") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("webresearch") && (<>
+          <div className="settings-item">
+            <label>Allow Web Research (fetch links you name)</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.webResearchEnabled ? "active" : ""}`}
+                onClick={() => update("webResearchEnabled", !settings.webResearchEnabled)}
+              >
+                {settings.webResearchEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            When enabled, chat requests like <em>"research the latest from https://… and conclude"</em> fetch
+            <strong> only the URLs you explicitly name</strong> — HTTPS-only, no search engine, no background
+            traffic, and local/private addresses are always refused. Pages are reduced to text locally and
+            synthesized by your local model. <strong>Off by default:</strong> leave it off and PrismOS stays
+            fully offline. Tip: the zero-network alternative is <em>"read my screen and conclude"</em> with the
+            page open — local vision only.
+          </div>
+          </>)}
+        </div>
+
         {/* ── Calendar Integration ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("calendar")}>

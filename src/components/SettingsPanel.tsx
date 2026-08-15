@@ -952,10 +952,12 @@ export default function SettingsPanel({
           <div className="settings-hint">
             When enabled, chat requests like <em>"research the latest from https://… and conclude"</em> fetch
             <strong> only the URLs you explicitly name</strong> — HTTPS-only, no search engine, no background
-            traffic, and local/private addresses are always refused. Pages are reduced to text locally and
-            synthesized by your local model. <strong>Off by default:</strong> leave it off and PrismOS stays
-            fully offline. Tip: the zero-network alternative is <em>"read my screen and conclude"</em> with the
-            page open — local vision only.
+            traffic, and local/private addresses are always refused. Pages download <strong>in parallel</strong>;
+            add <em>"explore"</em> and the most relevant links found on those pages are followed too (bounded,
+            same protections). Everything read is <strong>indexed into your local Spectrum Graph</strong> so
+            future answers can retrieve it — knowledge updates, model weights never change, nothing phones home.
+            <strong> Off by default:</strong> leave it off and PrismOS stays fully offline. Tip: the zero-network
+            alternative is <em>"read my screen and conclude"</em> with the page open — local vision only.
           </div>
           </>)}
         </div>

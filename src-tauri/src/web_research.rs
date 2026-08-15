@@ -33,6 +33,11 @@ const MAX_REDIRECTS: usize = 5;
 const MAX_FETCH_BYTES: usize = 2 * 1024 * 1024;
 /// Cap on the extracted plain text handed back over IPC.
 const MAX_TEXT_CHARS: usize = 40_000;
+/// Most in-page links reported per fetched page (the frontend ranks and
+/// follows at most a handful; this just bounds the IPC payload).
+const MAX_LINKS: usize = 30;
+/// Anchor-text cap per reported link.
+const MAX_ANCHOR_CHARS: usize = 120;
 
 pub fn set_enabled(enabled: bool) {
     WEB_RESEARCH_ENABLED.store(enabled, Ordering::SeqCst);
@@ -48,6 +53,15 @@ pub struct FetchedPage {
     pub title: String,
     pub text: String,
     pub truncated: bool,
+    /// In-page links (absolute https, public hosts only) so the frontend can
+    /// EXPLORE: rank them against the question and follow the best few.
+    pub links: Vec<LinkOut>,
+}
+
+#[derive(Serialize)]
+pub struct LinkOut {
+    pub url: String,
+    pub text: String,
 }
 
 /// Validate that a URL is https and points at a public host.
@@ -254,13 +268,128 @@ pub async fn fetch_url_as_text(url: &str) -> Result<FetchedPage, String> {
     if text.trim().is_empty() {
         return Err("The page had no readable text (it may be script-rendered or non-HTML).".to_string());
     }
+    let links = extract_links(&body, &final_url);
 
     Ok(FetchedPage {
         url: final_url,
         title,
         text,
         truncated,
+        links,
     })
+}
+
+/// Origin ("https://host[:port]") of an https URL.
+fn url_origin(url: &str) -> Option<String> {
+    let rest = url.trim().strip_prefix("https://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    if authority.is_empty() {
+        None
+    } else {
+        Some(format!("https://{authority}"))
+    }
+}
+
+/// Directory base of a URL (through the last '/') for resolving relative hrefs.
+fn url_dir(url: &str) -> String {
+    let no_q = url.split(['?', '#']).next().unwrap_or(url);
+    match no_q.rfind('/') {
+        Some(i) if i >= "https://".len() => no_q[..=i].to_string(),
+        _ => format!("{}/", no_q.trim_end_matches('/')),
+    }
+}
+
+/// Resolve an href against its page URL. Returns None for fragments,
+/// non-web schemes, and anything that fails the https/public-host checks.
+fn absolutize(href: &str, base_url: &str) -> Option<String> {
+    let h = href.trim();
+    if h.is_empty() {
+        return None;
+    }
+    let hl = ascii_lower(h);
+    if hl.starts_with('#')
+        || hl.starts_with("mailto:")
+        || hl.starts_with("javascript:")
+        || hl.starts_with("tel:")
+        || hl.starts_with("data:")
+    {
+        return None;
+    }
+    let abs = if hl.starts_with("https://") {
+        h.to_string()
+    } else if hl.starts_with("http://") {
+        format!("https://{}", &h[7..]) // upgrade — the backend is https-only
+    } else if h.starts_with("//") {
+        format!("https:{h}")
+    } else if h.starts_with('/') {
+        format!("{}{}", url_origin(base_url)?, h)
+    } else if h.split('/').next().unwrap_or("").contains(':') {
+        return None; // some other scheme (ftp:, chrome:, …)
+    } else {
+        format!("{}{}", url_dir(base_url), h)
+    };
+    let abs = abs.split('#').next().unwrap_or(&abs).to_string();
+    validate_url(&abs).ok()?;
+    Some(abs)
+}
+
+/// Pull `<a href>` links (with anchor text) out of a page. Everything is
+/// absolutized against the page URL and passed through the same https/public
+/// validation as user-named URLs — a page can never steer exploration onto
+/// localhost or the LAN. Deduped and capped.
+pub fn extract_links(html: &str, base_url: &str) -> Vec<LinkOut> {
+    let lower = ascii_lower(html);
+    let mut out: Vec<LinkOut> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut pos = 0;
+    while let Some(rel) = lower[pos..].find("<a") {
+        let tag_start = pos + rel;
+        // Require "<a" + whitespace/'>' so <article>/<abbr> don't match.
+        let after = lower.as_bytes().get(tag_start + 2).copied();
+        if !matches!(after, Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>')) {
+            pos = tag_start + 2;
+            continue;
+        }
+        let tag_end = match lower[tag_start..].find('>') {
+            Some(i) => tag_start + i,
+            None => break,
+        };
+        let tag = &html[tag_start..tag_end];
+        let tag_l = &lower[tag_start..tag_end];
+        let href = tag_l.find("href").and_then(|hi| {
+            let rest = &tag[hi + 4..];
+            let eq = rest.find('=')?;
+            let v = rest[eq + 1..].trim_start();
+            let (quote, v2) = match v.chars().next()? {
+                '"' => ('"', &v[1..]),
+                '\'' => ('\'', &v[1..]),
+                _ => (' ', v),
+            };
+            let end = if quote == ' ' {
+                v2.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(v2.len())
+            } else {
+                v2.find(quote)?
+            };
+            Some(v2[..end].to_string())
+        });
+        let close = lower[tag_end..].find("</a").map(|i| tag_end + i);
+        let text = close
+            .map(|c| html_to_text(&html[tag_end + 1..c]).replace('\n', " "))
+            .unwrap_or_default();
+        pos = close.unwrap_or(tag_end) + 1;
+        if let Some(hraw) = href {
+            if let Some(abs) = absolutize(&hraw, base_url) {
+                if seen.insert(abs.clone()) {
+                    let t: String = text.chars().take(MAX_ANCHOR_CHARS).collect();
+                    out.push(LinkOut { url: abs, text: t });
+                    if out.len() >= MAX_LINKS {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// ASCII-only lowercase that preserves byte offsets exactly (Unicode
@@ -458,6 +587,47 @@ mod tests {
         assert_eq!(url_port("https://example.com:8443/x"), 8443);
         assert_eq!(url_port("https://[2606:4700::1111]/x"), 443);
         assert_eq!(url_port("https://[2606:4700::1111]:9443/x"), 9443);
+    }
+
+    #[test]
+    fn extract_links_absolutizes_filters_and_dedupes() {
+        let html = r#"<a href="/docs">Docs</a>
+            <a href="page2.html">Next <span>page</span></a>
+            <a href="https://other.example.org/deep">Other</a>
+            <a href="http://insecure.example.com/x">Upgraded</a>
+            <a href="//cdn.example.com/lib">Protocol-relative</a>
+            <a href="#section">Frag</a>
+            <a href="mailto:a@b.c">Mail</a>
+            <a href="javascript:void(0)">JS</a>
+            <a href="https://192.168.1.1/router">LAN</a>
+            <a href="/docs">Dup</a>"#;
+        let links = extract_links(html, "https://example.com/blog/post.html");
+        let urls: Vec<&str> = links.iter().map(|l| l.url.as_str()).collect();
+        assert!(urls.contains(&"https://example.com/docs"));
+        assert!(urls.contains(&"https://example.com/blog/page2.html"));
+        assert!(urls.contains(&"https://other.example.org/deep"));
+        assert!(urls.contains(&"https://insecure.example.com/x"));
+        assert!(urls.contains(&"https://cdn.example.com/lib"));
+        assert_eq!(links.len(), 5, "frag/mailto/js/LAN/dup must be dropped: {urls:?}");
+        let next = links.iter().find(|l| l.url.ends_with("page2.html")).unwrap();
+        assert_eq!(next.text, "Next page");
+    }
+
+    #[test]
+    fn extract_links_caps_output_and_skips_a_lookalike_tags() {
+        let mut html = String::from("<article><p>no links here</p></article>");
+        for i in 0..40 {
+            html.push_str(&format!("<a href=\"https://x.example.com/p{i}\">L{i}</a>"));
+        }
+        let links = extract_links(&html, "https://x.example.com/");
+        assert_eq!(links.len(), 30);
+    }
+
+    #[test]
+    fn url_dir_and_origin_resolve_correctly() {
+        assert_eq!(url_dir("https://a.com/x/y.html"), "https://a.com/x/");
+        assert_eq!(url_dir("https://a.com"), "https://a.com/");
+        assert_eq!(url_origin("https://a.com:8443/x/y").unwrap(), "https://a.com:8443");
     }
 
     #[test]

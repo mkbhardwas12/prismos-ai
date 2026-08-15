@@ -16,6 +16,7 @@
 // size-capped before it is handed to the local model for synthesis.
 
 use serde::Serialize;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -25,6 +26,8 @@ use std::time::Duration;
 static WEB_RESEARCH_ENABLED: AtomicBool = AtomicBool::new(false);
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(20);
+/// Redirects are followed manually so every hop is re-validated.
+const MAX_REDIRECTS: usize = 5;
 /// Hard cap on downloaded bytes per page (streamed, so an endless response
 /// can't balloon memory).
 const MAX_FETCH_BYTES: usize = 2 * 1024 * 1024;
@@ -84,29 +87,92 @@ pub fn validate_url(url: &str) -> Result<String, String> {
     Ok(host_lc)
 }
 
-/// True for localhost, .local, and RFC-1918 / link-local / loopback addresses.
+/// True for localhost-style names and non-public IP literals. Prefix checks
+/// apply only to PARSED IP addresses — a domain like fcc.gov or fda.gov must
+/// never be mistaken for an fc00::/7 literal.
 fn is_private_host(host: &str) -> bool {
-    if host == "localhost" || host == "0.0.0.0" || host.ends_with(".local") || host.ends_with(".localhost") {
+    if host == "localhost" || host.ends_with(".local") || host.ends_with(".localhost") {
         return true;
     }
-    if host == "::1" || host.starts_with("fe80:") || host.starts_with("fc") || host.starts_with("fd") {
-        return true; // IPv6 loopback / link-local / unique-local
+    match host.parse::<IpAddr>() {
+        Ok(ip) => is_private_ip(&ip),
+        Err(_) => false, // a real hostname — its resolved IPs are checked separately
     }
-    let octets: Vec<u8> = host
-        .split('.')
-        .filter_map(|p| p.parse::<u8>().ok())
+}
+
+/// True for any IP that must never be fetched: loopback, unspecified,
+/// RFC-1918, link-local, CGNAT, multicast/broadcast, IPv6 ULA, and
+/// IPv4-mapped forms of any of those.
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            v4.is_loopback()
+                || v4.is_unspecified()
+                || v4.is_private()          // 10/8, 172.16/12, 192.168/16
+                || v4.is_link_local()       // 169.254/16
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || o[0] == 0                // 0.0.0.0/8
+                || (o[0] == 100 && (64..=127).contains(&o[1])) // 100.64/10 CGNAT
+        }
+        IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return is_private_ip(&IpAddr::V4(mapped));
+            }
+            let s = v6.segments();
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (s[0] & 0xffc0) == 0xfe80 // link-local fe80::/10
+                || (s[0] & 0xfe00) == 0xfc00 // unique-local fc00::/7
+        }
+    }
+}
+
+/// Resolve a host and return socket addrs, refusing if ANY resolved address
+/// is non-public (a public hostname must not be usable to reach the LAN via
+/// DNS tricks). IP literals skip DNS entirely.
+async fn resolve_public(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        // Already vetted by validate_url, but keep the invariant local.
+        if is_private_ip(&ip) {
+            return Err(format!("\"{host}\" is a local/private address."));
+        }
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|e| format!("Could not resolve \"{host}\": {e}"))?
         .collect();
-    if octets.len() == 4 && host.split('.').count() == 4 {
-        return match (octets[0], octets[1]) {
-            (127, _) => true,           // loopback
-            (10, _) => true,            // RFC-1918
-            (192, 168) => true,         // RFC-1918
-            (172, b) if (16..=31).contains(&b) => true, // RFC-1918
-            (169, 254) => true,         // link-local
-            _ => false,
-        };
+    if addrs.is_empty() {
+        return Err(format!("\"{host}\" did not resolve to any address."));
     }
-    false
+    if let Some(bad) = addrs.iter().find(|a| is_private_ip(&a.ip())) {
+        return Err(format!(
+            "\"{host}\" resolves to a local/private address ({}) — refusing to fetch.",
+            bad.ip()
+        ));
+    }
+    Ok(addrs)
+}
+
+/// Port from an https URL's authority (default 443).
+fn url_port(url: &str) -> u16 {
+    let rest = url.trim().strip_prefix("https://").unwrap_or("");
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.starts_with('[') {
+        // [v6]:port
+        authority
+            .rsplit_once("]:")
+            .and_then(|(_, p)| p.parse().ok())
+            .unwrap_or(443)
+    } else {
+        authority
+            .rsplit_once(':')
+            .and_then(|(_, p)| p.parse().ok())
+            .unwrap_or(443)
+    }
 }
 
 /// Fetch a single user-named URL and return its readable text.
@@ -119,29 +185,53 @@ pub async fn fetch_url_as_text(url: &str) -> Result<FetchedPage, String> {
                 .to_string(),
         );
     }
-    validate_url(url)?;
+    // Redirects are followed MANUALLY so that every hop — not just the final
+    // landing URL — is validated at the name level AND at the resolved-IP
+    // level (DNS pinned via resolve_to_addrs, closing the rebinding window
+    // between the check and the connect).
+    let mut current = url.trim().to_string();
+    let mut resp = None;
+    for _hop in 0..=MAX_REDIRECTS {
+        let host = validate_url(&current)?;
+        let port = url_port(&current);
+        let addrs = resolve_public(&host, port).await?;
 
-    let client = reqwest::Client::builder()
-        .timeout(FETCH_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .user_agent("PrismOS-AI/0.6 (local research; user-directed)")
-        .build()
-        .map_err(|e| e.to_string())?;
+        let client = reqwest::Client::builder()
+            .timeout(FETCH_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve_to_addrs(&host, &addrs)
+            .user_agent("PrismOS-AI/0.6 (local research; user-directed)")
+            .build()
+            .map_err(|e| e.to_string())?;
 
-    let mut resp = client
-        .get(url.trim())
-        .send()
-        .await
-        .map_err(|e| format!("Fetch failed: {e}"))?;
+        let r = client
+            .get(&current)
+            .send()
+            .await
+            .map_err(|e| format!("Fetch failed: {e}"))?;
+
+        if r.status().is_redirection() {
+            let loc = r
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+                .ok_or_else(|| "Redirect without a Location header.".to_string())?;
+            let next = r
+                .url()
+                .join(loc)
+                .map_err(|e| format!("Bad redirect target: {e}"))?;
+            current = next.to_string();
+            continue;
+        }
+        resp = Some(r);
+        break;
+    }
+    let mut resp = resp.ok_or_else(|| "Too many redirects.".to_string())?;
 
     if !resp.status().is_success() {
         return Err(format!("Fetch failed: HTTP {}", resp.status()));
     }
-    // Re-validate where redirects actually landed — a public URL must not be
-    // able to bounce us onto localhost or the LAN.
     let final_url = resp.url().to_string();
-    validate_url(&final_url)
-        .map_err(|e| format!("Redirected to a non-fetchable address: {e}"))?;
 
     let mut bytes: Vec<u8> = Vec::new();
     let mut truncated = false;
@@ -333,6 +423,41 @@ mod tests {
         // 172.32.x is public; 172.15.x is public.
         assert!(validate_url("https://172.32.0.1/").is_ok());
         assert!(validate_url("https://172.15.0.1/").is_ok());
+    }
+
+    #[test]
+    fn domains_starting_with_fc_fd_are_not_ipv6_literals() {
+        // Regression: a string-prefix check once misclassified these as
+        // fc00::/7 unique-local addresses.
+        assert_eq!(validate_url("https://fcc.gov/").unwrap(), "fcc.gov");
+        assert_eq!(validate_url("https://fda.gov/about").unwrap(), "fda.gov");
+        assert_eq!(validate_url("https://fe80cars.example.com/").unwrap(), "fe80cars.example.com");
+    }
+
+    #[test]
+    fn is_private_ip_classifies_correctly() {
+        let private = [
+            "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.0.1", "169.254.9.9",
+            "0.0.0.0", "100.64.0.1", "::1", "fe80::1", "fc00::1", "fd12::1",
+            "::ffff:192.168.0.1", // IPv4-mapped private
+        ];
+        for p in private {
+            let ip: IpAddr = p.parse().unwrap();
+            assert!(is_private_ip(&ip), "should be private: {p}");
+        }
+        let public = ["8.8.8.8", "1.1.1.1", "172.32.0.1", "100.128.0.1", "2606:4700::1111"];
+        for p in public {
+            let ip: IpAddr = p.parse().unwrap();
+            assert!(!is_private_ip(&ip), "should be public: {p}");
+        }
+    }
+
+    #[test]
+    fn url_port_parses_defaults_and_explicit() {
+        assert_eq!(url_port("https://example.com/x"), 443);
+        assert_eq!(url_port("https://example.com:8443/x"), 8443);
+        assert_eq!(url_port("https://[2606:4700::1111]/x"), 443);
+        assert_eq!(url_port("https://[2606:4700::1111]:9443/x"), 9443);
     }
 
     #[test]

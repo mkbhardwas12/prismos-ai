@@ -25,6 +25,7 @@ mod model_tracker;
 mod brain_wrapped;
 mod doc_generator;
 mod project_reviewer;
+mod web_research;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -452,6 +453,32 @@ async fn create_text_file(
     }
 
     serde_json::to_string(&generated).map_err(|e| e.to_string())
+}
+
+// ─── Web Research — opt-in, user-directed HTTPS fetching ─────────────────────
+
+/// Sync the Rust-side Web Research gate with the Settings toggle. The gate
+/// always starts OFF on launch; the frontend re-applies the persisted setting.
+#[tauri::command]
+async fn set_web_research_enabled(enabled: bool) -> Result<bool, String> {
+    web_research::set_enabled(enabled);
+    Ok(web_research::is_enabled())
+}
+
+/// research_fetch_url — Fetch ONE user-named https:// URL and return its
+/// readable text as JSON ({url,title,text,truncated}). Hard-refused unless the
+/// user has enabled Web Research in Settings; https-only; localhost and
+/// private/LAN addresses are always rejected. Every fetch is audit-logged.
+#[tauri::command]
+async fn research_fetch_url(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    let page = web_research::fetch_url_as_text(&url).await?;
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let audit = audit_log::AuditLog::new(&app_dir);
+        let _ = audit.append("research_fetch_url", "user", &page.url);
+    }
+
+    serde_json::to_string(&page).map_err(|e| e.to_string())
 }
 
 /// open_generated_file — Open a generated file (or reveal its folder) with the
@@ -3214,6 +3241,9 @@ pub fn run() {
             create_powerpoint,
             create_text_file,
             open_generated_file,
+            // Web Research — opt-in, user-directed HTTPS fetching
+            set_web_research_enabled,
+            research_fetch_url,
             // Project Review — gated, read-only whole-project review
             scan_project_for_review,
             run_project_review,

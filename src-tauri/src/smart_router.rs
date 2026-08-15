@@ -141,6 +141,19 @@ pub struct ModelCapabilities {
 
 // ─── Core Routing Logic ────────────────────────────────────────────────────────
 
+/// Ollama treats a bare model name and `name:latest` as the same model —
+/// `/api/tags` reports `llava:latest` for a model the user selected as
+/// `llava`. Compare names with that alias folded away (case-insensitive).
+fn models_match(a: &str, b: &str) -> bool {
+    fn norm(s: &str) -> String {
+        let s = s.to_lowercase();
+        s.strip_suffix(":latest")
+            .map(|p| p.to_string())
+            .unwrap_or(s)
+    }
+    norm(a) == norm(b)
+}
+
 /// Check if a model name indicates vision capability
 pub fn is_vision_model(model_name: &str) -> bool {
     let lower = model_name.to_lowercase();
@@ -373,7 +386,7 @@ pub fn route_model(
         let user_vision_installed = available_models.is_empty()
             || available_models
                 .iter()
-                .any(|m| m.eq_ignore_ascii_case(user_model));
+                .any(|m| models_match(m, user_model));
         if is_vision_model(user_model) && user_vision_installed {
             return RoutingDecision {
                 model: user_model.to_string(),
@@ -781,6 +794,22 @@ mod tests {
         let route = route_model("llama3.2-vision", true, false, false, &available);
         assert_eq!(route.model, "llama3.2-vision");
         assert!(!route.auto_swapped);
+    }
+
+    #[test]
+    fn route_model_treats_implicit_latest_tag_as_installed() {
+        // Ollama reports `llava:latest` in /api/tags for a model the user
+        // selected as bare `llava` — the alias must count as installed, in
+        // both directions.
+        let available = vec!["llava:latest".to_string(), "qwen3-vl:32b".to_string()];
+        let route = route_model("llava", true, false, false, &available);
+        assert_eq!(route.model, "llava");
+        assert!(!route.auto_swapped);
+
+        let available2 = vec!["llava".to_string()];
+        let route2 = route_model("llava:latest", true, false, false, &available2);
+        assert_eq!(route2.model, "llava:latest");
+        assert!(!route2.auto_swapped);
     }
 
     #[test]

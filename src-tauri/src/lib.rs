@@ -288,9 +288,14 @@ async fn read_screen(
         .unwrap_or_default();
     let model_names: Vec<String> = models.iter().map(|m| m.name.clone()).collect();
 
+    // No hardcoded "preferred" model here: passing a vision-named literal made
+    // the router treat it as the user's choice and skip the installed-model
+    // scan, which 404'd on every machine without that exact model installed.
+    // An empty user model forces auto-detection from what is actually there
+    // (VISION_MODEL_PRIORITY: qwen3-vl first, then qwen2.5vl, …).
     let route = smart_router::route_model(
-        "llama3.2-vision", // preferred default for screen reading
-        true,              // has_image = true
+        "",   // no user-selected model — auto-detect from installed list
+        true, // has_image = true
         false,
         false,
         &model_names,

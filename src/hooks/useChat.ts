@@ -6,6 +6,7 @@ import type { AppSettings, Message, RefractiveResult, RefractionAlternative, Col
 import { detectDocRequest, detectFileRequest, generateDocument, generateTextFile } from "../lib/docGen";
 import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
+import { buildErrorMessage } from "../lib/errors";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -799,25 +800,7 @@ export function useChat({
   };
 }
 
-// ── Helper: build user-friendly error messages ──
-function buildErrorMessage(err: unknown, settings: AppSettings): Message {
-  const errorStr = String(err);
-  const isOllamaError = errorStr.includes("connection") || errorStr.includes("refused") || errorStr.includes("timeout") || errorStr.includes("error sending request") || errorStr.includes("fetch");
-  const isModelError = errorStr.includes("model") || errorStr.includes("not found");
-
-  let content: string;
-  if (isOllamaError) {
-    content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`;
-  } else if (isModelError) {
-    content = `⚠️ Model "${settings.defaultModel}" not available.\n\nTo fix this:\n  1. ollama pull ${settings.defaultModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`;
-  } else {
-    content = `⚠️ Unable to process your intent.\n\nError: ${errorStr}\n\nTroubleshooting:\n  • Check that Ollama is running: ollama serve\n  • Verify your model is downloaded: ollama list\n  • Check Settings for the correct Ollama URL\n  • Try a simpler intent to test the connection`;
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    role: "system",
-    content,
-    timestamp: new Date(),
-  };
-}
+// Error-card construction lives in src/lib/errors.ts (buildErrorMessage) so it
+// can be unit-tested without dragging in the Tauri runtime — wrong blame in an
+// error card is itself a bug class (a Screen Recording denial once rendered as
+// "model not available").

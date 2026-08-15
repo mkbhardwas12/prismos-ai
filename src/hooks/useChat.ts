@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
-import { detectDocRequest, generateDocument } from "../lib/docGen";
+import { detectDocRequest, detectFileRequest, generateDocument, generateTextFile } from "../lib/docGen";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 
 interface UseChatOptions {
@@ -321,6 +321,43 @@ export function useChat({
             content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it to your Downloads folder.\n\n───\n📎 ${docKind.toUpperCase()} · generated locally · 100% private`,
             timestamp: new Date(),
             agent: docKind === "pptx" ? "Presentation Builder" : "Document Writer",
+            attachment,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          onIntentProcessed(aiMsg.agent);
+          await refreshSuggestions(input, aiMsg.id);
+          return;
+        }
+
+        // ── Generic file generation path (.html / .md / .txt / .csv / .json / .svg) ──
+        const fileKind = detectFileRequest(input);
+        if (fileKind) {
+          setProcessingPhase("Checking Ollama connection…");
+          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+          if (!ollamaOk) {
+            throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+          }
+
+          const recentContext = messages
+            .slice(-4)
+            .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+            .join("\n")
+            .slice(-1600);
+
+          const attachment = await generateTextFile(fileKind, input, {
+            model: settings.defaultModel || "mistral",
+            ollamaUrl: settings.ollamaUrl || null,
+            maxTokens: settings.maxTokens || 4096,
+            context: recentContext || undefined,
+            onPhase: setProcessingPhase,
+          });
+
+          const aiMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: `✅ Created **${attachment.filename}** and saved it to your Downloads folder.${fileKind === "html" ? " Double-click it to open in your browser." : ""}\n\n───\n📎 ${fileKind.toUpperCase()} · generated locally · 100% private`,
+            timestamp: new Date(),
+            agent: "File Writer",
             attachment,
           };
           setMessages((prev) => [...prev, aiMsg]);

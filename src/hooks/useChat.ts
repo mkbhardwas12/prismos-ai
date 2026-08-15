@@ -372,6 +372,25 @@ export function useChat({
         // Web lane: opt-in (Settings + Rust gate), fetches only named URLs.
         const research = detectResearchRequest(input);
         if (research) {
+          // Open lane — pop the page in the user's real browser (the app
+          // makes no network request; works even with Web Research off).
+          if (research.mode === "open") {
+            setProcessingPhase("Opening in your browser…");
+            const host = await invoke<string>("open_url_in_browser", {
+              url: research.urls[0],
+            });
+            const aiMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "ai",
+              content: `🌐 Opened **${host}** in your default browser. Once the page loads, say *"read my screen and conclude"* — zero network, and it works on script-heavy pages that plain fetching can't parse.`,
+              timestamp: new Date(),
+              agent: "Web Researcher",
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+            onIntentProcessed("Web Researcher");
+            return;
+          }
+
           if (research.mode === "screen") {
             setProcessingPhase("Reading your screen…");
             const resultJson = await invoke<string>("read_screen", {
@@ -421,6 +440,8 @@ export function useChat({
                 "",
                 "`research the latest from https://ollama.com/library/qwen3.8 and conclude`",
                 "",
+                "Add **\"explore\"** and I'll also follow the most relevant links found on those pages (in parallel, same protections). Everything I read gets indexed into your Spectrum Graph for future answers.",
+                "",
                 "Or open the page and ask me to *\"read my screen\"* — that lane uses zero network.",
               ].join("\n"),
               timestamp: new Date(),
@@ -441,6 +462,7 @@ export function useChat({
             model: settings.defaultModel || "mistral",
             ollamaUrl: settings.ollamaUrl || null,
             maxTokens: settings.maxTokens || 4096,
+            explore: research.explore,
             onPhase: setProcessingPhase,
           });
 
@@ -450,10 +472,16 @@ export function useChat({
           const failNote = result.failures.length
             ? `\n⚠️ Could not fetch: ${result.failures.join("; ")}`
             : "";
+          const exploredNote = result.explored
+            ? ` (${result.explored} discovered by exploring links on your pages)`
+            : "";
+          const learnedNote = result.learnedChunks
+            ? `\n🧠 Learned ${result.learnedChunks} chunk${result.learnedChunks > 1 ? "s" : ""} into your Spectrum Graph — future answers can draw on this.`
+            : "";
           const aiMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",
-            content: `${result.answer}\n\n───\n🌐 Web Research (opt-in) · fetched only the ${result.pages.length} link${result.pages.length > 1 ? "s" : ""} you gave\n${sourceLines}${failNote}`,
+            content: `${result.answer}\n\n───\n🌐 Web Research (opt-in) · ${result.pages.length} source${result.pages.length > 1 ? "s" : ""} fetched in parallel${exploredNote}\n${sourceLines}${failNote}${learnedNote}`,
             timestamp: new Date(),
             agent: "Web Researcher",
           };

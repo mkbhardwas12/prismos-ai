@@ -9,8 +9,10 @@ import { describe, it, expect } from "vitest";
 import {
   detectResearchRequest,
   extractUrls,
+  rankLinks,
   synthesisPrompt,
   MAX_RESEARCH_URLS,
+  MAX_EXPLORE_LINKS,
   type FetchedPage,
 } from "../lib/research";
 
@@ -93,6 +95,70 @@ describe("detectResearchRequest — screen lane", () => {
   });
 });
 
+describe("detectResearchRequest — open lane + explore flag", () => {
+  it("routes 'open <url>' to the browser-open lane", () => {
+    expect(detectResearchRequest("open https://example.com/docs")?.mode).toBe("open");
+    expect(detectResearchRequest("please open https://example.com in my browser")?.mode).toBe("open");
+  });
+
+  it("does not hijack open-requests without a URL", () => {
+    expect(detectResearchRequest("open the csv file")).toBeNull();
+  });
+
+  it("plain summarize-a-link stays in the web lane", () => {
+    expect(detectResearchRequest("summarize https://example.com/a and conclude")?.mode).toBe("web");
+  });
+
+  it("sets explore on 'explore'/'dig deeper'/'multithreaded' phrasings", () => {
+    expect(detectResearchRequest("research https://a.com/x and explore deeper")?.explore).toBe(true);
+    expect(detectResearchRequest("dig into https://a.com/x thoroughly")?.explore).toBe(true);
+    expect(detectResearchRequest("multithreaded research on https://a.com/x")?.explore).toBe(true);
+    expect(detectResearchRequest("summarize https://a.com/x and conclude")?.explore).toBe(false);
+  });
+});
+
+describe("rankLinks", () => {
+  const page = (url: string, links: { url: string; text: string }[]): FetchedPage => ({
+    url,
+    title: "T",
+    text: "body",
+    truncated: false,
+    links,
+  });
+
+  it("ranks by keyword overlap with the question and skips fetched URLs", () => {
+    const pages = [
+      page("https://a.com/qwen", [
+        { url: "https://a.com/qwen/benchmarks", text: "Qwen benchmark results" },
+        { url: "https://a.com/about", text: "About us" },
+        { url: "https://a.com/qwen", text: "Self link (already fetched)" },
+        { url: "https://a.com/qwen/quantization", text: "Quantization notes for qwen" },
+      ]),
+    ];
+    const ranked = rankLinks("qwen benchmark quantization results", pages);
+    expect(ranked.map((l) => l.url)).toEqual([
+      "https://a.com/qwen/benchmarks",
+      "https://a.com/qwen/quantization",
+    ]);
+  });
+
+  it(`caps at ${MAX_EXPLORE_LINKS} and dedupes across pages`, () => {
+    const links = Array.from({ length: 10 }, (_, i) => ({
+      url: `https://a.com/qwen/${i}`,
+      text: `qwen article ${i}`,
+    }));
+    const pages = [page("https://a.com/1", links), page("https://a.com/2", links)];
+    const ranked = rankLinks("qwen article", pages);
+    expect(ranked).toHaveLength(MAX_EXPLORE_LINKS);
+    expect(new Set(ranked.map((l) => l.url)).size).toBe(MAX_EXPLORE_LINKS);
+  });
+
+  it("returns nothing when no link relates to the question", () => {
+    const pages = [page("https://a.com/x", [{ url: "https://a.com/careers", text: "Careers" }])];
+    expect(rankLinks("qwen quantization accuracy", pages)).toHaveLength(0);
+  });
+});
+
 describe("extractUrls", () => {
   it("dedupes, strips trailing punctuation, and upgrades http", () => {
     expect(
@@ -112,6 +178,7 @@ describe("synthesisPrompt", () => {
     title: "Title A",
     text: "Body text about qwen.",
     truncated: false,
+    links: [],
     ...over,
   });
 
@@ -128,5 +195,14 @@ describe("synthesisPrompt", () => {
     const p = synthesisPrompt("q", [big]);
     expect(p.length).toBeLessThan(20_000);
     expect(p).toContain("…");
+  });
+
+  it("scales the per-source budget so 7 sources still fit the context window", () => {
+    const pages = Array.from({ length: 7 }, (_, i) =>
+      page({ url: `https://a.com/${i}`, text: "y".repeat(20_000) }),
+    );
+    const p = synthesisPrompt("q", pages);
+    expect(p.length).toBeLessThan(30_000);
+    expect(p).toContain("[7]");
   });
 });

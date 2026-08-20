@@ -71,7 +71,7 @@ struct GenerateChunk {
     error: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelEntry {
     name: String,
     #[serde(default)]
@@ -81,6 +81,20 @@ struct ModelEntry {
 #[derive(Debug, Deserialize)]
 struct ModelList {
     models: Vec<ModelEntry>,
+}
+
+// JSON output structures for --json flag
+#[derive(Debug, Serialize)]
+struct HealthJson {
+    ok: bool,
+    url: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AskJson {
+    model: String,
+    response: String,
+    truncated: bool,
 }
 
 // ─── arg parsing ──────────────────────────────────────────────────────────────
@@ -94,6 +108,7 @@ struct Args {
     from_stdin: bool,
     think: Option<bool>,
     prompt: String,
+    json_output: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -128,6 +143,7 @@ fn parse_args() -> Result<Args, String> {
         from_stdin: false,
         think: None,
         prompt: String::new(),
+        json_output: false,
     };
 
     let mut i = 1;
@@ -144,6 +160,7 @@ fn parse_args() -> Result<Args, String> {
             }
             "--no-stream" => args.no_stream = true,
             "--stdin"     => args.from_stdin = true,
+            "--json"      => args.json_output = true,
             "--think"     => args.think = Some(true),
             "--no-think"  => args.think = Some(false),
             "--help" | "-h" => {
@@ -183,6 +200,7 @@ impl Args {
             from_stdin: false,
             think: None,
             prompt: String::new(),
+            json_output: false,
         }
     }
 }
@@ -208,6 +226,7 @@ OPTIONS
       --stdin          Read the prompt from stdin (lets you pipe in files).
       --think          Ask a thinking-capable model for a reasoning trace.
       --no-think       Force thinking off (default for qwen3 chat models).
+      --json           Output machine-readable JSON (implies --no-stream for ask).
 
 EXAMPLES
   prismos-cli health
@@ -236,16 +255,34 @@ async fn main() -> ExitCode {
         Cmd::Help    => { print!("{HELP}"); ExitCode::SUCCESS }
         Cmd::Version => { println!("prismos-cli {}", env!("CARGO_PKG_VERSION")); ExitCode::SUCCESS }
         Cmd::Health  => match check_health(&args.base_url).await {
-            Ok(true)  => { println!("ok — ollama is up at {}", args.base_url); ExitCode::SUCCESS }
-            Ok(false) => { eprintln!("down — no response from {}", args.base_url); ExitCode::from(1) }
+            Ok(true)  => {
+                if args.json_output {
+                    let json = HealthJson { ok: true, url: args.base_url.clone() };
+                    println!("{}", serde_json::to_string(&json).unwrap());
+                } else {
+                    println!("ok — ollama is up at {}", args.base_url);
+                }
+                ExitCode::SUCCESS
+            }
+            Ok(false) => {
+                if args.json_output {
+                    let json = HealthJson { ok: false, url: args.base_url.clone() };
+                    println!("{}", serde_json::to_string(&json).unwrap());
+                } else {
+                    eprintln!("down — no response from {}", args.base_url);
+                }
+                ExitCode::from(1)
+            }
             Err(e)    => { eprintln!("error: {e}"); ExitCode::from(1) }
         },
         Cmd::Models  => match list_models(&args.base_url).await {
             Ok(models) => {
-                if models.is_empty() {
+                if args.json_output {
+                    println!("{}", serde_json::to_string(&models).unwrap());
+                } else if models.is_empty() {
                     println!("(no models pulled — try: ollama pull qwen3:4b)");
                 } else {
-                    for m in models {
+                    for m in &models {
                         println!("{:<32}  {:>10}", m.name, human_size(m.size));
                     }
                 }
@@ -261,7 +298,9 @@ async fn main() -> ExitCode {
                 );
                 return ExitCode::from(1);
             }
-            let res = if args.no_stream {
+            let res = if args.json_output {
+                generate_json(&args).await
+            } else if args.no_stream {
                 generate_blocking(&args).await
             } else {
                 generate_streaming(&args).await
@@ -423,6 +462,22 @@ async fn generate_blocking(a: &Args) -> Result<(), Box<dyn std::error::Error + S
     if parsed.done_reason.as_deref() == Some("length") {
         eprintln!("[prismos-cli] note: answer hit the token ceiling and may be incomplete");
     }
+    Ok(())
+}
+
+async fn generate_json(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let resp = post_generate(a, false).await?;
+    if !resp.status().is_success() {
+        return Err(format!("ollama returned {}: {}", resp.status(), resp.text().await.unwrap_or_default()).into());
+    }
+    let parsed: GenerateChunk = resp.json().await?;
+    let truncated = parsed.done_reason.as_deref() == Some("length");
+    let json = AskJson {
+        model: a.model.clone(),
+        response: strip_think(&parsed.response),
+        truncated,
+    };
+    println!("{}", serde_json::to_string(&json).unwrap());
     Ok(())
 }
 

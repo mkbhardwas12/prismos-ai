@@ -483,6 +483,11 @@ export default function MainView({
                     ))
                   )}
                 </div>
+                {msg.role === "ai" && msg.truncated && (
+                  <div className="message-truncated-notice" role="status">
+                    ⚠️ Response hit the length limit — raise Max Tokens in Settings or ask for a shorter answer.
+                  </div>
+                )}
                 {msg.reviewRequest && (
                   <div className="review-gate-card">
                     <div className="review-gate-header">

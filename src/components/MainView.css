@@ -1434,6 +1434,23 @@
   flex-wrap: wrap;
 }
 
+/* ── Truncated response notice ── */
+.message-truncated-notice {
+  font-size: 11px;
+  color: var(--color-warning, #f59e0b);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-top: 6px;
+  margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  max-width: 90%;
+}
+
 /* ── Generated file attachment (Word / PowerPoint) ── */
 .attachment-actions {
   display: flex;

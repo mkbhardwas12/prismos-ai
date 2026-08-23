@@ -223,6 +223,8 @@ export interface Message {
   content: string;
   timestamp: Date;
   agent?: string;
+  /** Whether the AI response was truncated because it hit the token limit */
+  truncated?: boolean;
   /** User feedback: 'good' (👍) or 'bad' (👎) */
   feedback?: "good" | "bad";
   /** Context node IDs used for this response (for feedback linkage) */

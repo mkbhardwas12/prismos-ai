@@ -470,7 +470,7 @@ describe("SpectrumGraphView", () => {
     expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
       "get_spectrum_graph",
     ]);
-  });
+  }, 20_000); // 1,201-node render is ~6 s on the CI runner
 
   it("expands a long note on request and can return to the excerpt", async () => {
     setup({

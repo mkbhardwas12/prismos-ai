@@ -223,7 +223,7 @@ impl ToolSmithNode {
                 let action = format!(
                     "Deterministic tool check: system intent detected. No status-check \
                      tool has run in this text lane. Request: {}",
-                    &work_unit.content.chars().take(100).collect::<String>()
+                    work_unit.content.chars().take(100).collect::<String>()
                 );
                 (action, 1)
             }
@@ -295,7 +295,7 @@ impl MemoryKeeperNode {
              Will store conversation in ephemeral layer and reinforce {} \
              co-reference edges. Entities to index: {:?}.",
             context_node_count,
-            &intent.raw.chars().take(60).collect::<String>(),
+            intent.raw.chars().take(60).collect::<String>(),
             (context_node_count.min(5) * (context_node_count.min(5).saturating_sub(1))) / 2,
             intent.entities
         );
@@ -339,7 +339,7 @@ impl MemoryKeeperNode {
         app_dir: &Path,
     ) -> Result<(Vec<String>, String), Box<dyn std::error::Error + Send + Sync>> {
         let agent_id = "memory_keeper";
-        let prism_name = format!("collab_memory_{}", &intent.raw.chars().take(20).collect::<String>());
+        let prism_name = format!("collab_memory_{}", intent.raw.chars().take(20).collect::<String>());
         let mut prism = crate::sandbox_prism::create_prism_for_agent(&prism_name, agent_id);
         let graph = crate::spectrum_graph::SpectrumGraph::new(app_dir)?;
 
@@ -442,7 +442,7 @@ impl MemoryKeeperNode {
         let mut conv_node_id = String::new();
         if store_result.success {
             let conv_node = graph.add_node_with_layer(
-                &format!("Chat: {}", &intent.raw.chars().take(50).collect::<String>()),
+                &format!("Chat: {}", intent.raw.chars().take(50).collect::<String>()),
                 &format!(
                     "Q: {}\n\nA: {}",
                     intent.raw,

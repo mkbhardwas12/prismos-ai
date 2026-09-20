@@ -879,7 +879,7 @@ impl WorkflowEngine {
             emit_activity(
                 &app_handle,
                 arg.from.display_name(),
-                &format!("{}{}: {}", arg_label, target_str, &arg.content.chars().take(80).collect::<String>()),
+                &format!("{}{}: {}", arg_label, target_str, arg.content.chars().take(80).collect::<String>()),
                 "thinking",
                 "debate",
             );

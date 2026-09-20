@@ -6,7 +6,7 @@ const call = vi.mocked(invoke);
 describe("local artifact evidence", () => {
   beforeEach(() => { call.mockReset(); });
   it("bounds and deduplicates topic queries", () => {
-    expect(artifactKeywords("Create a PPT for executive SAP SAP NetWeaver SP27 to SP34 DEV Test Stage Prod")).toHaveLength(6);
+    expect(artifactKeywords("Create a PPT for executive SAP SAP NetWeaver SP10 to SP20 DEV Test Stage Prod")).toHaveLength(6);
     expect(artifactKeywords("create create slides SAP SAP")).toEqual(["sap"]);
   });
   it("deduplicates local records and excludes retired records and suggestions", async () => {
@@ -39,7 +39,7 @@ describe("local artifact evidence", () => {
     expect(await collectArtifactContext("Create SAP slides")).toContain("No supporting local knowledge was retrieved");
   });
   it("never turns response-derived entities or conversation history into K evidence", async () => {
-    call.mockResolvedValue(JSON.stringify([{id:"old",label:"Old SAP answer",content:"SP34 is LTS",node_type:"entity"}]));
+    call.mockResolvedValue(JSON.stringify([{id:"old",label:"Old SAP answer",content:"SP20 is LTS",node_type:"entity"}]));
     const result = await collectArtifactContext("Create SAP slides");
     expect(result).not.toContain("[K1]");
     expect(result).toContain("UNVERIFIED CONTINUITY ONLY");

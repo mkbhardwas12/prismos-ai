@@ -4,7 +4,7 @@ Reviewed: 2026-09-08. Classification: public planning reference; not an executab
 
 SAP describes Maintenance Planner as supporting software-maintenance planning, including releases and updates, Java patches, landscape information and related planning utilities. [Source: SAP Maintenance Planner](https://support.sap.com/en/alm/solution-manager/integrated-tools/maintenance-planner.html)
 
-A requested move from NetWeaver 7.5 SP27 to SP34 is a proposed target, not proof of compatibility, entitlement, maintenance status or an approved stack. This reference does not verify that path. Obtain the applicable SAP documentation and system-specific maintenance plan before writing execution instructions. Do not invent SAP Note numbers, label SP34 a long-term-maintenance release, or guess a required kernel from the request alone.
+A requested move from one NetWeaver support-package level to a later one is a proposed target, not proof of compatibility, entitlement, maintenance status or an approved stack. This reference does not verify any such path. Obtain the applicable SAP documentation and system-specific maintenance plan before writing execution instructions. Do not invent SAP Note numbers, label a target support package a long-term-maintenance release, or guess a required kernel from the request alone.
 
 Required project inputs include installed product/component versions, PI versus PO topology, Java/ABAP presence, operating system and database, adapters and integrations, add-ons, customizations, target-stack validation, applicable update guide and tool version, backup/restore design, business blackout constraints, and test ownership.
 

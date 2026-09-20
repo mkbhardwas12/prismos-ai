@@ -302,6 +302,25 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_generations_never_share_a_folder() {
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    generate_app(&spec_with(vec![("index.html", "<html></html>")]))
+                        .expect("app generation")
+                        .dir
+                })
+            })
+            .collect();
+        let dirs: Vec<String> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let unique: std::collections::HashSet<&String> = dirs.iter().collect();
+        assert_eq!(unique.len(), dirs.len(), "folders were shared: {dirs:?}");
+        for dir in &dirs {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
     fn refuses_non_html_entry() {
         let mut spec = spec_with(vec![("index.html", "<html/>"), ("app.js", "x()")]);
         spec.entry = "app.js".into();

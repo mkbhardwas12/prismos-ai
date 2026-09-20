@@ -1,8 +1,8 @@
 # PrismOS-AI
 
-> **Open the lid, ask, close the lid. Your AI runs on your laptop — zero bytes leave the machine.**
+> **A desktop AI that reads your files, answers offline, and remembers — in a knowledge graph that lives on your disk, not someone's server.**
 
-Drop a PDF and ask a question. PrismOS answers from a local [Ollama](https://ollama.com) model, keeps what it learns in a knowledge graph on disk, and works with Wi-Fi off.
+Drop a PDF and ask. A local [Ollama](https://ollama.com) model answers, and what it learns lands in a SQLite knowledge graph you can explore in 3D and that the *next* conversation can use. Works with Wi-Fi off.
 
 <p align="center">
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">
@@ -21,73 +21,36 @@ Drop a PDF and ask a question. PrismOS answers from a local [Ollama](https://oll
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 
-Tauri 2 + React 18 + Rust. No account, no sign-up, no remote model call.
+Tauri 2 + React 18 + Rust · MIT · no account, no sign-up, no telemetry.
+Private inference is loopback-only Ollama; the exact network boundary is spelled
+out in [What stays local](#what-stays-local-and-what-can-use-the-network).
 
 ---
 
-## Don't take "offline" on faith — check it
+## What it does
 
-The app's Content Security Policy is enforced by the OS webview, not by a
-promise in a README. This is the whole allow-list, from
-[`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json):
+| | |
+|---|---|
+| **Remembers across sessions** | Answers and concepts persist to a local SQLite knowledge graph. Explore it as a [3D/2D atlas](docs/KNOWLEDGE_ATLAS.md), filter by source, read notes, trace connections, scrub a timeline. The next conversation retrieves from it. |
+| **Reads your documents** | PDF, DOCX, PPTX, XLSX. Text is extracted on-device, chunked, and retrieved with TF-IDF instead of naively truncated. |
+| **Talks to any local model** | Streaming chat against any Ollama model; curated registry of 18 models with hardware-aware recommendations on first run. Attach an image and it swaps to a vision model, then swaps back. |
+| **Generates documents, decks and small apps** | Ask for a report, a slide deck (5 layouts, speaker notes) or a self-contained HTML app; it writes the file locally and opens it. |
+| **Agent roles debate the answer** | Orchestrator, Reasoner, Memory Keeper, Tool Smith and Sentinel vote on the response before it's shown; operation approvals go through a small wasmtime policy module. |
+| **Stays out of your way** | Global hotkey summons it over any app; it minimizes to the tray and the agents stay resident. |
 
-```
-connect-src 'self' http://localhost:11434 http://127.0.0.1:11434
-```
-
-`localhost:11434` is your own Ollama daemon. There is no other host in the
-list, so the UI cannot reach one. Verify it the hard way if you like: pull
-your Ethernet, turn off Wi-Fi, and keep using the app — or point Little Snitch
-/ `tcpdump` at it and watch nothing leave.
-
-Two honest caveats, because "100% offline" gets thrown around too loosely:
-
-- The **installer** downloads from GitHub, and **Ollama** downloads model
-  weights the first time. After that, no network is required or used.
-- The optional **Email Keeper** agent connects to *your* IMAP server if you
-  configure it. It is off by default.
-- The optional **Web Research** feature fetches web pages — but only the URLs
-  you explicitly type into chat, over HTTPS, with localhost/LAN addresses
-  refused. It is off by default, double-gated (a Settings toggle plus a
-  Rust-side gate that hard-refuses fetches while disabled), uses no search
-  engine, and sends nothing in the background. Fetches run in parallel, and
-  saying *"explore"* additionally follows the most relevant links found on the
-  pages you named — bounded, and every followed link passes the same gates.
-  What it reads is indexed into the local knowledge graph so later answers can
-  retrieve it; that indexing is local SQLite, not telemetry. The zero-network
-  alternative is built in: open the page and ask PrismOS to *read your
-  screen* — local vision only.
-
-Email Keeper and Web Research are the only two features that can talk to
-anything beyond localhost. Leave both off — the default — and the app has no
-reason to open a socket.
+Optional, **off by default**, opt-in: user-directed Web Research (only URLs you
+type), IMAP Email Keeper, Yahoo Finance Keeper. Full feature history in
+[CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## Try it
 
-### Read this first if you're on macOS or Windows
-
-**The installers are not code-signed.** I'm one person and the certificates
-cost more than this project currently justifies. That means:
-
-- **macOS** will say *"PrismOS-AI is damaged and can't be opened"* or *"Apple
-  could not verify PrismOS-AI is free of malware."* The app is not damaged —
-  macOS applies a quarantine flag to anything downloaded from a browser and
-  refuses to run unsigned bundles. Clear it:
-  ```bash
-  xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
-  ```
-  On macOS Sequoia and later the old Control-click → Open trick no longer
-  works; the `xattr` command above, or System Settings → Privacy & Security →
-  *Open Anyway*, is the way through.
-
-- **Windows** will show SmartScreen's *"Windows protected your PC."* Click
-  **More info → Run anyway**.
-
-If that trade is not one you want to make, **build from source** — the
-instructions are below and the build is reproducible from a clean checkout.
-Code signing is on the roadmap; until then this is the honest trade.
+> **Installers are unsigned** (one maintainer, no cert yet — it's on the
+> roadmap). macOS: `xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app`
+> or System Settings → Privacy & Security → *Open Anyway*. Windows: SmartScreen
+> → **More info → Run anyway**. Or skip the dance: use the
+> [CLI](#the-60-second-version-use-the-cli) or [build from source](#build-from-source).
 
 ### Install
 
@@ -173,19 +136,58 @@ local models sharpen it, and nothing leaves the machine either way.
 
 ---
 
-## What it actually does
+## What stays local, and what can use the network
 
-| | |
-|---|---|
-| **Ask a local model** | Streaming chat against any Ollama model, with a curated registry of 18 models and hardware-aware recommendations on first run. |
-| **Drop in documents** | PDF, DOCX, PPTX, XLSX. Text is extracted on-device, chunked, and retrieved with TF-IDF instead of naively truncated. |
-| **Remember across sessions** | Answers and the concepts in them persist to a local SQLite knowledge graph you can browse, search, and view as a timeline. |
-| **Route to the right model** | Attach an image and it swaps to a vision model, then swaps back. Same for code-heavy prompts. |
-| **Run agents in a sandbox** | 8 agents (orchestrator, reasoner, tool smith, memory keeper, sentinel, email, calendar, finance) execute inside a wasmtime container with memory caps and CPU fuel metering. |
-| **Stay reachable** | Global hotkey summons it over any app; it minimizes to the system tray and the agents stay resident. |
+Private inference requests—including document text, images, summaries and
+embeddings—use the fixed `http://127.0.0.1:11434` daemon. The desktop and CLI
+inference clients disable proxies and redirects. The configurable Ollama URL
+is for management/status; desktop inference ignores it and CLI `ask` rejects
+remote/custom endpoints. This does **not** attest that the separately managed
+Ollama daemon or its selected model is offline.
 
-Full feature history — including what landed in which release — is in
-[CHANGELOG.md](CHANGELOG.md).
+The webview also has this Content Security Policy connection allow-list, from
+[`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json):
+
+```
+connect-src 'self' http://localhost:11434 http://127.0.0.1:11434
+```
+
+This constrains webview requests, **not Rust network clients, Ollama, or your
+system browser**. Local chat can work without internet once its models are
+installed, but PrismOS is not an OS-level network sandbox:
+
+- Installers, model/voice downloads, configured model-management endpoints and
+  update checks can access external services.
+- The optional **Email Keeper** agent connects to *your* IMAP server if you
+  configure it. It is off by default.
+- The optional **Finance Keeper** fetches public market data from Yahoo Finance.
+  Its requests reveal the ticker symbols being requested. It is off by default.
+- The optional **Web Research** feature fetches web pages — but only the URLs
+  you explicitly type into chat, over HTTPS, with localhost/LAN addresses
+  refused. It is off by default, double-gated (a Settings toggle plus a
+  Rust-side gate that hard-refuses fetches while disabled), uses no search
+  engine, and sends nothing in the background. Fetches run in parallel, and
+  saying *"explore"* additionally follows the most relevant links found on the
+  pages you named — bounded, and every followed link passes the same gates.
+  What it reads is indexed into the local knowledge graph so later answers can
+  retrieve it; that indexing is local SQLite, not telemetry.
+- Opening a URL uses your system browser, which can access the internet even
+  when Web Research is disabled. Reading a screen sends the captured image to
+  local Ollama, but does not make the page you opened an offline page.
+
+Generated app pages receive a restrictive policy before model-generated
+markup. This limits resource loading and fetches; it is not a full browser
+sandbox or a guarantee against navigation to another site. Review generated
+code before using it with sensitive information.
+
+For an offline check, disable optional integrations, install the required models,
+disconnect the network, and test the workflows you use. Network monitoring must
+include PrismOS, Ollama and any browser it opens—not just the webview.
+
+See also the [2026-09-08 audit and remaining release blockers](docs/AUDIT_2026-09-08.md)
+and the [reviewed public knowledge pack](resources/knowledge/reliable-local-assistant/manifest.json)
+(public reference guidance only; your personal knowledge database stays outside
+this repository, and ingestion is not model training).
 
 ---
 
@@ -196,13 +198,43 @@ evidence.
 
 | Layer | What it does | Source |
 |---|---|---|
-| WASM isolation | Agent actions run in wasmtime with 1–16 MB memory caps and CPU fuel metering | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
-| Action signing | HMAC-SHA256 over every action, per-sandbox salt | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
-| 3-tier allow-list | Operations classed Safe / Moderate / Restricted, per-agent permission sets | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
-| Audit chain | SHA-256 hash chain with a genesis entry over intent, export, import, sync, clear | [`audit_log.rs`](src-tauri/src/audit_log.rs) |
-| Key derivation | Uses TPM 2.0 / Apple Secure Enclave **where available**, with a software fallback everywhere else — check which one you got in Settings → Security | [`secure_enclave.rs`](src-tauri/src/secure_enclave.rs) |
-| Encrypted export | AES-256-GCM with device-bound keys | [`you_port.rs`](src-tauri/src/you_port.rs) |
-| Network confinement | CSP locked to `self` + localhost Ollama | [`tauri.conf.json`](src-tauri/tauri.conf.json) |
+| WASM policy checks | A small module checks operation approvals; host-side work is not contained by its fuel/memory limits | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
+| Action tags | HMAC tags use public identifiers; they are not trusted code signatures | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
+| 3-tier allow-list | Operation categories and per-role permissions, not an OS permission boundary | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
+| Audit chain | Local SHA-256 chain detects consistency errors; it is neither immutable nor protected against full-file rewriting | [`audit_log.rs`](src-tauri/src/audit_log.rs) |
+| Hardware detection | Detects platform hardware; current software key derivation does not perform protected TPM/Secure Enclave key operations | [`secure_enclave.rs`](src-tauri/src/secure_enclave.rs) |
+| Live storage | Ordinary, unencrypted SQLite in local app data; use OS disk encryption and access controls | [`spectrum_graph.rs`](src-tauri/src/spectrum_graph.rs) |
+| Graph exports | AES-GCM payloads, but legacy identity-derived keys and a fast passphrase derivation need a versioned security upgrade; keep exports private | [`you_port.rs`](src-tauri/src/you_port.rs) |
+| Private inference transport | Literal loopback, no proxies or redirects; does not attest the Ollama daemon | [`ollama_bridge.rs`](src-tauri/src/ollama_bridge.rs) |
+| Webview CSP | Limits frontend resource connections; does not restrict Rust or external browser traffic | [`tauri.conf.json`](src-tauri/tauri.conf.json) |
+
+Policy checkpoints are status records, not full data snapshots. They do not
+provide automatic rollback of arbitrary filesystem or database changes.
+
+### Private knowledge and recovery
+
+Keep personal knowledge, training data, databases, state files and exports
+outside public Git. `.gitignore` is a convenience, not a security boundary:
+already tracked files and forced additions bypass it. Before committing run
+`node scripts/check-public-files.mjs --staged`; before publishing run it with
+`--tracked`. This filename-only guard does not inspect secrets inside source,
+documents, screenshots or Git history; those require a separate review.
+
+You-Port and Graph Export are **graph exports, not full disaster-recovery
+backups**. They do not preserve the complete SQLite database, embeddings,
+feedback/history/profile tables, application settings or original source files.
+Startup handoff recovery is limited to an empty graph; manual imports merge
+records rather than provide complete point-in-time rollback. Identity-derived
+exports can fail after device/account/path changes. Do not rely on their current
+encryption as protection for public storage.
+
+A full recovery plan needs versioned, independently protected backups of app
+data, settings and original private sources, outside this public checkout,
+plus recovery keys stored separately. Capture SQLite consistently using a
+backup-capable tool or after fully quitting the app; copying a live `.db` alone
+can omit WAL changes. Test restoration into an isolated destination before
+depending on a backup. Automatic private Git backup/key recovery is not yet a
+shipped feature; the local build helper preserves app code, not knowledge.
 
 **Not yet independently audited.** No third party has reviewed this. If you
 work in security and want to look, open an issue — I'll take the findings.

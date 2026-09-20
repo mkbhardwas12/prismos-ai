@@ -4,8 +4,9 @@
 // structured spec (name + files + entry) from the local model; this module
 // writes it as a real project folder under Downloads/prismos-apps/ and the
 // frontend opens the entry page in the user's default browser. Static web
-// tech only — HTML, CSS, JS modules, JSON, SVG — so the result runs with zero
-// toolchain and zero network, preserving the offline invariant. The only
+// tech only — HTML, CSS, JS, JSON, SVG — with no build toolchain required.
+// A resource/fetch CSP is injected, but it is not a complete browser sandbox
+// and does not block every navigation. Review code before using private data. The only
 // place generated code ever executes is the user's own browser after they
 // (or the app, visibly) open it. Never shell scripts, never executables.
 
@@ -90,16 +91,6 @@ fn validate_rel_path(p: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Case-insensitive ASCII substring search (byte-safe: ASCII needles only).
-fn find_ci(hay: &str, needle: &str) -> Option<usize> {
-    let h = hay.as_bytes();
-    let n = needle.as_bytes();
-    if n.is_empty() || h.len() < n.len() {
-        return None;
-    }
-    (0..=h.len() - n.len()).find(|&i| h[i..i + n.len()].eq_ignore_ascii_case(n))
-}
-
 /// Content-Security-Policy injected into every generated HTML page.
 /// Defense-in-depth for the offline promise: even if the model disobeys the
 /// prompt and references a remote script/style/image/beacon, the browser
@@ -107,28 +98,59 @@ fn find_ci(hay: &str, needle: &str) -> Option<usize> {
 /// working; fetch/XHR/WebSocket and form posts are blocked outright.
 const APP_CSP_META: &str = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'unsafe-inline' data: blob: file:; connect-src 'none'; form-action 'none'; base-uri 'none'\">";
 
-/// Insert the CSP meta right after `<head…>` (or prepend when there is no
-/// head). Pages that already carry a CSP are left alone.
+/// Put a trusted HTML5 head before any model-controlled markup. Searching for
+/// `<head>` or an existing CSP is unsafe: either can occur in a comment/script,
+/// and an existing policy may be permissive. Browsers retain this first policy;
+/// later policies can only add restrictions. The leading doctype keeps standards
+/// mode even when the model supplies a fragment or its own redundant doctype.
 fn inject_csp(html: &str) -> String {
-    if find_ci(html, "content-security-policy").is_some() {
-        return html.to_string();
-    }
-    if let Some(head_pos) = find_ci(html, "<head") {
-        if let Some(rel_close) = html.as_bytes()[head_pos..].iter().position(|&b| b == b'>') {
-            let insert_at = head_pos + rel_close + 1;
-            let mut out = String::with_capacity(html.len() + APP_CSP_META.len());
-            out.push_str(&html[..insert_at]);
-            out.push_str(APP_CSP_META);
-            out.push_str(&html[insert_at..]);
-            return out;
-        }
-    }
-    format!("{APP_CSP_META}{html}")
+    format!("<!doctype html>\n<html><head>{APP_CSP_META}</head>\n{html}")
 }
 
 fn is_html_path(p: &str) -> bool {
     let lower = p.to_lowercase();
     lower.ends_with(".html") || lower.ends_with(".htm")
+}
+
+/// Small local models sometimes double-escape file contents — writing `\"` for
+/// every quote as if the file were embedded in one more JSON string layer.
+/// After the (correct) outer JSON parse, those files reach us with literal
+/// `\"` sequences and not a single bare quote, which breaks HTML attributes
+/// (`href=\"styles.css\"` → the browser requests `%22styles.css%22`).
+///
+/// Detector: at least one escaped quote AND zero bare quotes — real code that
+/// legitimately contains `\"` inside string literals always has bare quotes
+/// around those literals too, so it never trips this. When the shape matches,
+/// re-parse the content as a JSON string body to undo the extra layer; raw
+/// newlines/tabs are pre-escaped so they round-trip unchanged. On any parse
+/// failure the content is returned untouched.
+fn unescape_double_encoded(content: &str) -> String {
+    let mut has_escaped_quote = false;
+    let mut has_bare_quote = false;
+    let mut backslashes = 0usize;
+    for &c in content.as_bytes() {
+        match c {
+            b'\\' => backslashes += 1,
+            b'"' => {
+                if backslashes % 2 == 1 {
+                    has_escaped_quote = true;
+                } else {
+                    has_bare_quote = true;
+                }
+                backslashes = 0;
+            }
+            _ => backslashes = 0,
+        }
+    }
+    if !has_escaped_quote || has_bare_quote {
+        return content.to_string();
+    }
+    let prepared = content
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t");
+    serde_json::from_str::<String>(&format!("\"{prepared}\""))
+        .unwrap_or_else(|_| content.to_string())
 }
 
 // ─── Generation ──────────────────────────────────────────────────────────────
@@ -204,11 +226,13 @@ pub fn generate_app(spec: &AppSpec) -> Result<GeneratedApp, String> {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create folder for {}: {e}", f.path))?;
         }
-        // HTML pages get the offline CSP injected — see APP_CSP_META.
+        // Undo model double-escaping first, then HTML pages get the offline
+        // CSP injected — see APP_CSP_META / unescape_double_encoded.
+        let normalized = unescape_double_encoded(&f.content);
         let content = if is_html_path(&f.path) {
-            inject_csp(&f.content)
+            inject_csp(&normalized)
         } else {
-            f.content.clone()
+            normalized
         };
         std::fs::write(&target, &content)
             .map_err(|e| format!("Failed to write {}: {e}", f.path))?;
@@ -320,12 +344,62 @@ mod tests {
     }
 
     #[test]
+    fn undoes_double_escaped_model_content() {
+        // Exact failure shape seen live: every quote escaped, zero bare quotes.
+        let spec = spec_with(vec![
+            (
+                "index.html",
+                r#"<!DOCTYPE html><html lang=\"en\"><head><title>t</title></head><body><script src=\"js/app.js\"></script></body></html>"#,
+            ),
+            ("js/app.js", r#"console.log(\"hi\")"#),
+        ]);
+        let out = generate_app(&spec).expect("app generation");
+        let html = std::fs::read_to_string(&out.entry_path).unwrap();
+        assert!(html.contains(r#"lang="en""#), "quotes not unescaped: {html}");
+        assert!(html.contains(r#"src="js/app.js""#));
+        assert!(!html.contains(r#"\""#), "escaped quotes survived: {html}");
+        let js = std::fs::read_to_string(std::path::Path::new(&out.dir).join("js/app.js")).unwrap();
+        assert_eq!(js, r#"console.log("hi")"#);
+        let _ = std::fs::remove_dir_all(&out.dir);
+    }
+
+    #[test]
+    fn leaves_legitimately_escaped_code_untouched() {
+        // Real JS with `\"` inside string literals also has bare quotes — the
+        // detector must not fire and the file must be written verbatim.
+        let src = r#"el.innerHTML = "<a href=\"x\">go</a>"; const t = 'fine';"#;
+        let spec = spec_with(vec![("index.html", "<html><body>ok</body></html>"), ("app.js", src)]);
+        let out = generate_app(&spec).expect("app generation");
+        let js = std::fs::read_to_string(std::path::Path::new(&out.dir).join("app.js")).unwrap();
+        assert_eq!(js, src);
+        let _ = std::fs::remove_dir_all(&out.dir);
+    }
+
+    #[test]
     fn csp_injection_handles_missing_head_and_existing_policy() {
-        // no <head>: meta is prepended
         let no_head = inject_csp("<p>bare</p>");
-        assert!(no_head.starts_with(APP_CSP_META));
-        // existing policy is respected, not duplicated
+        assert!(no_head.starts_with("<!doctype html>\n<html><head>"));
+        assert!(no_head.contains(APP_CSP_META));
+        // An existing stricter policy is retained, but never replaces ours.
         let existing = "<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'\"></head></html>";
-        assert_eq!(inject_csp(existing), existing);
+        let secured = inject_csp(existing);
+        assert!(secured.ends_with(existing));
+        assert_eq!(secured.matches("Content-Security-Policy").count(), 2);
+        assert!(secured.find(APP_CSP_META).unwrap() < secured.find(existing).unwrap());
+    }
+
+    #[test]
+    fn csp_injection_cannot_be_bypassed_by_comments_or_permissive_model_policy() {
+        for untrusted in [
+            "<!-- content-security-policy <head> --> <html><head></head><body>app</body></html>",
+            "<!-- <head> --><script>const marker = 'content-security-policy';</script>",
+            "<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src * 'unsafe-inline'\"></head></html>",
+            "<script src=\"https://example.com/app.js\"></script><head><title>Late head</title></head>",
+        ] {
+            let secured = inject_csp(untrusted);
+            assert!(secured.contains(APP_CSP_META));
+            assert!(secured.ends_with(untrusted));
+            assert!(secured.find(APP_CSP_META).unwrap() < secured.find(untrusted).unwrap());
+        }
     }
 }

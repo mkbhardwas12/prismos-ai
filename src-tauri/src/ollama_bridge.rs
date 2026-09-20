@@ -1,14 +1,18 @@
 // Ollama Bridge — Local LLM Inference Interface
 //
 // Provides a Rust HTTP client for the Ollama REST API running on localhost.
-// All inference stays local — no data leaves the user's machine.
+// Private requests are confined to the loopback daemon. This transport policy
+// does not attest that the separately managed Ollama daemon is itself offline.
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use futures_util::StreamExt;
 
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-const GENERATE_TIMEOUT: Duration = Duration::from_secs(300); // 5 min — large models (deepseek-r1) on doc analysis need time
+/// Private inference never uses the configurable model-management endpoint.
+/// A literal loopback address also avoids hostname/DNS redirection.
+const PRIVATE_OLLAMA_URL: &str = "http://127.0.0.1:11434";
+const GENERATE_TIMEOUT: Duration = Duration::from_secs(1800); // 30 min — app/doc builds on large local models legitimately run past 5 min; the old 300s cut healthy generations mid-stream (seen live: qwen3.8:27b app build died at exactly 300s, surfacing as "truncated" / "cannot connect")
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 const EMBED_TIMEOUT: Duration = Duration::from_secs(30); // embeddings are ms-fast once the model is warm; 30s covers cold load
 
@@ -300,6 +304,10 @@ struct GenerateRequest {
     /// have no opinion — see the Thinking control section above.
     #[serde(skip_serializing_if = "Option::is_none")]
     think: Option<bool>,
+    /// Ollama structured-output schema (or its `"json"` mode). This constrains
+    /// response shape, not factual accuracy; artifact callers still validate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -404,6 +412,22 @@ pub struct ModelInfo {
 
 // ─── Request plumbing ──────────────────────────────────────────────────────────
 
+/// Keep the legacy argument for IPC/caller compatibility, but never let it
+/// route prompts, retrieved knowledge, screenshots, or embeddings off-device.
+fn private_inference_base_url(_configured_url: Option<&str>) -> &'static str {
+    PRIVATE_OLLAMA_URL
+}
+
+fn harden_private_client(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+}
+
+fn private_inference_client() -> Result<reqwest::Client, reqwest::Error> {
+    harden_private_client(reqwest::Client::builder()).build()
+}
+
 /// POST a JSON body; if the daemon rejects the `think` field (older Ollama, or
 /// a model tag that doesn't support toggling), retry once without it so we
 /// degrade to the daemon's default instead of failing the whole call.
@@ -455,8 +479,21 @@ pub async fn generate(
     max_tokens: Option<u32>,
     images: Option<Vec<String>>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
-    let client = reqwest::Client::new();
+    generate_with_format(model, prompt, base_url, max_tokens, images, None).await
+}
+
+/// Structured-output variant for artifact specifications. The schema stays on
+/// loopback with the prompt and is not a substitute for completeness/fact checks.
+pub async fn generate_with_format(
+    model: &str,
+    prompt: &str,
+    base_url: Option<&str>,
+    max_tokens: Option<u32>,
+    images: Option<Vec<String>>,
+    format: Option<serde_json::Value>,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let url = private_inference_base_url(base_url);
+    let client = private_inference_client()?;
     let (think, prompt) = resolve_think(model, prompt);
     let thinking = will_think(model, think);
     // Always set num_ctx (Ollama's default is far too small for documents); honor
@@ -474,6 +511,7 @@ pub async fn generate(
         images,
         keep_alive: Some(keep_alive()),
         think,
+        format,
     };
 
     let body = serde_json::to_value(&request)?;
@@ -488,7 +526,16 @@ pub async fn generate(
     }
 
     let gen_response: GenerateResponse = response.json().await?;
-    Ok(strip_think_blocks(&gen_response.response))
+    completed_generation_text(gen_response)
+}
+
+fn completed_generation_text(
+    response: GenerateResponse,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    if response.done_reason.as_deref() == Some("length") {
+        return Err("Ollama reached the output token limit; the response is incomplete and was not accepted. Increase the output limit or request a smaller artifact. This is not a connection failure.".into());
+    }
+    Ok(strip_think_blocks(&response.response))
 }
 
 /// Chat completion using Ollama's /api/chat endpoint with proper role separation.
@@ -505,8 +552,8 @@ pub async fn chat(
     images: Option<Vec<String>>,
     few_shot_examples: Option<Vec<(String, String)>>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
-    let client = reqwest::Client::new();
+    let url = private_inference_base_url(base_url);
+    let client = private_inference_client()?;
 
     let mut messages = vec![];
 
@@ -642,9 +689,9 @@ pub async fn embed(
     text: &str,
     base_url: Option<&str>,
 ) -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
-    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
+    let url = private_inference_base_url(base_url);
     let model = embed_model();
-    let client = reqwest::Client::new();
+    let client = private_inference_client()?;
 
     // Modern endpoint: POST /api/embed { model, input } → { embeddings: [[..]] }
     let response = client
@@ -738,8 +785,8 @@ pub async fn generate_stream<F>(
 where
     F: FnMut(StreamEvent),
 {
-    let url = base_url.unwrap_or(DEFAULT_OLLAMA_URL);
-    let client = reqwest::Client::new();
+    let url = private_inference_base_url(base_url);
+    let client = private_inference_client()?;
     let (think, prompt) = resolve_think(model, prompt);
     let thinking = will_think(model, think);
     // Always set num_ctx (Ollama's default is far too small for documents); honor
@@ -757,6 +804,7 @@ where
         images,
         keep_alive: Some(keep_alive()),
         think,
+        format: None,
     };
 
     let body = serde_json::to_value(&request)?;
@@ -837,6 +885,77 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn structured_generation_serializes_schema_without_changing_it() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["title", "slides"],
+            "properties": {
+                "title": {"type": "string"},
+                "slides": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+            },
+            "additionalProperties": false
+        });
+        let mut request = GenerateRequest {
+            model: "local-test".to_string(), prompt: "test artifact".to_string(),
+            stream: false, options: None, images: None, keep_alive: None,
+            think: None, format: Some(schema.clone()),
+        };
+        assert_eq!(serde_json::to_value(&request).unwrap()["format"], schema);
+        request.format = None;
+        assert!(serde_json::to_value(&request).unwrap().get("format").is_none());
+    }
+
+    #[test]
+    fn non_streaming_generation_rejects_token_limit_instead_of_returning_partial_json() {
+        let response: GenerateResponse = serde_json::from_value(serde_json::json!({
+            "response": "{\"slides\":[", "done": true, "done_reason": "length"
+        })).unwrap();
+        let error = completed_generation_text(response).unwrap_err().to_string();
+        assert!(error.contains("output token limit"));
+        assert!(error.contains("incomplete"));
+        assert!(!error.contains("{\"slides"));
+        let complete: GenerateResponse = serde_json::from_value(serde_json::json!({
+            "response": "{\"slides\":[]}", "done": true, "done_reason": "stop"
+        })).unwrap();
+        assert_eq!(completed_generation_text(complete).unwrap(), "{\"slides\":[]}");
+    }
+
+    #[test]
+    fn private_inference_ignores_remote_or_malformed_management_urls() {
+        for configured in [
+            None,
+            Some("https://example.com"),
+            Some("http://192.168.1.2:11434"),
+            Some("http://localhost:9999"),
+            Some("http://127.0.0.1:11434@evil.example"),
+            Some("not a URL"),
+        ] {
+            let base = private_inference_base_url(configured);
+            for endpoint in ["generate", "chat", "embed", "embeddings"] {
+                let request = private_inference_client().unwrap()
+                    .post(format!("{base}/api/{endpoint}"))
+                    .build().unwrap();
+                assert_eq!(request.url().scheme(), "http");
+                assert_eq!(request.url().host_str(), Some("127.0.0.1"));
+                assert_eq!(request.url().port(), Some(11434));
+                assert_eq!(request.url().path(), format!("/api/{endpoint}"));
+            }
+        }
+    }
+
+    #[test]
+    fn private_client_disables_redirects_and_clears_proxies_without_network() {
+        // An explicit proxy makes this independent of the test runner's
+        // environment. reqwest's no_proxy also disables automatic env proxies.
+        let builder = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all("http://127.0.0.1:9").unwrap());
+        let client = harden_private_client(builder).build().unwrap();
+        let config = format!("{client:?}");
+        assert!(config.contains("redirect_policy: \"Policy(None)\""), "{config}");
+        assert!(!config.contains("proxies"), "{config}");
+    }
 
     #[test]
     fn test_keep_alive_default() {

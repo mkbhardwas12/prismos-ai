@@ -15,6 +15,11 @@ const settings = {
 } as AppSettings;
 
 describe("buildErrorMessage", () => {
+  it("does not blame connectivity or a missing model for an incomplete document", () => {
+    const msg = buildErrorMessage("The presentation outline remained incomplete. Try a larger local model/context budget.", settings);
+    expect(msg.content).toContain("Document generation did not complete");
+    expect(msg.content).not.toContain("ollama pull");
+  });
   it("blames the exact model named in an Ollama 404, not the default", () => {
     const msg = buildErrorMessage(
       `Vision analysis failed: {"error":"model 'llama3.2-vision' not found"}`,

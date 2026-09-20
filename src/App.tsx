@@ -19,7 +19,7 @@ import SpotlightOverlay from "./components/SpotlightOverlay";
 import BrainWrapped from "./components/BrainWrapped";
 import { DEFAULT_SETTINGS } from "./lib/config";
 import prismosIcon from "./assets/prismos-icon.svg";
-import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, HandoffResult, AgentActivity, ProactiveSuggestion } from "./types";
+import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard";
 
@@ -228,27 +228,8 @@ function App() {
         setLoadingStatus("Checking Ollama...");
         await checkOllama();
 
-        // ── You-Port: Auto-restore previous session ──
-        setLoadingStatus("Checking saved state...");
-        try {
-          const hasSaved = await invoke<boolean>("has_saved_state");
-          if (hasSaved) {
-            setLoadingStatus("Restoring session...");
-            const resultJson = await invoke<string>("load_state");
-            const result: HandoffResult = JSON.parse(resultJson);
-            if (result.success) {
-              setToast({
-                message: `🔐 Restored from last session — ${result.nodes_count} nodes, ${result.edges_count} edges`,
-                visible: true,
-              });
-              await loadNodes();
-              await loadGraphStats();
-              setGraphRefreshKey((k) => k + 1);
-            }
-          }
-        } catch (e) {
-          console.error("You-Port restore failed:", e);
-        }
+        // Native startup handles missing-database recovery once. Re-merging an
+        // older handoff here can resurrect intentionally removed records.
 
         setLoadingStatus("Ready!");
 

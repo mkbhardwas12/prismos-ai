@@ -148,7 +148,9 @@ export default function SettingsPanel({
     setPullProgress({ status: "Starting download…", percent: 0 });
     try {
       const result = await invoke<string>("pull_ollama_model", {
-        modelName: name,
+        // The Rust command's parameter is `model` — sending `modelName` made
+        // every pull fail with "missing required key model".
+        model: name,
         ollamaUrl: settings.ollamaUrl,
       });
       showStatus(`✅ ${result}`, "success");
@@ -636,8 +638,8 @@ export default function SettingsPanel({
             </button>
           </div>
           <div className="settings-hint">
-            Export uses You-Port end-to-end encryption (AES-256-GCM authenticated encryption).
-            Files are device-bound and cannot be read on other devices.
+            Graph exports use AES-GCM with legacy keys derived from account/path information, not a secret recovery key.
+            Keep exports private and outside public Git. This is not a full backup; recovery may fail after account or path changes.
           </div>
           </>)}
         </div>
@@ -651,7 +653,8 @@ export default function SettingsPanel({
           {expandedSections.has("sync") && (<>
           <div className="settings-hint" style={{ marginBottom: "0.75rem" }}>
             Sync your Spectrum Graph between devices using a shared passphrase.
-            Files are encrypted — the same passphrase must be used on both devices.
+            Use a long, unique passphrase on both devices. The legacy derivation is not hardened against password guessing;
+            keep sync files private. Sync exports do not include complete app data or settings.
           </div>
 
           {/* Passphrase */}
@@ -1029,52 +1032,52 @@ export default function SettingsPanel({
             <div className="security-check">
               <span className="security-check-icon">✅</span>
               <div className="security-check-info">
-                <span className="security-check-label">Local Processing</span>
-                <span className="security-check-desc">All AI runs on your device via Ollama — nothing sent to the cloud</span>
+                <span className="security-check-label">Private Inference Transport</span>
+                <span className="security-check-desc">Prompts, documents and images go to 127.0.0.1:11434 without proxies or redirects. Ollama itself is not independently verified as offline.</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">ℹ️</span>
+              <div className="security-check-info">
+                <span className="security-check-label">WASM Policy Checks</span>
+                <span className="security-check-desc">A small WebAssembly module checks operation approvals. Actual Rust file, database and network work is not isolated inside it.</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">ℹ️</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Action Checksums</span>
+                <span className="security-check-desc">Policy records carry HMAC tags derived from public identifiers; these are not trusted code signatures or an authorization boundary.</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">⚠️</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Recovery Limits</span>
+                <span className="security-check-desc">Policy checkpoints record status, not complete data backups. They cannot automatically reverse arbitrary file or database changes.</span>
+              </div>
+            </div>
+            <div className="security-check">
+              <span className="security-check-icon">⚠️</span>
+              <div className="security-check-info">
+                <span className="security-check-label">Local Storage / Exports</span>
+                <span className="security-check-desc">The live SQLite database is not app-encrypted. Graph exports use AES-GCM with legacy identity-derived keys; keep them private. Use OS disk encryption and a separate tested full backup.</span>
               </div>
             </div>
             <div className="security-check">
               <span className="security-check-icon">✅</span>
               <div className="security-check-info">
-                <span className="security-check-label">WASM Sandbox</span>
-                <span className="security-check-desc">Agent code runs in isolated WebAssembly containers with strict limits</span>
+                <span className="security-check-label">Optional Network Features</span>
+                <span className="security-check-desc">Local chat needs no PrismOS account. Email, finance, web research, downloads, update checks and opened browser pages can use the network.</span>
               </div>
             </div>
             <div className="security-check">
-              <span className="security-check-icon">✅</span>
+              <span className="security-check-icon">ℹ️</span>
               <div className="security-check-info">
-                <span className="security-check-label">HMAC Code Signing</span>
-                <span className="security-check-desc">Every agent action is cryptographically signed and verified</span>
-              </div>
-            </div>
-            <div className="security-check">
-              <span className="security-check-icon">✅</span>
-              <div className="security-check-info">
-                <span className="security-check-label">Auto-Rollback</span>
-                <span className="security-check-desc">Unsafe changes are automatically reversed with checkpoint recovery</span>
-              </div>
-            </div>
-            <div className="security-check">
-              <span className="security-check-icon">✅</span>
-              <div className="security-check-info">
-                <span className="security-check-label">Encrypted Storage</span>
-                <span className="security-check-desc">Graph data encrypted with AES-256-GCM authenticated encryption, device-bound</span>
-              </div>
-            </div>
-            <div className="security-check">
-              <span className="security-check-icon">✅</span>
-              <div className="security-check-info">
-                <span className="security-check-label">Zero Cloud Dependency</span>
-                <span className="security-check-desc">Works fully offline — no accounts, no telemetry, no external APIs</span>
-              </div>
-            </div>
-            <div className="security-check">
-              <span className="security-check-icon">{securityStatus?.enclave?.hardware_available ? "🔐" : "🔑"}</span>
-              <div className="security-check-info">
-                <span className="security-check-label">Secure Enclave</span>
+                <span className="security-check-label">Hardware Detection</span>
                 <span className="security-check-desc">
                   {securityStatus?.enclave
-                    ? `${securityStatus.enclave.hardware_available ? "Hardware-backed" : "Software"}: ${securityStatus.enclave.backend.replace(/([A-Z])/g, ' $1').trim()} · Key: ${securityStatus.enclave.key_fingerprint}`
+                    ? `${securityStatus.enclave.backend.replace(/([A-Z])/g, ' $1').trim()} detected. Current keys use software derivation from device identifiers, not protected hardware key operations.`
                     : "Initializing…"}
                 </span>
               </div>
@@ -1082,10 +1085,10 @@ export default function SettingsPanel({
             <div className="security-check">
               <span className="security-check-icon">{securityStatus?.audit_chain?.valid ? "✅" : "⚠️"}</span>
               <div className="security-check-info">
-                <span className="security-check-label">Tamper-Evident Audit Log</span>
+                <span className="security-check-label">Audit Chain Consistency</span>
                 <span className="security-check-desc">
                   {securityStatus?.audit_chain
-                    ? `${securityStatus.audit_chain.entries} entries · Chain ${securityStatus.audit_chain.valid ? "verified ✓" : "BROKEN ✗"}`
+                    ? `${securityStatus.audit_chain.entries} entries · Chain ${securityStatus.audit_chain.valid ? "consistent" : "BROKEN"}. This is not immutable storage or proof against a full log rewrite.`
                     : "Initializing…"}
                 </span>
               </div>
@@ -1121,7 +1124,7 @@ export default function SettingsPanel({
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
               <span className="settings-version-name">PrismOS-AI</span>
-              <span className="settings-version-number">v0.5.2</span>
+              <span className="settings-version-number">v0.6.0</span>
             </div>
             <div className="settings-version-badges">
               <span className="settings-badge-local">100% Local</span>

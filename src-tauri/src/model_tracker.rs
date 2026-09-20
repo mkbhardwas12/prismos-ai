@@ -76,7 +76,7 @@ pub fn generate_recommendations(entries: &[ModelPerformance]) -> Vec<ModelRecomm
             comparison: None,
         };
 
-        let is_better = domain_best.get(domain).map_or(true, |existing| {
+        let is_better = domain_best.get(domain).is_none_or(|existing| {
             // Prefer higher satisfaction, then lower latency
             if (satisfaction - existing.satisfaction_rate).abs() > 0.05 {
                 satisfaction > existing.satisfaction_rate

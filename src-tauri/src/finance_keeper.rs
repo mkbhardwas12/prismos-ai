@@ -143,7 +143,7 @@ pub async fn fetch_quote(symbol: &str) -> TickerQuote {
 
     // Navigate the Yahoo Finance JSON structure
     let result = &body["chart"]["result"];
-    if result.is_null() || !result.is_array() || result.as_array().map_or(true, |a| a.is_empty()) {
+    if result.is_null() || !result.is_array() || result.as_array().is_none_or(|a| a.is_empty()) {
         return TickerQuote::error(symbol, "Ticker not found or market data unavailable");
     }
 

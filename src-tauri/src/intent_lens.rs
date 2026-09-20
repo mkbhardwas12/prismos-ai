@@ -38,11 +38,6 @@ impl IntentLens {
 
     /// Classify intent type using keyword-based heuristics
     fn classify_intent(&self, lower: &str) -> IntentType {
-        // Query patterns
-        let query_kw = [
-            "search", "find", "what", "how", "why", "when", "where", "who",
-            "tell me", "explain", "describe", "show", "look up", "?",
-        ];
         // Create patterns
         let create_kw = [
             "create", "make", "new", "add", "write", "build", "generate",
@@ -72,8 +67,6 @@ impl IntentLens {
             IntentType::Analyze
         } else if connect_kw.iter().any(|k| lower.contains(k)) {
             IntentType::Connect
-        } else if query_kw.iter().any(|k| lower.contains(k)) {
-            IntentType::Query
         } else {
             IntentType::Query // Default to query
         }

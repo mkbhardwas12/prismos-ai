@@ -277,6 +277,8 @@ pub enum TaskKind {
     /// Code generation / review — prefer a code-specialized model.
     Code,
     /// Anything involving an image — requires a vision model.
+    // Kept as part of the task-routing API even though no production caller constructs it yet.
+    #[allow(dead_code)]
     Vision,
 }
 

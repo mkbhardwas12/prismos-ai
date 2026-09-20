@@ -185,11 +185,17 @@ pub fn generate_app(spec: &AppSpec) -> Result<GeneratedApp, String> {
     std::fs::create_dir_all(&base).map_err(|e| format!("Failed to create app folder: {e}"))?;
     let mut dir: PathBuf = base.join(&stem);
     let mut n = 2;
-    while dir.exists() {
-        dir = base.join(format!("{stem}-{n}"));
-        n += 1;
+    // Reserve atomically: concurrent generations must never share a folder.
+    loop {
+        match std::fs::create_dir(&dir) {
+            Ok(()) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                dir = base.join(format!("{stem}-{n}"));
+                n += 1;
+            }
+            Err(error) => return Err(format!("Failed to create project folder: {error}")),
+        }
     }
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create project folder: {e}"))?;
 
     let mut written: Vec<String> = Vec::new();
     for f in &spec.files {
@@ -269,6 +275,25 @@ mod tests {
 
         let dup = spec_with(vec![("index.html", "a"), ("INDEX.html", "b")]);
         assert!(generate_app(&dup).is_err());
+    }
+
+    #[test]
+    fn concurrent_generations_never_share_a_folder() {
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    generate_app(&spec_with(vec![("index.html", "<html></html>")]))
+                        .expect("app generation")
+                        .dir
+                })
+            })
+            .collect();
+        let dirs: Vec<String> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let unique: std::collections::HashSet<&String> = dirs.iter().collect();
+        assert_eq!(unique.len(), dirs.len(), "folders were shared: {dirs:?}");
+        for dir in &dirs {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 
     #[test]

@@ -181,7 +181,7 @@ impl SecureEnclave {
                 let out = String::from_utf8_lossy(&o.stdout).to_string();
                 out.lines()
                     .find(|l| l.contains("IOPlatformUUID"))
-                    .map(|l| l.split('=').last().unwrap_or("").trim().trim_matches('"').to_string())
+                    .map(|l| l.split('=').next_back().unwrap_or("").trim().trim_matches('"').to_string())
                     .unwrap_or_default()
             })
             .unwrap_or_default();

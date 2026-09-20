@@ -236,7 +236,7 @@ impl ToolSmithNode {
             || lower.contains("prism");
 
         // Reject unsandboxed write operations
-        let approve = !(is_write && !mentions_sandbox);
+        let approve = !is_write || mentions_sandbox;
 
         Vote {
             agent: AgentRole::ToolSmith,

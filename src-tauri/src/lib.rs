@@ -15,6 +15,7 @@ mod whisper_engine;
 mod file_indexer;
 mod smart_router;
 mod doc_chunker;
+pub mod knowledge_import;
 mod email_keeper;
 mod calendar_keeper;
 mod finance_keeper;
@@ -125,9 +126,9 @@ async fn refract_intent(app: tauri::AppHandle, input: String, model: Option<Stri
 }
 
 #[tauri::command]
-async fn query_ollama(prompt: String, model: Option<String>, ollama_url: Option<String>, max_tokens: Option<u32>) -> Result<String, String> {
+async fn query_ollama(prompt: String, model: Option<String>, ollama_url: Option<String>, max_tokens: Option<u32>, format: Option<serde_json::Value>) -> Result<String, String> {
     let model = model.unwrap_or_else(|| "mistral".to_string());
-    ollama_bridge::generate(&model, &prompt, ollama_url.as_deref(), max_tokens, None)
+    ollama_bridge::generate_with_format(&model, &prompt, ollama_url.as_deref(), max_tokens, None, format)
         .await
         .map_err(|e| e.to_string())
 }
@@ -543,14 +544,51 @@ async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<Strin
     Ok(host)
 }
 
-/// open_generated_file — Open a generated file (or reveal its folder) with the
-/// OS default handler. Only allows opening files that actually exist on disk.
+/// Resolve a generated document beneath the app's output directory. The IPC
+/// command must not act as an arbitrary executable launcher or follow a link
+/// out of the artifact area. This checks metadata only, never file contents.
+fn validate_generated_file_path(
+    path: &std::path::Path,
+    output_dir: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    if !path.is_absolute() {
+        return Err("Generated file path must be absolute".to_string());
+    }
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|_| "Generated file no longer exists".to_string())?;
+    if !metadata.file_type().is_file() {
+        return Err("Only regular generated files can be opened".to_string());
+    }
+    let root = output_dir.canonicalize()
+        .map_err(|_| "Generated-file output directory is unavailable".to_string())?;
+    let resolved = path.canonicalize()
+        .map_err(|_| "Generated file cannot be resolved".to_string())?;
+    if !resolved.starts_with(&root) {
+        return Err("File is outside the generated-file output directory".to_string());
+    }
+    let ext = resolved.extension().and_then(|value| value.to_str())
+        .unwrap_or("").to_ascii_lowercase();
+    if !["docx", "pptx", "pdf", "xlsx", "html", "md", "txt", "csv", "json", "svg"]
+        .contains(&ext.as_str())
+    {
+        return Err("This generated-file type cannot be opened by PrismOS".to_string());
+    }
+    Ok(resolved)
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn generated_file_handler_url(path: &std::path::Path) -> Result<String, String> {
+    reqwest::Url::from_file_path(path)
+        .map(|url| url.to_string())
+        .map_err(|_| "Generated file cannot be represented as a local file URL".to_string())
+}
+
+/// open_generated_file — Open or reveal a supported generated document with
+/// the OS handler. No command shell is involved, including on Windows.
 #[tauri::command]
 async fn open_generated_file(path: String, reveal: Option<bool>) -> Result<(), String> {
-    let p = std::path::Path::new(&path);
-    if !p.exists() {
-        return Err("File no longer exists".to_string());
-    }
+    let p = validate_generated_file_path(std::path::Path::new(&path), &doc_generator::output_dir())?;
+    let path = p.to_string_lossy().to_string();
     let reveal = reveal.unwrap_or(false);
 
     #[cfg(target_os = "macos")]
@@ -564,7 +602,7 @@ async fn open_generated_file(path: String, reveal: Option<bool>) -> Result<(), S
     let (cmd, args): (&str, Vec<String>) = if reveal {
         ("explorer", vec![format!("/select,{}", path)])
     } else {
-        ("cmd", vec!["/C".to_string(), "start".to_string(), "".to_string(), path.clone()])
+        ("rundll32", vec!["url.dll,FileProtocolHandler".to_string(), generated_file_handler_url(&p)?])
     };
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -580,6 +618,61 @@ async fn open_generated_file(path: String, reveal: Option<bool>) -> Result<(), S
         .spawn()
         .map_err(|e| format!("Failed to open file: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod generated_file_path_tests {
+    use super::{generated_file_handler_url, validate_generated_file_path};
+
+    #[test]
+    fn accepts_documents_and_nested_app_entries_without_changing_literal_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["report.docx", "roadmap.PPTX", "a & b report.pdf", "summary.xlsx"] {
+            let file = dir.path().join(name);
+            std::fs::write(&file, b"test artifact").unwrap();
+            let resolved = validate_generated_file_path(&file, dir.path()).unwrap();
+            let url = reqwest::Url::parse(&generated_file_handler_url(&resolved).unwrap()).unwrap();
+            assert_eq!(url.scheme(), "file");
+            assert_eq!(url.to_file_path().unwrap(), resolved);
+        }
+        let app_dir = dir.path().join("prismos-apps/demo");
+        std::fs::create_dir_all(&app_dir).unwrap();
+        let entry = app_dir.join("index.html");
+        std::fs::write(&entry, "<h1>Local app</h1>").unwrap();
+        assert!(validate_generated_file_path(&entry, dir.path()).is_ok());
+    }
+
+    #[test]
+    fn rejects_missing_relative_outside_directory_and_executable_targets() {
+        let output = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let private_file = outside.path().join("private.txt");
+        std::fs::write(&private_file, b"test fixture").unwrap();
+        assert!(validate_generated_file_path(&private_file, output.path()).is_err());
+        assert!(validate_generated_file_path(std::path::Path::new("report.pdf"), output.path()).is_err());
+        assert!(validate_generated_file_path(&output.path().join("missing.pdf"), output.path()).is_err());
+        assert!(validate_generated_file_path(output.path(), output.path()).is_err());
+        for name in ["run.exe", "run.cmd", "run.bat", "run.js", "run.command", "run.lnk", "run.app"] {
+            let file = output.path().join(name);
+            std::fs::write(&file, b"inert test fixture").unwrap();
+            assert!(validate_generated_file_path(&file, output.path()).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_file_symlinks_and_parent_symlink_escapes() {
+        let output = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let private_file = outside.path().join("private.txt");
+        std::fs::write(&private_file, b"test fixture").unwrap();
+        let link = output.path().join("shortcut.txt");
+        std::os::unix::fs::symlink(&private_file, &link).unwrap();
+        assert!(validate_generated_file_path(&link, output.path()).is_err());
+        let parent_link = output.path().join("linked-dir");
+        std::os::unix::fs::symlink(outside.path(), &parent_link).unwrap();
+        assert!(validate_generated_file_path(&parent_link.join("private.txt"), output.path()).is_err());
+    }
 }
 
 // ─── Project Review Commands (gated, READ-ONLY) ───────────────────────────────
@@ -1171,18 +1264,38 @@ async fn anticipate_needs(db: tauri::State<'_, DbState>) -> Result<String, Strin
     serde_json::to_string(&needs).map_err(|e| e.to_string())
 }
 
-/// Get 2-3 proactive structured suggestions (Phase 3 — Proactive Spectrum Graph)
+/// Read display-only proactive cards. Polling must never add knowledge nodes.
 #[tauri::command]
 async fn get_proactive_suggestions(db: tauri::State<'_, DbState>) -> Result<String, String> {
     let graph = db.0.lock().map_err(|e| e.to_string())?;
+    proactive_suggestions_json(&graph)
+}
+
+fn proactive_suggestions_json(graph: &spectrum_graph::SpectrumGraph) -> Result<String, String> {
     let suggestions = graph
         .generate_proactive_suggestions()
         .map_err(|e| e.to_string())?;
-    // Store each suggestion in the graph for later recall
-    for sug in &suggestions {
-        let _ = graph.store_proactive_suggestion(sug);
-    }
     serde_json::to_string(&suggestions).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod suggestion_command_tests {
+    #[test]
+    fn repeated_suggestion_reads_never_persist_cards_or_modify_knowledge() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph = crate::spectrum_graph::SpectrumGraph::new(dir.path()).unwrap();
+        let a = graph.add_node("Release planning", "accepted project plan", "work").unwrap();
+        let b = graph.add_node("Integration tests", "accepted test notes", "note").unwrap();
+        let edge = graph.add_edge(&a.id, &b.id, "supports", 1.0).unwrap();
+        graph.update_edge_weight(&edge.id, 1.0).unwrap();
+        let before = serde_json::to_value(graph.get_full_graph().unwrap()).unwrap();
+        let first = super::proactive_suggestions_json(&graph).unwrap();
+        assert!(!serde_json::from_str::<Vec<crate::spectrum_graph::ProactiveSuggestion>>(&first).unwrap().is_empty());
+        for _ in 0..60 {
+            assert_eq!(super::proactive_suggestions_json(&graph).unwrap(), first);
+        }
+        assert_eq!(serde_json::to_value(graph.get_full_graph().unwrap()).unwrap(), before);
+    }
 }
 
 /// Strengthen graph edges related to given keywords (auto-reinforcement)
@@ -1762,26 +1875,9 @@ async fn import_graph(app: tauri::AppHandle, db_state: tauri::State<'_, DbState>
         serde_json::from_str(&plaintext).map_err(|e| format!("Failed to parse graph data: {}", e))?;
 
     let graph = db_state.0.lock().map_err(|e| e.to_string())?;
-    let mut nodes_imported = 0_usize;
-    let mut edges_imported = 0_usize;
-
-    for node in &snapshot.nodes {
-        match graph.get_node(&node.id) {
-            Ok(Some(_)) => {} // Node truly exists — skip
-            _ => {
-                // Ok(None) = node not found, Err = lookup failed — try to import either way
-                if graph.add_node_with_layer(&node.label, &node.content, &node.node_type, &node.layer).is_ok() {
-                    nodes_imported += 1;
-                }
-            }
-        }
-    }
-
-    for edge in &snapshot.edges {
-        if let Ok((_, true)) = graph.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation) {
-            edges_imported += 1;
-        }
-    }
+    let (nodes_imported, edges_imported) = graph
+        .import_snapshot(&snapshot)
+        .map_err(|e| format!("Graph import failed; no changes were applied: {}", e))?;
 
     let result = serde_json::json!({
         "success": true,
@@ -2299,7 +2395,8 @@ async fn start_file_indexer(
     let mut indexer = indexer_state.0.lock().map_err(|e| e.to_string())?;
 
     // Start watching
-    let _rx = indexer.start_watching(vec![watch_dir.clone()])?;
+    let rx = indexer.start_watching(vec![watch_dir.clone()])?;
+    let generation = indexer.generation();
 
     // Perform initial scan and index files
     let files_to_index = indexer.initial_scan();
@@ -2310,26 +2407,39 @@ async fn start_file_indexer(
     let db = db_state.0.lock().map_err(|e| e.to_string())?;
 
     for file_path in &files_to_index {
-        match indexer.index_file(file_path) {
-            Ok(mut indexed_file) => {
-                // Ingest into Spectrum Graph
-                let (label, content, node_type) =
-                    file_indexer::FileIndexer::file_to_node_content(&indexed_file);
-                match db.add_node_with_layer(&label, &content, &node_type, "context") {
-                    Ok(node) => {
-                        indexed_file.node_id = Some(node.id.clone());
-                        indexed_count += 1;
-                    }
-                    Err(e) => {
-                        eprintln!("[FileIndexer] Failed to add node for {}: {}", file_path.display(), e);
-                    }
-                }
-            }
+        match indexer.index_file_to_graph(file_path, &db) {
+            Ok(_) => indexed_count += 1,
             Err(e) => {
                 eprintln!("[FileIndexer] Failed to index {}: {}", file_path.display(), e);
             }
         }
     }
+    drop(db);
+    drop(indexer);
+
+    // Keep consuming the receiver. Dropping/stopping the watcher disconnects it;
+    // generation checks also prevent an old queued event indexing a new watch.
+    let watch_app = app.clone();
+    std::thread::spawn(move || {
+        while let Ok(path) = rx.recv() {
+            let state = watch_app.state::<IndexerState>();
+            let Ok(mut indexer) = state.0.lock() else { break; };
+            if indexer.generation() != generation { break; }
+            if !indexer.accepts_event(&path, generation) { continue; }
+            let db_state = watch_app.state::<DbState>();
+            let Ok(graph) = db_state.0.lock() else { break; };
+            let result = indexer.index_file_to_graph(&path, &graph);
+            drop(graph);
+            drop(indexer);
+            match result {
+                Ok(_) => { let _ = watch_app.emit("file-indexer-update", serde_json::json!({ "success": true, "files_indexed": 1 })); }
+                Err(error) => {
+                    eprintln!("[FileIndexer] Could not refresh changed source: {error}");
+                    let _ = watch_app.emit("file-indexer-update", serde_json::json!({ "success": false, "error": "A changed source could not be indexed." }));
+                }
+            }
+        }
+    });
 
     // Log to audit
     let audit = audit_log::AuditLog::new(&app_dir);
@@ -3020,6 +3130,26 @@ fn extract_xlsx_from_bytes(bytes: &[u8], file_name: &str) -> Result<String, Stri
 
 // ─── Application Setup ────────────────────────────────────────────────────────
 
+/// An intentionally cleared existing database is authoritative. Only a database
+/// that was absent before startup can be recovered from an older handoff or
+/// populated with first-run examples.
+fn should_initialize_graph_on_startup(database_existed: bool, counts: (usize, usize)) -> bool {
+    !database_existed && counts == (0, 0)
+}
+
+#[cfg(test)]
+mod startup_recovery_tests {
+    use super::should_initialize_graph_on_startup;
+
+    #[test]
+    fn existing_empty_graph_does_not_resurrect_saved_or_demo_records() {
+        assert!(!should_initialize_graph_on_startup(true, (0, 0)));
+        assert!(!should_initialize_graph_on_startup(true, (5, 4)));
+        assert!(!should_initialize_graph_on_startup(false, (5, 4)));
+        assert!(should_initialize_graph_on_startup(false, (0, 0)));
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -3029,6 +3159,9 @@ pub fn run() {
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
+            // Capture existence BEFORE opening SQLite, which creates a missing
+            // database. Empty rows alone cannot distinguish reset from loss.
+            let database_existed = app_dir.join("spectrum_graph.db").try_exists()?;
 
             // Initialize Spectrum Graph database — shared across all commands
             let db = spectrum_graph::SpectrumGraph::new(&app_dir)
@@ -3037,15 +3170,12 @@ pub fn run() {
                     Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error>
                 })?;
 
-            // Seed demo data for first-time users (runs only if graph is empty)
-            match db.seed_demo_data() {
-                Ok(true) => println!("  🌱 Demo data seeded — graph ready for first-time users"),
-                Ok(false) => {} // Already has data
-                Err(e) => eprintln!("  ⚠️ Demo seed failed (non-critical): {}", e),
-            }
-
-            // ── You-Port: Auto-restore previous session if state file exists ──
-            if you_port::has_saved_state(&app_dir) {
+            let initialize_graph = db.stats().is_ok_and(|counts| {
+                should_initialize_graph_on_startup(database_existed, counts)
+            });
+            // Existing SQLite data, including a deliberate empty reset, is
+            // authoritative. Explicit imports remain available to the user.
+            if initialize_graph && you_port::has_saved_state(&app_dir) {
                 match you_port::load_state(&db, &app_dir) {
                     Ok(result) if result.success => {
                         println!("  ✅ You-Port: Restored {} nodes, {} edges from previous session",
@@ -3057,6 +3187,15 @@ pub fn run() {
                     Err(e) => {
                         eprintln!("  ⚠️ You-Port: Failed to restore state: {}", e);
                     }
+                }
+            }
+
+            // First-run examples do not repopulate a deliberately cleared DB.
+            if initialize_graph {
+                match db.seed_demo_data() {
+                    Ok(true) => println!("  🌱 Demo data seeded — graph ready for first-time users"),
+                    Ok(false) => {}
+                    Err(e) => eprintln!("  ⚠️ Demo seed failed (non-critical): {}", e),
                 }
             }
 

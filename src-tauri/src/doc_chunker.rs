@@ -24,9 +24,6 @@ const TOP_K_CHUNKS: usize = 5;
 /// Minimum document length (chars) to trigger chunking (below this, use full doc)
 const MIN_CHUNK_THRESHOLD: usize = 3000;
 
-/// Node type used for document chunks in the Spectrum Graph
-const CHUNK_NODE_TYPE: &str = "doc_chunk";
-
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,7 +89,7 @@ pub struct RagResult {
 /// (\n\n) near the chunk size, falling back to sentence boundaries (. ),
 /// then word boundaries, then raw character split.
 pub fn chunk_document(text: &str, source: &str) -> ChunkedDocument {
-    let total_chars = text.len();
+    let total_chars = text.chars().count();
 
     // If document is small enough, return it as a single chunk
     if total_chars <= MIN_CHUNK_THRESHOLD {
@@ -181,7 +178,7 @@ fn find_break_point(chars: &[char], start: usize, target: usize, text_len: usize
     // 1. Try paragraph break (\n\n)
     let slice: String = chars[search_start..target].iter().collect();
     if let Some(pos) = slice.rfind("\n\n") {
-        let break_at = search_start + pos + 2; // After the double newline
+        let break_at = search_start + slice[..pos].chars().count() + 2;
         if break_at > start {
             return break_at;
         }
@@ -379,40 +376,14 @@ pub fn index_chunks_to_graph(
     graph: &crate::spectrum_graph::SpectrumGraph,
     document: &ChunkedDocument,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut node_ids = Vec::new();
-
-    for chunk in &document.chunks {
-        let label = format!(
-            "📄 {} [chunk {}/{}]",
-            chunk.source,
-            chunk.chunk_index + 1,
-            chunk.total_chunks
-        );
-        let content = format!(
-            "Source: {}\nChunk: {}/{}\nChars: {}-{}\n\n{}",
-            chunk.source,
-            chunk.chunk_index + 1,
-            chunk.total_chunks,
-            chunk.char_start,
-            chunk.char_end,
-            chunk.content
-        );
-
-        let node = graph.add_node_with_layer(&label, &content, CHUNK_NODE_TYPE, "knowledge")?;
-        node_ids.push(node.id);
-    }
-
-    // Create edges between consecutive chunks for traversal
-    for i in 0..node_ids.len().saturating_sub(1) {
-        let _ = graph.add_edge(
-            &node_ids[i],
-            &node_ids[i + 1],
-            "next_chunk",
-            0.9,
-        );
-    }
-
-    Ok(node_ids)
+    let chunks: Vec<crate::spectrum_graph::SourceDocumentChunk> = document.chunks.iter()
+        .map(|chunk| crate::spectrum_graph::SourceDocumentChunk {
+            content: chunk.content.clone(),
+            char_start: chunk.char_start,
+            char_end: chunk.char_end,
+        })
+        .collect();
+    graph.index_document_source(&document.source, &chunks)
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────
@@ -456,6 +427,40 @@ mod tests {
             let c1_end = result.chunks[0].char_end;
             let c2_start = result.chunks[1].char_start;
             assert!(c2_start < c1_end, "Chunks should overlap");
+        }
+    }
+
+    #[test]
+    fn unicode_paragraph_breaks_use_character_offsets_and_preserve_text() {
+        let text = format!("{}\n\n{}", "界".repeat(1850), "🙂".repeat(1500));
+        let document = chunk_document(&text, "unicode.md");
+        let chars: Vec<char> = text.chars().collect();
+        assert_eq!(document.total_chars, chars.len());
+        assert_eq!(document.chunks[0].char_end, 1852);
+        for chunk in &document.chunks {
+            assert!(chunk.char_end <= chars.len());
+            assert_eq!(chunk.content, chars[chunk.char_start..chunk.char_end].iter().collect::<String>());
+        }
+        assert_eq!(document.chunks.last().unwrap().char_end, chars.len());
+        let short = chunk_document("日本語🙂", "short.md");
+        assert_eq!(short.total_chars, 4);
+        assert_eq!(short.chunks[0].char_end, 4);
+    }
+
+    #[test]
+    fn reindexing_links_chunks_to_source_without_duplicate_edges() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = crate::spectrum_graph::SpectrumGraph::new(directory.path()).unwrap();
+        let document = chunk_document(&"Verified fixture paragraph. ".repeat(220), "fixture.md");
+        let first = index_chunks_to_graph(&graph, &document).unwrap();
+        let before = graph.get_full_graph().unwrap();
+        let second = index_chunks_to_graph(&graph, &document).unwrap();
+        let after = graph.get_full_graph().unwrap();
+        assert_eq!(first, second);
+        assert_eq!(before.nodes.len(), after.nodes.len());
+        assert_eq!(before.edges.len(), after.edges.len());
+        for id in first {
+            assert!(after.edges.iter().any(|edge| edge.target_id == id && edge.relation == "has_chunk"));
         }
     }
 

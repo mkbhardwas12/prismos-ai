@@ -12,8 +12,11 @@ src-tauri/target/
 
 # Environment
 .env
-.env.local
-.env.*.local
+.env.*
+# Only reviewed, placeholder-only examples belong in public source.
+!.env.example
+!.env.sample
+!.env.template
 
 # IDE
 .vscode/
@@ -39,15 +42,21 @@ docs/screenshots/live/
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PRIVATE knowledge — keep on-device, NEVER push to the public repo.
-# These describe the user's private projects / live-money trading bot.
-# PrismOS still ingests them locally; they just must not be committed.
+# Personal project knowledge can be ingested locally, but must not be committed.
 # ─────────────────────────────────────────────────────────────────────────────
 knowledge/
+# Public, reviewed reference pack only. Personal knowledge/ remains ignored.
+!/resources/knowledge/
+/resources/knowledge/*
+!/resources/knowledge/reliable-local-assistant/
+/resources/knowledge/reliable-local-assistant/*
+!/resources/knowledge/reliable-local-assistant/*.md
+!/resources/knowledge/reliable-local-assistant/manifest.json
 PrismDocs/
+.prismos-private-terms
 
-# Local AI-agent config + project guide. CLAUDE.md and the skills describe the
-# owner's private portfolio, live-money trading bot, local paths and secrets —
-# local-only tooling, NEVER push to the public repo. (polyedgebot-ops lives here.)
+# Local AI-agent configuration and project guides may include private project
+# details, local paths or credentials. Never push them to the public repo.
 CLAUDE.md
 .claude/
 
@@ -70,6 +79,10 @@ venv/
 *.db-shm
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
 # App data directory (knowledge graph, profile, audit log) if ever copied into repo
 **/com.prismos.app/
 # Brain / memory exports & dumps
@@ -79,6 +92,10 @@ spectrum_export*.json
 cognitive_profile*.json
 conversation*.json
 memory_dump*.json
+# Actual graph/handoff filenames (encrypted exports are still PRIVATE).
+*.prismos
+*.prismos-sync
+prismos-handoff.state
 
 # Self-improvement flywheel — harvested PERSONAL Q&A + fine-tuned weights
 scripts/flywheel/data/
@@ -101,3 +118,8 @@ npm-debug.log*
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local scratch: stale git locks + repo-history bundles. NEVER push — a bundle
+# carries full history, including anything scrubbed from the public tree.
+_to_delete/
+*.bundle

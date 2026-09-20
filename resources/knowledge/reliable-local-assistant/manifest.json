@@ -1,0 +1,66 @@
+{
+  "format": "prismos-knowledge-pack-v1",
+  "pack_id": "reliable-local-assistant",
+  "documents": [
+    {
+      "file": "artifact-quality.md",
+      "reviewed": true,
+      "sha256": "710caaa74875a139378cd5be51998e3064f3d0e3e84423a6ec8805bef8cf49bb"
+    },
+    {
+      "file": "evaluation.md",
+      "reviewed": true,
+      "sha256": "79fe1133f63e54e34d851ad5d66d2e409735958e0fc064f813c4206f02a9a65d"
+    },
+    {
+      "file": "evidence.md",
+      "reviewed": true,
+      "sha256": "b25bec6063632f61cc4446689439c89c6a7949e8f21d41939ac7f425680e663a"
+    },
+    {
+      "file": "knowledge-graph.md",
+      "reviewed": true,
+      "sha256": "9cc26f9c747412a4a22d08a6137fb1a472c321f923b5767919ff2ff84f78e912"
+    },
+    {
+      "file": "model-capabilities.md",
+      "reviewed": true,
+      "sha256": "df700e2b3bbf56edf6ecc5bb37ec9fe05067ca2a9476ae2815dbc8bde65a3aea"
+    },
+    {
+      "file": "orchestration.md",
+      "reviewed": true,
+      "sha256": "2c0ec74a92c9c083e528941c3ab79c565d83b53ea7c50e3ee91b2d4c270209a4"
+    },
+    {
+      "file": "privacy.md",
+      "reviewed": true,
+      "sha256": "4373fc0f889c1ccfe0d200e1826655687a90fae6b23aebdb4ffbe61169fa91c1"
+    },
+    {
+      "file": "reasoning.md",
+      "reviewed": true,
+      "sha256": "67554ad7d63f85c89c3029523ec72d3a850cfb4d2726ba1d39ecc1e60973777f"
+    },
+    {
+      "file": "recovery.md",
+      "reviewed": true,
+      "sha256": "8b17eb02146938cd4d42a255d503657b80f2af54a0ff3c2fe616dcf777378939"
+    },
+    {
+      "file": "retrieval.md",
+      "reviewed": true,
+      "sha256": "787ae9fbaca333ec7374c963b2d64bde925785d67d0b67b31b7370dfc600d992"
+    },
+    {
+      "file": "sap-planning.md",
+      "reviewed": true,
+      "sha256": "1befb197ba15f021347d549610e564b362b785afb53fb9860e7dd33fb622afd1"
+    },
+    {
+      "file": "structured-output.md",
+      "reviewed": true,
+      "sha256": "ba882a40972d720348359522f692d0f3cf18146a84c45762113f34124b21f807"
+    }
+  ]
+}

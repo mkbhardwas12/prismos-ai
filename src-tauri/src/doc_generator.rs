@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 // ─── Spec types (produced by the LLM, deserialized here) ─────────────────────
 
@@ -160,22 +160,44 @@ pub(crate) fn safe_stem(title: &str, fallback: &str) -> String {
 
 /// Resolve the output directory, preferring Downloads, then Desktop, then home.
 pub(crate) fn output_dir() -> PathBuf {
+    // Unit tests must never create or remove files in a user's Downloads.
+    #[cfg(test)]
+    {
+        thread_local! {
+            static TEST_OUTPUT: tempfile::TempDir = tempfile::tempdir().expect("temporary artifact output");
+        }
+        return TEST_OUTPUT.with(|dir| dir.path().to_path_buf());
+    }
+    #[cfg(not(test))]
     dirs::download_dir()
         .or_else(dirs::desktop_dir)
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// Build a unique, non-clobbering path in the output dir for `<stem>.<ext>`.
-fn unique_path(stem: &str, ext: &str) -> PathBuf {
+/// Atomically reserve a private file: parallel requests must not overwrite one
+/// another or follow a pre-existing symlink after an existence check.
+fn reserve_output(stem: &str, ext: &str) -> Result<(PathBuf, std::fs::File), String> {
     let dir = output_dir();
     let mut candidate = dir.join(format!("{stem}.{ext}"));
     let mut n = 2;
-    while candidate.exists() {
-        candidate = dir.join(format!("{stem}-{n}.{ext}"));
-        n += 1;
+    loop {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&candidate) {
+            Ok(file) => return Ok((candidate, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                candidate = dir.join(format!("{stem}-{n}.{ext}"));
+                n += 1;
+            }
+            Err(error) => return Err(format!("Failed to reserve artifact file: {error}")),
+        }
     }
-    candidate
 }
 
 // ─── Generic text files (.html / .md / .txt / .csv / .json / .svg) ───────────
@@ -197,8 +219,8 @@ pub fn generate_text_file(title: &str, ext: &str, content: &str) -> Result<Gener
         return Err("Refusing to write an empty file.".to_string());
     }
     let stem = safe_stem(title, "generated-file");
-    let path = unique_path(&stem, &ext);
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {e}"))?;
+    let (path, mut file) = reserve_output(&stem, &ext)?;
+    file.write_all(content.as_bytes()).map_err(|e| format!("Failed to write file: {e}"))?;
     Ok(GeneratedFile {
         path: path.to_string_lossy().to_string(),
         filename: path
@@ -274,10 +296,7 @@ pub fn generate_docx(spec: &WordSpec) -> Result<GeneratedFile, String> {
     }
 
     let stem = safe_stem(&spec.title, "document");
-    let path = unique_path(&stem, "docx");
-
-    let file = std::fs::File::create(&path)
-        .map_err(|e| format!("Failed to create docx file: {e}"))?;
+    let (path, file) = reserve_output(&stem, "docx")?;
     docx.build()
         .pack(file)
         .map_err(|e| format!("Failed to write docx: {e}"))?;
@@ -320,9 +339,8 @@ pub fn generate_pptx(spec: &DeckSpec) -> Result<GeneratedFile, String> {
     }
 
     let stem = safe_stem(&spec.title, "presentation");
-    let path = unique_path(&stem, "pptx");
-
-    write_pptx(&path, &slides)?;
+    let (path, file) = reserve_output(&stem, "pptx")?;
+    write_pptx(file, &slides)?;
 
     Ok(GeneratedFile {
         filename: path
@@ -341,12 +359,10 @@ struct RenderSlide {
     spec: SlideSpec,
 }
 
-/// Write the full OOXML presentation package to `path`.
-fn write_pptx(path: &Path, slides: &[RenderSlide]) -> Result<(), String> {
+/// Write the full OOXML presentation package to the exclusively reserved file.
+fn write_pptx(file: std::fs::File, slides: &[RenderSlide]) -> Result<(), String> {
     use zip::write::SimpleFileOptions;
 
-    let file = std::fs::File::create(path)
-        .map_err(|e| format!("Failed to create pptx file: {e}"))?;
     let mut zip = zip::ZipWriter::new(file);
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 

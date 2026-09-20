@@ -1569,9 +1569,9 @@ mod tests {
 
     #[test]
     fn test_sandbox_execute_approved_action() {
-        let result = sandbox_execute("read graph node status check", "orchestrator");
-        assert!(result.success || !result.success, "should not panic");
-        // May succeed or fail based on classification matching
+        // May succeed or fail based on classification matching — the contract
+        // under test is only that the pipeline completes without panicking.
+        let _ = sandbox_execute("read graph node status check", "orchestrator");
     }
 
     #[test]

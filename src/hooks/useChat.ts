@@ -7,6 +7,7 @@ import { detectAppRequest, detectDocRequest, detectFileRequest, generateAppProje
 import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 import { buildErrorMessage } from "../lib/errors";
+import { collectArtifactContext } from "../lib/artifactContext";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -15,19 +16,6 @@ interface UseChatOptions {
   voiceEnabled: boolean;
   voiceSpeak: (text: string) => void;
   refreshSuggestions: (input: string, msgId: string) => Promise<void>;
-}
-
-// Retry wrapper for API calls (up to 2 retries with exponential backoff)
-async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await fn();
-    } catch (e) {
-      if (attempt === retries) throw e;
-      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-    }
-  }
-  throw new Error("Unreachable");
 }
 
 export function useChat({
@@ -142,6 +130,31 @@ export function useChat({
     clearLiveSteps();
 
     try {
+      // Artifact intent takes priority over attachment analysis: an attached
+      // document is source material for the requested file, not a different task.
+      const requestedDocument = detectDocRequest(input);
+      if (requestedDocument && !imageData && !detectReviewRequest(input)) {
+        setProcessingPhase("Retrieving local source material…");
+        const recent = messages.slice(-4).map((m) => `${m.role}: ${m.content}`).join("\n");
+        const context = await collectArtifactContext(input, recent, documentText);
+        const attachment = await generateDocument(requestedDocument, input, {
+          model: settings.defaultModel || "mistral",
+          ollamaUrl: null,
+          maxTokens: settings.maxTokens || 4096,
+          context,
+          onPhase: setProcessingPhase,
+        });
+        const kindLabel = requestedDocument === "pptx" ? "PowerPoint presentation" : "Word document";
+        const aiMsg: Message = {
+          id: crypto.randomUUID(), role: "ai", timestamp: new Date(),
+          content: `Created your ${kindLabel}: **${attachment.filename}**.\n\nSaved locally and drafted from available context; technical claims still require review.`,
+          agent: requestedDocument === "pptx" ? "Presentation Builder" : "Document Writer", attachment,
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        onIntentProcessed(aiMsg.agent);
+        await refreshSuggestions(input, aiMsg.id);
+        return;
+      }
       // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
       if (documentText) {
         setProcessingPhase("Checking Ollama connection…");
@@ -290,47 +303,6 @@ export function useChat({
           return;
         }
 
-        // ── Document / presentation generation path ──
-        // If the user asks to create a Word doc or PowerPoint, produce a real
-        // file locally instead of just answering in chat.
-        const docKind = detectDocRequest(input);
-        if (docKind) {
-          setProcessingPhase("Checking Ollama connection…");
-          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
-          if (!ollamaOk) {
-            throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
-          }
-
-          // Recent conversation, so "create a doc on this" knows what "this" is.
-          const recentContext = messages
-            .slice(-4)
-            .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-            .join("\n")
-            .slice(-1600);
-
-          const attachment = await generateDocument(docKind, input, {
-            model: settings.defaultModel || "mistral",
-            ollamaUrl: settings.ollamaUrl || null,
-            maxTokens: settings.maxTokens || 4096,
-            context: recentContext || undefined,
-            onPhase: setProcessingPhase,
-          });
-
-          const kindLabel = docKind === "pptx" ? "PowerPoint presentation" : "Word document";
-          const aiMsg: Message = {
-            id: crypto.randomUUID(),
-            role: "ai",
-            content: `✅ Created your ${kindLabel} — **${attachment.filename}** — and saved it to your Downloads folder.\n\n───\n📎 ${docKind.toUpperCase()} · generated locally · 100% private`,
-            timestamp: new Date(),
-            agent: docKind === "pptx" ? "Presentation Builder" : "Document Writer",
-            attachment,
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-          onIntentProcessed(aiMsg.agent);
-          await refreshSuggestions(input, aiMsg.id);
-          return;
-        }
-
         // ── App Builder path — multi-file static web apps, built and opened ──
         if (detectAppRequest(input)) {
           setProcessingPhase("Checking Ollama connection…");
@@ -345,13 +317,14 @@ export function useChat({
             .join("\n")
             .slice(-1600);
 
-          const appInfo = await generateAppProject(input, {
+          const appResult = await generateAppProject(input, {
             model: settings.defaultModel || "mistral",
             ollamaUrl: settings.ollamaUrl || null,
             maxTokens: settings.maxTokens || 4096,
             context: recentContext || undefined,
             onPhase: setProcessingPhase,
           });
+          const appInfo = appResult.info;
 
           setProcessingPhase("Opening in your browser…");
           try {
@@ -361,10 +334,31 @@ export function useChat({
           }
 
           const fileList = appInfo.files.map((f) => `  • ${f}`).join("\n");
+          // Honest end-to-end checklist: what shipped vs what is left.
+          const verdictIcon = { done: "✅", partial: "⚠️", missing: "❌" } as const;
+          const checklist = appResult.features.length
+            ? "\n\n**End-to-end check:**\n" +
+              appResult.features
+                .map((f) => {
+                  const note = f.status !== "done" && f.note ? ` — ${f.note}` : "";
+                  return `${verdictIcon[f.status]} ${f.name}${note}`;
+                })
+                .join("\n")
+            : "";
+          const leftover = appResult.features.filter((f) => f.status !== "done");
+          const repairedLine = appResult.repairedCount
+            ? `\n\n🔧 Self-check caught issues mid-build — auto-fixed ${appResult.repairedCount} file(s) before shipping.`
+            : "";
+          const followUp =
+            (leftover.length
+              ? `\n\n**Left to do:** ${leftover.map((f) => f.name).join(" · ")} — say *"add ${leftover[0].name.toLowerCase()}"* and I'll extend the project.`
+              : appResult.features.length
+                ? "\n\nEverything planned made it in."
+                : "") + repairedLine;
           const aiMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",
-            content: `🚀 Built **${appInfo.name}** — ${appInfo.files.length} files, opened in your browser.\n\nProject folder: Downloads/prismos-apps\n${fileList}\n\nWant changes? Describe them and I'll rebuild. For a quick review, say *"read my screen and conclude"* with it open.\n\n───\n🛠️ App Builder · generated locally · 100% private`,
+            content: `🚀 Built **${appInfo.name}** — ${appInfo.files.length} files, opened in your browser.\n\nProject folder: Downloads/prismos-apps\n${fileList}${checklist}${followUp}\n\nWant changes? Describe them and I'll rebuild. For a quick review, say *"read my screen and conclude"* with it open.\n\n───\n🛠️ App Builder · generated locally · 100% private`,
             timestamp: new Date(),
             agent: "App Builder",
           };
@@ -537,16 +531,17 @@ export function useChat({
 
         // ── Standard text path (Refractive Core pipeline) ──
         try {
-          const resultJson = await withRetry(() => invoke<string>("refract_intent", { input, model: settings.defaultModel || "mistral" }));
+          // This pipeline updates memory. Retrying it wholesale can repeat those
+          // writes and silently switching pipelines/models hides the real error.
+          const resultJson = await invoke<string>("refract_intent", { input, model: settings.defaultModel || "mistral" });
           const result: RefractiveResult = JSON.parse(resultJson);
 
           // Build a clean, minimal footer — no internal debug info
           const timeSec = result.processing_time_ms
             ? `${(result.processing_time_ms / 1000).toFixed(1)}s`
             : "";
-          const consensusIcon = result.collaboration?.consensus_approved ? "✅" : "🛡️";
           const metaLine = timeSec
-            ? `\n\n───\n${consensusIcon} ${timeSec} · ${settings.defaultModel || "local"} · 100% private`
+            ? `\n\n───\n${timeSec} · local inference · factual claims not independently verified`
             : "";
 
           const aiContent = result.response + metaLine;
@@ -564,7 +559,7 @@ export function useChat({
               natural_band: result.natural_band || result.agent_used || "default",
               applied_band: result.applied_band || result.agent_used || "default",
               context_nodes_used: result.context_nodes?.length ?? 0,
-              model_used: settings.defaultModel || "local",
+              model_used: "local (routing not reported)",
               domain_detected: result.domain_detected || "General",
             },
           };
@@ -592,21 +587,7 @@ export function useChat({
           generateRefractionAlternative(input, aiMsg.id);
 
         } catch (e) {
-          // Fallback to legacy process_intent if refract_intent fails
-          try {
-            const response = await invoke<string>("process_intent", { input });
-            const aiMsg: Message = {
-              id: crypto.randomUUID(),
-              role: "ai",
-              content: response,
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, aiMsg]);
-            onIntentProcessed();
-            await refreshSuggestions(input, aiMsg.id);
-          } catch (fallbackErr) {
-            setMessages((prev) => [...prev, buildErrorMessage(fallbackErr, settings)]);
-          }
+          setMessages((prev) => [...prev, buildErrorMessage(e, settings)]);
         }
       }
     } catch (err) {

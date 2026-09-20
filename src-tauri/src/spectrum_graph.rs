@@ -11,9 +11,10 @@
 // Edges carry dynamic intent weights updated through closed-loop feedback.
 
 use chrono::{DateTime, Utc, Timelike};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use uuid::Uuid;
 
@@ -78,7 +79,7 @@ pub struct AnticipatedNeed {
     pub reasoning: String,
 }
 
-/// A proactive suggestion — structured, actionable, stored in the graph
+/// A display-only proactive suggestion. Showing a card does not make it knowledge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProactiveSuggestion {
     pub id: String,
@@ -100,6 +101,14 @@ pub struct IntentQueryResult {
     pub relevance_score: f64,
     pub path_strength: f64,
     pub temporal_boost: f64,
+}
+
+/// Source-backed text spans supplied by the local document chunker.
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceDocumentChunk {
+    pub content: String,
+    pub char_start: usize,
+    pub char_end: usize,
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -124,6 +133,122 @@ pub struct SpectrumGraph {
 }
 
 impl SpectrumGraph {
+    /// Reconcile one source atomically. IDs are stable across reimports; source
+    /// text is evidence, not an instruction or a claim of factual verification.
+    /// Obsolete chunks remain available for historical/user links, but are not
+    /// eligible for retrieval. No existing unrelated nodes or edges are removed.
+    pub fn index_document_source(
+        &self,
+        source: &str,
+        chunks: &[SourceDocumentChunk],
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        if source.trim().is_empty() || source.len() > 8192 || source.contains(['\n', '\r', '\0']) {
+            return Err("Document source must be a nonempty single-line identifier".into());
+        }
+        if chunks.is_empty() || chunks.len() > 40_000 {
+            return Err("Document must contain a bounded set of text chunks".into());
+        }
+        let mut previous_start = 0;
+        let mut previous_end = 0;
+        let mut bytes = 0usize;
+        for (index, chunk) in chunks.iter().enumerate() {
+            bytes = bytes.saturating_add(chunk.content.len());
+            if chunk.char_end < chunk.char_start
+                || chunk.char_end - chunk.char_start != chunk.content.chars().count()
+                || (index == 0 && chunk.char_start != 0)
+                || (index > 0 && (chunk.char_start <= previous_start || chunk.char_start > previous_end || chunk.char_end <= previous_end))
+                || bytes > 64 * 1024 * 1024
+            {
+                return Err("Invalid or oversized document chunk spans".into());
+            }
+            previous_start = chunk.char_start;
+            previous_end = chunk.char_end;
+        }
+        if bytes == 0 { return Err("Document contains no text".into()); }
+
+        let digest = format!("{:x}", Sha256::digest(source.as_bytes()));
+        let document_id = format!("docsrc-{digest}");
+        let chunk_prefix = format!("{document_id}-chunk-");
+        let payload_hash = format!("{:x}", Sha256::digest(serde_json::to_vec(chunks)?));
+        let excerpt: String = chunks[0].content.chars().take(350).collect();
+        let document_content = format!(
+            "Source: {source}\nContent SHA-256: {payload_hash}\nChunks: {}\nCharacters: {previous_end}\nEvidence: imported source text; not independently verified\n\n{excerpt}",
+            chunks.len()
+        );
+        let now = Utc::now().to_rfc3339();
+        let tx = rusqlite::Transaction::new_unchecked(&self.conn, rusqlite::TransactionBehavior::Immediate)?;
+        let upsert_node = |id: &str, label: &str, content: &str, node_type: &str| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            let existing: Option<(String, String)> = tx.query_row(
+                "SELECT node_type, content FROM nodes WHERE id=?1", params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            ).optional()?;
+            if let Some((kind, old_content)) = existing {
+                if !matches!(kind.as_str(), "document" | "doc_chunk" | "doc_chunk_retired")
+                    || !old_content.starts_with(&format!("Source: {source}\n"))
+                { return Err("Document import conflicts with an existing node identity".into()); }
+            }
+            tx.execute(
+                "INSERT INTO nodes (id,label,content,node_type,layer,access_count,last_accessed,created_at,updated_at)
+                 VALUES (?1,?2,?3,?4,'knowledge',0,?5,?5,?5)
+                 ON CONFLICT(id) DO UPDATE SET label=excluded.label, content=excluded.content,
+                    node_type=excluded.node_type, layer=excluded.layer, embedding=NULL, updated_at=excluded.updated_at
+                 WHERE nodes.label != excluded.label OR nodes.content != excluded.content
+                    OR nodes.node_type != excluded.node_type OR nodes.layer != excluded.layer",
+                params![id,label,content,node_type,now],
+            )?;
+            Ok(())
+        };
+        upsert_node(&document_id, &format!("📄 {source}"), &document_content, "document")?;
+        let mut node_ids = Vec::with_capacity(chunks.len());
+        for (index, chunk) in chunks.iter().enumerate() {
+            let id = format!("{chunk_prefix}{index}");
+            let content = format!("Source: {source}\nChunk: {}/{}\nChars: {}-{}\n\n{}",
+                index + 1, chunks.len(), chunk.char_start, chunk.char_end, chunk.content);
+            upsert_node(&id, &format!("📄 {source} [chunk {}/{}]", index + 1, chunks.len()), &content, "doc_chunk")?;
+            node_ids.push(id);
+        }
+        let current: HashSet<&str> = node_ids.iter().map(String::as_str).collect();
+        let old_chunks: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT n.id FROM nodes n JOIN edges e ON e.target_id=n.id
+                 WHERE e.source_id=?1 AND e.relation IN ('has_chunk','previous_chunk')
+                 AND n.node_type IN ('doc_chunk','doc_chunk_retired')"
+            )?;
+            let rows = stmt.query_map(params![document_id], |row| row.get(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        for old_id in old_chunks {
+            if old_id.starts_with(&chunk_prefix) && !current.contains(old_id.as_str()) {
+                tx.execute("UPDATE nodes SET node_type='doc_chunk_retired', layer='ephemeral' WHERE id=?1", params![old_id])?;
+                tx.execute("UPDATE edges SET relation='previous_chunk' WHERE id=?1 AND source_id=?2 AND target_id=?3",
+                    params![format!("{old_id}-source"), document_id, old_id])?;
+                tx.execute("UPDATE edges SET relation='previous_chunk_sequence' WHERE id=?1 AND target_id=?2",
+                    params![format!("{old_id}-previous"), old_id])?;
+            }
+        }
+        for (index, id) in node_ids.iter().enumerate() {
+            for (edge_id, from, to, relation) in std::iter::once((format!("{id}-source"), document_id.as_str(), id.as_str(), "has_chunk"))
+                .chain((index > 0).then(|| (format!("{id}-previous"), node_ids[index - 1].as_str(), id.as_str(), "next_chunk")))
+            {
+                let existing: Option<(String,String)> = tx.query_row(
+                    "SELECT source_id,target_id FROM edges WHERE id=?1", params![edge_id],
+                    |row| Ok((row.get(0)?,row.get(1)?)),
+                ).optional()?;
+                if existing.is_some_and(|(a,b)| a != from || b != to) {
+                    return Err("Document import conflicts with an existing edge identity".into());
+                }
+                tx.execute(
+                    "INSERT INTO edges (id,source_id,target_id,relation,weight,momentum,reinforcements,last_reinforced,created_at)
+                     VALUES (?1,?2,?3,?4,0.9,0,0,?5,?5)
+                     ON CONFLICT(id) DO UPDATE SET relation=excluded.relation WHERE edges.relation != excluded.relation",
+                    params![edge_id,from,to,relation,now],
+                )?;
+            }
+        }
+        tx.commit()?;
+        Ok(node_ids)
+    }
+
     /// Initialize the Spectrum Graph with full multi-layered SQLite backend
     pub fn new(app_dir: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let db_path = app_dir.join("spectrum_graph.db");
@@ -415,9 +540,9 @@ impl SpectrumGraph {
     }
 
     /// Add a node with explicit layer assignment.
-    /// **Deduplicates**: if a node with the same label AND node_type already exists,
-    /// it updates the content and bumps access_count + updated_at instead of
-    /// creating a duplicate. Returns the existing node in that case.
+    /// Reuses only an exact label, type, content and layer match. Source metadata
+    /// embedded in document content is part of that identity, so similarly named
+    /// files and distinct knowledge fragments remain separate nodes.
     pub fn add_node_with_layer(
         &self,
         label: &str,
@@ -427,25 +552,25 @@ impl SpectrumGraph {
     ) -> Result<SpectrumNode, Box<dyn std::error::Error + Send + Sync>> {
         let now = Utc::now().to_rfc3339();
 
-        // ── Dedup check: same label + node_type → update instead of insert ──
+        // Repeated ingestion can refresh an identical fragment, never merge
+        // different contents or layers merely because their labels match.
         let existing: Option<String> = self.conn.prepare(
-            "SELECT id FROM nodes WHERE label = ?1 AND node_type = ?2 LIMIT 1",
+            "SELECT id FROM nodes
+             WHERE label = ?1 AND node_type = ?2 AND content = ?3 AND layer = ?4
+             ORDER BY created_at, id LIMIT 1",
         )?
-        .query_row(params![label, node_type], |row| row.get::<_, String>(0))
-        .ok();
+        .query_row(params![label, node_type, content, layer], |row| row.get::<_, String>(0))
+        .optional()?;
 
         if let Some(existing_id) = existing {
-            // Merge: append new content if different, bump access + timestamp
             self.conn.execute(
                 "UPDATE nodes SET access_count = access_count + 1,
-                                  last_accessed = ?1, updated_at = ?1,
-                                  content = CASE WHEN content = ?2 THEN content
-                                                 ELSE content || '\n---\n' || ?2 END
-                 WHERE id = ?3",
-                params![now, content, existing_id],
+                                  last_accessed = ?1, updated_at = ?1
+                 WHERE id = ?2",
+                params![now, existing_id],
             )?;
 
-            if let Some(node) = self.get_node(&existing_id)? {
+            if let Some(node) = self.get_node_without_access(&existing_id)? {
                 return Ok(node);
             }
         }
@@ -480,7 +605,7 @@ impl SpectrumGraph {
             "SELECT id, label, content, node_type,
                     COALESCE(layer, 'context'), COALESCE(access_count, 0),
                     COALESCE(last_accessed, updated_at), created_at, updated_at
-             FROM nodes ORDER BY updated_at DESC LIMIT 500",
+             FROM nodes ORDER BY updated_at DESC, id",
         )?;
 
         let mut nodes: Vec<SpectrumNode> = stmt
@@ -501,30 +626,17 @@ impl SpectrumGraph {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Populate connections for all nodes in a single query (avoids N+1)
-        let node_ids: Vec<String> = nodes.iter().map(|n| n.id.clone()).collect();
-        if !node_ids.is_empty() {
-            let placeholders: String = node_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            let sql = format!(
-                "SELECT source_id, target_id FROM edges WHERE source_id IN ({p}) OR target_id IN ({p})",
-                p = placeholders
-            );
-            let mut edge_stmt = self.conn.prepare(&sql)?;
-            // Build params: each node_id appears twice (for source_id IN + target_id IN)
-            let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-            for id in &node_ids {
-                params.push(Box::new(id.clone()));
-            }
-            for id in &node_ids {
-                params.push(Box::new(id.clone()));
-            }
-            let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-
+        if !nodes.is_empty() {
+            // This is a complete node read, so a complete edge read avoids both
+            // per-node queries and SQLite's bound-parameter limit on large graphs.
+            let mut edge_stmt = self.conn.prepare(
+                "SELECT source_id, target_id FROM edges ORDER BY id",
+            )?;
             let edges: Vec<(String, String)> = edge_stmt
-                .query_map(param_refs.as_slice(), |row| {
+                .query_map([], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })?
-                .filter_map(|r| r.ok())
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
 
             // Build a lookup: node_id → list of connected node_ids
             let mut conn_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
@@ -536,6 +648,8 @@ impl SpectrumGraph {
             for node in &mut nodes {
                 if let Some(conns) = conn_map.remove(&node.id) {
                     node.connections = conns;
+                    node.connections.sort();
+                    node.connections.dedup();
                 }
             }
         }
@@ -692,7 +806,7 @@ impl SpectrumGraph {
         })
     }
 
-    /// Get or create an edge between two nodes (upsert pattern)
+    /// Get or create an exact directed (source, target, relation) edge.
     /// Returns `(edge, was_created)` — `was_created` is true only when a new edge was inserted.
     pub fn get_or_create_edge(
         &self,
@@ -700,17 +814,39 @@ impl SpectrumGraph {
         target_id: &str,
         relation: &str,
     ) -> Result<(SpectrumEdge, bool), Box<dyn std::error::Error + Send + Sync>> {
-        // Check if edge already exists
+        self.get_or_create_edge_with_direction(source_id, target_id, relation, false)
+    }
+
+    /// Reuse either orientation only for an explicitly symmetric relationship.
+    /// Other relation names between the same nodes remain independent edges.
+    pub fn get_or_create_undirected_edge(
+        &self,
+        source_id: &str,
+        target_id: &str,
+        relation: &str,
+    ) -> Result<(SpectrumEdge, bool), Box<dyn std::error::Error + Send + Sync>> {
+        self.get_or_create_edge_with_direction(source_id, target_id, relation, true)
+    }
+
+    fn get_or_create_edge_with_direction(
+        &self,
+        source_id: &str,
+        target_id: &str,
+        relation: &str,
+        allow_reverse: bool,
+    ) -> Result<(SpectrumEdge, bool), Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source_id, target_id, relation, weight,
                     COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
                     COALESCE(last_reinforced, created_at), created_at
              FROM edges
-             WHERE (source_id = ?1 AND target_id = ?2) OR (source_id = ?2 AND target_id = ?1)
-             LIMIT 1",
+             WHERE relation = ?3
+               AND ((source_id = ?1 AND target_id = ?2)
+                 OR (?4 AND source_id = ?2 AND target_id = ?1))
+             ORDER BY created_at ASC, id LIMIT 1",
         )?;
 
-        let mut rows = stmt.query_map(params![source_id, target_id], |row| {
+        let mut rows = stmt.query_map(params![source_id, target_id, relation, allow_reverse], |row| {
             Ok(SpectrumEdge {
                 id: row.get(0)?,
                 source_id: row.get(1)?,
@@ -847,7 +983,7 @@ impl SpectrumGraph {
             "SELECT id, source_id, target_id, relation, weight,
                     COALESCE(momentum, 0.0), COALESCE(reinforcements, 0),
                     COALESCE(last_reinforced, created_at), created_at
-             FROM edges ORDER BY weight DESC LIMIT 1000",
+             FROM edges ORDER BY weight DESC, id",
         )?;
 
         let edges = stmt
@@ -931,7 +1067,8 @@ impl SpectrumGraph {
                 "SELECT id, label, content, node_type,
                         COALESCE(layer, 'context'), COALESCE(access_count, 0),
                         COALESCE(last_accessed, updated_at), created_at, updated_at
-                 FROM nodes WHERE label LIKE ?1 OR content LIKE ?1
+                 FROM nodes WHERE (label LIKE ?1 OR content LIKE ?1)
+                   AND node_type NOT IN ('suggestion', 'doc_chunk_retired')
                  LIMIT 30",
             )?;
 
@@ -994,6 +1131,7 @@ impl SpectrumGraph {
                 } else if effective_weight > 0.3 {
                     // Pull in strongly connected neighbors not yet in results
                     if let Ok(Some(neighbor)) = self.get_node_without_access(neighbor_id) {
+                        if matches!(neighbor.node_type.as_str(), "suggestion" | "doc_chunk_retired") { continue; }
                         let temporal_boost = self.calculate_temporal_boost(&neighbor.updated_at);
                         results.push(IntentQueryResult {
                             relevance_score: 0.2,
@@ -1034,51 +1172,54 @@ impl SpectrumGraph {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  DEDUPLICATE NODES — Clean up duplicate label+type entries
+    //  DEDUPLICATE NODES — Consolidate identical knowledge fragments
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Merge duplicate nodes (same label + node_type) into one.
-    /// Keeps the oldest node, merges content, sums access_count,
-    /// re-points edges, and deletes the extras. Returns count merged.
+    /// Consolidate exact label, type, content and layer duplicates atomically.
+    /// Keeps the oldest identity and re-points relationships. Distinct content
+    /// (including document paths/source metadata) is never discarded. Historical
+    /// suggestion records are retained unchanged, not cleaned up automatically.
     pub fn deduplicate_nodes(
         &self,
     ) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
-        // Find groups of duplicates
-        let mut stmt = self.conn.prepare(
-            "SELECT label, node_type, COUNT(*) AS cnt
+        let tx = self.conn.unchecked_transaction()?;
+        let mut stmt = tx.prepare(
+            "SELECT label, node_type, content, layer
              FROM nodes
-             GROUP BY label, node_type
-             HAVING cnt > 1
-             ORDER BY cnt DESC",
+             WHERE node_type != 'suggestion'
+             GROUP BY label, node_type, content, layer
+             HAVING COUNT(*) > 1
+             ORDER BY label, node_type, content, layer",
         )?;
 
-        let dup_groups: Vec<(String, String, u32)> = stmt
+        let dup_groups: Vec<(String, String, String, String)> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
-                    row.get::<_, u32>(2)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
 
         let mut total_merged: u32 = 0;
 
-        for (label, node_type, _count) in &dup_groups {
+        for (label, node_type, content, layer) in &dup_groups {
             // Get all nodes in this group, oldest first
-            let mut grp = self.conn.prepare(
-                "SELECT id, content, COALESCE(access_count, 0)
+            let mut grp = tx.prepare(
+                "SELECT id, COALESCE(access_count, 0)
                  FROM nodes
-                 WHERE label = ?1 AND node_type = ?2
-                 ORDER BY created_at ASC",
+                 WHERE label = ?1 AND node_type = ?2 AND content = ?3 AND layer = ?4
+                 ORDER BY created_at ASC, id",
             )?;
 
-            let members: Vec<(String, String, u32)> = grp
-                .query_map(params![label, node_type], |row| {
+            let members: Vec<(String, u32)> = grp
+                .query_map(params![label, node_type, content, layer], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, u32>(2)?,
+                        row.get::<_, u32>(1)?,
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -1088,47 +1229,46 @@ impl SpectrumGraph {
             }
 
             let keeper_id = &members[0].0;
-            let mut total_access: u32 = members[0].2;
+            let mut total_access: u32 = members[0].1;
 
             for dup in &members[1..] {
                 let dup_id = &dup.0;
-                total_access += dup.2;
+                total_access = total_access.checked_add(dup.1)
+                    .ok_or("Cannot consolidate graph nodes: access count overflow")?;
+
+                // Only relationships between the identities being consolidated
+                // become redundant self-loops. Preserve unrelated self-edges.
+                tx.execute(
+                    "DELETE FROM edges
+                     WHERE (source_id = ?1 AND target_id = ?2)
+                        OR (source_id = ?2 AND target_id = ?1)",
+                    params![keeper_id, dup_id],
+                )?;
 
                 // Re-point edges from duplicate → keeper
-                self.conn.execute(
-                    "UPDATE OR IGNORE edges SET source_id = ?1 WHERE source_id = ?2",
+                tx.execute(
+                    "UPDATE edges SET source_id = ?1 WHERE source_id = ?2",
                     params![keeper_id, dup_id],
                 )?;
-                self.conn.execute(
-                    "UPDATE OR IGNORE edges SET target_id = ?1 WHERE target_id = ?2",
+                tx.execute(
+                    "UPDATE edges SET target_id = ?1 WHERE target_id = ?2",
                     params![keeper_id, dup_id],
-                )?;
-
-                // Delete orphan edges that now point to same node on both sides
-                self.conn.execute(
-                    "DELETE FROM edges WHERE source_id = target_id",
-                    [],
-                )?;
-
-                // Delete duplicate edges that couldn't be re-pointed (OR IGNORE skipped them)
-                self.conn.execute(
-                    "DELETE FROM edges WHERE source_id = ?1 OR target_id = ?1",
-                    params![dup_id],
                 )?;
 
                 // Delete the duplicate node
-                self.conn.execute("DELETE FROM nodes WHERE id = ?1", params![dup_id])?;
+                tx.execute("DELETE FROM nodes WHERE id = ?1", params![dup_id])?;
                 total_merged += 1;
             }
 
             // Update keeper with merged access count
             let now = Utc::now().to_rfc3339();
-            self.conn.execute(
+            tx.execute(
                 "UPDATE nodes SET access_count = ?1, updated_at = ?2 WHERE id = ?3",
                 params![total_access, now, keeper_id],
             )?;
         }
 
+        tx.commit()?;
         Ok(total_merged)
     }
 
@@ -1155,6 +1295,7 @@ impl SpectrumGraph {
              JOIN nodes ns ON e.source_id = ns.id
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.1
+               AND ns.node_type != 'suggestion' AND nt.node_type != 'suggestion'
                AND ns.label != nt.label
                AND SUBSTR(LOWER(ns.label), 1, 40) != SUBSTR(LOWER(nt.label), 1, 40)
              ORDER BY COALESCE(e.momentum, 0.0) DESC LIMIT 8",
@@ -1212,6 +1353,7 @@ impl SpectrumGraph {
             "SELECT n.id, n.label, n.node_type, COALESCE(n.access_count, 0)
              FROM nodes n
              WHERE COALESCE(n.access_count, 0) > 2
+               AND n.node_type != 'suggestion'
                AND n.id NOT IN (SELECT source_id FROM edges UNION SELECT target_id FROM edges)
              ORDER BY COALESCE(n.access_count, 0) DESC LIMIT 3",
         )?;
@@ -1292,7 +1434,8 @@ impl SpectrumGraph {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Generate 2-3 proactive, structured suggestions based on graph patterns.
-    /// Returns rich ProactiveSuggestion cards with one-click action intents.
+    /// Returns transient cards with one-click action intents. This is read-only:
+    /// polling never persists cards or treats earlier suggestions as evidence.
     pub fn generate_proactive_suggestions(
         &self,
     ) -> Result<Vec<ProactiveSuggestion>, Box<dyn std::error::Error + Send + Sync>> {
@@ -1306,6 +1449,7 @@ impl SpectrumGraph {
              JOIN nodes ns ON e.source_id = ns.id
              JOIN nodes nt ON e.target_id = nt.id
              WHERE COALESCE(e.momentum, 0.0) > 0.08
+               AND ns.node_type != 'suggestion' AND nt.node_type != 'suggestion'
                AND ns.label != nt.label
                AND SUBSTR(LOWER(ns.label), 1, 40) != SUBSTR(LOWER(nt.label), 1, 40)
              ORDER BY mom DESC LIMIT 6",
@@ -1361,7 +1505,7 @@ impl SpectrumGraph {
             let confidence = (*w / MAX_EDGE_WEIGHT).min(1.0).max(0.3) * 0.7
                 + (*m).min(1.0) * 0.3;
             suggestions.push(ProactiveSuggestion {
-                id: Uuid::new_v4().to_string(),
+                id: String::new(), // Stable display identity assigned below.
                 text,
                 action_intent: action,
                 icon,
@@ -1410,7 +1554,7 @@ impl SpectrumGraph {
                     ),
                 };
                 suggestions.push(ProactiveSuggestion {
-                    id: Uuid::new_v4().to_string(),
+                    id: String::new(),
                     text,
                     action_intent: action,
                     icon,
@@ -1425,6 +1569,7 @@ impl SpectrumGraph {
             "SELECT n.label, n.node_type, COALESCE(n.access_count, 0) as ac
              FROM nodes n
              WHERE COALESCE(n.access_count, 0) > 2
+               AND n.node_type != 'suggestion'
                AND n.id NOT IN (SELECT source_id FROM edges UNION SELECT target_id FROM edges)
              ORDER BY ac DESC LIMIT 1",
         )?;
@@ -1442,7 +1587,7 @@ impl SpectrumGraph {
         for (label, _ntype, ac) in &orphans {
             if suggestions.len() < 3 {
                 suggestions.push(ProactiveSuggestion {
-                    id: Uuid::new_v4().to_string(),
+                    id: String::new(),
                     text: format!("\"{}\" keeps coming up but isn't connected", label),
                     action_intent: format!("Find connections between \"{}\" and my other knowledge, then link them", label),
                     icon: "🧩".to_string(),
@@ -1458,6 +1603,7 @@ impl SpectrumGraph {
                 "SELECT label, node_type, access_count
                  FROM nodes
                  WHERE access_count > 5
+                   AND node_type != 'suggestion'
                  ORDER BY access_count DESC LIMIT 1",
             )?;
             let top_node: Vec<(String, String, u32)> = stmt4
@@ -1473,7 +1619,7 @@ impl SpectrumGraph {
             for (label, _ntype, ac) in &top_node {
                 if suggestions.len() < 3 {
                     suggestions.push(ProactiveSuggestion {
-                        id: Uuid::new_v4().to_string(),
+                        id: String::new(),
                         text: format!("\"{}\" is your most active topic ({} accesses)", label, ac),
                         action_intent: format!("Give me an overview of everything I know about \"{}\" and suggest next steps", label),
                         icon: "⭐".to_string(),
@@ -1497,31 +1643,14 @@ impl SpectrumGraph {
         });
 
         suggestions.truncate(3);
+        // A repeated card retains its UI identity even if confidence or counts
+        // change. No ID or card is written back to the knowledge store.
+        for suggestion in &mut suggestions {
+            use sha2::{Digest, Sha256};
+            let identity = serde_json::to_vec(&(&suggestion.category, &suggestion.action_intent))?;
+            suggestion.id = format!("suggestion-{:x}", Sha256::digest(identity));
+        }
         Ok(suggestions)
-    }
-
-    /// Store a proactive suggestion as a node in the graph for later recall.
-    pub fn store_proactive_suggestion(
-        &self,
-        suggestion: &ProactiveSuggestion,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let now = Utc::now().to_rfc3339();
-        let content = format!(
-            "Suggestion: {}\nAction: {}\nCategory: {}\nConfidence: {:.0}%",
-            suggestion.text, suggestion.action_intent, suggestion.category,
-            suggestion.confidence * 100.0
-        );
-        self.conn.execute(
-            "INSERT OR REPLACE INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 'suggestion', 'ephemeral', 0, ?4, ?4, ?4)",
-            params![
-                suggestion.id,
-                format!("{} {}", suggestion.icon, suggestion.text),
-                content,
-                now,
-            ],
-        )?;
-        Ok(())
     }
 
     /// Strengthen edges between nodes whose labels fuzzy-match any of the given keywords.
@@ -1604,11 +1733,15 @@ impl SpectrumGraph {
     //  GRAPH SNAPSHOT — Full Graph for Visualization
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Get the complete graph snapshot for frontend rendering
+    /// Read nodes, relationships and metrics from the same SQLite snapshot.
+    /// Other connections may ingest knowledge concurrently in WAL mode; keeping
+    /// these reads together prevents exports with missing relationship endpoints.
     pub fn get_full_graph(&self) -> Result<GraphSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+        let tx = self.conn.unchecked_transaction()?;
         let nodes = self.get_all_nodes()?;
         let edges = self.get_all_edges()?;
         let stats = self.get_metrics()?;
+        tx.commit()?;
 
         Ok(GraphSnapshot {
             nodes,
@@ -1800,7 +1933,8 @@ impl SpectrumGraph {
         let now = Utc::now().to_rfc3339();
         let promoted = self.conn.execute(
             "UPDATE nodes SET layer = 'context', updated_at = ?1
-             WHERE layer = 'ephemeral' AND access_count >= 3",
+             WHERE layer = 'ephemeral' AND access_count >= 3
+               AND node_type != 'suggestion'",
             params![now],
         )?;
         if promoted > 0 {
@@ -1841,7 +1975,8 @@ impl SpectrumGraph {
     }
 
     /// Load a previously persisted graph snapshot, merging into the current database.
-    /// Nodes and edges that already exist (by ID) are skipped; new ones are inserted.
+    /// Compatible existing IDs retain local metadata; content/identity conflicts
+    /// reject the complete import. New nodes and edges are inserted atomically.
     /// This supports the You-Port device handoff pattern.
     pub fn load(&self, import_path: &Path) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let json = std::fs::read_to_string(import_path)?;
@@ -1851,18 +1986,58 @@ impl SpectrumGraph {
             .ok_or("Invalid export: missing 'snapshot' field")?;
         let snapshot: GraphSnapshot = serde_json::from_value(snapshot_val.clone())?;
 
-        let mut nodes_imported = 0u32;
-        let mut edges_imported = 0u32;
+        let (nodes_imported, edges_imported) = self.import_snapshot(&snapshot)?;
+        Ok(format!("Loaded {} new nodes, {} new edges from {:?}",
+            nodes_imported, edges_imported, import_path))
+    }
 
-        // Import nodes (skip existing)
+    /// Merge a complete snapshot without changing its node or relationship IDs.
+    /// Existing IDs must match node label/content/type/layer or edge endpoints/
+    /// relation. Compatible records retain their local timestamps, access counts,
+    /// weights and reinforcement metadata. Any identity/content conflict rejects
+    /// the complete import; all new nodes and edges commit together or roll back.
+    pub fn import_snapshot(
+        &self,
+        snapshot: &GraphSnapshot,
+    ) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
+        let mut node_ids = HashSet::new();
         for node in &snapshot.nodes {
-            let exists: bool = self.conn.query_row(
-                "SELECT COUNT(*) > 0 FROM nodes WHERE id = ?1",
-                params![node.id],
+            if node.id.trim().is_empty() || !node_ids.insert(node.id.as_str()) {
+                return Err("Invalid graph snapshot: empty or duplicate node ID".into());
+            }
+        }
+        let mut edge_ids = HashSet::new();
+        for edge in &snapshot.edges {
+            if edge.id.trim().is_empty() || !edge_ids.insert(edge.id.as_str()) {
+                return Err("Invalid graph snapshot: empty or duplicate relationship ID".into());
+            }
+            if !node_ids.contains(edge.source_id.as_str())
+                || !node_ids.contains(edge.target_id.as_str())
+            {
+                return Err("Invalid graph snapshot: relationship endpoint is missing".into());
+            }
+            if !edge.weight.is_finite() || !edge.momentum.is_finite() {
+                return Err("Invalid graph snapshot: non-finite relationship weight".into());
+            }
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        let mut nodes_imported = 0usize;
+        let mut edges_imported = 0usize;
+
+        // Keep local metadata only when the stored identity and content agree.
+        for node in &snapshot.nodes {
+            let compatible: Option<bool> = tx.query_row(
+                "SELECT label = ?2 AND content = ?3 AND node_type = ?4 AND layer = ?5
+                 FROM nodes WHERE id = ?1",
+                params![node.id, node.label, node.content, node.node_type, node.layer],
                 |row| row.get(0),
-            )?;
-            if !exists {
-                self.conn.execute(
+            ).optional()?;
+            if compatible == Some(false) {
+                return Err("Graph import conflict: an existing node ID has different content or identity. No changes were applied.".into());
+            }
+            if compatible.is_none() {
+                tx.execute(
                     "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
@@ -1874,15 +2049,19 @@ impl SpectrumGraph {
             }
         }
 
-        // Import edges (skip existing)
+        // Matching relationship IDs must still refer to the same relationship.
         for edge in &snapshot.edges {
-            let exists: bool = self.conn.query_row(
-                "SELECT COUNT(*) > 0 FROM edges WHERE id = ?1",
-                params![edge.id],
+            let compatible: Option<bool> = tx.query_row(
+                "SELECT source_id = ?2 AND target_id = ?3 AND relation = ?4
+                 FROM edges WHERE id = ?1",
+                params![edge.id, edge.source_id, edge.target_id, edge.relation],
                 |row| row.get(0),
-            )?;
-            if !exists {
-                self.conn.execute(
+            ).optional()?;
+            if compatible == Some(false) {
+                return Err("Graph import conflict: an existing relationship ID has different endpoints or relation. No changes were applied.".into());
+            }
+            if compatible.is_none() {
+                tx.execute(
                     "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
@@ -1894,8 +2073,8 @@ impl SpectrumGraph {
             }
         }
 
-        Ok(format!("Loaded {} new nodes, {} new edges from {:?}",
-            nodes_imported, edges_imported, import_path))
+        tx.commit()?;
+        Ok((nodes_imported, edges_imported))
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1916,9 +2095,10 @@ impl SpectrumGraph {
             .flat_map(|f| f.to_le_bytes())
             .collect();
 
+        // Computing a search index does not refresh the underlying evidence.
         self.conn.execute(
-            "UPDATE nodes SET embedding = ?1, updated_at = ?2 WHERE id = ?3",
-            params![bytes, Utc::now().to_rfc3339(), node_id],
+            "UPDATE nodes SET embedding = ?1 WHERE id = ?2",
+            params![bytes, node_id],
         )?;
         Ok(())
     }
@@ -1958,7 +2138,8 @@ impl SpectrumGraph {
         top_k: usize,
     ) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, embedding FROM nodes WHERE embedding IS NOT NULL",
+            "SELECT id, embedding FROM nodes WHERE embedding IS NOT NULL
+             AND node_type NOT IN ('suggestion', 'doc_chunk_retired')",
         )?;
 
         let mut results: Vec<(String, f64)> = stmt
@@ -1997,7 +2178,8 @@ impl SpectrumGraph {
     ) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, label, content FROM nodes
-             WHERE embedding IS NULL OR length(embedding) = 0
+             WHERE (embedding IS NULL OR length(embedding) = 0)
+               AND node_type NOT IN ('suggestion', 'doc_chunk_retired')
              ORDER BY updated_at DESC
              LIMIT ?1",
         )?;
@@ -2682,6 +2864,7 @@ impl SpectrumGraph {
     {
         let mut node_stmt = self.conn.prepare(
             "SELECT id, label, content, node_type FROM nodes \
+             WHERE node_type != 'suggestion' \
              ORDER BY access_count DESC LIMIT 100",
         )?;
 
@@ -3617,14 +3800,86 @@ mod tests {
     }
 
     #[test]
-    fn test_add_node_deduplicates_same_label_and_type() {
+    fn test_add_node_deduplicates_only_identical_fragments() {
         let (g, _dir) = test_graph();
         let n1 = g.add_node("Budget", "v1 content", "finance").unwrap();
-        let n2 = g.add_node("Budget", "v2 content", "finance").unwrap();
-        // Should return same node ID (deduplicated)
+        let n2 = g.add_node("Budget", "v1 content", "finance").unwrap();
         assert_eq!(n1.id, n2.id);
+        assert_eq!(n2.access_count, 1);
+        let different_content = g.add_node("Budget", "v2 content", "finance").unwrap();
+        let different_layer = g.add_node_with_layer("Budget", "v1 content", "finance", "core").unwrap();
+        assert_ne!(n1.id, different_content.id);
+        assert_ne!(n1.id, different_layer.id);
         let (count, _) = g.stats().unwrap();
-        assert_eq!(count, 1, "duplicate node was created");
+        assert_eq!(count, 3, "distinct content and layers must retain their identities");
+    }
+
+    #[test]
+    fn test_document_source_reindex_preserves_identity_freshness_and_embedding() {
+        let (graph, _dir) = test_graph();
+        let chunks = vec![SourceDocumentChunk { content: "A sourced fact".into(), char_start: 0, char_end: 14 }];
+        let ids = graph.index_document_source("/fixtures/one/notes.md", &chunks).unwrap();
+        graph.conn.execute("UPDATE nodes SET updated_at='2020-01-01T00:00:00Z' WHERE id=?1", params![ids[0]]).unwrap();
+        graph.set_node_embedding(&ids[0], &[1.0, 0.0]).unwrap();
+        let before = graph.get_node_without_access(&ids[0]).unwrap().unwrap();
+        assert_eq!(before.updated_at, "2020-01-01T00:00:00Z");
+        assert_eq!(ids, graph.index_document_source("/fixtures/one/notes.md", &chunks).unwrap());
+        let after = graph.get_node_without_access(&ids[0]).unwrap().unwrap();
+        assert_eq!(before.updated_at, after.updated_at);
+        assert_eq!(before.access_count, after.access_count);
+        assert_eq!(graph.get_node_embedding(&ids[0]).unwrap(), Some(vec![1.0, 0.0]));
+        let distinct = graph.index_document_source("/fixtures/two/notes.md", &chunks).unwrap();
+        assert_ne!(ids, distinct);
+        let changed = vec![SourceDocumentChunk { content: "A revised fact".into(), char_start: 0, char_end: 14 }];
+        assert_eq!(ids, graph.index_document_source("/fixtures/one/notes.md", &changed).unwrap());
+        assert!(graph.get_node_embedding(&ids[0]).unwrap().is_none());
+        assert!(graph.get_node_without_access(&ids[0]).unwrap().unwrap().content.contains("A revised fact"));
+    }
+
+    #[test]
+    fn test_document_source_retires_obsolete_chunks_preserving_user_links() {
+        let (graph, _dir) = test_graph();
+        let chunks = vec![
+            SourceDocumentChunk { content: "first source".into(), char_start: 0, char_end: 12 },
+            SourceDocumentChunk { content: "stalerare evidence".into(), char_start: 12, char_end: 30 },
+        ];
+        let ids = graph.index_document_source("source.md", &chunks).unwrap();
+        let user = graph.add_node("My note", "user content", "note").unwrap();
+        let custom = graph.add_edge(&user.id, &ids[1], "user_reference", 1.0).unwrap();
+        graph.set_node_embedding(&ids[1], &[1.0, 0.0]).unwrap();
+        graph.index_document_source("source.md", &chunks[..1]).unwrap();
+        let retired = graph.get_node_without_access(&ids[1]).unwrap().unwrap();
+        assert_eq!(retired.node_type, "doc_chunk_retired");
+        assert_eq!(graph.get_node_without_access(&user.id).unwrap().unwrap().content, "user content");
+        assert!(graph.get_connections(&ids[1]).unwrap().iter().any(|edge| edge.id == custom.id));
+        assert!(graph.query_intent("stalerare", "query", &[]).unwrap().iter().all(|r| r.node.id != ids[1]));
+        assert!(graph.vector_search(&[1.0, 0.0], 20).unwrap().iter().all(|(id, _)| id != &ids[1]));
+        assert!(graph.nodes_missing_embedding(100).unwrap().iter().all(|(id, _, _)| id != &ids[1]));
+        let restored = graph.index_document_source("source.md", &chunks).unwrap();
+        assert_eq!(restored, ids);
+        assert_eq!(graph.get_node_without_access(&ids[1]).unwrap().unwrap().node_type, "doc_chunk");
+        assert!(graph.get_connections(&ids[1]).unwrap().iter().any(|edge| edge.relation == "has_chunk"));
+    }
+
+    #[test]
+    fn test_document_source_rejects_invalid_spans_without_partial_writes() {
+        let (graph, _dir) = test_graph();
+        let before = graph.get_full_graph().unwrap();
+        let invalid = vec![SourceDocumentChunk { content: "界".into(), char_start: 0, char_end: 3 }];
+        assert!(graph.index_document_source("invalid.md", &invalid).is_err());
+        let after = graph.get_full_graph().unwrap();
+        assert_eq!(before.nodes.len(), after.nodes.len());
+        assert_eq!(before.edges.len(), after.edges.len());
+    }
+
+    #[test]
+    fn test_add_document_preserves_same_filename_from_distinct_sources() {
+        let (g, _dir) = test_graph();
+        let a = g.add_node("README.md", "Path: /projects/alpha/README.md\nShared text", "document").unwrap();
+        let b = g.add_node("README.md", "Path: /projects/beta/README.md\nShared text", "document").unwrap();
+        assert_ne!(a.id, b.id);
+        assert_eq!(g.deduplicate_nodes().unwrap(), 0);
+        assert_eq!(g.stats().unwrap().0, 2);
     }
 
     #[test]
@@ -3710,6 +3965,45 @@ mod tests {
         assert!(created1);
         assert!(!created2, "second call should return existing edge");
         assert_eq!(e1.id, e2.id);
+    }
+
+    #[test]
+    fn test_directed_edge_identity_preserves_relation_direction_and_feedback_target() {
+        let (g, _dir) = test_graph();
+        let a = g.add_node("First", "first fact", "note").unwrap();
+        let b = g.add_node("Second", "second fact", "note").unwrap();
+        let (mentions, _) = g.get_or_create_edge(&a.id, &b.id, "mentions").unwrap();
+        let (derived, created) = g.get_or_create_edge(&a.id, &b.id, "derived_from").unwrap();
+        assert!(created, "another relation between the same endpoints must be distinct");
+        let (reverse, created) = g.get_or_create_edge(&b.id, &a.id, "mentions").unwrap();
+        assert!(created, "the reverse direction must retain its own identity");
+        assert_ne!(mentions.id, derived.id);
+        assert_ne!(mentions.id, reverse.id);
+        let (repeated, created) = g.get_or_create_edge(&a.id, &b.id, "mentions").unwrap();
+        assert!(!created);
+        assert_eq!(repeated.id, mentions.id);
+        let reinforced = g.update_edge_weight(&repeated.id, 1.0).unwrap();
+        assert!(reinforced.weight > mentions.weight);
+        let edges = g.get_all_edges().unwrap();
+        assert_eq!(edges.len(), 3);
+        assert_eq!(edges.iter().find(|edge| edge.id == derived.id).unwrap().reinforcements, 0);
+        assert_eq!(edges.iter().find(|edge| edge.id == reverse.id).unwrap().reinforcements, 0);
+        assert_eq!(edges.iter().find(|edge| edge.id == mentions.id).unwrap().reinforcements, 1);
+    }
+
+    #[test]
+    fn test_explicit_undirected_edge_reuses_reverse_but_preserves_other_relations() {
+        let (g, _dir) = test_graph();
+        let a = g.add_node("First", "first fact", "note").unwrap();
+        let b = g.add_node("Second", "second fact", "note").unwrap();
+        let existing = g.add_edge(&b.id, &a.id, "co_referenced", 2.0).unwrap();
+        let (reused, created) = g.get_or_create_undirected_edge(&a.id, &b.id, "co_referenced").unwrap();
+        assert!(!created, "symmetric callers must reuse a previously stored reverse edge");
+        assert_eq!(reused.id, existing.id);
+        let (different_relation, created) = g.get_or_create_undirected_edge(&a.id, &b.id, "co_occurs").unwrap();
+        assert!(created);
+        assert_ne!(different_relation.id, existing.id);
+        assert_eq!(g.stats().unwrap().1, 2);
     }
 
     #[test]
@@ -3827,6 +4121,78 @@ mod tests {
 
         let (after, _) = g.stats().unwrap();
         assert_eq!(after, 1);
+    }
+
+    #[test]
+    fn test_dedup_preserves_distinct_content_and_layers() {
+        let (g, _dir) = test_graph();
+        let now = Utc::now().to_rfc3339();
+        for (id, content, layer) in [
+            ("original", "first fact", "context"),
+            ("duplicate", "first fact", "context"),
+            ("other-content", "second fact", "context"),
+            ("other-layer", "first fact", "core"),
+        ] {
+            g.conn.execute(
+                "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                 VALUES (?1, 'Shared title', ?2, 'note', ?3, 0, ?4, ?4, ?4)",
+                params![id, content, layer, now],
+            ).unwrap();
+        }
+        assert_eq!(g.deduplicate_nodes().unwrap(), 1);
+        assert_eq!(g.stats().unwrap().0, 3);
+        assert_eq!(g.get_node_without_access("other-content").unwrap().unwrap().content, "second fact");
+        assert_eq!(g.get_node_without_access("other-layer").unwrap().unwrap().layer, "core");
+    }
+
+    #[test]
+    fn test_dedup_redirects_relationships_without_removing_unrelated_self_edges() {
+        let (g, _dir) = test_graph();
+        let keeper = g.add_node("Same", "same fact", "note").unwrap();
+        let neighbor = g.add_node("Neighbor", "other fact", "note").unwrap();
+        g.conn.execute(
+            "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+             SELECT 'duplicate', label, content, node_type, layer, 2, last_accessed, '2100-01-01', updated_at
+             FROM nodes WHERE id = ?1",
+            params![keeper.id],
+        ).unwrap();
+        let moved = g.add_edge("duplicate", &neighbor.id, "supports", 2.5).unwrap();
+        let unrelated = g.add_edge(&neighbor.id, &neighbor.id, "reflects", 1.0).unwrap();
+        let existing = g.add_edge(&keeper.id, &keeper.id, "reflects", 1.0).unwrap();
+        let collapsed = g.add_edge("duplicate", &keeper.id, "same_as", 1.0).unwrap();
+        assert_eq!(g.deduplicate_nodes().unwrap(), 1);
+        let edges = g.get_all_edges().unwrap();
+        assert_eq!(edges.len(), 3);
+        let redirected = edges.iter().find(|e| e.id == moved.id).unwrap();
+        assert_eq!(redirected.source_id, keeper.id);
+        assert_eq!(redirected.target_id, neighbor.id);
+        assert_eq!(redirected.weight, 2.5);
+        assert!(edges.iter().any(|e| e.id == unrelated.id));
+        assert!(edges.iter().any(|e| e.id == existing.id));
+        assert!(!edges.iter().any(|e| e.id == collapsed.id));
+    }
+
+    #[test]
+    fn test_dedup_failure_rolls_back_preceding_node_and_edge_changes() {
+        let (g, _dir) = test_graph();
+        let now = Utc::now().to_rfc3339();
+        for i in 0..3 {
+            g.conn.execute(
+                "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                 VALUES (?1, 'Same', 'same fact', 'note', 'context', 1, ?2, ?2, ?2)",
+                params![format!("duplicate-{i}"), now],
+            ).unwrap();
+        }
+        g.add_edge("duplicate-1", "duplicate-2", "same_as", 1.0).unwrap();
+        let before = serde_json::to_value(g.get_full_graph().unwrap()).unwrap();
+        g.conn.execute_batch(
+            "CREATE TRIGGER reject_second_delete BEFORE DELETE ON nodes
+             WHEN OLD.id = 'duplicate-2'
+             BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END;",
+        ).unwrap();
+        assert!(g.deduplicate_nodes().is_err());
+        let after = serde_json::to_value(g.get_full_graph().unwrap()).unwrap();
+        assert_eq!(before, after, "failed dedup must roll back the entire operation");
     }
 
     // ─── Temporal Helpers ──────────────────────────────────────────────────
@@ -4128,6 +4494,224 @@ mod tests {
         assert_eq!(nodes, 1);
     }
 
+    #[test]
+    fn test_full_snapshot_and_exports_retain_large_graph() {
+        let (g, dir) = test_graph();
+        let nodes: Vec<_> = (0..601)
+            .map(|i| g.add_node(&format!("Node {i}"), "test content", "note").unwrap())
+            .collect();
+        for i in 0..nodes.len() {
+            for offset in [1, 2] {
+                g.add_edge(&nodes[i].id, &nodes[(i + offset) % nodes.len()].id, "related", 1.0).unwrap();
+            }
+        }
+        let snapshot = g.get_full_graph().unwrap();
+        assert_eq!(snapshot.nodes.len(), 601);
+        assert_eq!(snapshot.edges.len(), 1202);
+        assert_eq!(snapshot.stats.node_count, snapshot.nodes.len());
+        assert_eq!(snapshot.stats.edge_count, snapshot.edges.len());
+        assert!(snapshot.nodes.iter().all(|n| n.connections.len() == 4));
+        let ids: HashSet<_> = snapshot.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(snapshot.edges.iter().all(|e| ids.contains(e.source_id.as_str()) && ids.contains(e.target_id.as_str())));
+
+        let package: serde_json::Value = serde_json::from_str(&g.export_sync_package().unwrap()).unwrap();
+        assert_eq!(package["snapshot"]["nodes"].as_array().unwrap().len(), 601);
+        assert_eq!(package["snapshot"]["edges"].as_array().unwrap().len(), 1202);
+        let export_path = dir.path().join("large-graph.json");
+        g.persist(&export_path).unwrap();
+        let (restored, _restored_dir) = test_graph();
+        restored.load(&export_path).unwrap();
+        assert_eq!(restored.stats().unwrap(), (601, 1202));
+    }
+
+    #[test]
+    fn test_full_snapshot_stays_consistent_during_ingestion_on_another_connection() {
+        let (reader, dir) = test_graph();
+        let root = reader.add_node("Root", "shared context", "note").unwrap();
+        let writer = SpectrumGraph::new(dir.path()).unwrap();
+        let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let writer_ready = ready.clone();
+        let writer_thread = std::thread::spawn(move || {
+            let now = Utc::now().to_rfc3339();
+            writer_ready.wait();
+            for i in 0..200 {
+                let tx = writer.conn.unchecked_transaction().unwrap();
+                let node_id = format!("concurrent-node-{i}");
+                tx.execute(
+                    "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+                     VALUES (?1, ?1, 'concurrent fact', 'note', 'context', 0, ?2, ?2, ?2)",
+                    params![node_id, now],
+                ).unwrap();
+                tx.execute(
+                    "INSERT INTO edges (id, source_id, target_id, relation, weight, momentum, reinforcements, last_reinforced, created_at)
+                     VALUES (?1, ?2, ?3, 'related', 1.0, 0.0, 0, ?4, ?4)",
+                    params![format!("concurrent-edge-{i}"), root.id, node_id, now],
+                ).unwrap();
+                tx.commit().unwrap();
+                std::thread::yield_now();
+            }
+        });
+        ready.wait();
+        for _ in 0..100 {
+            let snapshot = reader.get_full_graph().unwrap();
+            assert_eq!(snapshot.nodes.len(), snapshot.stats.node_count);
+            assert_eq!(snapshot.edges.len(), snapshot.stats.edge_count);
+            assert_eq!(snapshot.nodes.len(), snapshot.edges.len() + 1);
+            let node_ids: HashSet<_> = snapshot.nodes.iter().map(|node| node.id.as_str()).collect();
+            for edge in &snapshot.edges {
+                assert!(node_ids.contains(edge.source_id.as_str()));
+                assert!(node_ids.contains(edge.target_id.as_str()));
+            }
+            for node in &snapshot.nodes {
+                let neighbors: HashSet<_> = snapshot.edges.iter().filter_map(|edge| {
+                    if edge.source_id == node.id { Some(edge.target_id.as_str()) }
+                    else if edge.target_id == node.id { Some(edge.source_id.as_str()) }
+                    else { None }
+                }).collect();
+                assert_eq!(neighbors, node.connections.iter().map(String::as_str).collect());
+            }
+        }
+        writer_thread.join().unwrap();
+        assert_eq!(reader.stats().unwrap(), (201, 200));
+    }
+
+    #[test]
+    fn test_import_snapshot_preserves_ids_metadata_relationships_and_is_idempotent() {
+        let (source, _source_dir) = test_graph();
+        let a = source.add_node_with_layer("A", "first fact", "note", "core").unwrap();
+        let b = source.add_node("B", "second fact", "work").unwrap();
+        let edge = source.add_edge(&a.id, &b.id, "supports", 2.5).unwrap();
+        source.update_edge_weight(&edge.id, 1.0).unwrap();
+        let snapshot = source.get_full_graph().unwrap();
+        let (target, _target_dir) = test_graph();
+        assert_eq!(target.import_snapshot(&snapshot).unwrap(), (2, 1));
+        assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), serde_json::to_value(&snapshot).unwrap());
+        assert_eq!(target.import_snapshot(&snapshot).unwrap(), (0, 0));
+        assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), serde_json::to_value(&snapshot).unwrap());
+    }
+
+    #[test]
+    fn test_import_snapshot_rejects_each_node_conflict_and_rolls_back_prior_inserts() {
+        let (target, _target_dir) = test_graph();
+        target.add_node("Local note", "local content", "note").unwrap();
+        let original = target.get_full_graph().unwrap();
+        let before = serde_json::to_value(&original).unwrap();
+        for field in ["label", "content", "node_type", "layer"] {
+            let mut incoming = original.clone();
+            let mut new_node = incoming.nodes[0].clone();
+            new_node.id = format!("new-before-{field}-conflict");
+            new_node.label = "Incoming note".into();
+            let conflict = &mut incoming.nodes[0];
+            match field {
+                "label" => conflict.label = "Different title".into(),
+                "content" => conflict.content = "Different content".into(),
+                "node_type" => conflict.node_type = "document".into(),
+                "layer" => conflict.layer = "core".into(),
+                _ => unreachable!(),
+            }
+            incoming.nodes.insert(0, new_node);
+            let error = target.import_snapshot(&incoming).unwrap_err().to_string();
+            assert!(error.contains("existing node ID"), "missing conflict error for {field}");
+            assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), before,
+                "{field} conflict must roll back all preceding inserts");
+        }
+    }
+
+    #[test]
+    fn test_import_snapshot_rejects_each_edge_conflict_and_rolls_back_prior_inserts() {
+        let (target, _target_dir) = test_graph();
+        let a = target.add_node("First", "first fact", "note").unwrap();
+        let b = target.add_node("Second", "second fact", "note").unwrap();
+        target.add_edge(&a.id, &b.id, "supports", 1.0).unwrap();
+        let original = target.get_full_graph().unwrap();
+        let before = serde_json::to_value(&original).unwrap();
+        for field in ["source_id", "target_id", "relation"] {
+            let mut incoming = original.clone();
+            let mut new_node = incoming.nodes[0].clone();
+            new_node.id = format!("new-before-{field}-conflict");
+            new_node.label = "Incoming note".into();
+            let mut new_edge = incoming.edges[0].clone();
+            new_edge.id = format!("new-edge-before-{field}-conflict");
+            new_edge.target_id = new_node.id.clone();
+            incoming.nodes.push(new_node);
+            let conflict = &mut incoming.edges[0];
+            match field {
+                "source_id" => conflict.source_id = b.id.clone(),
+                "target_id" => conflict.target_id = a.id.clone(),
+                "relation" => conflict.relation = "contradicts".into(),
+                _ => unreachable!(),
+            }
+            incoming.edges.insert(0, new_edge);
+            let error = target.import_snapshot(&incoming).unwrap_err().to_string();
+            assert!(error.contains("existing relationship ID"), "missing conflict error for {field}");
+            assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), before,
+                "{field} conflict must roll back preceding node and relationship inserts");
+        }
+    }
+
+    #[test]
+    fn test_import_snapshot_keeps_compatible_local_metadata_on_repeated_import() {
+        let (target, _target_dir) = test_graph();
+        let a = target.add_node("First", "first fact", "note").unwrap();
+        let b = target.add_node("Second", "second fact", "note").unwrap();
+        target.add_edge(&a.id, &b.id, "supports", 1.0).unwrap();
+        let original = target.get_full_graph().unwrap();
+        let before = serde_json::to_value(&original).unwrap();
+        let mut incoming = original;
+        for node in &mut incoming.nodes {
+            node.access_count = 99;
+            node.last_accessed = "2099-01-01T00:00:00Z".into();
+            node.created_at = "2001-01-01T00:00:00Z".into();
+            node.updated_at = "2099-01-01T00:00:00Z".into();
+        }
+        incoming.edges[0].weight = 9.0;
+        incoming.edges[0].momentum = 0.7;
+        incoming.edges[0].reinforcements = 99;
+        incoming.edges[0].last_reinforced = "2099-01-01T00:00:00Z".into();
+        incoming.edges[0].created_at = "2001-01-01T00:00:00Z".into();
+        for _ in 0..2 {
+            assert_eq!(target.import_snapshot(&incoming).unwrap(), (0, 0));
+            assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn test_import_snapshot_rejects_invalid_identity_and_dangling_relationships() {
+        let (source, _source_dir) = test_graph();
+        let a = source.add_node("A", "first fact", "note").unwrap();
+        let b = source.add_node("B", "second fact", "note").unwrap();
+        source.add_edge(&a.id, &b.id, "supports", 1.0).unwrap();
+        let original = source.get_full_graph().unwrap();
+        let (target, _target_dir) = test_graph();
+        let mut duplicate = original.clone();
+        duplicate.nodes.push(duplicate.nodes[0].clone());
+        assert!(target.import_snapshot(&duplicate).is_err());
+        let mut dangling = original.clone();
+        dangling.edges[0].target_id = "missing-node".into();
+        assert!(target.import_snapshot(&dangling).is_err());
+        let mut duplicate_edge = original;
+        duplicate_edge.edges.push(duplicate_edge.edges[0].clone());
+        assert!(target.import_snapshot(&duplicate_edge).is_err());
+        assert_eq!(target.stats().unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn test_import_snapshot_rolls_back_nodes_when_relationship_insert_fails() {
+        let (source, _source_dir) = test_graph();
+        let a = source.add_node("A", "first fact", "note").unwrap();
+        let b = source.add_node("B", "second fact", "note").unwrap();
+        source.add_edge(&a.id, &b.id, "supports", 1.0).unwrap();
+        let (target, _target_dir) = test_graph();
+        target.add_node("Existing", "keep this", "work").unwrap();
+        let before = serde_json::to_value(target.get_full_graph().unwrap()).unwrap();
+        target.conn.execute_batch(
+            "CREATE TRIGGER reject_import_edge BEFORE INSERT ON edges
+             BEGIN SELECT RAISE(ABORT, 'injected edge failure'); END;",
+        ).unwrap();
+        assert!(target.import_snapshot(&source.get_full_graph().unwrap()).is_err());
+        assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), before);
+    }
+
     // ─── Anticipate Needs ──────────────────────────────────────────────────
 
     #[test]
@@ -4147,20 +4731,56 @@ mod tests {
     }
 
     #[test]
-    fn test_store_proactive_suggestion() {
+    fn test_legacy_suggestions_do_not_generate_more_cards_or_promote_themselves() {
         let (g, _dir) = test_graph();
-        let suggestion = ProactiveSuggestion {
-            id: "test-sug-1".to_string(),
-            text: "Test suggestion".to_string(),
-            action_intent: "Do something".to_string(),
-            icon: "🎯".to_string(),
-            category: "test".to_string(),
-            confidence: 0.75,
-        };
-        g.store_proactive_suggestion(&suggestion).unwrap();
+        let legacy_a = g.add_node_with_layer("Explore releases", "unaccepted generated prompt", "suggestion", "ephemeral").unwrap();
+        let legacy_b = g.add_node_with_layer("Plan releases", "another unaccepted generated prompt", "suggestion", "ephemeral").unwrap();
+        let orphan = g.add_node_with_layer("Review releases", "unaccepted orphan prompt", "suggestion", "ephemeral").unwrap();
+        let accepted = g.add_node("Release decision", "accepted user note", "note").unwrap();
+        for (source, target) in [(&legacy_a.id, &legacy_b.id), (&legacy_a.id, &accepted.id)] {
+            let edge = g.add_edge(source, target, "related", 2.0).unwrap();
+            g.update_edge_weight(&edge.id, 1.0).unwrap();
+        }
+        g.conn.execute("UPDATE nodes SET access_count = 20 WHERE node_type = 'suggestion'", []).unwrap();
+        g.conn.execute(
+            "INSERT INTO nodes (id, label, content, node_type, layer, access_count, last_accessed, created_at, updated_at)
+             SELECT 'legacy-duplicate', label, content, node_type, layer, access_count, last_accessed, created_at, updated_at
+             FROM nodes WHERE id = ?1",
+            params![legacy_a.id],
+        ).unwrap();
+        let before = serde_json::to_value(g.get_full_graph().unwrap()).unwrap();
+        for _ in 0..20 {
+            assert!(g.generate_proactive_suggestions().unwrap().is_empty());
+            assert!(g.anticipate_needs().unwrap().is_empty());
+            assert!(g.predict_edges(10).unwrap().is_empty());
+        }
+        assert_eq!(g.promote_active_nodes().unwrap(), 0);
+        assert_eq!(g.deduplicate_nodes().unwrap(), 0);
+        assert_eq!(serde_json::to_value(g.get_full_graph().unwrap()).unwrap(), before);
+        assert_eq!(g.get_node_without_access(&orphan.id).unwrap().unwrap().layer, "ephemeral");
+    }
 
-        let (nodes, _) = g.stats().unwrap();
-        assert_eq!(nodes, 1);
+    #[test]
+    fn test_legacy_suggestions_remain_stored_but_are_not_model_retrieval_evidence() {
+        let (g, _dir) = test_graph();
+        let accepted = g.add_node("Release decision", "accepted rollout decision", "note").unwrap();
+        let accepted_unembedded = g.add_node("Approved checklist", "accepted operational checklist", "note").unwrap();
+        let keyword = g.add_node("Release proposal", "generated rollout prompt", "suggestion").unwrap();
+        let neighbor = g.add_node("Unaccepted action", "generated follow-up prompt", "suggestion").unwrap();
+        let unembedded = g.add_node("Unaccepted reminder", "generated reminder", "suggestion").unwrap();
+        g.add_edge(&accepted.id, &neighbor.id, "related", 2.0).unwrap();
+        for id in [&accepted.id, &keyword.id, &neighbor.id] {
+            g.set_node_embedding(id, &[1.0, 0.0]).unwrap();
+        }
+        let before = serde_json::to_value(g.get_full_graph().unwrap()).unwrap();
+        let context = g.query_intent_hybrid("Release", "question", &[], Some(&[1.0, 0.0])).unwrap();
+        assert_eq!(context.iter().map(|result| result.node.id.as_str()).collect::<Vec<_>>(), vec![accepted.id.as_str()]);
+        assert_eq!(g.vector_search(&[1.0, 0.0], 10).unwrap().len(), 1);
+        assert_eq!(g.nodes_missing_embedding(20).unwrap().iter().map(|node| node.0.as_str()).collect::<Vec<_>>(), vec![accepted_unembedded.id.as_str()]);
+        assert_eq!(serde_json::to_value(g.get_full_graph().unwrap()).unwrap(), before);
+        // Historical cards stay inspectable/exportable; none are deleted.
+        assert!(g.get_node_without_access(&unembedded.id).unwrap().is_some());
+        assert_eq!(g.stats().unwrap().0, 5);
     }
 
     // ─── Strengthen Related Edges ──────────────────────────────────────────

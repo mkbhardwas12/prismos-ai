@@ -1,74 +1,62 @@
-# How PrismOS Self-Improves
+# How PrismOS Improves — Current Capabilities and Limits
 
-PrismOS gets better at **three timescales — all on-device, zero bytes leaving the
-machine.** Nothing here calls a cloud model; every loop closes locally against
-Ollama (`localhost:11434`) and a local SQLite brain. Wi-Fi off changes nothing.
+PrismOS can retrieve stored context and reuse positively rated answers in prompts.
+That changes the information supplied to a model, not its weights. Neither a
+stored note nor a thumbs-up establishes that an answer is correct.
 
+## What runs in the app
+
+1. **Context retrieval:** the Refractive Core retrieves graph nodes and selected
+   positively rated examples, then adds profile guidance to the prompt.
+2. **One model draft:** the standard chat workflow calls a local model. Other
+   roles perform deterministic routing, context-availability and keyword-policy
+   checks. They are not five independent model reviewers.
+3. **Explicit uncertainty:** the answer is marked factually unvalidated. Retrieved
+   sources are treated as untrusted data. New assistant-derived memories are
+   marked unverified; historical memories are not retroactively fact-checked.
+
+The checks do not verify SAP Notes, release compatibility, commands, source
+accuracy, files created, or general answer correctness. More stored context can
+help relevance, but can also carry outdated or incorrect material.
+
+## What is a design, not an implemented capability
+
+A plan–draft–critique–revise loop, multiple independent model reviewers, and
+claim-to-source verification remain future work. See [the loop design](LOCAL_LOOP_ENGINE.md).
+A multi-model council would still require evaluation; agreement alone would not
+prove correctness. No hidden chain-of-thought is needed for useful visibility:
+show source references, action results, assumptions and brief decision summaries.
+
+## Manual model-training prototype
+
+The scripts in [scripts/flywheel](../scripts/flywheel/README.md) can be explicitly
+run for an experiment:
+
+```text
+Positive user feedback → human/source review → candidate training corpus
+→ manual LoRA training → independent holdout comparison → manual promotion decision
 ```
-                 ┌──────────────────────────────────────────────┐
-   your question │                                              │
-        ──────▶  │  ① RAG / Knowledge Graph    (per query, ms)  │  better CONTEXT
-                 │     retrieve nodes + 👍 few-shot exemplars   │  (grounds the answer
-                 │                                              │   in YOUR data)
-                 ├──────────────────────────────────────────────┤
-                 │  ② Response Loop + Council  (per answer, sec)│  better ANSWER
-                 │     plan→build→judge→refine; N models debate │  (this reply, now)
-                 ├──────────────────────────────────────────────┤
-   👍 / 👎 ─────▶│  ③ Model Flywheel           (per model, wks) │  better MODEL
-                 │     harvest→LoRA→eval-gate→ship-if-better    │  (the weights, over time)
-                 └──────────────────────────────────────────────┘
-                          ▲                               │
-                          └──────  response_feedback  ◀───┘
-                            every rating fuels ① and ③
-```
 
-## ① RAG / Knowledge Graph — better *context* (milliseconds · **live**)
-Most weak answers are missing context, not a weak model. Each query retrieves
-relevant nodes from the Spectrum Graph **and** pulls your highest-rated past
-answers as **few-shot exemplars** (`get_good_examples`), then applies your
-cognitive profile. So a 👍 you give today literally shapes tomorrow's prompts —
-the cheapest, fastest improvement, and it's already wired in the app.
+The current harvester filters ratings; it does **not** perform the human/source
+review in that sequence. A positive rating is preference feedback, not verified
+ground truth. Training, downloads and model registration are separate operations;
+the app does not automatically train, schedule experiments, or change its default
+model after a rating.
 
-## ② Response Loop + Council — better *answer* (seconds · designed, not yet implemented)
-For hard questions the one-pass pipeline becomes **plan → build → judge → refine**,
-with the **Council** (several local models answer, peer-review each other
-*anonymously*, a chairman synthesizes) acting as the judge. An ensemble of local
-models beats any single one, and refinement catches what a single pass misses.
-Opt-in, so quick everyday queries stay snappy.
-→ `docs/LOCAL_LOOP_ENGINE.md`
+The evaluation gate now fails closed on malformed test data, missing references,
+invalid judge replies and invalid margins. Exact mode means normalized equality,
+not substring matching. An LLM judge supplies a preference signal, not a factual
+verdict. Passing a holdout is limited evidence; it does not guarantee improvement,
+safety, or protection against model collapse.
 
-## ③ Model Flywheel — better *model* (weeks · runnable prototype)
-The only loop that changes the weights:
-`response_feedback` → `harvest.py` (**only rating > 0 / validated answers** become
-training data) → MLX **LoRA** fine-tune → `eval_gate.py` holdout (**ship only if it
-beats the base**) → `ollama create`, keeping **N‑1 for instant rollback**. The
-payoff is a model specialized to *your* reasoning / technical / market-research /
-innovation domains — the moat a generic bigger model can't match.
-→ `docs/SELF_IMPROVING_LLM.md` · `scripts/flywheel/`
+## Privacy and recovery
 
-## Why it improves instead of degrading or leaking
-- **No model collapse.** Only human-validated (👍) answers train; nothing ships
-  unless it beats the current model on a held-out set; the prior version is kept
-  for rollback. (Auto-training on self-output is the classic collapse trap — so the
-  flywheel stays **human-gated** for the first rounds; the eval-gate is what makes it
-  *safe* to automate on a cron later.)
-- **No egress.** All three loops run against local Ollama + local SQLite. This is the
-  core invariant ("zero bytes leave the machine") and a hard review gate on every change.
+Personal prompts, feedback corpora, adapters, weights, and evaluation data must
+remain outside public source control. Git ignore rules do not encrypt files or
+remove existing history. Keep independently protected backups and preserve a
+known-working model/configuration before any manual switch. Dependencies or base
+model downloads may use the network; local computation alone is not proof that
+the complete environment is offline.
 
-## The virtuous cycle
-One 👍 does triple duty: a **few-shot exemplar** (① now), a **training example**
-(③ later), and a **graph node** (① context). The more you use PrismOS and rate
-answers, the better both the answers (today) and the model (over time) — without a
-single byte leaving your laptop.
-
-## Status (honest)
-| Layer | State |
-|---|---|
-| ① RAG + 👍 few-shot retrieval | **live in the app** |
-| ② Loop + Council | **designed, not yet implemented** — see `docs/LOCAL_LOOP_ENGINE.md`; will land default-off |
-| ③ Flywheel | **runnable prototype** — needs a validated corpus (keep rating answers 👍) |
-
-> Round-one fuel is measured by `scripts/flywheel/harvest.py` against your local
-> `spectrum_graph.db`. A 30B LoRA on a few dozen examples overfits — aim for
-> hundreds of validated answers before the first real round; until then, `--smoke`
-> validates the whole pipeline on a tiny model in minutes.
+No personal corpus was harvested and no training run was performed by the
+synthetic evaluation-gate tests.

@@ -20,6 +20,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+const PRIVATE_OLLAMA_URL: &str = "http://127.0.0.1:11434";
 const DEFAULT_MODEL: &str = "qwen3:4b";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 const GENERATE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -47,6 +48,36 @@ struct GenerateRequest<'a> {
 
 const CLI_NUM_CTX: u32 = 16384;
 const CLI_NUM_PREDICT: u32 = 8192;
+
+#[cfg(test)]
+mod private_transport_tests {
+    use super::*;
+
+    #[test]
+    fn ask_accepts_default_loopback_only_and_canonicalizes_to_literal_ip() {
+        for allowed in [DEFAULT_OLLAMA_URL, PRIVATE_OLLAMA_URL, "http://localhost:11434/", "http://[::1]:11434"] {
+            assert_eq!(private_inference_url(allowed).unwrap(), PRIVATE_OLLAMA_URL);
+        }
+        for refused in [
+            "https://example.com", "http://192.168.1.2:11434",
+            "http://localhost:9999", "http://localhost:11434/api",
+            "http://localhost:11434@evil.example", "http://user:pass@localhost:11434",
+            "http://localhost:11434?redirect=example.com", "invalid",
+        ] {
+            assert!(private_inference_url(refused).is_err());
+        }
+    }
+
+    #[test]
+    fn private_cli_client_disables_redirects_and_proxies_without_network() {
+        let builder = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all("http://127.0.0.1:9").unwrap());
+        let client = harden_private_client(builder).build().unwrap();
+        let config = format!("{client:?}");
+        assert!(config.contains("redirect_policy: \"Policy(None)\""), "{config}");
+        assert!(!config.contains("proxies"), "{config}");
+    }
+}
 
 /// Hybrid thinking models (qwen3 chat family; *-coder tags are non-thinking).
 fn auto_think(model: &str) -> Option<bool> {
@@ -175,6 +206,7 @@ fn parse_args() -> Result<Args, String> {
     }
 
     if args.cmd == Cmd::Ask {
+        private_inference_url(&args.base_url)?;
         if args.from_stdin {
             let mut buf = String::new();
             io::stdin().read_to_string(&mut buf).map_err(|e| e.to_string())?;
@@ -220,8 +252,9 @@ COMMANDS
 
 OPTIONS
   -m, --model <name>   Model to use (default: qwen3:4b, env: PRISMOS_MODEL)
-      --url <url>      Ollama base URL (default: http://localhost:11434,
-                       env: PRISMOS_OLLAMA_URL)
+      --url <url>      Health/model-list endpoint (env: PRISMOS_OLLAMA_URL).
+                       ask permits only the default loopback daemon on port
+                       11434; remote/custom inference endpoints are refused.
       --no-stream      Print the full answer at the end instead of streaming.
       --stdin          Read the prompt from stdin (lets you pipe in files).
       --think          Ask a thinking-capable model for a reasoning trace.
@@ -234,7 +267,8 @@ EXAMPLES
   prismos-cli ask \"explain WASM sandboxing in one paragraph\"
   cat notes.md | prismos-cli ask --stdin --model qwen3:4b
 
-The CLI talks to Ollama directly — your data never leaves the machine.
+Private prompts go directly to 127.0.0.1:11434, without proxies or redirects.
+The CLI cannot attest that the separately managed Ollama daemon is offline.
 For the full agent-debate experience, launch the GUI: `npm run tauri dev`.
 ";
 
@@ -343,14 +377,36 @@ fn build_request(a: &Args, stream: bool) -> GenerateRequest<'_> {
     }
 }
 
+fn private_inference_url(configured: &str) -> Result<&'static str, String> {
+    let refuse = || "Private inference is fixed to http://127.0.0.1:11434. Remove a remote/custom --url or PRISMOS_OLLAMA_URL before using ask; those settings remain available for health/models.".to_string();
+    let url = reqwest::Url::parse(configured).map_err(|_| refuse())?;
+    if url.scheme() != "http"
+        || !matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+        || url.port() != Some(11434)
+        || !matches!(url.path(), "" | "/")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(refuse());
+    }
+    Ok(PRIVATE_OLLAMA_URL)
+}
+
+fn harden_private_client(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder.no_proxy().redirect(reqwest::redirect::Policy::none())
+}
+
 /// POST the request; if the daemon rejects the `think` field (older Ollama or a
 /// model that can't toggle), retry once without it.
 async fn post_generate(
     a: &Args,
     stream: bool,
 ) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let url = format!("{}/api/generate", a.base_url);
+    let base_url = private_inference_url(&a.base_url)?;
+    let client = harden_private_client(reqwest::Client::builder()).build()?;
+    let url = format!("{base_url}/api/generate");
     let mut body = serde_json::to_value(build_request(a, stream))?;
     let had_think = body.get("think").is_some();
     let resp = client.post(&url).json(&body).timeout(GENERATE_TIMEOUT).send().await?;

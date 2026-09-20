@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-harvest.py — Build an MLX-LM fine-tuning dataset from PrismOS validated answers.
+harvest.py — Build a candidate MLX-LM dataset from positively rated answers.
 
 Reads the `response_feedback` table in spectrum_graph.db and emits:
   data/train.jsonl, data/valid.jsonl   — SFT pairs (rating > 0), MLX chat format
   data/prefs.jsonl  (optional, --prefs) — (chosen, rejected) per question, for DPO
 
-The verifier/human-rating IS the safety gate: only rating > 0 (thumbs-up / validated)
-answers become positive training data. This is what prevents model collapse.
+A positive rating is user preference feedback, NOT a factual-verification result.
+The selected examples require separate human/source review before training.
+This script neither verifies answers nor trains, evaluates, or promotes a model.
 
 100% local — reads a local SQLite file, writes local JSONL. No network.
 
@@ -57,7 +58,7 @@ def main():
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "data"))
     ap.add_argument("--min-rating", type=int, default=1,
-                    help="keep answers with rating >= this as positive SFT data")
+                    help="select feedback with rating >= this; not factual validation")
     ap.add_argument("--valid-frac", type=float, default=0.1)
     ap.add_argument("--min-len", type=int, default=40,
                     help="drop trivially short answers (chars)")
@@ -72,11 +73,11 @@ def main():
 
     positives = [r for r in rows
                  if r["rating"] >= args.min_rating and len(r["response"]) >= args.min_len]
-    print(f"[harvest] {len(positives)} positive (validated) examples after filtering")
+    print(f"[harvest] {len(positives)} positive-feedback examples after filtering (not fact-validated)")
     if len(positives) < 10:
-        print("[harvest] WARNING: very few validated examples. The flywheel needs a "
-              "corpus to learn from — keep using the app and rating answers 👍, or lower "
-              "--min-len. A 30B LoRA on <50 examples will overfit; aim for hundreds.")
+        print("[harvest] WARNING: very few feedback examples. Positive feedback alone "
+              "does not establish correctness, diversity, or readiness for training. "
+              "Review the candidate corpus and independent holdout before any training run.")
 
     os.makedirs(args.out, exist_ok=True)
     n_valid = max(1, int(len(positives) * args.valid_frac)) if positives else 0
@@ -109,7 +110,7 @@ def main():
 
     if not train:
         sys.exit("[harvest] no training data produced — nothing to fine-tune yet.")
-    print("[harvest] done. Next: python3 train_lora.py --smoke   (validate the pipeline)")
+    print("[harvest] export complete. Review this private feedback corpus before separately choosing to train; no model was trained or validated.")
 
 
 if __name__ == "__main__":

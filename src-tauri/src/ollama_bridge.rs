@@ -366,7 +366,6 @@ struct ChatResponse {
     done: bool,
     /// "stop" on normal completion, "length" when num_predict was hit.
     #[serde(default)]
-    #[allow(dead_code)]
     done_reason: Option<String>,
 }
 
@@ -538,6 +537,15 @@ fn completed_generation_text(
     Ok(strip_think_blocks(&response.response))
 }
 
+/// Result of a non-streaming chat completion. `truncated` is true when Ollama
+/// stopped at the `num_predict` ceiling (`done_reason == "length"`), so the
+/// text is an incomplete answer and the UI should say so.
+#[derive(Debug, Clone)]
+pub struct ChatCompletion {
+    pub text: String,
+    pub truncated: bool,
+}
+
 /// Chat completion using Ollama's /api/chat endpoint with proper role separation.
 /// This gives the model structured system/user/assistant message roles,
 /// which dramatically improves instruction-following compared to raw prompt injection.
@@ -552,6 +560,20 @@ pub async fn chat(
     images: Option<Vec<String>>,
     few_shot_examples: Option<Vec<(String, String)>>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    chat_completion(model, system_prompt, user_content, base_url, images, few_shot_examples)
+        .await
+        .map(|c| c.text)
+}
+
+/// Same as [`chat`] but also reports whether the answer hit the token ceiling.
+pub async fn chat_completion(
+    model: &str,
+    system_prompt: &str,
+    user_content: &str,
+    base_url: Option<&str>,
+    images: Option<Vec<String>>,
+    few_shot_examples: Option<Vec<(String, String)>>,
+) -> Result<ChatCompletion, Box<dyn std::error::Error + Send + Sync>> {
     let url = private_inference_base_url(base_url);
     let client = private_inference_client()?;
 
@@ -618,7 +640,14 @@ pub async fn chat(
     }
 
     let chat_response: ChatResponse = response.json().await?;
-    Ok(strip_think_blocks(&chat_response.message.content))
+    Ok(completed_chat(chat_response))
+}
+
+fn completed_chat(response: ChatResponse) -> ChatCompletion {
+    ChatCompletion {
+        truncated: response.done_reason.as_deref() == Some("length"),
+        text: strip_think_blocks(&response.message.content),
+    }
 }
 
 /// List all locally available models
@@ -920,6 +949,29 @@ mod tests {
             "response": "{\"slides\":[]}", "done": true, "done_reason": "stop"
         })).unwrap();
         assert_eq!(completed_generation_text(complete).unwrap(), "{\"slides\":[]}");
+    }
+
+    #[test]
+    fn chat_completion_reports_token_ceiling_without_dropping_partial_text() {
+        let cut: ChatResponse = serde_json::from_value(serde_json::json!({
+            "message": {"role": "assistant", "content": "Partial ans"},
+            "done": true, "done_reason": "length"
+        })).unwrap();
+        let cut = completed_chat(cut);
+        assert!(cut.truncated);
+        assert_eq!(cut.text, "Partial ans");
+
+        let whole: ChatResponse = serde_json::from_value(serde_json::json!({
+            "message": {"role": "assistant", "content": "Full answer"},
+            "done": true, "done_reason": "stop"
+        })).unwrap();
+        assert!(!completed_chat(whole).truncated);
+
+        // Older daemons omit done_reason entirely: never a false positive.
+        let legacy: ChatResponse = serde_json::from_value(serde_json::json!({
+            "message": {"role": "assistant", "content": "ok"}, "done": true
+        })).unwrap();
+        assert!(!completed_chat(legacy).truncated);
     }
 
     #[test]

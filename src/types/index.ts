@@ -100,6 +100,8 @@ export interface ProactiveSuggestion {
 
 export interface RefractiveResult {
   response: string;
+  /** True when the model stopped at its output-token ceiling (done_reason == "length"). */
+  truncated?: boolean;
   intent: ParsedIntent;
   agent_used: string;
   context_nodes: string[];

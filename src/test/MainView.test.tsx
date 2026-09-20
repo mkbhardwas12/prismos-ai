@@ -23,7 +23,7 @@ vi.mock("../hooks/useVoice", () => ({
   useVoice: () => ({ speak: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock("../hooks/useChat", () => ({
-  useChat: () => ({
+  useChat: vi.fn(() => ({
     messages: [
       {
         id: "msg1",
@@ -43,7 +43,7 @@ vi.mock("../hooks/useChat", () => ({
     handleIntent: vi.fn(),
     clearConversation: vi.fn(),
     conversationRef: { current: null },
-  }),
+  })),
 }));
 vi.mock("../hooks/useSuggestions", () => ({
   useSuggestions: () => ({

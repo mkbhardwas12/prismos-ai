@@ -73,6 +73,10 @@ impl std::fmt::Display for IntentType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefractiveResult {
     pub response: String,
+    /// True when the model stopped at its output-token ceiling, so `response`
+    /// is an incomplete answer that the UI should flag.
+    #[serde(default)]
+    pub truncated: bool,
     pub intent: ParsedIntent,
     pub agent_used: String,
     pub context_nodes: Vec<String>,      // node IDs from Spectrum Graph context

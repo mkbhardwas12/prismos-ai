@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
 import { detectAppRequest, detectDocRequest, detectFileRequest, generateAppProject, generateDocument, generateTextFile } from "../lib/docGen";
 import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
@@ -103,32 +102,6 @@ export function useChat({
     return () => {
       window.removeEventListener("prismos:fill-intent", fillHandler);
       window.removeEventListener("prismos:process-intent", processHandler);
-    };
-  }, []);
-
-  // Listen for ollama-stream events (report truncation when response hits token limit)
-  useEffect(() => {
-    let unlistenFn: (() => void) | null = null;
-    listen<{ token: string; done: boolean; truncated?: boolean }>("ollama-stream", (event) => {
-      const { done, truncated } = event.payload;
-      if (done && truncated) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].role === "ai") {
-              updated[i] = { ...updated[i], truncated: true };
-              break;
-            }
-          }
-          return updated;
-        });
-      }
-    }).then((fn) => {
-      unlistenFn = fn;
-    });
-
-    return () => {
-      if (unlistenFn) unlistenFn();
     };
   }, []);
 
@@ -578,6 +551,7 @@ export function useChat({
             content: aiContent,
             timestamp: new Date(),
             agent: result.agent_used,
+            truncated: result.truncated === true,
             contextNodes: result.context_nodes,
             conversationId: result.conversation_id,
             userQuestion: input,

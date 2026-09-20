@@ -35,4 +35,23 @@ describe("chat request routing", () => {
     expect(call.mock.calls.some(([command]) => command === "process_intent")).toBe(false);
     expect(result.current.messages[result.current.messages.length - 1]?.content).toContain("Test pipeline failed");
   });
+  it("flags the AI message as truncated when the backend reports the token ceiling", async () => {
+    const refracted = (truncated: boolean) => JSON.stringify({
+      response: "Partial answer", truncated, agent_used: "reasoner", context_nodes: [], edges_reinforced: [],
+      anticipations: [], processing_time_ms: 10, npu_accelerated: false,
+      intent: { raw: "q", intent_type: "question", entities: [], confidence: 1 },
+    });
+    call.mockImplementation(async (command) => {
+      if (command === "search_spectrum_nodes") return "[]";
+      if (command === "refract_intent") return refracted(true);
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("Explain everything"); });
+    expect(result.current.messages[result.current.messages.length - 1]?.truncated).toBe(true);
+
+    call.mockImplementation(async (command) => command === "refract_intent" ? refracted(false) : "[]");
+    await act(async () => { await result.current.handleIntent("Short one"); });
+    expect(result.current.messages[result.current.messages.length - 1]?.truncated).toBe(false);
+  });
 });

@@ -1,8 +1,8 @@
 # PrismOS-AI
 
-> **Local-first AI for your laptop, with explicit boundaries for optional network features.**
+> **A desktop AI that reads your files, answers offline, and remembers — in a knowledge graph that lives on your disk, not someone's server.**
 
-Drop a PDF and ask a question. PrismOS answers from a local [Ollama](https://ollama.com) model, keeps what it learns in a knowledge graph on disk, and works with Wi-Fi off.
+Drop a PDF and ask. A local [Ollama](https://ollama.com) model answers, and what it learns lands in a SQLite knowledge graph you can explore in 3D and that the *next* conversation can use. Works with Wi-Fi off.
 
 <p align="center">
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">
@@ -21,89 +21,36 @@ Drop a PDF and ask a question. PrismOS answers from a local [Ollama](https://oll
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-blueviolet)](https://ollama.com)
 
-Tauri 2 + React 18 + Rust. No PrismOS account or sign-up; private inference uses local Ollama.
-
-See the [2026-09-08 audit and remaining release blockers](docs/AUDIT_2026-09-08.md)
-and the [reviewed public knowledge pack](resources/knowledge/reliable-local-assistant/manifest.json).
-The pack contains public reference guidance; your personal knowledge database
-stays outside this repository. Ingestion is not model training.
+Tauri 2 + React 18 + Rust · MIT · no account, no sign-up, no telemetry.
+Private inference is loopback-only Ollama; the exact network boundary is spelled
+out in [What stays local](#what-stays-local-and-what-can-use-the-network).
 
 ---
 
-## What stays local, and what can use the network
+## What it does
 
-Private inference requests—including document text, images, summaries and
-embeddings—use the fixed `http://127.0.0.1:11434` daemon. The desktop and CLI
-inference clients disable proxies and redirects. The configurable Ollama URL
-is for management/status; desktop inference ignores it and CLI `ask` rejects
-remote/custom endpoints. This does **not** attest that the separately managed
-Ollama daemon or its selected model is offline.
+| | |
+|---|---|
+| **Remembers across sessions** | Answers and concepts persist to a local SQLite knowledge graph. Explore it as a [3D/2D atlas](docs/KNOWLEDGE_ATLAS.md), filter by source, read notes, trace connections, scrub a timeline. The next conversation retrieves from it. |
+| **Reads your documents** | PDF, DOCX, PPTX, XLSX. Text is extracted on-device, chunked, and retrieved with TF-IDF instead of naively truncated. |
+| **Talks to any local model** | Streaming chat against any Ollama model; curated registry of 18 models with hardware-aware recommendations on first run. Attach an image and it swaps to a vision model, then swaps back. |
+| **Generates documents, decks and small apps** | Ask for a report, a slide deck (5 layouts, speaker notes) or a self-contained HTML app; it writes the file locally and opens it. |
+| **Agent roles debate the answer** | Orchestrator, Reasoner, Memory Keeper, Tool Smith and Sentinel vote on the response before it's shown; operation approvals go through a small wasmtime policy module. |
+| **Stays out of your way** | Global hotkey summons it over any app; it minimizes to the tray and the agents stay resident. |
 
-The webview also has this Content Security Policy connection allow-list, from
-[`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json):
-
-```
-connect-src 'self' http://localhost:11434 http://127.0.0.1:11434
-```
-
-This constrains webview requests, **not Rust network clients, Ollama, or your
-system browser**. Local chat can work without internet once its models are
-installed, but PrismOS is not an OS-level network sandbox:
-
-- Installers, model/voice downloads, configured model-management endpoints and
-  update checks can access external services.
-- The optional **Email Keeper** agent connects to *your* IMAP server if you
-  configure it. It is off by default.
-- The optional **Finance Keeper** fetches public market data from Yahoo Finance.
-  Its requests reveal the ticker symbols being requested. It is off by default.
-- The optional **Web Research** feature fetches web pages — but only the URLs
-  you explicitly type into chat, over HTTPS, with localhost/LAN addresses
-  refused. It is off by default, double-gated (a Settings toggle plus a
-  Rust-side gate that hard-refuses fetches while disabled), uses no search
-  engine, and sends nothing in the background. Fetches run in parallel, and
-  saying *"explore"* additionally follows the most relevant links found on the
-  pages you named — bounded, and every followed link passes the same gates.
-  What it reads is indexed into the local knowledge graph so later answers can
-  retrieve it; that indexing is local SQLite, not telemetry.
-- Opening a URL uses your system browser, which can access the internet even
-  when Web Research is disabled. Reading a screen sends the captured image to
-  local Ollama, but does not make the page you opened an offline page.
-
-Generated app pages receive a restrictive policy before model-generated
-markup. This limits resource loading and fetches; it is not a full browser
-sandbox or a guarantee against navigation to another site. Review generated
-code before using it with sensitive information.
-
-For an offline check, disable optional integrations, install the required models,
-disconnect the network, and test the workflows you use. Network monitoring must
-include PrismOS, Ollama and any browser it opens—not just the webview.
+Optional, **off by default**, opt-in: user-directed Web Research (only URLs you
+type), IMAP Email Keeper, Yahoo Finance Keeper. Full feature history in
+[CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## Try it
 
-### Read this first if you're on macOS or Windows
-
-**The installers are not code-signed.** I'm one person and the certificates
-cost more than this project currently justifies. That means:
-
-- **macOS** will say *"PrismOS-AI is damaged and can't be opened"* or *"Apple
-  could not verify PrismOS-AI is free of malware."* The app is not damaged —
-  macOS applies a quarantine flag to anything downloaded from a browser and
-  refuses to run unsigned bundles. Clear it:
-  ```bash
-  xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app
-  ```
-  On macOS Sequoia and later the old Control-click → Open trick no longer
-  works; the `xattr` command above, or System Settings → Privacy & Security →
-  *Open Anyway*, is the way through.
-
-- **Windows** will show SmartScreen's *"Windows protected your PC."* Click
-  **More info → Run anyway**.
-
-If that trade is not one you want to make, **build from source** — the
-instructions are below and the build is reproducible from a clean checkout.
-Code signing is on the roadmap; until then this is the honest trade.
+> **Installers are unsigned** (one maintainer, no cert yet — it's on the
+> roadmap). macOS: `xattr -rd com.apple.quarantine /Applications/PrismOS-AI.app`
+> or System Settings → Privacy & Security → *Open Anyway*. Windows: SmartScreen
+> → **More info → Run anyway**. Or skip the dance: use the
+> [CLI](#the-60-second-version-use-the-cli) or [build from source](#build-from-source).
 
 ### Install
 
@@ -189,19 +136,58 @@ local models sharpen it, and nothing leaves the machine either way.
 
 ---
 
-## What it actually does
+## What stays local, and what can use the network
 
-| | |
-|---|---|
-| **Ask a local model** | Streaming chat against any Ollama model, with a curated registry of 18 models and hardware-aware recommendations on first run. |
-| **Drop in documents** | PDF, DOCX, PPTX, XLSX. Text is extracted on-device, chunked, and retrieved with TF-IDF instead of naively truncated. |
-| **Remember across sessions** | Answers and concepts persist to a local SQLite knowledge graph. Explore its [Knowledge atlas](docs/KNOWLEDGE_ATLAS.md) in 3D or 2D, filter sources, read notes and trace recorded connections; a timeline is also available. |
-| **Route to the right model** | Attach an image and it swaps to a vision model, then swaps back. Same for code-heavy prompts. |
-| **Coordinate workflow roles** | Operation-category approvals pass through a small wasmtime policy module. Actual Rust file, database and network work is outside that module; this is not isolated execution of arbitrary agent code. |
-| **Stay reachable** | Global hotkey summons it over any app; it minimizes to the system tray and the agents stay resident. |
+Private inference requests—including document text, images, summaries and
+embeddings—use the fixed `http://127.0.0.1:11434` daemon. The desktop and CLI
+inference clients disable proxies and redirects. The configurable Ollama URL
+is for management/status; desktop inference ignores it and CLI `ask` rejects
+remote/custom endpoints. This does **not** attest that the separately managed
+Ollama daemon or its selected model is offline.
 
-Full feature history — including what landed in which release — is in
-[CHANGELOG.md](CHANGELOG.md).
+The webview also has this Content Security Policy connection allow-list, from
+[`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json):
+
+```
+connect-src 'self' http://localhost:11434 http://127.0.0.1:11434
+```
+
+This constrains webview requests, **not Rust network clients, Ollama, or your
+system browser**. Local chat can work without internet once its models are
+installed, but PrismOS is not an OS-level network sandbox:
+
+- Installers, model/voice downloads, configured model-management endpoints and
+  update checks can access external services.
+- The optional **Email Keeper** agent connects to *your* IMAP server if you
+  configure it. It is off by default.
+- The optional **Finance Keeper** fetches public market data from Yahoo Finance.
+  Its requests reveal the ticker symbols being requested. It is off by default.
+- The optional **Web Research** feature fetches web pages — but only the URLs
+  you explicitly type into chat, over HTTPS, with localhost/LAN addresses
+  refused. It is off by default, double-gated (a Settings toggle plus a
+  Rust-side gate that hard-refuses fetches while disabled), uses no search
+  engine, and sends nothing in the background. Fetches run in parallel, and
+  saying *"explore"* additionally follows the most relevant links found on the
+  pages you named — bounded, and every followed link passes the same gates.
+  What it reads is indexed into the local knowledge graph so later answers can
+  retrieve it; that indexing is local SQLite, not telemetry.
+- Opening a URL uses your system browser, which can access the internet even
+  when Web Research is disabled. Reading a screen sends the captured image to
+  local Ollama, but does not make the page you opened an offline page.
+
+Generated app pages receive a restrictive policy before model-generated
+markup. This limits resource loading and fetches; it is not a full browser
+sandbox or a guarantee against navigation to another site. Review generated
+code before using it with sensitive information.
+
+For an offline check, disable optional integrations, install the required models,
+disconnect the network, and test the workflows you use. Network monitoring must
+include PrismOS, Ollama and any browser it opens—not just the webview.
+
+See also the [2026-09-08 audit and remaining release blockers](docs/AUDIT_2026-09-08.md)
+and the [reviewed public knowledge pack](resources/knowledge/reliable-local-assistant/manifest.json)
+(public reference guidance only; your personal knowledge database stays outside
+this repository, and ingestion is not model training).
 
 ---
 

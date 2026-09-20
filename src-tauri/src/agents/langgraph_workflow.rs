@@ -424,6 +424,7 @@ pub fn run_debate(
 }
 
 /// Summarize a proposal to a short debate-friendly statement
+#[cfg(test)]
 fn summarize_proposal(content: &str) -> String {
     let truncated: String = content.chars().take(200).collect();
     if content.len() > 200 {
@@ -543,6 +544,8 @@ pub struct WorkflowEngine;
 
 impl WorkflowEngine {
     /// Execute the full LangGraph workflow for an intent
+    // The workflow boundary intentionally keeps its inputs explicit.
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         intent: ParsedIntent,
         context_summary: &str,
@@ -754,14 +757,13 @@ impl WorkflowEngine {
                                     ))
                                 } else {
                                     eprintln!("[LangGraph-WF] Ollama unavailable: {}", err_text);
-                                    Err(format!(
-                                        "I'm currently unable to reach the AI model. \
+                                    Err("I'm currently unable to reach the AI model. \
                                          Please make sure Ollama is running:\n\n\
                                          1. Open a terminal\n\
                                          2. Run `ollama serve`\n\
                                          3. Try your question again\n\n\
                                          Your data is safe — everything stays local."
-                                    ))
+                                        .to_string())
                                 }
                             }
                         }

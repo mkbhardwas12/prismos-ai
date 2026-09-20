@@ -23,7 +23,7 @@ vi.mock("../hooks/useVoice", () => ({
   useVoice: () => ({ speak: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock("../hooks/useChat", () => ({
-  useChat: () => ({
+  useChat: vi.fn(() => ({
     messages: [
       {
         id: "msg1",
@@ -43,7 +43,7 @@ vi.mock("../hooks/useChat", () => ({
     handleIntent: vi.fn(),
     clearConversation: vi.fn(),
     conversationRef: { current: null },
-  }),
+  })),
 }));
 vi.mock("../hooks/useSuggestions", () => ({
   useSuggestions: () => ({
@@ -186,5 +186,40 @@ describe("MainView", () => {
       render(<MainView {...defaultProps} />);
     });
     expect(screen.getByTestId("daily-brief")).toBeInTheDocument();
+  });
+
+  it("renders truncation notice when AI response is truncated", async () => {
+    const { useChat } = await import("../hooks/useChat");
+    vi.mocked(useChat).mockReturnValueOnce({
+      messages: [
+        {
+          id: "msg-trunc",
+          role: "ai",
+          content: "This is a partial answer that got cut off",
+          timestamp: new Date(),
+          truncated: true,
+        },
+      ],
+      isProcessing: false,
+      processingPhase: "",
+      processingElapsed: 0,
+      pendingIntent: "",
+      setPendingIntent: vi.fn(),
+      handleIntent: vi.fn(),
+      clearConversation: vi.fn(),
+      submitFeedback: vi.fn(),
+      selectRefractionAlternative: vi.fn(),
+      approveProjectReview: vi.fn(),
+      declineProjectReview: vi.fn(),
+      conversationRef: { current: null },
+    } as any);
+
+    await act(async () => {
+      render(<MainView {...defaultProps} />);
+    });
+
+    expect(
+      screen.getByText(/Response hit the length limit — raise Max Tokens in Settings or ask for a shorter answer\./)
+    ).toBeInTheDocument();
   });
 });

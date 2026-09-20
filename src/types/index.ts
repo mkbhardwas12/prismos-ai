@@ -100,6 +100,8 @@ export interface ProactiveSuggestion {
 
 export interface RefractiveResult {
   response: string;
+  /** True when the model stopped at its output-token ceiling (done_reason == "length"). */
+  truncated?: boolean;
   intent: ParsedIntent;
   agent_used: string;
   context_nodes: string[];
@@ -223,6 +225,8 @@ export interface Message {
   content: string;
   timestamp: Date;
   agent?: string;
+  /** Whether the AI response was truncated because it hit the token limit */
+  truncated?: boolean;
   /** User feedback: 'good' (👍) or 'bad' (👎) */
   feedback?: "good" | "bad";
   /** Context node IDs used for this response (for feedback linkage) */

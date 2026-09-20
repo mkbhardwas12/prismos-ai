@@ -551,6 +551,7 @@ export function useChat({
             content: aiContent,
             timestamp: new Date(),
             agent: result.agent_used,
+            truncated: result.truncated === true,
             contextNodes: result.context_nodes,
             conversationId: result.conversation_id,
             userQuestion: input,

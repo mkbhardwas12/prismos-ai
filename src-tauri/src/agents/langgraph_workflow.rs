@@ -726,8 +726,8 @@ impl WorkflowEngine {
                         } else {
                             user_content
                         };
-                        match crate::ollama_bridge::chat(&model_name, &system_prompt, &user_content, None, None, few_shots).await {
-                            Ok(r) if !r.trim().is_empty() => Ok(r),
+                        match crate::ollama_bridge::chat_completion(&model_name, &system_prompt, &user_content, None, None, few_shots).await {
+                            Ok(r) if !r.text.trim().is_empty() => Ok(r),
                             Ok(_) => Err("The model returned an empty draft. No answer or knowledge was saved.".to_string()),
                             Err(e) => {
                                 let err_text = e.to_string();
@@ -810,9 +810,10 @@ impl WorkflowEngine {
         );
 
         // Errors are not model answers and must not be approved or learned.
-        let llm_response = llm_response.map_err(|message| -> Box<dyn std::error::Error + Send + Sync> {
-            message.into()
-        })?;
+        let crate::ollama_bridge::ChatCompletion { text: llm_response, truncated: llm_truncated } =
+            llm_response.map_err(|message| -> Box<dyn std::error::Error + Send + Sync> {
+                message.into()
+            })?;
 
         // ── Record Reasoner results ──
         // No independent factual validation or calibrated confidence is available.
@@ -1109,6 +1110,7 @@ impl WorkflowEngine {
 
         let result = crate::refractive_core::RefractiveResult {
             response: final_response,
+            truncated: llm_truncated,
             intent,
             agent_used,
             context_nodes: context_node_ids.to_vec(),

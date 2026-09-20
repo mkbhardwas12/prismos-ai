@@ -28,6 +28,8 @@ use std::time::Instant;
 ///
 /// Returns (RefractiveResult, CollaborationSession, Option<WorkflowState>) — the final response,
 /// the collaboration audit trail, and the workflow state with debate data.
+// The workflow boundary intentionally keeps its inputs explicit.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_collaboration(
     intent: ParsedIntent,
     context_summary: &str,

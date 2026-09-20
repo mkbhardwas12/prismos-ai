@@ -17,6 +17,11 @@ use std::collections::HashMap;
 use std::path::Path;
 use uuid::Uuid;
 
+type MomentumEdgeRecord = (String, String, String, String, f64, f64, String, String);
+type EmbeddingBackfillRow = (String, String, String);
+type RecentIntentRow = (String, String, f64, String);
+type CognitiveSnapshotRow = (String, f64, f64, f64, f64, f64, i64, String);
+
 // ─── Data Models ───────────────────────────────────────────────────────────────
 
 /// A node in the Spectrum Graph representing a life facet or knowledge fragment
@@ -1160,7 +1165,7 @@ impl SpectrumGraph {
              ORDER BY COALESCE(e.momentum, 0.0) DESC LIMIT 8",
         )?;
 
-        let momentum_edges: Vec<(String, String, String, String, f64, f64, String, String)> = stmt
+        let momentum_edges: Vec<MomentumEdgeRecord> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(7)?,  // source_label
@@ -1358,7 +1363,7 @@ impl SpectrumGraph {
                     "🔗".to_string(),
                 ),
             };
-            let confidence = (*w / MAX_EDGE_WEIGHT).min(1.0).max(0.3) * 0.7
+            let confidence = (*w / MAX_EDGE_WEIGHT).clamp(0.3, 1.0) * 0.7
                 + (*m).min(1.0) * 0.3;
             suggestions.push(ProactiveSuggestion {
                 id: Uuid::new_v4().to_string(),
@@ -1936,12 +1941,10 @@ impl SpectrumGraph {
 
         match result {
             Some(bytes) if !bytes.is_empty() => {
-                let floats: Vec<f64> = bytes
-                    .chunks_exact(8)
-                    .filter_map(|chunk| {
-                        let arr: [u8; 8] = chunk.try_into().ok()?;
-                        Some(f64::from_le_bytes(arr))
-                    })
+                let (chunks, _) = bytes.as_chunks::<8>();
+                let floats: Vec<f64> = chunks
+                    .iter()
+                    .map(|chunk| f64::from_le_bytes(*chunk))
                     .collect();
                 Ok(Some(floats))
             }
@@ -1970,12 +1973,10 @@ impl SpectrumGraph {
             .filter_map(|r| r.ok())
             .filter_map(|(id, bytes)| {
                 if bytes.is_empty() { return None; }
-                let embedding: Vec<f64> = bytes
-                    .chunks_exact(8)
-                    .filter_map(|c| {
-                        let arr: [u8; 8] = c.try_into().ok()?;
-                        Some(f64::from_le_bytes(arr))
-                    })
+                let (chunks, _) = bytes.as_chunks::<8>();
+                let embedding: Vec<f64> = chunks
+                    .iter()
+                    .map(|chunk| f64::from_le_bytes(*chunk))
                     .collect();
                 let sim = cosine_similarity(query_embedding, &embedding);
                 Some((id, sim))
@@ -1994,7 +1995,7 @@ impl SpectrumGraph {
     pub fn nodes_missing_embedding(
         &self,
         limit: usize,
-    ) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<EmbeddingBackfillRow>, Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, label, content FROM nodes
              WHERE embedding IS NULL OR length(embedding) = 0
@@ -2192,12 +2193,10 @@ impl SpectrumGraph {
             let rows = stmt.query_map(params![pattern, limit as u32], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?;
-            for row in rows {
-                if let Ok(pair) = row {
-                    // Avoid duplicates
-                    if !results.iter().any(|(q, _)| q == &pair.0) {
-                        results.push(pair);
-                    }
+            for pair in rows.flatten() {
+                // Avoid duplicates
+                if !results.iter().any(|(q, _)| q == &pair.0) {
+                    results.push(pair);
                 }
             }
             if results.len() >= limit {
@@ -2276,7 +2275,7 @@ impl SpectrumGraph {
     pub fn get_recent_intents(
         &self,
         days: u32,
-    ) -> Result<Vec<(String, String, f64, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<RecentIntentRow>, Box<dyn std::error::Error + Send + Sync>> {
         let mut stmt = self.conn.prepare(
             "SELECT raw_input, intent_type, confidence, created_at
              FROM intent_log
@@ -2559,7 +2558,7 @@ impl SpectrumGraph {
              ORDER BY snapshot_at DESC LIMIT ?1",
         )?;
 
-        let snapshots: Vec<(String, f64, f64, f64, f64, f64, i64, String)> = stmt
+        let snapshots: Vec<CognitiveSnapshotRow> = stmt
             .query_map(rusqlite::params![weeks], |row| {
                 Ok((
                     row.get(0)?,
@@ -3131,7 +3130,7 @@ impl MergeStrategy {
         match s.to_lowercase().as_str() {
             "theirs" => MergeStrategy::Theirs,
             "ours" => MergeStrategy::Ours,
-            "latest" | _ => MergeStrategy::Latest,
+            _ => MergeStrategy::Latest,
         }
     }
 }

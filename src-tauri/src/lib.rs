@@ -118,7 +118,7 @@ async fn refract_intent(app: tauri::AppHandle, input: String, model: Option<Stri
     let _ = audit.append(
         "refract_intent",
         "user",
-        &format!("Intent processed via model '{}': {}", model_name, &input.chars().take(100).collect::<String>()),
+        &format!("Intent processed via model '{}': {}", model_name, input.chars().take(100).collect::<String>()),
     );
 
     serde_json::to_string(&result).map_err(|e| e.to_string())
@@ -713,7 +713,7 @@ async fn fetch_email_summary(
     let sandbox_check = sandbox_prism::sandbox_execute("email read fetch unread summary", "email_keeper");
     if !sandbox_check.success {
         return Err(format!("🛡️ Sandbox Prism blocked email access: {}",
-            sandbox_check.rollback_explanation.unwrap_or_else(|| sandbox_check.output)));
+            sandbox_check.rollback_explanation.unwrap_or(sandbox_check.output)));
     }
 
     let config = email_keeper::EmailConfig {
@@ -786,7 +786,7 @@ async fn fetch_calendar_summary(
     let sandbox_check = sandbox_prism::sandbox_execute("calendar read events today schedule", "calendar_keeper");
     if !sandbox_check.success {
         return Err(format!("🛡️ Sandbox Prism blocked calendar access: {}",
-            sandbox_check.rollback_explanation.unwrap_or_else(|| sandbox_check.output)));
+            sandbox_check.rollback_explanation.unwrap_or(sandbox_check.output)));
     }
 
     let config = calendar_keeper::CalendarConfig {
@@ -821,7 +821,7 @@ async fn fetch_finance_summary(
     let sandbox_check = sandbox_prism::sandbox_execute("finance stock ticker portfolio market", "finance_keeper");
     if !sandbox_check.success {
         return Err(format!("🛡️ Sandbox Prism blocked finance access: {}",
-            sandbox_check.rollback_explanation.unwrap_or_else(|| sandbox_check.output)));
+            sandbox_check.rollback_explanation.unwrap_or(sandbox_check.output)));
     }
 
     let config = finance_keeper::FinanceConfig { tickers };
@@ -1949,7 +1949,7 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
             node_type: node.node_type.clone(),
             layer: node.layer.clone(),
             timestamp: node.created_at.clone(),
-            access_count: node.access_count as u32,
+            access_count: node.access_count,
         });
 
         // If updated_at differs from created_at, add an update event
@@ -1962,7 +1962,7 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
                 node_type: node.node_type.clone(),
                 layer: node.layer.clone(),
                 timestamp: node.updated_at.clone(),
-                access_count: node.access_count as u32,
+                access_count: node.access_count,
             });
         }
     }
@@ -1972,12 +1972,12 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
         events.push(TimelineEvent {
             id: edge.id.clone(),
             event_type: "edge_created".into(),
-            label: format!("{}", edge.relation),
+            label: edge.relation.to_string(),
             description: format!("Edge created: {} → {} (weight: {:.2})", edge.source_id, edge.target_id, edge.weight),
             node_type: "meta".into(),
             layer: "context".into(),
             timestamp: edge.created_at.clone(),
-            access_count: edge.reinforcements as u32,
+            access_count: edge.reinforcements,
         });
 
         // If last_reinforced differs from created_at, add reinforcement event
@@ -1990,7 +1990,7 @@ async fn get_timeline_data(db: tauri::State<'_, DbState>) -> Result<String, Stri
                 node_type: "meta".into(),
                 layer: "context".into(),
                 timestamp: edge.last_reinforced.clone(),
-                access_count: edge.reinforcements as u32,
+                access_count: edge.reinforcements,
             });
         }
     }
@@ -3034,7 +3034,7 @@ pub fn run() {
             let db = spectrum_graph::SpectrumGraph::new(&app_dir)
                 .map_err(|e| {
                     eprintln!("❌ Failed to initialize Spectrum Graph: {}", e);
-                    Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error>
+                    Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
                 })?;
 
             // Seed demo data for first-time users (runs only if graph is empty)
@@ -3099,8 +3099,10 @@ pub fn run() {
             println!("║  You-Port Encrypted Handoff: ENABLED         ║");
             println!("║  Graph Merge/Diff Multi-Device: ENABLED      ║");
             println!("║  Tamper-Evident Audit Log: ACTIVE            ║");
-            println!("║  Secure Enclave: {}      ║",
-                format!("{:<25}", enclave_status.backend.label()));
+            println!(
+                "║  Secure Enclave: {:<25}      ║",
+                enclave_status.backend.label()
+            );
             println!("╚══════════════════════════════════════════════╝");
             println!("📍 Data directory: {:?}", app_dir);
             println!("🔑 Enclave fingerprint: {}", enclave_status.key_fingerprint);

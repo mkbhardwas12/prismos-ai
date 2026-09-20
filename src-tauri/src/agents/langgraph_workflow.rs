@@ -478,7 +478,7 @@ pub fn run_debate(
                             "Rebuttal: While Spectrum Graph context strengthens confidence, \
                              the LLM analysis is based on the user's direct intent: '{}'. \
                              The response is still valid without graph grounding.",
-                            &intent.raw.chars().take(60).collect::<String>()
+                            intent.raw.chars().take(60).collect::<String>()
                         )
                     }
                     AgentRole::MemoryKeeper => {
@@ -696,6 +696,8 @@ pub struct WorkflowEngine;
 
 impl WorkflowEngine {
     /// Execute the full LangGraph workflow for an intent
+    // The workflow boundary intentionally keeps its inputs explicit.
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         intent: ParsedIntent,
         context_summary: &str,
@@ -906,14 +908,13 @@ impl WorkflowEngine {
                                     )
                                 } else {
                                     eprintln!("[LangGraph-WF] Ollama unavailable: {}", err_text);
-                                    format!(
-                                        "I'm currently unable to reach the AI model. \
+                                    "I'm currently unable to reach the AI model. \
                                          Please make sure Ollama is running:\n\n\
                                          1. Open a terminal\n\
                                          2. Run `ollama serve`\n\
                                          3. Try your question again\n\n\
                                          Your data is safe — everything stays local."
-                                    )
+                                        .to_string()
                                 }
                             }
                         }
@@ -1021,7 +1022,7 @@ impl WorkflowEngine {
             emit_activity(
                 &app_handle,
                 arg.from.display_name(),
-                &format!("{}{}: {}", arg_label, target_str, &arg.content.chars().take(80).collect::<String>()),
+                &format!("{}{}: {}", arg_label, target_str, arg.content.chars().take(80).collect::<String>()),
                 "thinking",
                 "debate",
             );

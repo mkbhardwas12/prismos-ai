@@ -585,7 +585,7 @@ pub fn execute_in_sandbox_for_agent(
                  Only pre-approved operations (graph reads, writes, LLM inference, etc.) \
                  are permitted. This protects your data from unexpected behavior.",
                 agent_id,
-                &action.chars().take(100).collect::<String>()
+                action.chars().take(100).collect::<String>()
             );
 
             prism.action_log.push(SignedAction {
@@ -909,10 +909,8 @@ fn wasm_isolated_execute(
         "sandbox",
         "validate_action",
         |mut caller: Caller<'_, SandboxStoreState>, op_type: i32, risk_tier: i32, _agent_idx: i32| -> i32 {
-            let valid = op_type >= 0
-                && op_type <= 13  // 0-13: all AllowedOperation variants including EmailRead(11), CalendarRead(12), FinanceRead(13)
-                && risk_tier >= 1
-                && risk_tier <= 3
+            let valid = (0..=13).contains(&op_type) // all AllowedOperation variants including EmailRead(11), CalendarRead(12), FinanceRead(13)
+                && (1..=3).contains(&risk_tier)
                 && index_to_operation(op_type).is_some();
             caller.data_mut().validated = valid;
             if valid { 1 } else { 0 }

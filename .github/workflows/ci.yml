@@ -65,7 +65,7 @@ jobs:
 
       - name: Cargo clippy (lint)
         working-directory: src-tauri
-        run: cargo clippy -- -D warnings || true
+        run: cargo clippy -- -D warnings
 
       - name: Cargo test
         working-directory: src-tauri

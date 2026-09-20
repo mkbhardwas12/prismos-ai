@@ -574,6 +574,8 @@ pub struct AgentMemoryEntry {
 }
 
 /// Intent transparency — explains why a response was shaped the way it was
+// Reserved for the intent-transparency UI/API surface.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntentTransparency {
     pub detected_query_type: String,

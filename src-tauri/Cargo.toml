@@ -17,6 +17,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "prismos-cli"
 path = "src/bin/prismos_cli.rs"
 
+[[bin]]
+name = "prismos-knowledge"
+path = "src/bin/prismos_knowledge.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

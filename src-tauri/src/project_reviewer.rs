@@ -236,11 +236,11 @@ pub fn scan_project(root_input: &str) -> Result<(PendingScan, ScanPreview), Stri
     }
 
     // Highest priority first; cap the static-analysis set.
-    candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+    candidates.sort_by_key(|a| std::cmp::Reverse(a.priority));
     candidates.truncate(MAX_STATIC_FILES);
 
     let mut top_extensions: Vec<(String, usize)> = ext_counts.into_iter().collect();
-    top_extensions.sort_by(|a, b| b.1.cmp(&a.1));
+    top_extensions.sort_by_key(|a| std::cmp::Reverse(a.1));
     top_extensions.truncate(8);
 
     let scan_id = uuid::Uuid::new_v4().to_string();

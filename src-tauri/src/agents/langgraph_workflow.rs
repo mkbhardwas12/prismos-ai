@@ -2,15 +2,15 @@
 //
 // This module implements a formal LangGraph-style state graph for
 // multi-agent collaboration. Agents traverse a typed state machine
-// with conditional edges, parallel branches, debate rounds, and
-// quorum-based consensus. Every state transition is checkpointed
+// with conditional edges, a single model draft, deterministic role checks, and
+// a policy gate. Every state transition is checkpointed
 // for auditability.
 //
 // Architecture:
 //   StateGraph — defines nodes (agents) + edges (transitions)
 //   WorkflowEngine — executes the graph with state management
-//   DebateRound — agents challenge & rebut each other's proposals
-//   Deliberation — structured argument exchange before consensus
+//   DebateResult — legacy wire envelope for deterministic workflow checks
+//   Policy gate — operational checks, never independent factual verification
 //
 // All side-effecting actions go through the Sandbox Prism.
 
@@ -19,7 +19,6 @@ use super::nodes::*;
 use crate::refractive_core::{IntentType, ParsedIntent};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 use tauri::Emitter;
 use uuid::Uuid;
@@ -146,7 +145,7 @@ impl StateGraph {
             id: "parallel_analyze".into(),
             node_type: GraphNodeType::ParallelFanOut,
             agent: None,
-            description: "Fan-out: all specialists analyze in parallel".into(),
+            description: "One model draft alongside deterministic tool/context checks".into(),
         });
 
         graph.add_node(GraphNode {
@@ -181,28 +180,28 @@ impl StateGraph {
             id: "debate".into(),
             node_type: GraphNodeType::Debate,
             agent: None,
-            description: "Agents debate and challenge proposals".into(),
+            description: "Deterministic workflow checks; no independent factual review".into(),
         });
 
         graph.add_node(GraphNode {
             id: "sentinel_review".into(),
             node_type: GraphNodeType::Agent,
             agent: Some(AgentRole::Sentinel),
-            description: "Security gate: validates all proposals".into(),
+            description: "Keyword-based policy screening, not factual validation".into(),
         });
 
         graph.add_node(GraphNode {
             id: "consensus".into(),
             node_type: GraphNodeType::Consensus,
             agent: None,
-            description: "Voting round: majority + Sentinel non-veto".into(),
+            description: "Policy gate: role checks + Sentinel non-veto".into(),
         });
 
         graph.add_node(GraphNode {
             id: "execute".into(),
             node_type: GraphNodeType::Terminal,
             agent: None,
-            description: "Execute approved action through Sandbox Prism".into(),
+            description: "Return text draft and attempt policy-gated local memory update".into(),
         });
 
         graph.add_node(GraphNode {
@@ -368,215 +367,64 @@ pub struct DebateResult {
     pub summary: String,
 }
 
-/// Run a structured debate round between agents
+/// Produce a deterministic workflow-check record in the legacy debate envelope.
+/// No extra model is called, no dialogue is invented, and no fact-check occurs.
 pub fn run_debate(
     proposals: &[AgentMessage],
-    intent: &ParsedIntent,
+    _intent: &ParsedIntent,
     max_rounds: usize,
 ) -> DebateResult {
-    let round_id = Uuid::new_v4().to_string();
-    let mut arguments: Vec<DebateArgument> = vec![];
-    let mut rounds_completed = 0;
-
-    // ── Round 1: Each agent states their position ──
-    for proposal in proposals {
-        arguments.push(DebateArgument {
-            id: Uuid::new_v4().to_string(),
-            from: proposal.from.clone(),
-            argument_type: ArgumentType::Position,
-            target_agent: None,
-            content: summarize_proposal(&proposal.content),
-            confidence: proposal.metadata.confidence,
-            timestamp: Utc::now().to_rfc3339(),
-        });
-    }
-    rounds_completed += 1;
-
-    // ── Round 2: Challenges — agents critique each other ──
-    if max_rounds >= 2 && proposals.len() > 1 {
-        // Reasoner challenges Tool Smith's risk assessment
-        if let Some(ts_proposal) = proposals.iter().find(|p| p.from == AgentRole::ToolSmith) {
-            let challenge = if ts_proposal.metadata.risk_tier >= 2 {
-                format!(
-                    "Challenge: Tool Smith proposes Tier {} action. \
-                     Has the risk been fully evaluated? The Sandbox Prism \
-                     should enforce strict boundaries for this operation.",
-                    ts_proposal.metadata.risk_tier
-                )
-            } else {
-                "No concerns with Tool Smith's low-risk assessment.".to_string()
-            };
-
-            arguments.push(DebateArgument {
-                id: Uuid::new_v4().to_string(),
-                from: AgentRole::Reasoner,
-                argument_type: if ts_proposal.metadata.risk_tier >= 2 {
-                    ArgumentType::Challenge
-                } else {
-                    ArgumentType::Support
-                },
-                target_agent: Some(AgentRole::ToolSmith),
-                content: challenge,
-                confidence: 0.8,
-                timestamp: Utc::now().to_rfc3339(),
-            });
-        }
-
-        // Memory Keeper evaluates if graph context supports the response
-        if let Some(reasoner_proposal) = proposals.iter().find(|p| p.from == AgentRole::Reasoner) {
-            let has_context = !reasoner_proposal.metadata.context_nodes.is_empty();
-            let argument_type = if has_context {
-                ArgumentType::Support
-            } else {
-                ArgumentType::Challenge
-            };
-            let content = if has_context {
-                format!(
-                    "Support: Reasoner's analysis is grounded in {} context nodes \
-                     from the Spectrum Graph. The response has empirical backing.",
-                    reasoner_proposal.metadata.context_nodes.len()
-                )
-            } else {
-                "Challenge: Reasoner's response lacks Spectrum Graph context. \
-                 Consider this a lower-confidence answer without memory grounding."
-                    .to_string()
-            };
-
-            arguments.push(DebateArgument {
-                id: Uuid::new_v4().to_string(),
-                from: AgentRole::MemoryKeeper,
-                argument_type,
-                target_agent: Some(AgentRole::Reasoner),
-                content,
-                confidence: if has_context { 0.9 } else { 0.6 },
-                timestamp: Utc::now().to_rfc3339(),
-            });
-        }
-
-        rounds_completed += 1;
-    }
-
-    // ── Round 3: Rebuttals — challenged agents respond ──
-    if max_rounds >= 3 {
-        let challenges: Vec<DebateArgument> = arguments
-            .iter()
-            .filter(|a| a.argument_type == ArgumentType::Challenge)
-            .cloned()
-            .collect();
-
-        for challenge in &challenges {
-            if let Some(target) = &challenge.target_agent {
-                let rebuttal_content = match target {
-                    AgentRole::ToolSmith => {
-                        "Rebuttal: All Tier 2+ actions are sandboxed with HMAC-SHA256 \
-                         signing, checkpoint rollback, and allow-list enforcement. \
-                         The Sandbox Prism provides deterministic isolation."
-                            .to_string()
-                    }
-                    AgentRole::Reasoner => {
-                        format!(
-                            "Rebuttal: While Spectrum Graph context strengthens confidence, \
-                             the LLM analysis is based on the user's direct intent: '{}'. \
-                             The response is still valid without graph grounding.",
-                            &intent.raw.chars().take(60).collect::<String>()
-                        )
-                    }
-                    AgentRole::MemoryKeeper => {
-                        "Rebuttal: Graph updates are executed through sandboxed write \
-                         operations with edge reinforcement. Data integrity is maintained."
-                            .to_string()
-                    }
-                    _ => "Acknowledged. Position maintained with safeguards.".to_string(),
-                };
-
-                arguments.push(DebateArgument {
-                    id: Uuid::new_v4().to_string(),
-                    from: target.clone(),
-                    argument_type: ArgumentType::Rebuttal,
-                    target_agent: Some(challenge.from.clone()),
-                    content: rebuttal_content,
-                    confidence: 0.85,
-                    timestamp: Utc::now().to_rfc3339(),
-                });
-            }
-        }
-
-        rounds_completed += 1;
-    }
-
-    // ── Calculate agreement score ──
-    let support_count = arguments
-        .iter()
-        .filter(|a| {
-            a.argument_type == ArgumentType::Support
-                || a.argument_type == ArgumentType::Concession
-        })
-        .count();
-    let challenge_count = arguments
-        .iter()
-        .filter(|a| a.argument_type == ArgumentType::Challenge)
-        .count();
-    let rebuttal_count = arguments
-        .iter()
-        .filter(|a| a.argument_type == ArgumentType::Rebuttal)
-        .count();
-
-    let total_exchanges = support_count + challenge_count + rebuttal_count;
-    let agreement_score = if total_exchanges > 0 {
-        let resolved_challenges = rebuttal_count.min(challenge_count);
-        let positive = support_count + resolved_challenges;
-        positive as f64 / total_exchanges as f64
+    let arguments = if max_rounds == 0 {
+        vec![]
     } else {
-        1.0 // No disagreement = full agreement
+        proposals.iter().map(|proposal| {
+            let content = match proposal.from {
+                AgentRole::Reasoner => format!(
+                    "Model draft received: {} characters. Factual accuracy is unvalidated; no independent reviewer was called.",
+                    proposal.content.chars().count()
+                ),
+                AgentRole::MemoryKeeper => format!(
+                    "Deterministic context check: {} retrieved nodes available. Source count does not establish relevance or factual support.",
+                    proposal.metadata.context_nodes.len()
+                ),
+                AgentRole::ToolSmith => format!(
+                    "Deterministic tool-policy assessment: risk tier {}. No tool execution or artifact was verified by this check.",
+                    proposal.metadata.risk_tier
+                ),
+                _ => format!(
+                    "Deterministic role-check record for {}. This is not independent model analysis or factual verification.",
+                    proposal.from.display_name()
+                ),
+            };
+            DebateArgument {
+                id: Uuid::new_v4().to_string(),
+                from: proposal.from.clone(),
+                // Preserve the wire format; this is a check record, not dialogue.
+                argument_type: ArgumentType::Position,
+                target_agent: None,
+                content,
+                confidence: 0.0,
+                timestamp: Utc::now().to_rfc3339(),
+            }
+        }).collect::<Vec<_>>()
     };
-
-    let resolved = agreement_score >= 0.5;
-
-    // ── Find winning position (highest average confidence) ──
-    let mut confidence_by_agent: HashMap<String, (f64, usize)> = HashMap::new();
-    for arg in &arguments {
-        let entry = confidence_by_agent
-            .entry(arg.from.display_name().to_string())
-            .or_insert((0.0, 0));
-        entry.0 += arg.confidence;
-        entry.1 += 1;
-    }
-
-    let winning_position = confidence_by_agent
-        .iter()
-        .map(|(agent, (total, count))| (agent.clone(), total / *count as f64))
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(agent, _)| agent);
-
-    let summary = format!(
-        "Debate: {} rounds, {} arguments ({} positions, {} challenges, {} rebuttals, {} supports). \
-         Agreement: {:.0}% — {}.",
-        rounds_completed,
-        arguments.len(),
-        arguments
-            .iter()
-            .filter(|a| a.argument_type == ArgumentType::Position)
-            .count(),
-        challenge_count,
-        rebuttal_count,
-        support_count,
-        agreement_score * 100.0,
-        if resolved { "RESOLVED" } else { "UNRESOLVED" }
-    );
-
     DebateResult {
-        round_id,
-        arguments,
-        rounds_completed,
+        round_id: Uuid::new_v4().to_string(),
+        rounds_completed: usize::from(!arguments.is_empty()),
         max_rounds,
-        resolved,
-        winning_position,
-        agreement_score,
-        summary,
+        resolved: false, // no factual debate has been conducted or resolved
+        winning_position: None,
+        agreement_score: 0.0, // unknown, not a fabricated consensus percentage
+        summary: format!(
+            "Workflow checks: {} records; one model draft plus deterministic role checks. Factual accuracy: unvalidated. No model debate or independent fact-check was performed.",
+            arguments.len()
+        ),
+        arguments,
     }
 }
 
 /// Summarize a proposal to a short debate-friendly statement
+#[cfg(test)]
 fn summarize_proposal(content: &str) -> String {
     let truncated: String = content.chars().take(200).collect();
     if content.len() > 200 {
@@ -696,6 +544,8 @@ pub struct WorkflowEngine;
 
 impl WorkflowEngine {
     /// Execute the full LangGraph workflow for an intent
+    // The workflow boundary intentionally keeps its inputs explicit.
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         intent: ParsedIntent,
         context_summary: &str,
@@ -877,7 +727,8 @@ impl WorkflowEngine {
                             user_content
                         };
                         match crate::ollama_bridge::chat(&model_name, &system_prompt, &user_content, None, None, few_shots).await {
-                            Ok(r) => r,
+                            Ok(r) if !r.trim().is_empty() => Ok(r),
+                            Ok(_) => Err("The model returned an empty draft. No answer or knowledge was saved.".to_string()),
                             Err(e) => {
                                 let err_text = e.to_string();
                                 let lower = err_text.to_lowercase();
@@ -896,40 +747,39 @@ impl WorkflowEngine {
                                         "[LangGraph-WF] model not installed: {} ({})",
                                         model_name, err_text
                                     );
-                                    format!(
+                                    Err(format!(
                                         "The model `{model}` isn't installed.\n\n\
                                          • Pull it:  `ollama pull {model}`\n\
                                          • Or pick an installed model in Settings → Model.\n\n\
                                          Ollama is running — only this model is missing. \
                                          Your data stays local.",
                                         model = model_name
-                                    )
+                                    ))
                                 } else {
                                     eprintln!("[LangGraph-WF] Ollama unavailable: {}", err_text);
-                                    format!(
-                                        "I'm currently unable to reach the AI model. \
+                                    Err("I'm currently unable to reach the AI model. \
                                          Please make sure Ollama is running:\n\n\
                                          1. Open a terminal\n\
                                          2. Run `ollama serve`\n\
                                          3. Try your question again\n\n\
                                          Your data is safe — everything stays local."
-                                    )
+                                        .to_string())
                                 }
                             }
                         }
                     } else {
-                        format!(
+                        Err(format!(
                             "🛡️ [Sandbox] LLM inference denied for Reasoner: {}",
                             sandbox_result.output
-                        )
+                        ))
                     }
                 } else {
-                    "Reasoner: no work unit received".to_string()
+                    Err("Reasoner: no work unit received".to_string())
                 }
             },
             // 2b: Tool Smith — sync evaluation (completes instantly)
             async {
-                if let Some(ref work) = tool_smith_work {
+                let proposal = if let Some(ref work) = tool_smith_work {
                     ToolSmithNode::evaluate(work, &intent_for_ts)
                 } else {
                     AgentMessage::new(
@@ -938,11 +788,13 @@ impl WorkflowEngine {
                         MessageType::Proposal,
                         "Tool Smith: no tool execution required".to_string(),
                     )
-                }
+                };
+                emit_activity(&app_handle, "Tool Smith", "Deterministic tool-policy check complete; no tool executed", "completed", "analyze");
+                proposal
             },
             // 2c: Memory Keeper — sync processing (completes instantly)
             async {
-                if let Some(ref work) = memory_keeper_work {
+                let proposal = if let Some(ref work) = memory_keeper_work {
                     MemoryKeeperNode::process(work, &intent_for_mk, ctx_len)
                 } else {
                     AgentMessage::new(
@@ -951,12 +803,20 @@ impl WorkflowEngine {
                         MessageType::Proposal,
                         "Memory Keeper: no graph updates needed".to_string(),
                     )
-                }
+                };
+                emit_activity(&app_handle, "Memory Keeper", "Context-availability check complete; factual support unvalidated", "completed", "analyze");
+                proposal
             }
         );
 
+        // Errors are not model answers and must not be approved or learned.
+        let llm_response = llm_response.map_err(|message| -> Box<dyn std::error::Error + Send + Sync> {
+            message.into()
+        })?;
+
         // ── Record Reasoner results ──
-        let reasoner_confidence = if llm_response.contains("Offline") { 0.5 } else { 0.85 };
+        // No independent factual validation or calibrated confidence is available.
+        let reasoner_confidence = 0.0;
         let reasoner_proposal =
             ReasonerNode::propose(&llm_response, reasoner_confidence, context_node_ids.to_vec());
         state.visit_node("reasoner");
@@ -974,7 +834,6 @@ impl WorkflowEngine {
         session.complete_trace_step("Tool Smith");
         state.checkpoint("tool_smith");
         state.transition("tool_smith", "parallel_join", "tool smith proposal", parallel_start);
-        emit_activity(&app_handle, "Tool Smith", "Tool evaluation complete", "completed", "analyze");
 
         // ── Record Memory Keeper results ──
         state.visit_node("memory_keeper");
@@ -983,7 +842,6 @@ impl WorkflowEngine {
         session.complete_trace_step("Memory Keeper");
         state.checkpoint("memory_keeper");
         state.transition("memory_keeper", "parallel_join", "memory keeper proposal", parallel_start);
-        emit_activity(&app_handle, "Memory Keeper", "Graph context processed", "completed", "analyze");
 
         eprintln!("[LangGraph-WF] All 3 specialists completed analysis (parallel via tokio::join!)");
 
@@ -995,8 +853,8 @@ impl WorkflowEngine {
         state.visit_node("debate");
         state.status = WorkflowStatus::DebateInProgress;
         session.current_phase = CollaborationPhase::Proposing;
-        session.push_trace("Debate", "Agents debating proposals", StepStatus::Active);
-        emit_activity(&app_handle, "Debate", "Agents debating proposals…", "thinking", "debate");
+        session.push_trace("Workflow checks", "Deterministic role checks (not fact-checking)", StepStatus::Active);
+        emit_activity(&app_handle, "Workflow checks", "Reviewing deterministic role checks; no model debate…", "thinking", "debate");
 
         let all_proposals = vec![
             reasoner_proposal.clone(),
@@ -1004,16 +862,16 @@ impl WorkflowEngine {
             memory_keeper_proposal.clone(),
         ];
 
-        let debate_result = run_debate(&all_proposals, &intent, 3);
+        let debate_result = run_debate(&all_proposals, &intent, 1);
 
         // Emit individual debate arguments for live log
         for arg in &debate_result.arguments {
             let arg_label = match arg.argument_type {
-                ArgumentType::Position => "states position",
-                ArgumentType::Challenge => "challenges",
-                ArgumentType::Rebuttal => "rebuts",
-                ArgumentType::Support => "supports",
-                ArgumentType::Concession => "concedes",
+                ArgumentType::Position => "check record",
+                ArgumentType::Challenge => "check concern",
+                ArgumentType::Rebuttal => "check response",
+                ArgumentType::Support => "check support",
+                ArgumentType::Concession => "check update",
             };
             let target_str = arg.target_agent.as_ref()
                 .map(|t| format!(" → {}", t.display_name()))
@@ -1021,7 +879,7 @@ impl WorkflowEngine {
             emit_activity(
                 &app_handle,
                 arg.from.display_name(),
-                &format!("{}{}: {}", arg_label, target_str, &arg.content.chars().take(80).collect::<String>()),
+                &format!("{}{}: {}", arg_label, target_str, arg.content.chars().take(80).collect::<String>()),
                 "thinking",
                 "debate",
             );
@@ -1046,13 +904,13 @@ impl WorkflowEngine {
         }
 
         state.debate = Some(debate_result.clone());
-        session.complete_trace_step("Debate");
+        session.complete_trace_step("Workflow checks");
         state.checkpoint("debate");
         state.transition("debate", "sentinel_review", "debate complete", debate_start);
         emit_activity(
             &app_handle,
-            "Debate",
-            &format!("Debate {} — {:.0}% agreement", if debate_result.resolved { "resolved" } else { "unresolved" }, debate_result.agreement_score * 100.0),
+            "Workflow checks",
+            "Role checks recorded; answer remains factually unvalidated",
             "completed",
             "debate",
         );
@@ -1096,17 +954,14 @@ impl WorkflowEngine {
         state.visit_node("consensus");
         state.status = WorkflowStatus::VotingInProgress;
         session.current_phase = CollaborationPhase::Voting;
-        session.push_trace("Consensus", "Voting round", StepStatus::Active);
-        emit_activity(&app_handle, "Consensus", "All 5 agents casting votes…", "thinking", "vote");
-
-        // Collect votes — influenced by debate results
-        let debate_bonus: f64 = if debate_result.resolved { 0.1 } else { -0.05 };
+        session.push_trace("Consensus", "Deterministic policy gate", StepStatus::Active);
+        emit_activity(&app_handle, "Consensus", "Applying role-policy checks (not independent model reviews)…", "thinking", "vote");
 
         let orchestrator_vote = Vote {
             agent: AgentRole::Orchestrator,
             approve: true,
-            reason: "Orchestrator approves: workflow executed as planned".to_string(),
-            confidence: (0.9 + debate_bonus).clamp(0.0, 1.0),
+            reason: "Routing check passed; factual accuracy is unvalidated".to_string(),
+            confidence: 0.0,
         };
         let reasoner_vote = ReasonerNode::vote(&llm_response, &reasoner_proposal.content);
         let tool_smith_vote = ToolSmithNode::vote(&llm_response);
@@ -1143,7 +998,7 @@ impl WorkflowEngine {
         emit_activity(
             &app_handle,
             "Consensus",
-            &format!("Consensus {} — {}/{} approved", if consensus.approved { "reached ✓" } else { "rejected ✗" }, consensus.approve_count, votes.len()),
+            &format!("Policy gate {} — {}/{} role checks passed; not a fact-check", if consensus.approved { "passed" } else { "rejected" }, consensus.approve_count, votes.len()),
             "completed",
             "vote",
         );
@@ -1176,8 +1031,8 @@ impl WorkflowEngine {
         let _exec_start = std::time::Instant::now();
         state.visit_node(target_node);
         session.current_phase = CollaborationPhase::Executing;
-        session.push_trace("Sandbox Prism", "Executing approved actions", StepStatus::Active);
-        emit_activity(&app_handle, "Sandbox Prism", "Executing through isolated sandbox…", "thinking", "execute");
+        session.push_trace("Sandbox Prism", "Finalizing response and local memory", StepStatus::Active);
+        emit_activity(&app_handle, "Sandbox Prism", "Finalizing text response; checking local memory-write policy…", "thinking", "execute");
 
         let final_response;
         let mut edges_reinforced = vec![];
@@ -1185,7 +1040,7 @@ impl WorkflowEngine {
         let agent_used;
 
         if consensus.approved {
-            final_response = llm_response.clone();
+            final_response = format!("{}\n\n---\nEvidence status: unvalidated model draft · deterministic workflow checks, not independent fact-checking.", llm_response);
             agent_used = determine_primary_agent(&intent);
 
             match MemoryKeeperNode::execute_graph_updates(
@@ -1214,7 +1069,7 @@ impl WorkflowEngine {
         session.complete();
         state.checkpoint(target_node);
         state.completed_at = Some(Utc::now().to_rfc3339());
-        emit_activity(&app_handle, "Sandbox Prism", "Workflow complete — all actions executed safely", "completed", "execute");
+        emit_activity(&app_handle, "Sandbox Prism", "Workflow complete; no tool execution or artifact creation verified in this text lane", "completed", "execute");
 
         // Record execution result
         session.add_message(AgentMessage::new(
@@ -1564,94 +1419,55 @@ mod tests {
     }
 
     #[test]
-    fn test_run_debate_produces_positions() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-
-        let result = run_debate(&proposals, &intent, 1);
+    fn workflow_checks_are_one_pass_not_a_model_debate() {
+        let result = run_debate(&make_test_proposals(), &make_test_intent(), 3);
         assert_eq!(result.rounds_completed, 1);
-        let positions: Vec<_> = result.arguments.iter()
-            .filter(|a| a.argument_type == ArgumentType::Position).collect();
-        assert_eq!(positions.len(), 3, "3 proposals → 3 position statements");
+        assert_eq!(result.arguments.len(), 3);
+        assert!(result.arguments.iter().all(|a| a.argument_type == ArgumentType::Position));
+        assert!(result.arguments.iter().all(|a| a.target_agent.is_none()));
+        assert!(result.arguments.iter().all(|a| a.confidence == 0.0));
+        assert!(!result.resolved);
+        assert_eq!(result.agreement_score, 0.0);
+        assert!(result.winning_position.is_none());
+        assert!(result.summary.contains("Factual accuracy: unvalidated"));
     }
 
     #[test]
-    fn test_run_debate_two_rounds_adds_challenges() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-
-        let result = run_debate(&proposals, &intent, 2);
-        assert!(result.rounds_completed >= 2);
-        let challenges: Vec<_> = result.arguments.iter()
-            .filter(|a| a.argument_type == ArgumentType::Challenge).collect();
-        // With low risk_tier = 1, Reasoner won't challenge ToolSmith,
-        // but MemoryKeeper should still evaluate
-        assert!(!result.arguments.is_empty());
-    }
-
-    #[test]
-    fn test_run_debate_three_rounds_adds_rebuttals() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-
-        let result = run_debate(&proposals, &intent, 3);
-        assert!(result.rounds_completed >= 3);
-        // Rebuttals should exist if there were challenges
-        let has_rebuttals = result.arguments.iter()
-            .any(|a| a.argument_type == ArgumentType::Rebuttal);
-        // May or may not have rebuttals depending on challenge count
-        let _ = has_rebuttals;
-    }
-
-    #[test]
-    fn test_run_debate_agreement_score() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-
-        let result = run_debate(&proposals, &intent, 3);
-        assert!(result.agreement_score >= 0.0 && result.agreement_score <= 1.0,
-            "agreement score should be 0-1, got {}", result.agreement_score);
-    }
-
-    #[test]
-    fn test_run_debate_resolved_flag() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-
-        let result = run_debate(&proposals, &intent, 3);
-        // resolved = agreement_score >= 0.5
-        if result.agreement_score >= 0.5 {
-            assert!(result.resolved);
-        } else {
+    fn source_count_never_becomes_empirical_backing() {
+        for count in [0, 1, 100] {
+            let mut proposals = make_test_proposals();
+            for proposal in &mut proposals {
+                proposal.metadata.context_nodes = (0..count).map(|i| format!("n{i}")).collect();
+            }
+            let result = run_debate(&proposals, &make_test_intent(), 3);
+            let content = result.arguments.iter().map(|a| a.content.as_str()).collect::<Vec<_>>().join(" ");
+            assert!(content.contains("Source count does not establish"));
+            assert!(!content.contains("empirical backing"));
+            assert!(!content.contains("still valid without"));
             assert!(!result.resolved);
+            assert_eq!(result.agreement_score, 0.0);
         }
     }
 
     #[test]
-    fn test_run_debate_summary_nonempty() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-        let result = run_debate(&proposals, &intent, 3);
-        assert!(!result.summary.is_empty());
-        assert!(result.summary.contains("Debate:"));
+    fn workflow_checks_do_not_replay_model_reasoning_or_private_source_text() {
+        let mut proposals = make_test_proposals();
+        proposals[0].content = "SENSITIVE_DRAFT_CONTENT <think>hidden reasoning</think>".into();
+        let result = run_debate(&proposals, &make_test_intent(), 3);
+        assert!(result.arguments.iter().all(|a| !a.content.contains("SENSITIVE_DRAFT_CONTENT")));
+        assert!(result.arguments.iter().all(|a| !a.content.contains("<think>")));
     }
 
     #[test]
-    fn test_run_debate_winning_position() {
-        let intent = make_test_intent();
-        let proposals = make_test_proposals();
-        let result = run_debate(&proposals, &intent, 3);
-        assert!(result.winning_position.is_some(), "should have a winning position");
-    }
-
-    #[test]
-    fn test_run_debate_single_proposal() {
-        let intent = make_test_intent();
-        let proposals = vec![make_test_proposals().remove(0)];
-
-        let result = run_debate(&proposals, &intent, 3);
-        assert!(result.rounds_completed <= 3, "single proposal should complete quickly");
-        assert!(result.winning_position.is_some(), "should produce a winning position");
+    fn workflow_checks_respect_disabled_and_empty_inputs() {
+        let disabled = run_debate(&make_test_proposals(), &make_test_intent(), 0);
+        assert!(disabled.arguments.is_empty());
+        assert_eq!(disabled.rounds_completed, 0);
+        let empty = run_debate(&[], &make_test_intent(), 3);
+        assert!(empty.arguments.is_empty());
+        assert_eq!(empty.rounds_completed, 0);
+        assert!(empty.winning_position.is_none());
+        assert!(!empty.resolved);
     }
 
     // ─── Summarize Proposal ────────────────────────────────────────────────

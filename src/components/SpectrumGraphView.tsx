@@ -1,1033 +1,1257 @@
-// PrismOS-AI Spectrum Graph View — Force-Directed Knowledge Graph Visualization
-//
-// Renders the multi-layered Spectrum Graph using react-force-graph-2d.
-//
-// Organized as CLUSTERS: nodes are grouped into knowledge families (You,
-// PrismOS, PolyEdgeBot, Projects, Chats, Documents, Insights, Knowledge).
-// Collapsed clusters render as one hub bubble — click a hub to expand its
-// members in place; click again (or use the legend / toolbar) to collapse.
-// Clicking a member focuses it: neighbors stay lit, everything else dims.
-// Custom collision + cluster-anchor forces keep groups apart so labels stay
-// readable instead of piling on top of each other.
-
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import ForceGraph2D from "react-force-graph-2d";
-import type { GraphSnapshot, SpectrumNode, SpectrumEdge, GraphMetrics, AnticipatedNeed, PredictedEdge } from "../types";
-import prismosLogo from "../assets/prismos-logo.svg";
+import type { GraphSnapshot, PredictedEdge } from "../types";
+import {
+  buildKnowledgeGraph,
+  connectedNeighborhood,
+  findKnowledgePath,
+  searchKnowledgeNodes,
+  type KnowledgeNode,
+} from "../lib/knowledgeGraph";
+import KnowledgeGraphScene from "./KnowledgeGraphScene";
 import "./SpectrumGraphView.css";
 
-// ─── Facet Color Palette ───────────────────────────────────────────────────────
+const MAX_RENDERED_NODES = 1200;
+const PREFERENCES_KEY = "prismos-knowledge-view-v1";
+const EMPTY_NODES: GraphSnapshot["nodes"] = [];
+const EMPTY_EDGES: GraphSnapshot["edges"] = [];
+type ConnectionScope = "connected" | "unconnected" | "all";
 
-const FACET_COLORS: Record<string, string> = {
-  work: "#4fc3f7",
-  health: "#81c784",
-  finance: "#ffb74d",
-  social: "#ce93d8",
-  learning: "#64b5f6",
-  memory: "#90a4ae",
-  task: "#e57373",
-  note: "#aed581",
-  conversation: "#78909c",
-  meta: "#b0bec5",
-  personal: "#f48fb1",
-  document: "#aed581",
-  doc_chunk: "#9ccc65",
-};
-
-const LAYER_SIZES: Record<string, number> = {
-  core: 10,
-  context: 6,
-  knowledge: 6,
-  ephemeral: 4,
-};
-
-// ─── Knowledge Clusters ────────────────────────────────────────────────────────
-// First match wins. The final entry is the catch-all bucket.
-
-interface ClusterDef {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-  match: (id: string, nodeType: string) => boolean;
+function preferences(): { mode: "2d" | "3d"; labels: boolean } {
+  try {
+    const value = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
+    return {
+      mode: value?.mode === "2d" ? "2d" : "3d",
+      labels: value?.labels === true,
+    };
+  } catch {
+    return { mode: "3d", labels: false };
+  }
 }
 
-const CLUSTER_DEFS: ClusterDef[] = [
-  { id: "you", name: "You", icon: "👤", color: "#f48fb1", match: (id) => id.startsWith("user-") },
-  { id: "prismos", name: "PrismOS", icon: "🔮", color: "#64b5f6", match: (id) => id.startsWith("pos-") || id === "proj-prismos" },
-  { id: "polyedgebot", name: "PolyEdgeBot", icon: "📈", color: "#ffb74d", match: (id) => id.startsWith("peb-") },
-  { id: "projects", name: "Projects", icon: "🗂️", color: "#4fc3f7", match: (id) => id.startsWith("proj-") },
-  { id: "chats", name: "Chats", icon: "💬", color: "#78909c", match: (_id, t) => t === "conversation" },
-  { id: "documents", name: "Documents", icon: "📄", color: "#aed581", match: (_id, t) => t === "document" || t === "doc_chunk" },
-  { id: "insights", name: "Insights", icon: "✨", color: "#ce93d8", match: (_id, t) => ["suggestion", "drift_pattern", "thought_current", "refraction", "meta"].includes(t) },
-  { id: "knowledge", name: "Knowledge", icon: "🧠", color: "#81c784", match: () => true },
-];
-
-function clusterOf(id: string, nodeType: string): ClusterDef {
-  return CLUSTER_DEFS.find((c) => c.match(id, nodeType)) ?? CLUSTER_DEFS[CLUSTER_DEFS.length - 1];
+function reviewReasons(node: KnowledgeNode): string[] {
+  const reasons: string[] = [];
+  const date = Date.parse(node.updated_at);
+  if (!Number.isFinite(date) || date > Date.now())
+    reasons.push("Update date unknown");
+  else if (Date.now() - date >= 90 * 86400000)
+    reasons.push("Not updated in 90+ days");
+  if (!node.degree) reasons.push("No recorded connections");
+  return reasons;
 }
 
-const EXPANDED_STORE_KEY = "prismos-graph-expanded";
-
-// ─── Force Graph Data Types ────────────────────────────────────────────────────
-
-interface GraphNode {
-  id: string;
-  label: string;
-  node_type: string;
-  layer: string;
-  access_count: number;
-  content: string;
-  color: string;
-  val: number;
-  cluster: string;
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
-  // Cluster-hub extras
-  isHub?: boolean;
-  count?: number;
-  icon?: string;
+function updatedLabel(value: string): string {
+  const date = Date.parse(value);
+  return Number.isFinite(date) && date <= Date.now()
+    ? new Date(date).toLocaleDateString()
+    : "Unknown";
 }
 
-interface GraphLink {
-  source: string;
-  target: string;
-  relation: string;
-  weight: number;
-  momentum: number;
-  edge_id: string;
-  reinforcements: number;
-  last_reinforced: string | null;
-  predicted?: boolean;
-  aggregated?: number; // >1 when this link bundles many collapsed connections
-}
-
-interface GraphData {
-  nodes: GraphNode[];
-  links: GraphLink[];
-}
-
-const linkEndId = (end: GraphLink["source"]): string =>
-  typeof end === "string" ? end : (end as unknown as GraphNode).id;
-
-// ─── Component ─────────────────────────────────────────────────────────────────
-
-interface SpectrumGraphViewProps {
+/** Local graph browser. View operations never create or infer stored edges. */
+export default function SpectrumGraphView({
+  refreshKey = 0,
+}: {
   refreshKey?: number;
-}
-
-export default function SpectrumGraphView({ refreshKey }: SpectrumGraphViewProps) {
-  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
-  const [metrics, setMetrics] = useState<GraphMetrics | null>(null);
-  const [anticipations, setAnticipations] = useState<AnticipatedNeed[]>([]);
-  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
+}) {
+  const initialPreferences = useMemo(preferences, []);
+  const [mode, setMode] = useState<"2d" | "3d">(initialPreferences.mode);
+  const [showLabels, setShowLabels] = useState(initialPreferences.labels);
+  const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fgRef = useRef<any>(null);
-  const didInitialFit = useRef(false);
-  const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
-  // Glow phase is animated in a ref + throttled tick (~10 fps) to avoid
-  // pegging the JS thread by re-rendering the entire force-graph every
-  // animation frame (was ~60 fps → 100% CPU + frozen UI).
-  const glowRef = useRef<number>(0);
-  const [glowTick, setGlowTick] = useState(0);
-  const [recentEdges, setRecentEdges] = useState<Set<string>>(new Set());
-  const [predictions, setPredictions] = useState<PredictedEdge[]>([]);
-  const [showIntro, setShowIntro] = useState(
-    () => !localStorage.getItem("prismos-graph-intro-seen")
+  const [loadError, setLoadError] = useState("");
+  const [query, setQuery] = useState("");
+  const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set());
+  const [attention, setAttention] = useState(false);
+  const [connectionScope, setConnectionScope] = useState<
+    ConnectionScope | "auto"
+  >("auto");
+  const [showGuide, setShowGuide] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [focus, setFocus] = useState(false);
+  const [fullNote, setFullNote] = useState(false);
+  const [neighborLimit, setNeighborLimit] = useState(20);
+  const [browseLimit, setBrowseLimit] = useState(30);
+  const [pathFrom, setPathFrom] = useState<string | null>(null);
+  const [pathTo, setPathTo] = useState<string | null>(null);
+  const [fitKey, setFitKey] = useState(0);
+  const [size, setSize] = useState({ width: 640, height: 600 });
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<PredictedEdge[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState("");
+  const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(
+    null,
   );
-  // Which clusters are expanded. Default: all collapsed → a calm, readable
-  // constellation of hubs. Persisted so the view reopens the way you left it.
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem(EXPANDED_STORE_KEY);
-      return new Set<string>(saved ? (JSON.parse(saved) as string[]) : []);
-    } catch {
-      return new Set<string>();
-    }
-  });
-
-  const persistExpanded = useCallback((next: Set<string>) => {
-    setExpanded(next);
-    try {
-      localStorage.setItem(EXPANDED_STORE_KEY, JSON.stringify([...next]));
-    } catch {
-      /* storage full/unavailable — view still works */
-    }
-  }, []);
-
-  // Animate glow pulse for high-momentum edges (throttled, see note above).
-  useEffect(() => {
-    const iv = setInterval(() => {
-      glowRef.current += 0.18;
-      setGlowTick((t) => (t + 1) % 1_000_000);
-    }, 100);
-    return () => clearInterval(iv);
-  }, []);
-
-  // ─── Load full graph snapshot ──────────────────────────────────────────
+  const [pendingEdge, setPendingEdge] = useState<string | null>(null);
+  const [edgeError, setEdgeError] = useState("");
+  const canvasContainer = useRef<HTMLDivElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const requestNumber = useRef(0);
+  const suggestionRequest = useRef(0);
+  const mounted = useRef(true);
+  const suggestionBusy = useRef(false);
+  const edgeBusy = useRef(false);
 
   const loadGraph = useCallback(async () => {
+    const request = ++requestNumber.current;
+    setLoading(true);
+    setLoadError("");
     try {
-      setLoading(true);
-      const result = await invoke<string>("get_spectrum_graph");
-      const snapshot: GraphSnapshot = JSON.parse(result);
-
-      const nodes: GraphNode[] = snapshot.nodes.map((n: SpectrumNode) => ({
-        id: n.id,
-        label: n.label,
-        node_type: n.node_type,
-        layer: n.layer || "context",
-        access_count: n.access_count || 0,
-        content: n.content,
-        color: FACET_COLORS[n.node_type] || "#b0bec5",
-        val: LAYER_SIZES[n.layer || "context"] || 6,
-        cluster: clusterOf(n.id, n.node_type).id,
-      }));
-
-      const nodeIds = new Set(nodes.map((n) => n.id));
-      const links: GraphLink[] = snapshot.edges
-        .filter((e: SpectrumEdge) => nodeIds.has(e.source_id) && nodeIds.has(e.target_id))
-        .map((e: SpectrumEdge) => ({
-          source: e.source_id,
-          target: e.target_id,
-          relation: e.relation,
-          weight: e.weight,
-          momentum: e.momentum || 0,
-          edge_id: e.id,
-          reinforcements: e.reinforcements || 0,
-          last_reinforced: e.last_reinforced || null,
-        }));
-
-      // Compute recently strengthened edges (reinforced within last 5 minutes)
-      const recentCutoff = Date.now() - 5 * 60 * 1000;
-      const recent = new Set<string>();
-      for (const link of links) {
-        if (link.reinforcements > 0 && link.last_reinforced) {
-          const ts = new Date(link.last_reinforced).getTime();
-          if (ts > recentCutoff) recent.add(link.edge_id);
-        }
-      }
-      setRecentEdges(recent);
-
-      setGraphData({ nodes, links });
-      setMetrics(snapshot.stats);
-    } catch (e) {
-      console.error("Failed to load spectrum graph:", e);
+      const raw = await invoke<string>("get_spectrum_graph");
+      const graph = JSON.parse(raw) as GraphSnapshot;
+      if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges))
+        throw new Error("Invalid graph snapshot received");
+      if (mounted.current && request === requestNumber.current)
+        setSnapshot(graph);
+    } catch (error) {
+      if (mounted.current && request === requestNumber.current)
+        setLoadError(String(error));
     } finally {
-      setLoading(false);
+      if (mounted.current && request === requestNumber.current)
+        setLoading(false);
     }
   }, []);
-
-  // ─── Load anticipatory needs ───────────────────────────────────────────
-
-  const loadAnticipations = useCallback(async () => {
-    try {
-      const result = await invoke<string>("anticipate_needs");
-      setAnticipations(JSON.parse(result));
-    } catch (e) {
-      console.error("Failed to load anticipations:", e);
-    }
-  }, []);
-
-  // ─── Load edge prophecy predictions ────────────────────────────────────
-
-  const loadPredictions = useCallback(async () => {
-    try {
-      const result = await invoke<string>("predict_edges", { limit: 10 });
-      setPredictions(JSON.parse(result));
-    } catch (e) {
-      console.error("Failed to load edge predictions:", e);
-    }
-  }, []);
-
-  const confirmPrediction = useCallback(async (sourceId: string, targetId: string) => {
-    try {
-      await invoke("confirm_predicted_edge", { sourceId, targetId });
-      loadGraph();
-      loadPredictions();
-    } catch (e) {
-      console.error("Failed to confirm predicted edge:", e);
-    }
-  }, [loadGraph, loadPredictions]);
-
-  const dismissPrediction = useCallback(async (sourceId: string, targetId: string) => {
-    try {
-      await invoke("dismiss_predicted_edge", { sourceId, targetId });
-      loadPredictions();
-    } catch (e) {
-      console.error("Failed to dismiss predicted edge:", e);
-    }
-  }, [loadPredictions]);
 
   useEffect(() => {
-    loadGraph();
-    loadAnticipations();
-    loadPredictions();
-  }, [loadGraph, loadAnticipations, loadPredictions, refreshKey]);
-
-  // ─── Resize handling (measure canvas area, not full container) ────────
-
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const update = () => {
-      setDimensions({
-        width: el.clientWidth,
-        height: el.clientHeight,
-      });
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestNumber.current++;
+      suggestionRequest.current++;
     };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [loading]);
+  }, []);
 
-  // ─── Cluster membership & displayed (collapsed/expanded) graph ────────
+  useEffect(() => {
+    void loadGraph();
+  }, [loadGraph, refreshKey]);
 
-  const clusterCounts = useMemo(() => {
+  useEffect(() => {
+    // Persist display preferences only, never note text, source paths, or searches.
+    try {
+      localStorage.setItem(
+        PREFERENCES_KEY,
+        JSON.stringify({ mode, labels: showLabels }),
+      );
+    } catch {
+      /* Storage is optional. */
+    }
+  }, [mode, showLabels]);
+
+  useEffect(() => {
+    const host = canvasContainer.current;
+    if (!host) return;
+    const resize = () => {
+      const bounds = host.getBoundingClientRect();
+      if (bounds.width > 0 && bounds.height > 0)
+        setSize({ width: bounds.width, height: bounds.height });
+    };
+    resize();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(resize);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+        return;
+      if (
+        event.target instanceof HTMLElement &&
+        (event.target.isContentEditable ||
+          /INPUT|TEXTAREA|SELECT/.test(event.target.tagName))
+      )
+        return;
+      event.preventDefault();
+      searchInput.current?.focus();
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+
+  const graph = useMemo(
+    () =>
+      buildKnowledgeGraph(
+        snapshot?.nodes ?? EMPTY_NODES,
+        snapshot?.edges ?? EMPTY_EDGES,
+      ),
+    [snapshot],
+  );
+  const nodeById = useMemo(
+    () => new Map(graph.nodes.map((node) => [node.id, node])),
+    [graph],
+  );
+  const groupById = useMemo(
+    () => new Map(graph.groups.map((group) => [group.id, group])),
+    [graph],
+  );
+  const selected = selectedId ? nodeById.get(selectedId) : undefined;
+  const hovered = hoveredId ? nodeById.get(hoveredId) : undefined;
+  const searchResults = useMemo(
+    () => (query.trim() ? searchKnowledgeNodes(graph.nodes, query) : []),
+    [graph.nodes, query],
+  );
+  const selectedNeighborhood = useMemo(
+    () => (selected ? connectedNeighborhood(graph.edges, selected.id) : null),
+    [selected, graph.edges],
+  );
+  // Selecting highlights the neighborhood without filtering or moving it.
+  // Only the explicit Focus action removes the surrounding map from view.
+  const focusIds = focus ? selectedNeighborhood : null;
+  const path = useMemo(
+    () =>
+      pathFrom && pathTo
+        ? findKnowledgePath(graph.edges, pathFrom, pathTo)
+        : null,
+    [graph.edges, pathFrom, pathTo],
+  );
+  const pathEdgeIds = useMemo(() => new Set(path?.edgeIds ?? []), [path]);
+  const pathNodeIds = useMemo(() => new Set(path?.nodeIds ?? []), [path]);
+  const connectedCount = graph.nodes.length - graph.diagnostics.isolatedNodes;
+  const activeScope: ConnectionScope =
+    connectionScope === "auto"
+      ? connectedCount > 0 && graph.diagnostics.isolatedNodes > connectedCount
+        ? "connected"
+        : "all"
+      : connectionScope;
+  const isolatedSuggestionCount = useMemo(
+    () =>
+      graph.nodes.filter(
+        (node) => node.node_type === "suggestion" && node.degree === 0,
+      ).length,
+    [graph.nodes],
+  );
+  const scopedNodes = useMemo(
+    () =>
+      graph.nodes
+        .filter(
+          (node) =>
+            activeScope === "all" ||
+            (activeScope === "connected" ? node.degree > 0 : node.degree === 0),
+        )
+        .sort(
+          (a, b) =>
+            Number(a.node_type === "suggestion") -
+            Number(b.node_type === "suggestion"),
+        ),
+    [graph.nodes, activeScope],
+  );
+  const scopedGroupCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const n of graphData.nodes) {
-      counts.set(n.cluster, (counts.get(n.cluster) ?? 0) + 1);
-    }
+    for (const node of scopedNodes)
+      counts.set(node.groupId, (counts.get(node.groupId) ?? 0) + 1);
     return counts;
-  }, [graphData.nodes]);
-
-  const activeClusters = useMemo(
-    () => CLUSTER_DEFS.filter((c) => (clusterCounts.get(c.id) ?? 0) > 0),
-    [clusterCounts]
+  }, [scopedNodes]);
+  const reviewCount = useMemo(
+    () => scopedNodes.filter((node) => reviewReasons(node).length > 0).length,
+    [scopedNodes],
   );
-
-  const displayed: GraphData = useMemo(() => {
-    const nodes: GraphNode[] = [];
-    const nodeById = new Map<string, GraphNode>();
-    for (const n of graphData.nodes) nodeById.set(n.id, n);
-
-    // Hub bubble per collapsed cluster; member nodes for expanded clusters.
-    for (const c of activeClusters) {
-      const count = clusterCounts.get(c.id) ?? 0;
-      if (expanded.has(c.id)) continue;
-      nodes.push({
-        id: `cluster:${c.id}`,
-        label: c.name,
-        node_type: "cluster",
-        layer: "core",
-        access_count: 0,
-        content: `${count} items`,
-        color: c.color,
-        val: 14 + Math.sqrt(count) * 3,
-        cluster: c.id,
-        isHub: true,
-        count,
-        icon: c.icon,
-      });
-    }
-    for (const n of graphData.nodes) {
-      if (expanded.has(n.cluster)) nodes.push(n);
-    }
-
-    // Remap links to whichever endpoint is displayed (member or its hub),
-    // bundling everything that lands on the same displayed pair.
-    const displayId = (rawId: string): string => {
-      const n = nodeById.get(rawId);
-      if (!n) return rawId;
-      return expanded.has(n.cluster) ? n.id : `cluster:${n.cluster}`;
-    };
-
-    const allRaw: GraphLink[] = [
-      ...graphData.links,
-      ...predictions
-        .filter((p) => nodeById.has(p.source_id) && nodeById.has(p.target_id))
-        .map((p) => ({
-          source: p.source_id,
-          target: p.target_id,
-          relation: p.reason,
-          weight: p.probability,
-          momentum: 0,
-          edge_id: `predicted-${p.source_id}-${p.target_id}`,
-          reinforcements: 0,
-          last_reinforced: null,
-          predicted: true,
-        })),
-    ];
-
-    const bundled = new Map<string, GraphLink>();
-    for (const l of allRaw) {
-      const s = displayId(linkEndId(l.source));
-      const t = displayId(linkEndId(l.target));
-      if (s === t) continue; // interior to a collapsed cluster
-      const bothMembers = !s.startsWith("cluster:") && !t.startsWith("cluster:");
-      if (bothMembers) {
-        // Real edge between two visible nodes — keep it intact (reinforce
-        // buttons, glow, prophecy dashes all rely on the real edge identity).
-        bundled.set(l.edge_id, { ...l, source: s, target: t });
-        continue;
-      }
-      const key = s < t ? `${s}→${t}` : `${t}→${s}`;
-      const prev = bundled.get(key);
-      if (prev) {
-        prev.aggregated = (prev.aggregated ?? 1) + 1;
-        prev.weight = Math.max(prev.weight, l.weight);
-        prev.momentum = Math.max(prev.momentum, l.momentum);
-        prev.relation = `${prev.aggregated} connections`;
-        prev.predicted = prev.predicted && l.predicted;
-      } else {
-        bundled.set(key, {
-          ...l,
-          source: s,
-          target: t,
-          edge_id: `agg:${key}`,
-          relation: l.predicted ? l.relation : "1 connection",
-          aggregated: 1,
-        });
-      }
-    }
-
-    return { nodes, links: [...bundled.values()] };
-  }, [graphData, predictions, expanded, activeClusters, clusterCounts]);
-
-  // ─── Focus set: selected member + its displayed neighbors ─────────────
-
-  const focusIds = useMemo(() => {
-    if (!selectedNode || selectedNode.isHub) return null;
-    const set = new Set<string>([selectedNode.id]);
-    for (const l of displayed.links) {
-      const s = linkEndId(l.source);
-      const t = linkEndId(l.target);
-      if (s === selectedNode.id) set.add(t);
-      if (t === selectedNode.id) set.add(s);
-    }
-    return set;
-  }, [selectedNode, displayed.links]);
-
-  // ─── Layout forces: cluster anchors + collision (no overlap) ───────────
-
-  const anchors = useMemo(() => {
-    const map = new Map<string, { x: number; y: number }>();
-    const n = activeClusters.length || 1;
-    const radius = n <= 2 ? 160 : 150 + n * 42;
-    activeClusters.forEach((c, i) => {
-      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-      map.set(c.id, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
-    });
-    return map;
-  }, [activeClusters]);
-
-  const nodeRadius = (n: GraphNode) => (n.isHub ? n.val : (n.val || 6)) as number;
+  const duplicateTitles = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const node of graph.nodes)
+      counts.set(node.label, (counts.get(node.label) ?? 0) + 1);
+    return new Set(
+      [...counts].filter(([, count]) => count > 1).map(([label]) => label),
+    );
+  }, [graph.nodes]);
+  const filteredNodes = useMemo(
+    () =>
+      scopedNodes.filter(
+        (node) =>
+          !hiddenGroups.has(node.groupId) &&
+          (!attention || reviewReasons(node).length > 0) &&
+          (!focusIds || focusIds.has(node.id)),
+      ),
+    [scopedNodes, hiddenGroups, attention, focusIds],
+  );
+  const renderedNodes = useMemo(
+    () =>
+      filteredNodes.length <= MAX_RENDERED_NODES
+        ? filteredNodes
+        : [...filteredNodes]
+            .sort((a, b) => {
+              const priority = (node: KnowledgeNode) =>
+                (node.id === selectedId ? 4 : 0) +
+                (pathNodeIds.has(node.id) ? 2 : 0);
+              return (
+                priority(b) - priority(a) ||
+                b.degree - a.degree ||
+                Number(a.node_type === "suggestion") -
+                  Number(b.node_type === "suggestion") ||
+                a.label.localeCompare(b.label) ||
+                a.id.localeCompare(b.id)
+              );
+            })
+            .slice(0, MAX_RENDERED_NODES),
+    [filteredNodes, selectedId, pathNodeIds],
+  );
+  const renderedEdges = useMemo(() => {
+    const ids = new Set(renderedNodes.map((node) => node.id));
+    return graph.edges.filter(
+      (edge) => ids.has(edge.source_id) && ids.has(edge.target_id),
+    );
+  }, [renderedNodes, graph.edges]);
+  const neighbors = useMemo(
+    () =>
+      selected
+        ? graph.edges
+            .filter(
+              (edge) =>
+                edge.source_id === selected.id ||
+                edge.target_id === selected.id,
+            )
+            .map((edge) => ({
+              edge,
+              outgoing: edge.source_id === selected.id,
+              node: nodeById.get(
+                edge.source_id === selected.id
+                  ? edge.target_id
+                  : edge.source_id,
+              )!,
+            }))
+            .sort(
+              (a, b) =>
+                a.node.label.localeCompare(b.node.label) ||
+                a.edge.relation.localeCompare(b.edge.relation),
+            )
+        : [],
+    [selected, graph.edges, nodeById],
+  );
+  const visibleSelectedLinks = useMemo(
+    () =>
+      selected
+        ? renderedEdges.filter(
+            (edge) =>
+              edge.source_id === selected.id || edge.target_id === selected.id,
+          ).length
+        : 0,
+    [selected, renderedEdges],
+  );
 
   useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg || displayed.nodes.length === 0) return;
+    if (selectedId && !nodeById.has(selectedId)) {
+      setSelectedId(null);
+      setFocus(false);
+    }
+    if (
+      (pathFrom && !nodeById.has(pathFrom)) ||
+      (pathTo && !nodeById.has(pathTo))
+    ) {
+      setPathFrom(null);
+      setPathTo(null);
+    }
+  }, [nodeById, selectedId, pathFrom, pathTo]);
 
-    // Pull every node gently toward its cluster's anchor — hubs harder, so
-    // collapsed bubbles sit in a clean ring; members swarm their own anchor.
-    const clusterForce = () => {
-      let nodes: GraphNode[] = [];
-      const force = (alpha: number) => {
-        for (const node of nodes) {
-          const a = anchors.get(node.cluster);
-          if (!a) continue;
-          const k = (node.isHub ? 0.22 : 0.05) * alpha;
-          node.vx = (node.vx ?? 0) + (a.x - (node.x ?? 0)) * k;
-          node.vy = (node.vy ?? 0) + (a.y - (node.y ?? 0)) * k;
-        }
-      };
-      force.initialize = (ns: GraphNode[]) => {
-        nodes = ns;
-      };
-      return force;
-    };
-
-    // Pairwise collision keeps circles (and their labels) from stacking.
-    // O(n²) per tick is fine at this graph's scale (≤ a few hundred shown).
-    const collideForce = () => {
-      let nodes: GraphNode[] = [];
-      const force = () => {
-        const pad = 10;
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const a = nodes[i];
-            const b = nodes[j];
-            const dx = (b.x ?? 0) - (a.x ?? 0);
-            const dy = (b.y ?? 0) - (a.y ?? 0);
-            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-            const min = nodeRadius(a) + nodeRadius(b) + pad;
-            if (dist < min) {
-              const push = ((min - dist) / dist) * 0.5;
-              const px = dx * push;
-              const py = dy * push;
-              a.x = (a.x ?? 0) - px * 0.5;
-              a.y = (a.y ?? 0) - py * 0.5;
-              b.x = (b.x ?? 0) + px * 0.5;
-              b.y = (b.y ?? 0) + py * 0.5;
-            }
-          }
-        }
-      };
-      force.initialize = (ns: GraphNode[]) => {
-        nodes = ns;
-      };
-      return force;
-    };
-
-    fg.d3Force("center", null);
-    fg.d3Force("cluster", clusterForce());
-    fg.d3Force("collide", collideForce());
-    const charge = fg.d3Force("charge");
-    if (charge?.strength) charge.strength(-70);
-    const link = fg.d3Force("link");
-    if (link?.distance) {
-      link.distance((l: GraphLink) => {
-        const s = linkEndId(l.source);
-        const t = linkEndId(l.target);
-        const sn = displayed.nodes.find((n) => n.id === s);
-        const tn = displayed.nodes.find((n) => n.id === t);
-        return sn && tn && sn.cluster === tn.cluster ? 42 : 170;
+  const selectNode = useCallback(
+    (id: string) => {
+      const node = nodeById.get(id);
+      if (!node) return;
+      setSelectedId(id);
+      if (
+        activeScope !== "all" &&
+        (activeScope === "connected") !== node.degree > 0
+      ) {
+        setConnectionScope(node.degree > 0 ? "connected" : "unconnected");
+        setFocus(false);
+      }
+      setHiddenGroups((current) => {
+        if (!current.has(node.groupId)) return current;
+        const next = new Set(current);
+        next.delete(node.groupId);
+        return next;
       });
+      if (!reviewReasons(node).length) setAttention(false);
+      setFullNote(false);
+      setNeighborLimit(20);
+      setQuery("");
+      setShowSuggestions(false);
+      setShowGuide(false);
+      setEdgeError("");
+    },
+    [nodeById, activeScope],
+  );
+
+  const changeScope = (scope: ConnectionScope) => {
+    if (activeScope === scope) return;
+    setConnectionScope(scope);
+    setHiddenGroups(new Set());
+    setAttention(false);
+    setFocus(false);
+    setQuery("");
+    setPathFrom(null);
+    setPathTo(null);
+    setSelectedId(null);
+    setBrowseLimit(30);
+    setFitKey((key) => key + 1);
+  };
+
+  const showAll = () => {
+    setHiddenGroups((current) => (current.size ? new Set() : current));
+    setAttention(false);
+    setFocus(false);
+    setQuery("");
+    setFitKey((key) => key + 1);
+  };
+
+  const feedbackEdge = async (edgeId: string, feedbackSignal: number) => {
+    if (edgeBusy.current) return;
+    edgeBusy.current = true;
+    setPendingEdge(edgeId);
+    setEdgeError("");
+    try {
+      await invoke("update_edge_weight", { edgeId, feedbackSignal });
+      if (mounted.current) await loadGraph();
+    } catch (error) {
+      if (mounted.current) setEdgeError(String(error));
+    } finally {
+      edgeBusy.current = false;
+      if (mounted.current) setPendingEdge(null);
     }
-    fg.d3ReheatSimulation();
-  }, [displayed, anchors]);
+  };
 
-  const fitView = useCallback((ms = 500) => {
-    fgRef.current?.zoomToFit(ms, 70);
-  }, []);
-
-  // First layout settle → frame everything once.
-  const handleEngineStop = useCallback(() => {
-    if (!didInitialFit.current) {
-      didInitialFit.current = true;
-      fitView(600);
+  const loadSuggestions = async () => {
+    setShowSuggestions(true);
+    setSuggestionError("");
+    setSuggestionsLoading(true);
+    const request = ++suggestionRequest.current;
+    try {
+      const result = JSON.parse(
+        await invoke<string>("predict_edges", { limit: 10 }),
+      ) as PredictedEdge[];
+      if (!Array.isArray(result))
+        throw new Error("Invalid connection suggestions received");
+      if (mounted.current && request === suggestionRequest.current)
+        setSuggestions(
+          result.filter(
+            (item) =>
+              nodeById.has(item.source_id) && nodeById.has(item.target_id),
+          ),
+        );
+    } catch (error) {
+      if (mounted.current && request === suggestionRequest.current)
+        setSuggestionError(String(error));
+    } finally {
+      if (mounted.current && request === suggestionRequest.current)
+        setSuggestionsLoading(false);
     }
-  }, [fitView]);
+  };
 
-  // ─── Expand / collapse ─────────────────────────────────────────────────
-
-  const toggleCluster = useCallback(
-    (clusterId: string) => {
-      const next = new Set(expanded);
-      if (next.has(clusterId)) {
-        next.delete(clusterId);
-        if (selectedNode && !selectedNode.isHub && selectedNode.cluster === clusterId) {
-          setSelectedNode(null);
-        }
-      } else {
-        next.add(clusterId);
+  const resolveSuggestion = async (item: PredictedEdge, confirm: boolean) => {
+    if (suggestionBusy.current) return;
+    suggestionBusy.current = true;
+    setPendingSuggestion(`${item.source_id}:${item.target_id}`);
+    setSuggestionError("");
+    try {
+      await invoke(
+        confirm ? "confirm_predicted_edge" : "dismiss_predicted_edge",
+        { sourceId: item.source_id, targetId: item.target_id },
+      );
+      if (!mounted.current) return;
+      setSuggestions((items) =>
+        items.filter(
+          (candidate) =>
+            candidate.source_id !== item.source_id ||
+            candidate.target_id !== item.target_id,
+        ),
+      );
+      if (confirm) {
+        await loadGraph();
+        if (!mounted.current) return;
+        // The accepted endpoints are no longer unconnected. Reveal their
+        // recorded relationship instead of leaving a hidden selection behind.
+        setConnectionScope("connected");
+        showAll();
+        setPathFrom(null);
+        setPathTo(null);
+        setSelectedId(item.source_id);
+        setFullNote(false);
+        setNeighborLimit(20);
+        setShowSuggestions(false);
+        setShowGuide(false);
       }
-      persistExpanded(next);
-      setTimeout(() => fitView(500), 350);
-    },
-    [expanded, persistExpanded, selectedNode, fitView]
-  );
-
-  const expandAll = useCallback(() => {
-    persistExpanded(new Set(activeClusters.map((c) => c.id)));
-    setTimeout(() => fitView(500), 350);
-  }, [activeClusters, persistExpanded, fitView]);
-
-  const collapseAll = useCallback(() => {
-    persistExpanded(new Set());
-    setSelectedNode(null);
-    setTimeout(() => fitView(500), 350);
-  }, [persistExpanded, fitView]);
-
-  // ─── Node click: hubs expand, members focus ────────────────────────────
-
-  const handleNodeClick = useCallback(
-    (node: GraphNode) => {
-      if (node.isHub) {
-        toggleCluster(node.cluster);
-        return;
-      }
-      setSelectedNode(node);
-      // Bring the neighborhood into view without yanking the camera far away.
-      if (typeof node.x === "number" && typeof node.y === "number") {
-        fgRef.current?.centerAt(node.x, node.y, 500);
-      }
-    },
-    [toggleCluster]
-  );
-
-  const handleBackgroundClick = useCallback(() => setSelectedNode(null), []);
-
-  // ─── Reinforce edge (closed-loop feedback from UI) ────────────────────
-
-  const reinforceEdge = useCallback(
-    async (edgeId: string, signal: number) => {
-      try {
-        await invoke("update_edge_weight", {
-          edgeId,
-          feedbackSignal: signal,
-        });
-        loadGraph(); // Refresh
-      } catch (e) {
-        console.error("Failed to reinforce edge:", e);
-      }
-    },
-    [loadGraph]
-  );
-
-  // ─── Custom node rendering ────────────────────────────────────────────
-
-  const paintNode = useCallback(
-    (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const x = node.x ?? 0;
-      const y = node.y ?? 0;
-      const dimmed = focusIds ? !focusIds.has(node.id) && !node.isHub : false;
-      ctx.save();
-      if (dimmed) ctx.globalAlpha = 0.14;
-
-      if (node.isHub) {
-        // ── Cluster hub bubble ──
-        const r = node.val;
-        const grad = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
-        grad.addColorStop(0, node.color);
-        grad.addColorStop(1, node.color + "55");
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, 2 * Math.PI);
-        ctx.fillStyle = grad;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.55)";
-        ctx.lineWidth = 1.5 / globalScale;
-        ctx.stroke();
-
-        // Icon + name + count — hubs are the map's landmarks, always labeled.
-        const iconSize = Math.max(10, r * 0.9);
-        ctx.font = `${iconSize}px Inter, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(node.icon ?? "●", x, y);
-
-        const nameSize = Math.max(4, 13 / globalScale);
-        ctx.font = `600 ${nameSize}px Inter, sans-serif`;
-        const name = node.label;
-        const countText = `${node.count}`;
-        const nameW = ctx.measureText(name).width;
-        const labelY = y + r + 4 / globalScale;
-        ctx.fillStyle = "rgba(8,10,16,0.72)";
-        const padX = 5 / globalScale;
-        const lineH = nameSize * 1.25;
-        ctx.beginPath();
-        ctx.roundRect(x - nameW / 2 - padX, labelY, nameW + padX * 2, lineH * 2, 4 / globalScale);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.textBaseline = "top";
-        ctx.fillText(name, x, labelY + lineH * 0.12);
-        ctx.font = `${nameSize * 0.85}px Inter, sans-serif`;
-        ctx.fillStyle = node.color;
-        ctx.fillText(`${countText} items`, x, labelY + lineH);
-        ctx.restore();
-        return;
-      }
-
-      // ── Member node ──
-      const nodeSize = (node.val || 6) / Math.max(globalScale * 0.55, 1);
-
-      ctx.beginPath();
-      ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
-      ctx.fillStyle = node.color;
-      ctx.fill();
-
-      // Highlight selected
-      if (selectedNode?.id === node.id) {
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 2 / globalScale;
-        ctx.stroke();
-      }
-
-      // Access count ring (closed-loop feedback indicator)
-      if (node.access_count > 3) {
-        ctx.beginPath();
-        ctx.arc(x, y, nodeSize + 2 / globalScale, 0, 2 * Math.PI);
-        ctx.strokeStyle = "rgba(255,255,255,0.3)";
-        ctx.lineWidth = 1 / globalScale;
-        ctx.stroke();
-      }
-
-      // Label only when it can actually be read: zoomed in, or part of the
-      // focused neighborhood, or hovered. This is what kills the label pile-up.
-      const inFocus = focusIds?.has(node.id) ?? false;
-      const isHovered = hoverNode?.id === node.id;
-      const showLabel = !dimmed && (globalScale > 1.4 || inFocus || isHovered || selectedNode?.id === node.id);
-      if (showLabel) {
-        const fontSize = Math.max(3.5, 11 / globalScale);
-        ctx.font = `${fontSize}px Inter, sans-serif`;
-        const text = node.label.length > 26 ? node.label.slice(0, 26) + "…" : node.label;
-        const w = ctx.measureText(text).width;
-        const ly = y + nodeSize + 2.5 / globalScale;
-        ctx.fillStyle = "rgba(8,10,16,0.66)";
-        ctx.beginPath();
-        ctx.roundRect(x - w / 2 - 3 / globalScale, ly, w + 6 / globalScale, fontSize * 1.35, 3 / globalScale);
-        ctx.fill();
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillStyle = "rgba(255,255,255,0.92)";
-        ctx.fillText(text, x, ly + fontSize * 0.15);
-      }
-      ctx.restore();
-    },
-    [selectedNode, hoverNode, focusIds]
-  );
-
-  // ─── Custom link rendering ────────────────────────────────────────────
-
-  const paintLink = useCallback(
-    (link: GraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const source = link.source as unknown as { x: number; y: number; id?: string };
-      const target = link.target as unknown as { x: number; y: number; id?: string };
-      if (!source || !target) return;
-
-      const dimmed = focusIds
-        ? !(focusIds.has(linkEndId(link.source)) && focusIds.has(linkEndId(link.target)))
-        : false;
-      ctx.save();
-      if (dimmed) ctx.globalAlpha = 0.08;
-
-      // Predicted edges render as dashed lines
-      if (link.predicted) {
-        ctx.setLineDash([8 / globalScale, 4 / globalScale]);
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = "rgba(180, 140, 255, 0.5)";
-        ctx.lineWidth = 1.5 / globalScale;
-        ctx.stroke();
-        ctx.restore();
-        return;
-      }
-
-      // Bundled hub↔hub / hub↔node links: width grows with how many real
-      // connections they carry, drawn softly so hubs stay visually calm.
-      if ((link.aggregated ?? 0) > 0 && link.edge_id.startsWith("agg:")) {
-        const w = Math.min(4, 0.6 + (link.aggregated ?? 1) * 0.25) / globalScale;
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = "rgba(140, 160, 200, 0.35)";
-        ctx.lineWidth = w;
-        ctx.stroke();
-        ctx.restore();
-        return;
-      }
-
-      // Width proportional to edge weight
-      const width = Math.max(0.5, link.weight * 1.5) / globalScale;
-
-      // Color: blue for positive momentum, red for negative, gray for neutral
-      let color = "rgba(100, 100, 120, 0.4)";
-      if (link.momentum > 0.05) color = "rgba(100, 180, 255, 0.6)";
-      else if (link.momentum < -0.05) color = "rgba(255, 100, 100, 0.4)";
-
-      // Glow effect for newly strengthened edges (golden pulse)
-      const isRecent = recentEdges.has(link.edge_id);
-      const phase = glowRef.current;
-      if (isRecent) {
-        const pulse = 0.5 + 0.5 * Math.abs(Math.sin(phase * 1.5 + link.weight * 3));
-        ctx.save();
-        ctx.shadowColor = "rgba(255, 200, 60, " + (0.6 * pulse) + ")";
-        ctx.shadowBlur = (6 + 4 * pulse) / globalScale;
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = `rgba(255, 210, 80, ${0.4 + 0.25 * pulse})`;
-        ctx.lineWidth = (width * 1.5);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Glow effect for high-momentum edges (Phase 1 — Alive Graph)
-      const isHighMomentum = link.momentum > 0.1;
-      if (isHighMomentum) {
-        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(phase * 2 + link.weight));
-        ctx.save();
-        ctx.shadowColor = "rgba(100, 200, 255, " + (0.8 * pulse) + ")";
-        ctx.shadowBlur = (8 + 6 * pulse) / globalScale;
-        ctx.beginPath();
-        ctx.moveTo(source.x, source.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = `rgba(120, 200, 255, ${0.5 + 0.3 * pulse})`;
-        ctx.lineWidth = (width * 1.8);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.lineTo(target.x, target.y);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.stroke();
-      ctx.restore();
-    },
-    [glowTick, recentEdges, focusIds]
-  );
-
-  // ─── Render ────────────────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="spectrum-graph-view">
-        <div className="sg-loading">
-          <span className="sg-spinner" />
-          Loading Spectrum Graph…
-        </div>
-      </div>
-    );
-  }
+    } catch (error) {
+      if (mounted.current) setSuggestionError(String(error));
+    } finally {
+      suggestionBusy.current = false;
+      if (mounted.current) setPendingSuggestion(null);
+    }
+  };
 
   return (
-    <div className="spectrum-graph-view" ref={containerRef}>
-      {/* ── Graph Canvas ── */}
-      <div className="sg-canvas" ref={canvasRef}>
-        {graphData.nodes.length === 0 ? (
-          <div className="sg-empty">
-            <div className="sg-empty-icon"><img src={prismosLogo} alt="PrismOS-AI" className="sg-empty-logo" /></div>
-            <div className="sg-growing-pulse" />
-            <h3>🌱 Memory is growing…</h3>
-            <p>Your Spectrum Graph builds itself as you chat. Each conversation creates nodes and connections that PrismOS-AI learns from.</p>
-            <p className="sg-empty-hint">Try sending an intent like <em>"Summarize my week"</em> to get started.</p>
-          </div>
-        ) : (
-          <>
-            <div className="sg-toolbar">
-              <button className="sg-tool-btn" onClick={expandAll} title="Expand every cluster">
-                ⊕ Expand all
-              </button>
-              <button className="sg-tool-btn" onClick={collapseAll} title="Collapse back to cluster bubbles">
-                ⊖ Collapse all
-              </button>
-              <button className="sg-tool-btn" onClick={() => fitView(500)} title="Frame the whole graph">
-                ⌖ Fit
-              </button>
-              {selectedNode && !selectedNode.isHub && (
-                <button className="sg-tool-btn sg-tool-focus" onClick={() => setSelectedNode(null)} title="Clear focus">
-                  ✕ Unfocus
-                </button>
-              )}
-            </div>
-            <ForceGraph2D
-              ref={fgRef as never}
-              graphData={displayed as never}
-              width={dimensions.width}
-              height={dimensions.height}
-              nodeCanvasObject={paintNode as never}
-              nodePointerAreaPaint={((node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
-                ctx.beginPath();
-                ctx.arc(node.x ?? 0, node.y ?? 0, nodeRadius(node) + 4, 0, 2 * Math.PI);
-                ctx.fillStyle = color;
-                ctx.fill();
-              }) as never}
-              linkCanvasObject={paintLink as never}
-              onNodeClick={handleNodeClick as never}
-              onNodeHover={((node: GraphNode | null) => setHoverNode(node)) as never}
-              onBackgroundClick={handleBackgroundClick}
-              onEngineStop={handleEngineStop}
-              nodeLabel={(node: GraphNode) =>
-                node.isHub
-                  ? `${node.icon} ${node.label} — ${node.count} items\nClick to ${expanded.has(node.cluster) ? "collapse" : "expand"}`
-                  : `${node.label}\n[${node.node_type}] Layer: ${node.layer}\nAccessed: ${node.access_count}x`
-              }
-              linkLabel={(link: GraphLink) =>
-                link.edge_id.startsWith("agg:")
-                  ? `${link.aggregated} connection${(link.aggregated ?? 1) > 1 ? "s" : ""} between groups`
-                  : `${link.relation} (weight: ${link.weight.toFixed(2)}, momentum: ${link.momentum.toFixed(2)})`
-              }
-              cooldownTicks={120}
-              d3AlphaDecay={0.02}
-              d3VelocityDecay={0.32}
-              linkDirectionalArrowLength={3}
-              linkDirectionalArrowRelPos={1}
-              backgroundColor="transparent"
-            />
-          </>
-        )}
-      </div>
-
-      {/* ── Metrics Bar ── */}
-      {metrics && (
-        <div className="sg-metrics-bar">
-          <span className="sg-metric">
-            <strong>{metrics.node_count}</strong> nodes
+    <section
+      className="spectrum-graph-view kg-view"
+      aria-label="Knowledge graph"
+    >
+      <header className="kg-topbar">
+        <div className="kg-brand">
+          <span className="kg-brand-icon" aria-hidden="true">
+            ✳
           </span>
-          <span className="sg-metric">
-            <strong>{metrics.edge_count}</strong> edges
-          </span>
-          <span className="sg-metric">
-            avg w: <strong>{metrics.avg_edge_weight.toFixed(2)}</strong>
-          </span>
-          <span className="sg-metric">
-            density: <strong>{(metrics.graph_density * 100).toFixed(1)}%</strong>
-          </span>
-          {metrics.most_connected_node && (
-            <span className="sg-metric">
-              hub: <strong>{metrics.most_connected_node}</strong>
+          <div>
+            <strong>Spectrum Graph</strong>
+            <span
+              title={`Built ${import.meta.env.VITE_PRISMOS_BUILD || "in development"}`}
+            >
+              Knowledge atlas 2 ·{" "}
+              {import.meta.env.VITE_PRISMOS_BUILD?.slice(0, 10) ||
+                "development"}
             </span>
+          </div>
+        </div>
+        <div className="kg-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            ref={searchInput}
+            aria-label="Search notes"
+            placeholder="Search titles, content, sources…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setQuery("");
+            }}
+          />
+          {query ? (
+            <button onClick={() => setQuery("")} aria-label="Clear search">
+              ×
+            </button>
+          ) : (
+            <kbd>/</kbd>
           )}
-          <button className="sg-refresh-btn" onClick={loadGraph}>
-            ↻ Refresh
-          </button>
-        </div>
-      )}
-
-      {/* ── Graph Intro Overlay ── */}
-      {showIntro && graphData.nodes.length > 0 && (
-        <div className="sg-intro-overlay">
-          <div className="sg-intro-card">
-            <h3>🌈 Welcome to Your Spectrum Graph</h3>
-            <p>This is your living knowledge graph, organized into clusters. It grows as you chat.</p>
-            <ul>
-              <li><strong>Click a bubble</strong> to expand that cluster</li>
-              <li><strong>Click a node</strong> to focus it — neighbors light up</li>
-              <li><strong>+/−</strong> buttons reinforce or weaken edges</li>
-              <li><strong>Dashed lines</strong> are predicted connections</li>
-            </ul>
-            <button className="sg-intro-dismiss" onClick={() => { localStorage.setItem("prismos-graph-intro-seen", "1"); setShowIntro(false); }}>
-              Got it! →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Side Panel ── */}
-      <div className="sg-side-panel">
-        {/* Selected Node Detail */}
-        {selectedNode && !selectedNode.isHub && (
-          <div className="sg-node-detail">
-            <h4>
-              <span
-                className="sg-dot"
-                style={{ background: selectedNode.color }}
-              />
-              {selectedNode.label}
-            </h4>
-            <div className="sg-detail-meta">
-              <span className="sg-tag">{selectedNode.node_type}</span>
-              <span className="sg-tag">{selectedNode.layer}</span>
-              <span className="sg-tag">👁 {selectedNode.access_count}</span>
-            </div>
-            <p className="sg-detail-content">{selectedNode.content}</p>
-
-            {/* Show connected edges with reinforce buttons */}
-            <div className="sg-connected-edges">
-              <h5>Connected Edges</h5>
-              {graphData.links
-                .filter(
-                  (l) =>
-                    linkEndId(l.source) === selectedNode.id ||
-                    linkEndId(l.target) === selectedNode.id
-                )
-                .slice(0, 5)
-                .map((l) => (
-                  <div key={l.edge_id} className="sg-edge-item">
-                    <span className="sg-edge-relation">{l.relation}</span>
-                    <span className="sg-edge-weight">
-                      w:{l.weight.toFixed(2)} m:{l.momentum.toFixed(2)}
-                    </span>
-                    <button
-                      className="sg-reinforce-btn positive"
-                      onClick={() => reinforceEdge(l.edge_id, 1.0)}
-                      title="Reinforce (strengthen)"
-                    >
-                      +
-                    </button>
-                    <button
-                      className="sg-reinforce-btn negative"
-                      onClick={() => reinforceEdge(l.edge_id, -0.5)}
-                      title="Weaken"
-                    >
-                      −
-                    </button>
-                  </div>
-                ))}
-            </div>
-
-            <button
-              className="sg-close-btn"
-              onClick={() => setSelectedNode(null)}
-            >
-              Close
-            </button>
-          </div>
-        )}
-
-        {/* Anticipatory Needs */}
-        {anticipations.length > 0 && (
-          <div className="sg-anticipations">
-            <h4>🔮 Anticipated Needs</h4>
-            {anticipations.map((need, i) => (
-              <div key={i} className="sg-anticipation-item">
-                <p className="sg-anticipation-suggestion">{need.suggestion}</p>
-                <div className="sg-anticipation-meta">
-                  <span className="sg-tag">{need.facet}</span>
-                  <span className="sg-confidence">
-                    {(need.confidence * 100).toFixed(0)}%
+          {query.trim() && (
+            <div className="kg-search-results" aria-label="Search results">
+              <div className="kg-eyebrow">
+                {searchResults.length
+                  ? `${searchResults.length}${searchResults.length === 80 ? "+" : ""} matches · all sources`
+                  : "No matching notes"}
+              </div>
+              {searchResults.map((node) => (
+                <button key={node.id} onClick={() => selectNode(node.id)}>
+                  <i
+                    style={{ background: groupById.get(node.groupId)?.color }}
+                  />
+                  <span>
+                    {node.label}
+                    <small>
+                      {groupById.get(node.groupId)?.label} · {node.degree}{" "}
+                      connections
+                    </small>
+                    {duplicateTitles.has(node.label) && (
+                      <small className="kg-search-evidence">
+                        {updatedLabel(node.updated_at)} ·{" "}
+                        {node.content.replace(/\s+/g, " ").slice(0, 110) ||
+                          "No content recorded"}
+                      </small>
+                    )}
                   </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <span
+          className="kg-private"
+          title="This view reads your local database. No knowledge is uploaded by this view."
+        >
+          <span aria-hidden="true">◉</span> Local knowledge
+        </span>
+      </header>
 
-        {/* Edge Prophecy — predicted connections */}
-        {predictions.length > 0 && (
-          <div className="sg-prophecy">
-            <h4>✨ Edge Prophecy</h4>
-            <p className="sg-prophecy-desc">Predicted connections between your ideas</p>
-            {predictions.slice(0, 5).map((pred, i) => (
-              <div key={i} className="sg-prophecy-item">
-                <div className="sg-prophecy-labels">
-                  <span className="sg-prophecy-source">{pred.source_label}</span>
-                  <span className="sg-prophecy-arrow">↔</span>
-                  <span className="sg-prophecy-target">{pred.target_label}</span>
-                </div>
-                <div className="sg-prophecy-reason">{pred.reason}</div>
-                <div className="sg-prophecy-meta">
-                  <span className="sg-confidence">{(pred.probability * 100).toFixed(0)}%</span>
-                  <div className="sg-prophecy-actions">
-                    <button
-                      className="sg-prophecy-btn sg-prophecy-confirm"
-                      onClick={() => confirmPrediction(pred.source_id, pred.target_id)}
-                      title="Confirm this connection"
-                    >
-                      ✓ Confirm
-                    </button>
-                    <button
-                      className="sg-prophecy-btn sg-prophecy-dismiss"
-                      onClick={() => dismissPrediction(pred.source_id, pred.target_id)}
-                      title="Dismiss this suggestion"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Cluster Legend — click to expand/collapse a knowledge family */}
-        <div className="sg-legend">
-          <h5>Clusters</h5>
-          {activeClusters.map((c) => (
+      <div className="kg-connection-scope" aria-label="Connection coverage">
+        <div className="kg-scope-tabs" aria-label="Connection scope">
+          {(
+            [
+              ["connected", "Connected", connectedCount],
+              ["unconnected", "Unconnected", graph.diagnostics.isolatedNodes],
+              ["all", "All records", graph.nodes.length],
+            ] as const
+          ).map(([scope, label, count]) => (
             <button
-              key={c.id}
-              className={`sg-legend-item sg-cluster-item ${expanded.has(c.id) ? "expanded" : ""}`}
-              onClick={() => toggleCluster(c.id)}
-              title={expanded.has(c.id) ? "Collapse" : "Expand"}
+              key={scope}
+              aria-label={`${label} ${count.toLocaleString()}`}
+              aria-pressed={activeScope === scope}
+              onClick={() => changeScope(scope)}
             >
-              <span className="sg-dot" style={{ background: c.color }} />
-              <span className="sg-cluster-name">{c.icon} {c.name}</span>
-              <span className="sg-cluster-count">{clusterCounts.get(c.id) ?? 0}</span>
-              <span className="sg-cluster-state">{expanded.has(c.id) ? "−" : "+"}</span>
+              <span>{label}</span>
+              <strong>{count.toLocaleString()}</strong>
             </button>
           ))}
         </div>
+        <p>
+          {activeScope === "connected"
+            ? "Showing notes with recorded relationships."
+            : activeScope === "unconnected"
+              ? "These records have no recorded relationships yet."
+              : "All stored records, including unconnected notes."}
+          {isolatedSuggestionCount > 0 && (
+            <span>
+              {isolatedSuggestionCount.toLocaleString()} unconnected records are
+              automatic suggestions. Nothing has been deleted.
+            </span>
+          )}
+        </p>
       </div>
-    </div>
+
+      <div className="kg-workspace">
+        <aside className="kg-sources" aria-label="Sources and filters">
+          <div className="kg-intro">
+            <div className="kg-eyebrow">YOUR KNOWLEDGE MAP</div>
+            <h2>
+              Knowledge.
+              <br />
+              <em>In context.</em>
+            </h2>
+            <p>
+              Follow the links between your projects, documents and
+              conversations.
+            </p>
+          </div>
+          <div className="kg-stats">
+            <div>
+              <strong>{graph.nodes.length.toLocaleString()}</strong>
+              <span>notes</span>
+            </div>
+            <div>
+              <strong>{graph.groups.length}</strong>
+              <span>groups</span>
+            </div>
+            <div>
+              <strong>{graph.edges.length.toLocaleString()}</strong>
+              <span>links</span>
+            </div>
+          </div>
+          <div className="kg-section-heading">
+            <h3>Sources & groups</h3>
+            <button onClick={showAll}>Reset</button>
+          </div>
+          <div className="kg-source-list">
+            {graph.groups
+              .filter((group) => scopedGroupCounts.has(group.id))
+              .map((group) => (
+                <button
+                  className="kg-source"
+                  key={group.id}
+                  aria-pressed={!hiddenGroups.has(group.id)}
+                  onClick={() => {
+                    setHiddenGroups((hidden) => {
+                      const next = new Set(hidden);
+                      if (next.has(group.id)) next.delete(group.id);
+                      else next.add(group.id);
+                      return next;
+                    });
+                    setFocus(false);
+                  }}
+                  title={`${group.label} · ${group.kind} · ${scopedGroupCounts.get(group.id)} in this scope, ${group.count} total`}
+                >
+                  <i style={{ background: group.color }} />
+                  <span>{group.label}</span>
+                  <small>{scopedGroupCounts.get(group.id)}</small>
+                </button>
+              ))}
+          </div>
+          <label className="kg-check">
+            <input
+              type="checkbox"
+              checked={attention}
+              onChange={(event) => {
+                setAttention(event.target.checked);
+                setFocus(false);
+              }}
+            />
+            <span>Review suggested</span>
+            <small>{reviewCount}</small>
+          </label>
+          <p className="kg-fineprint">
+            90+ days without an update, unknown date, or no links. A review
+            signal—not a correctness rating.
+          </p>
+          <label className="kg-check">
+            <input
+              type="checkbox"
+              checked={showLabels}
+              onChange={(event) => setShowLabels(event.target.checked)}
+            />
+            <span>Show all labels</span>
+          </label>
+          <button
+            className="kg-outline-button"
+            onClick={() => void loadSuggestions()}
+          >
+            Review connections
+          </button>
+          <details
+            className="kg-browse"
+            key={activeScope}
+            open={activeScope === "unconnected" ? true : undefined}
+          >
+            <summary>
+              Browse notes <span>{filteredNodes.length}</span>
+            </summary>
+            <p className="kg-fineprint">
+              {activeScope === "unconnected"
+                ? "No links are recorded for these notes. Read them or review connection suggestions; proximity on the map is not a relationship."
+                : "Keyboard-accessible list of the filtered map."}
+            </p>
+            {filteredNodes.slice(0, browseLimit).map((node) => (
+              <button key={node.id} onClick={() => selectNode(node.id)}>
+                <i style={{ background: groupById.get(node.groupId)?.color }} />
+                <span>{node.label}</span>
+              </button>
+            ))}
+            {filteredNodes.length > browseLimit && (
+              <button onClick={() => setBrowseLimit((limit) => limit + 50)}>
+                Show more notes
+              </button>
+            )}
+          </details>
+        </aside>
+
+        <main
+          className="kg-map"
+          ref={canvasContainer}
+          aria-label="Interactive knowledge map"
+        >
+          <div className="kg-map-toolbar">
+            <div className="kg-segment" aria-label="Map dimension">
+              <button
+                aria-pressed={mode === "3d"}
+                onClick={() => setMode("3d")}
+              >
+                3D
+              </button>
+              <button
+                aria-pressed={mode === "2d"}
+                onClick={() => setMode("2d")}
+              >
+                2D
+              </button>
+            </div>
+            <button onClick={() => setFitKey((key) => key + 1)}>
+              Center map
+            </button>
+            <button disabled={loading} onClick={() => void loadGraph()}>
+              {loading && snapshot ? "Refreshing…" : "Refresh"}
+            </button>
+            <button
+              aria-pressed={showGuide}
+              onClick={() => {
+                setShowGuide((value) => !value);
+                setSelectedId(null);
+                setFocus(false);
+                setShowSuggestions(false);
+              }}
+            >
+              Guide
+            </button>
+          </div>
+          {loadError && (
+            <div className="kg-map-alert" role="alert">
+              <strong>Could not load your knowledge graph.</strong>
+              <p>{loadError}</p>
+              <button onClick={() => void loadGraph()}>Retry</button>
+              {snapshot && (
+                <small>Showing the last successfully loaded snapshot.</small>
+              )}
+            </div>
+          )}
+          {loading && !snapshot ? (
+            <div className="kg-map-empty" role="status">
+              Loading local knowledge…
+            </div>
+          ) : !graph.nodes.length ? (
+            <div className="kg-map-empty">
+              <span aria-hidden="true">✳</span>
+              <h3>Your knowledge starts here</h3>
+              <p>
+                Add notes or import documents through PrismOS.
+                <br />
+                Only stored knowledge appears on this map.
+              </p>
+            </div>
+          ) : !renderedNodes.length ? (
+            <div className="kg-map-empty">
+              <h3>No notes in this view</h3>
+              <button
+                onClick={() => {
+                  setConnectionScope("all");
+                  showAll();
+                }}
+              >
+                Show entire map
+              </button>
+            </div>
+          ) : (
+            <KnowledgeGraphScene
+              nodes={renderedNodes}
+              edges={renderedEdges}
+              groups={graph.groups}
+              mode={mode}
+              onFallback={() => setMode("2d")}
+              width={size.width}
+              height={size.height}
+              selectedId={selectedId}
+              focusIds={path ? pathNodeIds : (focusIds ?? selectedNeighborhood)}
+              pathEdges={pathEdgeIds}
+              showLabels={showLabels}
+              fitKey={fitKey}
+              onSelect={selectNode}
+              onHover={setHoveredId}
+            />
+          )}
+          {hovered && (
+            <div className="kg-hover" role="status">
+              <i
+                style={{ background: groupById.get(hovered.groupId)?.color }}
+              />
+              <strong>{hovered.label}</strong>
+              <span>
+                {groupById.get(hovered.groupId)?.label} · {hovered.degree}{" "}
+                connections
+              </span>
+            </div>
+          )}
+          <div className="kg-map-caption">
+            {renderedEdges.length > 0 && (
+              <div className="kg-map-key" aria-label="Relationship legend">
+                <span>
+                  <i aria-hidden="true" />
+                  Recorded relationship
+                </span>
+                {selected && (
+                  <span>
+                    <i className="is-selected" aria-hidden="true" />
+                    Selected note’s links
+                  </span>
+                )}
+                {path && (
+                  <span>
+                    <i className="is-path" aria-hidden="true" />
+                    Traced path
+                  </span>
+                )}
+              </div>
+            )}
+            {renderedNodes.length > 0 && renderedEdges.length === 0 && (
+              <strong className="kg-no-links">
+                No links in this view.
+                {connectedCount > 0
+                  ? " Choose Connected above to explore recorded relationships."
+                  : " Import related context or review suggestions to build connections."}
+              </strong>
+            )}
+            <span>
+              <i className="kg-live-dot" />
+              {renderedNodes.length.toLocaleString()} of{" "}
+              {graph.nodes.length.toLocaleString()} notes ·{" "}
+              {renderedEdges.length.toLocaleString()} recorded links
+            </span>
+            <span>
+              {mode === "3d"
+                ? "Drag to orbit · scroll to zoom · right-drag to pan"
+                : "Drag to pan · scroll to zoom"}{" "}
+              · select a note to highlight its links
+            </span>
+            {filteredNodes.length > MAX_RENDERED_NODES && (
+              <strong>
+                Rendering the {MAX_RENDERED_NODES.toLocaleString()} most
+                connected notes in this filter. Search any note or narrow a
+                source to reach the rest.
+              </strong>
+            )}
+          </div>
+        </main>
+
+        <aside
+          className={`kg-inspector${!selected && !showSuggestions && !showGuide ? " kg-inspector-collapsed" : ""}`}
+          aria-label={
+            showSuggestions ? "Connection suggestions" : "Note details"
+          }
+        >
+          {showSuggestions ? (
+            <>
+              <div className="kg-section-heading">
+                <h3>Suggested connections</h3>
+                <button onClick={() => setShowSuggestions(false)}>Close</button>
+              </div>
+              <p className="kg-fineprint">
+                Heuristic suggestions, not established facts. They appear on the
+                map only after you record them.
+              </p>
+              {suggestionsLoading && <p role="status">Finding candidates…</p>}
+              {suggestionError && (
+                <p role="alert" className="kg-error">
+                  {suggestionError}
+                </p>
+              )}
+              {!suggestionsLoading &&
+                !suggestionError &&
+                !suggestions.length && (
+                  <p>No connection suggestions right now.</p>
+                )}
+              {!suggestionsLoading &&
+                suggestions.map((item) => (
+                  <article
+                    className="kg-suggestion"
+                    key={`${item.source_id}:${item.target_id}`}
+                  >
+                    <h4>
+                      {nodeById.get(item.source_id)?.label}{" "}
+                      <span aria-hidden="true">↔</span>{" "}
+                      {nodeById.get(item.target_id)?.label}
+                    </h4>
+                    <p>{item.reason}</p>
+                    <small>Evidence: {item.evidence_type}</small>
+                    <div>
+                      <button
+                        disabled={!!pendingSuggestion}
+                        onClick={() => void resolveSuggestion(item, true)}
+                      >
+                        Record connection
+                      </button>
+                      <button
+                        disabled={!!pendingSuggestion}
+                        onClick={() => void resolveSuggestion(item, false)}
+                      >
+                        Dismiss suggestion
+                      </button>
+                    </div>
+                  </article>
+                ))}
+            </>
+          ) : selected ? (
+            <>
+              <div className="kg-section-heading">
+                <div className="kg-eyebrow">SELECTED NOTE</div>
+                <button
+                  aria-label="Close note details"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setFocus(false);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="kg-note-source">
+                <i
+                  style={{ background: groupById.get(selected.groupId)?.color }}
+                />
+                {groupById.get(selected.groupId)?.label}
+              </div>
+              <h2>{selected.label}</h2>
+              <dl className="kg-metadata">
+                <div>
+                  <dt>Type</dt>
+                  <dd>{selected.node_type}</dd>
+                </div>
+                <div>
+                  <dt>Layer</dt>
+                  <dd>{selected.layer}</dd>
+                </div>
+                <div>
+                  <dt>Updated</dt>
+                  <dd>{updatedLabel(selected.updated_at)}</dd>
+                </div>
+                <div>
+                  <dt>Words</dt>
+                  <dd>
+                    {selected.content.trim()
+                      ? selected.content
+                          .trim()
+                          .split(/\s+/)
+                          .length.toLocaleString()
+                      : 0}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Connections</dt>
+                  <dd>{selected.degree}</dd>
+                </div>
+              </dl>
+              <div
+                className="kg-selection-summary"
+                role="status"
+                aria-label="Visible connections"
+              >
+                <strong>
+                  {visibleSelectedLinks.toLocaleString()} of{" "}
+                  {neighbors.length.toLocaleString()} recorded relationships
+                  visible
+                </strong>
+                <span>
+                  {selected.degree === 0
+                    ? "This note has no recorded relationships yet."
+                    : visibleSelectedLinks < neighbors.length
+                      ? "Some links are outside the current filters or display limit. Reset filters or focus connections to explore more."
+                      : "Bright arrows follow stored relationship direction. Choose a connected note below to continue exploring."}
+                </span>
+              </div>
+              {reviewReasons(selected).length > 0 && (
+                <div className="kg-review-tags">
+                  {reviewReasons(selected).map((reason) => (
+                    <span key={reason}>{reason}</span>
+                  ))}
+                </div>
+              )}
+              <div
+                className={`kg-note-content ${fullNote ? "is-expanded" : ""}`}
+              >
+                {selected.content
+                  ? fullNote
+                    ? selected.content
+                    : selected.content.slice(0, 700)
+                  : "No note content recorded."}
+                {!fullNote && selected.content.length > 700 ? "…" : ""}
+              </div>
+              {selected.content.length > 700 && (
+                <button
+                  className="kg-text-button"
+                  onClick={() => setFullNote((value) => !value)}
+                >
+                  {fullNote ? "Show less" : "Read full note"}
+                </button>
+              )}
+              <div className="kg-note-actions">
+                <button
+                  disabled={!selected.degree}
+                  title={
+                    !selected.degree
+                      ? "This record has no connections yet"
+                      : undefined
+                  }
+                  onClick={() => {
+                    if (focus) showAll();
+                    else {
+                      setHiddenGroups(new Set());
+                      setAttention(false);
+                      setFocus(true);
+                      setFitKey((key) => key + 1);
+                    }
+                  }}
+                >
+                  {focus ? "Show entire map" : "Focus connections"}
+                </button>
+                <button
+                  disabled={!selected.degree}
+                  title={
+                    !selected.degree
+                      ? "A path needs at least one recorded relationship"
+                      : undefined
+                  }
+                  onClick={() => {
+                    setPathFrom(selected.id);
+                    setPathTo(null);
+                    showAll();
+                  }}
+                >
+                  Start path here
+                </button>
+                {pathFrom && pathFrom !== selected.id && (
+                  <button
+                    onClick={() => {
+                      setPathTo(selected.id);
+                      showAll();
+                    }}
+                  >
+                    Trace to this note
+                  </button>
+                )}
+              </div>
+              <div className="kg-section-heading">
+                <h3>Connected notes</h3>
+                <span>{neighbors.length} relations</span>
+              </div>
+              <p className="kg-fineprint">
+                Arrows show the stored relationship direction.
+              </p>
+              {edgeError && (
+                <p className="kg-error" role="alert">
+                  {edgeError}
+                </p>
+              )}
+              <div className="kg-neighbors">
+                {!neighbors.length && (
+                  <p>
+                    No recorded links yet. Review connection suggestions or add
+                    context in chat.
+                  </p>
+                )}
+                {neighbors
+                  .slice(0, neighborLimit)
+                  .map(({ edge, node, outgoing }) => (
+                    <article key={edge.id}>
+                      <button onClick={() => selectNode(node.id)}>
+                        <i
+                          style={{
+                            background: groupById.get(node.groupId)?.color,
+                          }}
+                        />
+                        <span>
+                          {node.label}
+                          <small>
+                            {outgoing ? "→" : "←"}{" "}
+                            {edge.relation.replace(/_/g, " ")} ·{" "}
+                            {groupById.get(node.groupId)?.label}
+                          </small>
+                        </span>
+                      </button>
+                      <details>
+                        <summary>Relationship details</summary>
+                        <div className="kg-edge-feedback">
+                          <span>
+                            Weight {edge.weight.toFixed(2)} · momentum{" "}
+                            {edge.momentum.toFixed(2)} · {edge.reinforcements}{" "}
+                            reinforcements. Weight is a learning signal, not
+                            verified confidence.
+                          </span>
+                          <button
+                            disabled={!!pendingEdge}
+                            onClick={() => void feedbackEdge(edge.id, 1)}
+                          >
+                            Strengthen link
+                          </button>
+                          <button
+                            disabled={!!pendingEdge}
+                            onClick={() => void feedbackEdge(edge.id, -0.5)}
+                          >
+                            Weaken link
+                          </button>
+                        </div>
+                      </details>
+                    </article>
+                  ))}
+                {neighbors.length > neighborLimit && (
+                  <button
+                    onClick={() => setNeighborLimit((limit) => limit + 30)}
+                  >
+                    Show more connections ({neighbors.length - neighborLimit})
+                  </button>
+                )}
+              </div>
+              <details className="kg-provenance">
+                <summary>Record details</summary>
+                <dl>
+                  <dt>Note ID</dt>
+                  <dd>{selected.id}</dd>
+                  <dt>Created</dt>
+                  <dd>{updatedLabel(selected.created_at)}</dd>
+                  <dt>Grouping</dt>
+                  <dd>
+                    Stored source metadata, explicit project membership, or note
+                    type. Grouping does not create relationships.
+                  </dd>
+                </dl>
+              </details>
+            </>
+          ) : (
+            <div className="kg-inspector-empty">
+              <div className="kg-orbit-icon" aria-hidden="true">
+                ◎
+              </div>
+              <div className="kg-eyebrow">FOLLOW YOUR CURIOSITY</div>
+              <h2>Find the thread.</h2>
+              <button
+                className="kg-text-button"
+                onClick={() => setShowGuide(false)}
+              >
+                Close guide
+              </button>
+              <p>
+                Select a note to read its content and see what connects to it.
+              </p>
+              <ol>
+                <li>
+                  <strong>Discover</strong> Search or choose a source.
+                </li>
+                <li>
+                  <strong>Explore</strong> Open a note and its neighbors.
+                </li>
+                <li>
+                  <strong>Trace</strong> Pick two notes to reveal a path.
+                </li>
+              </ol>
+              <div className="kg-key">
+                <p>
+                  <i /> Color identifies the source group.
+                </p>
+                <p>
+                  <b>●</b> Bigger nodes connect to more notes.
+                </p>
+                <p>
+                  <span>—</span> Lines are recorded relationships.
+                </p>
+              </div>
+              <p className="kg-fineprint">
+                This is a map of stored knowledge, not a live display of agents’
+                internal reasoning.
+              </p>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {pathFrom && (
+        <div className="kg-path" aria-label="Connection path">
+          <div>
+            <span className="kg-eyebrow">TRACE CONNECTIONS</span>
+            <button
+              onClick={() => {
+                setPathFrom(null);
+                setPathTo(null);
+              }}
+            >
+              Clear path
+            </button>
+          </div>
+          {!pathTo ? (
+            <p>
+              Starting at <strong>{nodeById.get(pathFrom)?.label}</strong>.
+              Select another note, then choose “Trace to this note”.
+            </p>
+          ) : !path ? (
+            <p role="status" aria-label="Path result">
+              No recorded path between these notes. No relationship has been
+              invented.
+            </p>
+          ) : (
+            <>
+              <div className="kg-path-steps">
+                {path.nodeIds.map((id, index) => {
+                  const edge = graph.edges.find(
+                    (candidate) => candidate.id === path.edgeIds[index],
+                  );
+                  return (
+                    <span key={id}>
+                      <button onClick={() => selectNode(id)}>
+                        {nodeById.get(id)?.label}
+                      </button>
+                      {edge && (
+                        <small>
+                          {edge.source_id === id ? "→" : "←"}{" "}
+                          {edge.relation.replace(/_/g, " ")}
+                        </small>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+              <p className="kg-fineprint">
+                {path.edgeIds.length} recorded{" "}
+                {path.edgeIds.length === 1 ? "link" : "links"} · navigation
+                follows relationships in either direction, not execution flow.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+      {(graph.diagnostics.danglingEdges > 0 ||
+        graph.diagnostics.duplicateEdges > 0) && (
+        <div className="kg-diagnostics" role="status">
+          View integrity: {graph.diagnostics.danglingEdges} links reference
+          missing notes; {graph.diagnostics.duplicateEdges} repeated links
+          hidden. Stored data has not been changed.
+        </div>
+      )}
+    </section>
   );
 }

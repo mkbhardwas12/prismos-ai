@@ -28,6 +28,8 @@ use std::time::Instant;
 ///
 /// Returns (RefractiveResult, CollaborationSession, Option<WorkflowState>) — the final response,
 /// the collaboration audit trail, and the workflow state with debate data.
+// The workflow boundary intentionally keeps its inputs explicit.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_collaboration(
     intent: ParsedIntent,
     context_summary: &str,
@@ -63,15 +65,15 @@ pub async fn execute_collaboration(
     for node_id in &workflow_state.visited_nodes {
         let action = match node_id.as_str() {
             "orchestrator" => "Decomposing intent",
-            "parallel_analyze" => "Fan-out to specialists",
-            "reasoner" => "Analyzing intent via LLM",
-            "tool_smith" => "Evaluating tool needs",
-            "memory_keeper" => "Processing graph context",
+            "parallel_analyze" => "One model draft alongside deterministic role checks",
+            "reasoner" => "Generating model draft (factually unvalidated)",
+            "tool_smith" => "Deterministic tool-policy assessment",
+            "memory_keeper" => "Deterministic context-availability check",
             "parallel_join" => "Collecting proposals",
-            "debate" => "Agents debating proposals",
-            "sentinel_review" => "Security review",
-            "consensus" => "Voting round",
-            "execute" => "Executing through Sandbox Prism",
+            "debate" => "Workflow checks; no model debate or factual verification",
+            "sentinel_review" => "Keyword-based policy screening",
+            "consensus" => "Deterministic policy gate (not a fact-check)",
+            "execute" => "Returned text draft; attempted policy-gated memory update",
             "rejected" => "Consensus rejected — safe fallback",
             _ => "Processing",
         };
@@ -81,7 +83,7 @@ pub async fn execute_collaboration(
             "tool_smith" => "Tool Smith",
             "memory_keeper" => "Memory Keeper",
             "sentinel_review" => "Sentinel",
-            "debate" => "Debate",
+            "debate" => "Workflow checks",
             "consensus" => "Consensus",
             "parallel_analyze" | "parallel_join" => "Pipeline",
             "execute" => "Sandbox Prism",

@@ -9,6 +9,9 @@ import { detectDocRequest, detectFileRequest, extractJson, repairJson, splitFile
 
 describe("detectDocRequest", () => {
   it("detects classic phrasings", () => {
+    expect(detectDocRequest("Create a PPT for executive review of SAP")).toBe("pptx");
+    expect(detectDocRequest("Can you please create a PPT about SAP?")).toBe("pptx");
+    expect(detectDocRequest("Could you write a Word document on this?")).toBe("docx");
     expect(detectDocRequest("create a presentation about AI")).toBe("pptx");
     expect(detectDocRequest("make me a PowerPoint on sales")).toBe("pptx");
     expect(detectDocRequest("generate slides for standup")).toBe("pptx");
@@ -44,6 +47,7 @@ describe("detectDocRequest", () => {
   });
 
   it("never fires on questions or read-style requests about documents", () => {
+    expect(detectDocRequest("How can I create a Word document?")).toBeNull();
     expect(detectDocRequest("what's in the word document on my desk?")).toBeNull();
     expect(detectDocRequest("summarize the report about Q3")).toBeNull();
     expect(detectDocRequest("can you read the document about the merger")).toBeNull();

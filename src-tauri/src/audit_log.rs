@@ -257,11 +257,11 @@ impl AuditLog {
         let reader = BufReader::new(file);
 
         let mut entries: Vec<AuditEntry> = Vec::new();
+        // Skip unreadable lines individually; map_while would drop every later entry.
         for line in reader.lines() {
-            if let Ok(line) = line {
-                if let Ok(entry) = serde_json::from_str::<AuditEntry>(&line) {
-                    entries.push(entry);
-                }
+            let Ok(line) = line else { continue };
+            if let Ok(entry) = serde_json::from_str::<AuditEntry>(&line) {
+                entries.push(entry);
             }
         }
 

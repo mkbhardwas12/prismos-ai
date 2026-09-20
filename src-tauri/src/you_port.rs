@@ -475,30 +475,8 @@ pub fn load_state(
     // ── 6. Deserialize state ──
     let state: YouPortState = serde_json::from_str(&plaintext)?;
 
-    // ── 7. Restore Spectrum Graph (merge — skip existing nodes/edges) ──
-    let mut nodes_restored = 0_usize;
-    let mut edges_restored = 0_usize;
-
-    for node in &state.graph_snapshot.nodes {
-        match graph.get_node(&node.id) {
-            Ok(_) => {} // Already exists, skip
-            Err(_) => {
-                if graph
-                    .add_node_with_layer(&node.label, &node.content, &node.node_type, &node.layer)
-                    .is_ok()
-                {
-                    nodes_restored += 1;
-                }
-            }
-        }
-    }
-
-    for edge in &state.graph_snapshot.edges {
-        match graph.get_or_create_edge(&edge.source_id, &edge.target_id, &edge.relation) {
-            Ok((_, true)) => edges_restored += 1,
-            _ => {}
-        }
-    }
+    // ── 7. Restore graph atomically; compatible IDs retain local metadata ──
+    let (nodes_restored, edges_restored) = graph.import_snapshot(&state.graph_snapshot)?;
 
     let total_nodes = state.graph_snapshot.nodes.len();
     let total_edges = state.graph_snapshot.edges.len();
@@ -720,6 +698,25 @@ pub fn preview_sync_merge(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_encrypted_handoff_restores_fresh_graph_with_original_relationships() {
+        let app_dir = tempfile::tempdir().unwrap();
+        let source_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+        let source = crate::spectrum_graph::SpectrumGraph::new(source_dir.path()).unwrap();
+        let a = source.add_node("First", "first fact", "work").unwrap();
+        let b = source.add_node("Second", "second fact", "note").unwrap();
+        source.add_edge(&a.id, &b.id, "supports", 2.5).unwrap();
+        let original = serde_json::to_value(source.get_full_graph().unwrap()).unwrap();
+        save_state(&source, app_dir.path()).unwrap();
+        let target = crate::spectrum_graph::SpectrumGraph::new(target_dir.path()).unwrap();
+        assert!(load_state(&target, app_dir.path()).unwrap().success);
+        assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), original);
+        assert!(load_state(&target, app_dir.path()).unwrap().success);
+        assert_eq!(target.stats().unwrap(), (2, 1));
+        assert_eq!(serde_json::to_value(target.get_full_graph().unwrap()).unwrap(), original);
+    }
 
     #[test]
     fn test_legacy_export_import_roundtrip() {

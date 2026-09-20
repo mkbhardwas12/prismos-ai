@@ -27,32 +27,29 @@ function DebatePanel({ debate }: { debate: DebateSummary }) {
     <div className="debate-panel">
       <div className="debate-header">
         <span className="debate-icon">⚖️</span>
-        <span className="debate-title">Agent Debate</span>
-        <span className={`debate-resolution-badge ${debate.resolved ? 'resolved' : 'unresolved'}`}>
-          {debate.resolved ? '✓ Resolved' : '⚡ Unresolved'}
+        <span className="debate-title">Workflow checks</span>
+        <span className="debate-resolution-badge unresolved">
+          Facts unvalidated
         </span>
       </div>
 
       <div className="debate-stats">
         <div className="debate-stat">
           <span className="debate-stat-value">{debate.rounds}</span>
-          <span className="debate-stat-label">Rounds</span>
+          <span className="debate-stat-label">Check passes</span>
         </div>
         <div className="debate-stat">
           <span className="debate-stat-value">{debate.total_arguments}</span>
-          <span className="debate-stat-label">Arguments</span>
+          <span className="debate-stat-label">Records</span>
         </div>
         <div className="debate-stat">
-          <span className="debate-stat-value">{Math.round(debate.agreement_score * 100)}%</span>
-          <span className="debate-stat-label">Agreement</span>
+          <span className="debate-stat-value">Not run</span>
+          <span className="debate-stat-label">Independent fact-check</span>
         </div>
       </div>
 
       <div className="debate-breakdown">
-        <span className="debate-tag tag-position">📌 {debate.positions} positions</span>
-        <span className="debate-tag tag-challenge">⚔️ {debate.challenges} challenges</span>
-        <span className="debate-tag tag-rebuttal">🔄 {debate.rebuttals} rebuttals</span>
-        <span className="debate-tag tag-support">✅ {debate.supports} supports</span>
+        <span className="debate-tag tag-position">One model draft + deterministic role checks. These records are not model conversations.</span>
       </div>
 
       {debate.arguments.length > 0 && (
@@ -65,7 +62,7 @@ function DebatePanel({ debate }: { debate: DebateSummary }) {
                 {arg.target && (
                   <span className="debate-arg-target">→ {arg.target}</span>
                 )}
-                <span className="debate-arg-confidence">{Math.round(arg.confidence * 100)}%</span>
+                <span className="debate-arg-confidence">Not fact-checked</span>
               </div>
               <div className="debate-arg-content">{arg.content}</div>
             </div>
@@ -123,10 +120,10 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
                 const phaseLabel: Record<string, string> = {
                   orchestrate: "🧭 Orchestrating",
                   analyze: "🔬 Analyzing",
-                  debate: "⚖️ Debating",
-                  review: "🛡️ Security review",
-                  vote: "🗳️ Voting",
-                  execute: "⚡ Executing",
+                  debate: "⚖️ Workflow checks",
+                  review: "🛡️ Policy screening",
+                  vote: "🗳️ Policy gate",
+                  execute: "⚡ Finalizing",
                 };
                 return phaseLabel[last.phase] ?? `${liveThinkingAgents.size} agents working…`;
               })()
@@ -136,16 +133,16 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
         </span>
       </div>
 
-      <div className="sandbox-prism-badge" title="Every AI agent runs inside an isolated security container. If anything goes wrong, changes are automatically reversed. All actions are cryptographically signed.">
+      <div className="sandbox-prism-badge" title="Configured action-policy checks do not prove that model inference was isolated or that an external operation ran. See each action's actual result.">
         <span className="sandbox-prism-icon">🛡️</span>
-        <span className="sandbox-prism-text">Protected by Sandbox Prism</span>
-        <span className="sandbox-prism-detail">HMAC-SHA256 · Allow-List · Auto-Rollback</span>
+        <span className="sandbox-prism-text">Sandbox action policy</span>
+        <span className="sandbox-prism-detail">Per-action checks · Execution requires a tool result</span>
       </div>
 
-      <div className="wasm-isolation-badge" title="Code runs in a WebAssembly sandbox — agents cannot access your files, network, or system without explicit permission. Execution time and memory are strictly limited.">
+      <div className="wasm-isolation-badge" title="The WASM executor has separate runtime limits. Ordinary model drafting and workflow checks do not establish that a WASM task ran.">
         <span className="wasm-badge-icon">🔒</span>
-        <span className="wasm-badge-text">WASM Isolated</span>
-        <span className="wasm-badge-detail">wasmtime · Fuel Metering · Memory Bounded · Zero Ambient Authority</span>
+        <span className="wasm-badge-text">WASM executor available</span>
+        <span className="wasm-badge-detail">Isolation applies only to tasks actually run there</span>
       </div>
 
       {/* LangGraph Collaboration Trace */}
@@ -155,7 +152,7 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
             <span className="collab-trace-icon">🔗</span>
             <span className="collab-trace-title">LangGraph Workflow</span>
             <span className={`collab-consensus-badge ${collaboration.consensus_approved ? 'approved' : 'rejected'}`}>
-              {collaboration.consensus_approved ? '✓ Approved' : '✗ Rejected'}
+              {collaboration.consensus_approved ? '✓ Policy gate passed' : '✗ Policy gate rejected'}
             </span>
           </div>
           <div className="collab-pipeline">
@@ -168,9 +165,9 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
             ))}
           </div>
           <div className="collab-vote-summary">
-            <span className="collab-vote-approve">✓ {collaboration.approve_count}</span>
-            <span className="collab-vote-reject">✗ {collaboration.reject_count}</span>
-            <span className="collab-vote-msgs">💬 {collaboration.message_count} msgs</span>
+            <span className="collab-vote-approve">✓ {collaboration.approve_count} checks passed</span>
+            <span className="collab-vote-reject">✗ {collaboration.reject_count} flagged</span>
+            <span className="collab-vote-msgs">{collaboration.message_count} workflow records · not factual validation</span>
           </div>
         </div>
       )}
@@ -214,7 +211,7 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
             }
           }
           if (isCollabActive && traceStep) return traceStep.action;
-          if (inDebate && debateArg) return `Argued: ${debateArg.argument_type}`;
+          if (inDebate && debateArg) return "Workflow check recorded; facts unvalidated";
           return agent.role;
         })();
 
@@ -245,7 +242,7 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
                 </span>
               )}
               {inDebate && (
-                <span className="agent-debate-chip" title={`Debated: ${debateArg?.argument_type}`}>
+                <span className="agent-debate-chip" title="Workflow check recorded (not independent model analysis)">
                   ⚖️
                 </span>
               )}
@@ -254,10 +251,10 @@ export default memo(function ActiveAgents({ agents, collaboration, debateSummary
                   🔗
                 </span>
               )}
-              <div className="agent-sandbox-chip" title="WASM isolated · HMAC signed · Sandboxed">
+              <div className="agent-sandbox-chip" title="Action policy configured; see actual tool results">
                 ◈
               </div>
-              <div className="agent-wasm-chip" title="True WASM isolation via wasmtime">
+              <div className="agent-wasm-chip" title="WASM executor available for supported tasks">
                 🔒
               </div>
             </div>

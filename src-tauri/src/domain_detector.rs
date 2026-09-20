@@ -23,6 +23,7 @@ pub enum UserDomain {
 }
 
 impl UserDomain {
+    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Medical => "Medical",
@@ -37,6 +38,7 @@ impl UserDomain {
         }
     }
 
+    #[allow(dead_code)]
     pub fn emoji(&self) -> &'static str {
         match self {
             Self::Medical => "🩺",
@@ -122,6 +124,7 @@ impl UserDomain {
     }
 
     /// Recommended model for this domain (Ollama model name)
+    #[allow(dead_code)]
     pub fn recommended_model(&self) -> &'static str {
         match self {
             Self::Medical => "qwen3:14b",
@@ -255,6 +258,7 @@ impl DomainProfile {
     }
 
     /// Get recommended model for this user's primary domain
+    #[allow(dead_code)]
     pub fn get_recommended_model(&self) -> &'static str {
         if self.confidence >= 0.3 {
             self.primary_domain.recommended_model()
@@ -264,6 +268,7 @@ impl DomainProfile {
     }
 
     /// Get domain distribution as percentages (for UI display)
+    #[allow(dead_code)]
     pub fn get_distribution(&self) -> Vec<(String, f64)> {
         if self.total_queries == 0 {
             return vec![];

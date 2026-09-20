@@ -102,4 +102,21 @@ describe("SettingsPanel", () => {
     await renderSettings({ ollamaConnected: false });
     expect(screen.getByText("Offline")).toBeInTheDocument();
   });
+
+  it("describes plaintext storage and policy limits instead of asserting unavailable protections", async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByText(/Security Status/));
+    expect(screen.getByText(/live SQLite database is not app-encrypted/)).toBeInTheDocument();
+    expect(screen.getByText(/not isolated inside it/)).toBeInTheDocument();
+    expect(screen.getByText(/cannot automatically reverse/)).toBeInTheDocument();
+    expect(screen.getByText(/not protected hardware key operations/)).toBeInTheDocument();
+    expect(screen.queryByText("Encrypted Storage")).not.toBeInTheDocument();
+    expect(screen.queryByText("Auto-Rollback")).not.toBeInTheDocument();
+  });
+
+  it("warns that graph exports are private and incomplete recovery artifacts", async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByText(/Spectrum Graph/));
+    expect(screen.getByText(/not a full backup; recovery may fail/)).toBeInTheDocument();
+  });
 });

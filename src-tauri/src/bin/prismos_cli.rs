@@ -20,6 +20,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+const PRIVATE_OLLAMA_URL: &str = "http://127.0.0.1:11434";
 const DEFAULT_MODEL: &str = "qwen3:4b";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 const GENERATE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -48,6 +49,36 @@ struct GenerateRequest<'a> {
 const CLI_NUM_CTX: u32 = 16384;
 const CLI_NUM_PREDICT: u32 = 8192;
 
+#[cfg(test)]
+mod private_transport_tests {
+    use super::*;
+
+    #[test]
+    fn ask_accepts_default_loopback_only_and_canonicalizes_to_literal_ip() {
+        for allowed in [DEFAULT_OLLAMA_URL, PRIVATE_OLLAMA_URL, "http://localhost:11434/", "http://[::1]:11434"] {
+            assert_eq!(private_inference_url(allowed).unwrap(), PRIVATE_OLLAMA_URL);
+        }
+        for refused in [
+            "https://example.com", "http://192.168.1.2:11434",
+            "http://localhost:9999", "http://localhost:11434/api",
+            "http://localhost:11434@evil.example", "http://user:pass@localhost:11434",
+            "http://localhost:11434?redirect=example.com", "invalid",
+        ] {
+            assert!(private_inference_url(refused).is_err());
+        }
+    }
+
+    #[test]
+    fn private_cli_client_disables_redirects_and_proxies_without_network() {
+        let builder = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all("http://127.0.0.1:9").unwrap());
+        let client = harden_private_client(builder).build().unwrap();
+        let config = format!("{client:?}");
+        assert!(config.contains("redirect_policy: \"Policy(None)\""), "{config}");
+        assert!(!config.contains("proxies"), "{config}");
+    }
+}
+
 /// Hybrid thinking models (qwen3 chat family; *-coder tags are non-thinking).
 fn auto_think(model: &str) -> Option<bool> {
     let m = model.to_lowercase();
@@ -71,7 +102,7 @@ struct GenerateChunk {
     error: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelEntry {
     name: String,
     #[serde(default)]
@@ -81,6 +112,20 @@ struct ModelEntry {
 #[derive(Debug, Deserialize)]
 struct ModelList {
     models: Vec<ModelEntry>,
+}
+
+// JSON output structures for --json flag
+#[derive(Debug, Serialize)]
+struct HealthJson {
+    ok: bool,
+    url: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AskJson {
+    model: String,
+    response: String,
+    truncated: bool,
 }
 
 // ─── arg parsing ──────────────────────────────────────────────────────────────
@@ -94,6 +139,7 @@ struct Args {
     from_stdin: bool,
     think: Option<bool>,
     prompt: String,
+    json_output: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -128,6 +174,7 @@ fn parse_args() -> Result<Args, String> {
         from_stdin: false,
         think: None,
         prompt: String::new(),
+        json_output: false,
     };
 
     let mut i = 1;
@@ -144,6 +191,7 @@ fn parse_args() -> Result<Args, String> {
             }
             "--no-stream" => args.no_stream = true,
             "--stdin"     => args.from_stdin = true,
+            "--json"      => args.json_output = true,
             "--think"     => args.think = Some(true),
             "--no-think"  => args.think = Some(false),
             "--help" | "-h" => {
@@ -158,6 +206,7 @@ fn parse_args() -> Result<Args, String> {
     }
 
     if args.cmd == Cmd::Ask {
+        private_inference_url(&args.base_url)?;
         if args.from_stdin {
             let mut buf = String::new();
             io::stdin().read_to_string(&mut buf).map_err(|e| e.to_string())?;
@@ -183,6 +232,7 @@ impl Args {
             from_stdin: false,
             think: None,
             prompt: String::new(),
+            json_output: false,
         }
     }
 }
@@ -202,12 +252,14 @@ COMMANDS
 
 OPTIONS
   -m, --model <name>   Model to use (default: qwen3:4b, env: PRISMOS_MODEL)
-      --url <url>      Ollama base URL (default: http://localhost:11434,
-                       env: PRISMOS_OLLAMA_URL)
+      --url <url>      Health/model-list endpoint (env: PRISMOS_OLLAMA_URL).
+                       ask permits only the default loopback daemon on port
+                       11434; remote/custom inference endpoints are refused.
       --no-stream      Print the full answer at the end instead of streaming.
       --stdin          Read the prompt from stdin (lets you pipe in files).
       --think          Ask a thinking-capable model for a reasoning trace.
       --no-think       Force thinking off (default for qwen3 chat models).
+      --json           Output machine-readable JSON (implies --no-stream for ask).
 
 EXAMPLES
   prismos-cli health
@@ -215,7 +267,8 @@ EXAMPLES
   prismos-cli ask \"explain WASM sandboxing in one paragraph\"
   cat notes.md | prismos-cli ask --stdin --model qwen3:4b
 
-The CLI talks to Ollama directly — your data never leaves the machine.
+Private prompts go directly to 127.0.0.1:11434, without proxies or redirects.
+The CLI cannot attest that the separately managed Ollama daemon is offline.
 For the full agent-debate experience, launch the GUI: `npm run tauri dev`.
 ";
 
@@ -236,16 +289,34 @@ async fn main() -> ExitCode {
         Cmd::Help    => { print!("{HELP}"); ExitCode::SUCCESS }
         Cmd::Version => { println!("prismos-cli {}", env!("CARGO_PKG_VERSION")); ExitCode::SUCCESS }
         Cmd::Health  => match check_health(&args.base_url).await {
-            Ok(true)  => { println!("ok — ollama is up at {}", args.base_url); ExitCode::SUCCESS }
-            Ok(false) => { eprintln!("down — no response from {}", args.base_url); ExitCode::from(1) }
+            Ok(true)  => {
+                if args.json_output {
+                    let json = HealthJson { ok: true, url: args.base_url.clone() };
+                    println!("{}", serde_json::to_string(&json).unwrap());
+                } else {
+                    println!("ok — ollama is up at {}", args.base_url);
+                }
+                ExitCode::SUCCESS
+            }
+            Ok(false) => {
+                if args.json_output {
+                    let json = HealthJson { ok: false, url: args.base_url.clone() };
+                    println!("{}", serde_json::to_string(&json).unwrap());
+                } else {
+                    eprintln!("down — no response from {}", args.base_url);
+                }
+                ExitCode::from(1)
+            }
             Err(e)    => { eprintln!("error: {e}"); ExitCode::from(1) }
         },
         Cmd::Models  => match list_models(&args.base_url).await {
             Ok(models) => {
-                if models.is_empty() {
+                if args.json_output {
+                    println!("{}", serde_json::to_string(&models).unwrap());
+                } else if models.is_empty() {
                     println!("(no models pulled — try: ollama pull qwen3:4b)");
                 } else {
-                    for m in models {
+                    for m in &models {
                         println!("{:<32}  {:>10}", m.name, human_size(m.size));
                     }
                 }
@@ -261,7 +332,9 @@ async fn main() -> ExitCode {
                 );
                 return ExitCode::from(1);
             }
-            let res = if args.no_stream {
+            let res = if args.json_output {
+                generate_json(&args).await
+            } else if args.no_stream {
                 generate_blocking(&args).await
             } else {
                 generate_streaming(&args).await
@@ -304,14 +377,36 @@ fn build_request(a: &Args, stream: bool) -> GenerateRequest<'_> {
     }
 }
 
+fn private_inference_url(configured: &str) -> Result<&'static str, String> {
+    let refuse = || "Private inference is fixed to http://127.0.0.1:11434. Remove a remote/custom --url or PRISMOS_OLLAMA_URL before using ask; those settings remain available for health/models.".to_string();
+    let url = reqwest::Url::parse(configured).map_err(|_| refuse())?;
+    if url.scheme() != "http"
+        || !matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+        || url.port() != Some(11434)
+        || !matches!(url.path(), "" | "/")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(refuse());
+    }
+    Ok(PRIVATE_OLLAMA_URL)
+}
+
+fn harden_private_client(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder.no_proxy().redirect(reqwest::redirect::Policy::none())
+}
+
 /// POST the request; if the daemon rejects the `think` field (older Ollama or a
 /// model that can't toggle), retry once without it.
 async fn post_generate(
     a: &Args,
     stream: bool,
 ) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let url = format!("{}/api/generate", a.base_url);
+    let base_url = private_inference_url(&a.base_url)?;
+    let client = harden_private_client(reqwest::Client::builder()).build()?;
+    let url = format!("{base_url}/api/generate");
     let mut body = serde_json::to_value(build_request(a, stream))?;
     let had_think = body.get("think").is_some();
     let resp = client.post(&url).json(&body).timeout(GENERATE_TIMEOUT).send().await?;
@@ -423,6 +518,22 @@ async fn generate_blocking(a: &Args) -> Result<(), Box<dyn std::error::Error + S
     if parsed.done_reason.as_deref() == Some("length") {
         eprintln!("[prismos-cli] note: answer hit the token ceiling and may be incomplete");
     }
+    Ok(())
+}
+
+async fn generate_json(a: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let resp = post_generate(a, false).await?;
+    if !resp.status().is_success() {
+        return Err(format!("ollama returned {}: {}", resp.status(), resp.text().await.unwrap_or_default()).into());
+    }
+    let parsed: GenerateChunk = resp.json().await?;
+    let truncated = parsed.done_reason.as_deref() == Some("length");
+    let json = AskJson {
+        model: a.model.clone(),
+        response: strip_think(&parsed.response),
+        truncated,
+    };
+    println!("{}", serde_json::to_string(&json).unwrap());
     Ok(())
 }
 

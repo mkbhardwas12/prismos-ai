@@ -14,10 +14,10 @@ assets are on `/releases/latest`.
 ### Code & Documentation
 
 - [ ] All features for this release are complete and merged
-- [ ] All tests passing (162/162):
+- [ ] All current tests passing (record counts with the release):
   ```bash
-  npm test  # 97 frontend tests
-  cd src-tauri && cargo test  # 65 backend tests
+  npm test
+  cd src-tauri && cargo test
   ```
 - [ ] No failing TypeScript checks:
   ```bash
@@ -32,6 +32,39 @@ assets are on `/releases/latest`.
 - [ ] All documentation reflects new features
 - [ ] Screenshots updated if UI changed
 - [ ] Demo video updated if major UI changes
+
+### Privacy and Recovery Gate
+
+- [ ] Keep personal knowledge, databases, exports, credentials, training data and
+  live app data outside public Git. Ignore rules do not protect already tracked
+  or force-added files.
+- [ ] Run the filename-only guards (they do not alter the index):
+  ```bash
+  node scripts/check-public-files.mjs --staged
+  node scripts/check-public-files.mjs --tracked
+  node --test scripts/check-public-files.test.mjs
+  ```
+- [ ] Separately review staged content, environment examples, screenshots, demo
+  media and Git history for private information/secrets. A passing filename
+  guard is not a secret-content audit; do not paste sensitive scan output into
+  public logs or issues.
+- [ ] Describe the live database as ordinary local **plaintext SQLite**, not
+  app-encrypted storage. Graph exports use AES-GCM with legacy key derivation;
+  do not advertise them as safe for public storage or as complete backups.
+- [ ] Verify a versioned full backup and an isolated restore rehearsal before
+  any data-format migration. Include SQLite consistently (not a live `.db`
+  without its WAL state), settings and original sources. Store recovery keys
+  separately. No automatic Git backup or complete You-Port recovery is claimed.
+- [ ] Network claims distinguish fixed-loopback private inference from optional
+  email, finance, web research, model/download/update and external-browser
+  traffic. Webview CSP does not govern Rust clients or attest Ollama's behavior.
+- [ ] Security descriptions do not claim hardware-protected keys, arbitrary
+  agent-code WASM isolation, immutable logs or automatic data rollback where
+  only detection, policy checks or status records exist.
+- [ ] Run `npm audit` and `cargo audit` and resolve or explicitly assess all
+  findings against the shipped targets. See [the 2026-09-08 audit](AUDIT_2026-09-08.md)
+  for outstanding Rust dependency and cryptographic migration risks; passing
+  unit tests does not close those release blockers.
 
 ### Version Bumping
 
@@ -65,9 +98,13 @@ assets are on `/releases/latest`.
 
 - [ ] Commit version bump:
   ```bash
-  git add .
+  git add -- package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json CHANGELOG.md
+  git diff --cached --stat
+  node scripts/check-public-files.mjs --staged
   git commit -m "release: bump version to vX.X.X"
   ```
+  Adjust this explicit list to files actually reviewed for the release. Do not
+  use blanket `git add .` / `git add -A`; unrelated local work may be private.
 
 ### Testing
 

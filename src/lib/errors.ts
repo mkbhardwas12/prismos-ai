@@ -30,8 +30,10 @@ export function buildErrorMessage(err: unknown, settings: AppSettings): Message 
   let content: string;
   if (isCaptureError) {
     content = `⚠️ Couldn't capture your screen.\n\nThis is a capture-permission or display problem, not a model problem:\n  • macOS: System Settings → Privacy & Security → Screen Recording → enable PrismOS-AI, then relaunch the app\n  • Windows/Linux: check the app has screen-capture permission and a display is connected (headless sessions can't capture)\n\nDetails: ${errorStr}`;
+  } else if (/outline|document spec|JSON Parse|incomplete output|token limit|attached document/i.test(errorStr)) {
+    content = `⚠️ Document generation did not complete.\n\n${errorStr}\n\nThe source/outline must be complete and valid before a file can be generated. Try fewer slides or a shorter document, or review the local model's output budget. This is not evidence that Ollama is disconnected.`;
   } else if (isOllamaError) {
-    content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nIf Ollama is running, check that it's accessible at:\n  ${settings.ollamaUrl}\n\nThen try your intent again.`;
+    content = `⚠️ Cannot connect to Ollama.\n\nPlease ensure Ollama is running:\n  1. Install from https://ollama.com\n  2. ollama pull ${settings.defaultModel}\n  3. ollama serve\n\nPrivate inference uses http://127.0.0.1:11434. The Settings URL controls model management/status only.\n\nThen try your intent again.`;
   } else if (namedModel) {
     content = `⚠️ Model "${namedModel}" is not installed.\n\nTo fix this:\n  1. ollama pull ${namedModel}\n  2. Or switch to a different model in Settings\n\nAvailable models can be listed with:\n  ollama list`;
   } else if (isModelError) {

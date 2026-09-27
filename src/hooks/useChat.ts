@@ -223,7 +223,8 @@ export function useChat({
 
         const sourceMatch = documentText.match(/\[Document:\s*(.*?)\]/);
         const fileMatch = documentText.match(/\[File:\s*(.*?)\]/);
-        const sourceName = sourceMatch?.[1] || fileMatch?.[1] || "document";
+        const audioMatch = documentText.match(/\[Audio:\s*(.*?)\]/);
+        const sourceName = sourceMatch?.[1] || fileMatch?.[1] || audioMatch?.[1] || "document";
 
         setProcessingPhase(`Chunking & indexing "${sourceName}"…`);
         const ragJson = await invoke<string>("rag_query", {
@@ -250,7 +251,7 @@ export function useChat({
         const ragBadge = ragResult.rag_used
           ? `RAG: ${ragResult.chunks_used}/${ragResult.total_chunks} chunks`
           : "Full document";
-        const metaLine = `\n\n───\n📄 Document Analysis · ${sourceName} · ${ragBadge} · ${modelName} · 100% local`;
+        const metaLine = `\n\n───\n${audioMatch ? "🎙️ Recording Analysis" : "📄 Document Analysis"} · ${sourceName} · ${ragBadge} · ${modelName} · 100% local`;
 
         const docMsgId = crypto.randomUUID();
         const aiMsg: Message = {
@@ -258,10 +259,10 @@ export function useChat({
           role: "ai",
           content: docResponse + metaLine,
           timestamp: new Date(),
-          agent: "Document Analyst",
+          agent: audioMatch ? "Meeting Scribe" : "Document Analyst",
         };
         setMessages((prev) => [...prev, aiMsg]);
-        attachReceipt(docMsgId, { question: input, answer: docResponse, model: modelName, agent: "Document Analyst", sources: [sourceName] });
+        attachReceipt(docMsgId, { question: input, answer: docResponse, model: modelName, agent: aiMsg.agent!, sources: [sourceName] });
 
         // Index into the graph, then (opt-in) check the new text against what the
         // graph already believes. Both run after the answer is on screen.

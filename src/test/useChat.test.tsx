@@ -175,4 +175,22 @@ describe("chat request routing", () => {
     expect(last.attachment).toBeUndefined();
     expect(call.mock.calls.some(([c]) => c === "aggregate_table" || c === "create_text_file")).toBe(false);
   });
+
+  it("treats a transcript attachment like a document, credited to the Meeting Scribe", async () => {
+    call.mockImplementation(async (command, args) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "rag_query") {
+        expect((args as { source: string }).source).toBe("standup.m4a | 61s | transcribed offline by whisper.cpp (local sidecar)");
+        return JSON.stringify({ context: "We ship Friday.", chunks_used: 1, total_chunks: 1, source: "x", rag_used: false });
+      }
+      if (command === "query_ollama") return "Decision: ship Friday. Action: Ana writes release notes.";
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("What was decided?", undefined, "[Audio: standup.m4a | 61s | transcribed offline by whisper.cpp (local sidecar)]\n\nWe ship Friday."); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Meeting Scribe");
+    expect(last.content).toContain("🎙️ Recording Analysis · standup.m4a");
+    expect(call).toHaveBeenCalledWith("index_document_chunks", expect.objectContaining({ source: expect.stringContaining("standup.m4a") }));
+  });
 });

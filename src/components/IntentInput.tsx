@@ -19,6 +19,29 @@ const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "xls", "txt", "md", 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_FILE_SIZE_LABEL = "25 MB";
 
+/** Audio we transcribe offline via the whisper.cpp sidecar (see whisper_engine.rs) */
+const AUDIO_EXTENSIONS = ["wav", "mp3", "m4a", "flac", "ogg", "aac", "webm", "aiff", "aif", "opus"];
+/** Recordings are large; the Rust side re-checks its own cap. */
+const MAX_AUDIO_SIZE_BYTES = 200 * 1024 * 1024;
+const AUDIO_PROMPT = "Summarize this recording: key points, decisions, and action items.";
+
+/** Check if a filename is a supported audio recording */
+function isAudioFile(name: string): boolean {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return AUDIO_EXTENSIONS.includes(ext);
+}
+
+/** Base64-encode a File in chunks (avoids call-stack overflow on large files). */
+async function fileToBase64(file: File): Promise<string> {
+  const uint8 = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 32768;
+  for (let i = 0; i < uint8.length; i += chunkSize) {
+    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 /** Check if a filename is an image */
 function isImageFile(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
@@ -41,6 +64,7 @@ function getDocIcon(name: string): string {
     case "xlsx": case "xls": return "📗";
     case "csv": return "📊";
     case "md": return "📝";
+    case "wav": case "mp3": case "m4a": case "flac": case "ogg": case "aac": case "webm": case "aiff": case "aif": case "opus": return "🎙️";
     default: return "📄";
   }
 }
@@ -177,15 +201,7 @@ export default function IntentInput({
 
       if (binaryFormats.includes(ext)) {
         // Binary formats (PDF/DOCX/PPTX/XLSX): read as ArrayBuffer → base64 → send to Rust
-        const arrayBuffer = await file.arrayBuffer();
-        const uint8 = new Uint8Array(arrayBuffer);
-        // Convert to base64 in chunks to avoid call stack overflow on large files
-        let binary = "";
-        const chunkSize = 32768;
-        for (let i = 0; i < uint8.length; i += chunkSize) {
-          binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
-        }
-        const base64 = btoa(binary);
+        const base64 = await fileToBase64(file);
         const text: string = await invoke("extract_document_from_bytes", {
           data: base64,
           fileName: file.name,
@@ -204,6 +220,40 @@ export default function IntentInput({
       console.error("Document extraction error:", err);
       clearAttachedDocument();
       setInput((prev) => prev + `\n⚠️ Could not extract text from ${file.name}: ${err}`);
+    } finally {
+      setIsExtractingDoc(false);
+    }
+  }
+
+  /** Attach an audio recording: transcribed offline by the whisper.cpp sidecar, then
+   *  handled exactly like a document (RAG answer + indexed into the graph). */
+  async function attachAudioFromFile(file: File) {
+    if (file.size > MAX_AUDIO_SIZE_BYTES) {
+      setInput((prev) => prev + `\n⚠️ ${file.name} is larger than 200 MB — trim the recording first.`);
+      return;
+    }
+    setIsExtractingDoc(true);
+    setDocumentName(file.name);
+    setDocumentMeta("Transcribing locally…");
+    try {
+      // Honest pre-flight: fail with the install hint instead of a cryptic error.
+      const status = JSON.parse(await invoke<string>("audio_sidecar_status")) as {
+        ready: boolean; cli_path: string | null; model_path: string | null; install_hint: string;
+      };
+      if (!status.ready) {
+        throw new Error(status.cli_path ? `No whisper model found. ${status.install_hint}` : `whisper.cpp is not installed. ${status.install_hint}`);
+      }
+      const base64 = await fileToBase64(file);
+      const result = JSON.parse(await invoke<string>("transcribe_audio_bytes", { data: base64, fileName: file.name })) as {
+        text: string; engine: string; audio_seconds: number | null;
+      };
+      const secs = result.audio_seconds ? `${Math.round(result.audio_seconds)}s` : "";
+      setAttachedDocument(`[Audio: ${file.name}${secs ? ` | ${secs}` : ""} | transcribed offline by ${result.engine}]\n\n${result.text}`);
+      setDocumentMeta(`Transcript${secs ? ` · ${secs}` : ""} · ${result.engine}`);
+    } catch (err) {
+      console.error("Audio transcription error:", err);
+      clearAttachedDocument();
+      setInput((prev) => prev + `\n⚠️ Could not transcribe ${file.name}: ${err instanceof Error ? err.message : err}`);
     } finally {
       setIsExtractingDoc(false);
     }
@@ -322,6 +372,12 @@ export default function IntentInput({
   async function handleDocFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (isAudioFile(file.name)) {
+      await attachAudioFromFile(file);
+      if (!input.trim()) setInput(AUDIO_PROMPT);
+      e.target.value = "";
+      return;
+    }
     if (!checkFileSize(file)) { e.target.value = ""; return; }
     const filePath = (file as File & { path?: string }).path;
     if (filePath) {
@@ -373,6 +429,13 @@ export default function IntentInput({
 
     const file = files[0];
     const fileName = file.name;
+
+    // ── Audio recordings → offline transcript (own, larger size cap) ──
+    if (isAudioFile(fileName)) {
+      await attachAudioFromFile(file);
+      if (!input.trim()) setInput(AUDIO_PROMPT);
+      return;
+    }
 
     // ── File size guard ──
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -546,7 +609,7 @@ export default function IntentInput({
       <input
         ref={docFileInputRef}
         type="file"
-        accept=".pdf,.docx,.pptx,.xlsx,.xls,.txt,.md,.csv,.json,.rtf"
+        accept=".pdf,.docx,.pptx,.xlsx,.xls,.txt,.md,.csv,.json,.rtf,.wav,.mp3,.m4a,.flac,.ogg,.aac,.webm,.aiff,.aif,.opus"
         style={{ display: "none" }}
         onChange={handleDocFileSelect}
       />
@@ -635,7 +698,19 @@ export default function IntentInput({
                 <span className="attach-menu-icon">📄</span>
                 <div className="attach-menu-label">
                   <span className="attach-menu-title">Document</span>
-                  <span className="attach-menu-hint">PDF, DOCX, PPTX, XLSX</span>
+                  <span className="attach-menu-hint">PDF, DOCX, PPTX, XLSX, CSV</span>
+                </div>
+              </button>
+              <button
+                className="attach-menu-item"
+                role="menuitem"
+                onClick={() => { docFileInputRef.current?.click(); setAttachMenuOpen(false); }}
+                disabled={isExtractingDoc}
+              >
+                <span className="attach-menu-icon">🎙️</span>
+                <div className="attach-menu-label">
+                  <span className="attach-menu-title">Audio recording</span>
+                  <span className="attach-menu-hint">Voice memo or meeting — transcribed offline</span>
                 </div>
               </button>
               <button

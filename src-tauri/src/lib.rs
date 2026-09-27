@@ -2177,6 +2177,67 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
+// ─── Audio → Knowledge — offline transcription via the whisper.cpp sidecar ──
+
+/// What the machine can transcribe right now (CLI, ffmpeg, model), with an
+/// install hint when something is missing.
+#[tauri::command]
+async fn audio_sidecar_status(app: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let status = tokio::task::spawn_blocking(move || whisper_engine::sidecar_status(&app_dir))
+        .await
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&status).map_err(|e| e.to_string())
+}
+
+/// Transcribe an attached audio file delivered as base64 (the webview cannot
+/// hand us a path). The temp copy is deleted whether or not transcription works.
+#[tauri::command]
+async fn transcribe_audio_bytes(app: tauri::AppHandle, data: String, file_name: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let ext = whisper_engine::audio_extension(&file_name)
+        .ok_or_else(|| format!("Unsupported audio format. Supported: {}", whisper_engine::AUDIO_EXTS.join(", ")))?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| format!("Invalid audio payload: {e}"))?;
+    if bytes.len() as u64 > whisper_engine::MAX_AUDIO_BYTES {
+        return Err("Audio file is too large".to_string());
+    }
+    let work = app_dir.join("audio-tmp");
+    std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+    let temp = work.join(format!("{}.{ext}", uuid::Uuid::new_v4()));
+    std::fs::write(&temp, &bytes).map_err(|e| format!("Cannot stage audio: {e}"))?;
+    let temp_for_task = temp.clone();
+    let app_dir_for_task = app_dir.clone();
+    let result = tokio::task::spawn_blocking(move || whisper_engine::transcribe_file(&app_dir_for_task, &temp_for_task))
+        .await
+        .map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&temp);
+    let result = result??;
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append(
+        "audio_transcribed",
+        "user",
+        &format!("file={file_name} seconds={:.1} engine={}", result.audio_seconds.unwrap_or(0.0), result.engine),
+    );
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Open the whisper models folder so the user can drop a ggml-*.bin in it.
+#[tauri::command]
+async fn open_whisper_models_dir(app: tauri::AppHandle) -> Result<(), String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = whisper_engine::models_dir(&app_dir);
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("open").arg(&dir).status();
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("explorer").arg(&dir).status();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = std::process::Command::new("xdg-open").arg(&dir).status();
+    status.map_err(|e| format!("Could not open folder: {e}")).map(|_| ())
+}
+
 // ─── Data Lane — deterministic offline analysis of CSV / XLSX attachments ──
 
 /// Parse an attached table and return its column profile (types, stats, top
@@ -2350,8 +2411,13 @@ async fn whisper_status(app: tauri::AppHandle) -> Result<String, String> {
         .map(|f| !f.0.load(Ordering::Relaxed))
         .unwrap_or(false);
 
+    let sidecar = whisper_engine::sidecar_status(&app_dir);
     let status = whisper_engine::WhisperStatus {
-        available: true,
+        // Honest: "available" means a transcript can actually be produced.
+        available: sidecar.ready,
+        cli_available: sidecar.cli_path.is_some(),
+        cli_path: sidecar.cli_path.clone(),
+        install_hint: sidecar.install_hint.clone(),
         model_loaded: has_model,
         model_name: models.first().cloned(),
         model_path: models.first().map(|m| {
@@ -3507,6 +3573,10 @@ pub fn run() {
             // Data Lane — CSV/XLSX profile + aggregate
             profile_table,
             aggregate_table,
+            // Audio → Knowledge — whisper.cpp sidecar
+            audio_sidecar_status,
+            transcribe_audio_bytes,
+            open_whisper_models_dir,
             // Whisper Voice Engine (Phase 4 — Local Voice)
             whisper_status,
             download_whisper_model,

@@ -99,6 +99,32 @@ export default function SettingsPanel({
     })();
   }, []);
 
+  // ── Audio → Knowledge sidecar status (fetched only when the section is opened) ──
+  const [audioStatus, setAudioStatus] = useState<{ ready: boolean; cli_path: string | null; ffmpeg_path: string | null; model_path: string | null; models_dir: string; install_hint: string } | null>(null);
+  const [whisperDownload, setWhisperDownload] = useState<string>("");
+  const refreshAudioStatus = useCallback(async () => {
+    try { setAudioStatus(JSON.parse(await invoke<string>("audio_sidecar_status"))); } catch { /* backend not ready */ }
+  }, []);
+  useEffect(() => {
+    if (expandedSections.has("audio")) void refreshAudioStatus();
+  }, [expandedSections, refreshAudioStatus]);
+  const handleDownloadWhisperModel = useCallback(async () => {
+    setWhisperDownload("Downloading ggml-base.en.bin (~150 MB) from Hugging Face…");
+    let unlisten: (() => void) | null = null;
+    try {
+      unlisten = await listen<{ percent: number; message: string }>("whisper-download-progress", (e) => {
+        setWhisperDownload(`${e.payload.message} ${Math.round(e.payload.percent)}%`);
+      });
+      await invoke<string>("download_whisper_model", { size: "base" });
+      setWhisperDownload("✅ Model downloaded.");
+      await refreshAudioStatus();
+    } catch (e) {
+      setWhisperDownload(`❌ Download failed: ${e}`);
+    } finally {
+      if (unlisten) unlisten();
+    }
+  }, [refreshAudioStatus]);
+
   const handleVerifyModel = useCallback(async () => {
     const model = settings.defaultModel || "llama3.2";
     setModelVerification("Verifying...");
@@ -903,6 +929,48 @@ export default function SettingsPanel({
           <div className="settings-hint">
             Voice uses Web Speech API — all processing stays in your browser.
             No audio is sent to any server.
+          </div>
+          </>)}
+        </div>
+
+        {/* ── Audio → Knowledge ── */}
+        <div className="settings-group">
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("audio")}>
+            🎧 Audio → Knowledge
+            <span className={`settings-group-chevron${expandedSections.has("audio") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("audio") && (<>
+          <div className="settings-item">
+            <label>Offline transcriber (whisper.cpp sidecar)</label>
+            <span className="settings-value" data-testid="audio-sidecar-status">
+              {audioStatus === null ? "Checking…" : audioStatus.ready ? "✅ Ready" : audioStatus.cli_path ? "⚠️ No model" : "⛔ Not installed"}
+            </span>
+          </div>
+          {audioStatus && (
+            <div className="settings-hint">
+              <div>whisper-cli: {audioStatus.cli_path ? <code>{audioStatus.cli_path}</code> : <em>not found — {audioStatus.install_hint}</em>}</div>
+              <div>ffmpeg (any format → 16 kHz WAV): {audioStatus.ffmpeg_path ? <code>{audioStatus.ffmpeg_path}</code> : <em>not found — only wav/mp3/flac will work</em>}</div>
+              <div>model: {audioStatus.model_path ? <code>{audioStatus.model_path}</code> : <em>none in {audioStatus.models_dir}</em>}</div>
+            </div>
+          )}
+          <div className="settings-item">
+            <div className="settings-theme-toggle">
+              <button className="settings-theme-btn" onClick={handleDownloadWhisperModel} disabled={whisperDownload.startsWith("Downloading")}>
+                ⬇️ Download base model (one-time, ~150 MB)
+              </button>
+              <button className="settings-theme-btn" onClick={() => invoke("open_whisper_models_dir").catch(() => {})}>
+                📂 Open models folder
+              </button>
+            </div>
+          </div>
+          {whisperDownload && <div className="settings-hint">{whisperDownload}</div>}
+          <div className="settings-hint">
+            Drop a voice memo or meeting recording into the chat (wav, mp3, m4a, flac, ogg, …). It is transcribed
+            <strong> on this machine</strong> by <code>whisper-cli</code> — spawned only for that job, nothing runs in
+            the background — then summarised by your local model and indexed into your Spectrum Graph like any
+            document, so later questions can recall what was said. The only network action here is the explicit
+            one-time model download button above (Hugging Face); with a model already in the folder, PrismOS
+            never connects anywhere. Not installed? <code>brew install whisper-cpp</code>.
           </div>
           </>)}
         </div>

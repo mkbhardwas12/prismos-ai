@@ -1,7 +1,7 @@
 // PrismOS-AI — SettingsPanel Component Tests (Accordion Behavior)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import SettingsPanel from "../components/SettingsPanel";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, GraphStats } from "../types";
@@ -32,6 +32,7 @@ describe("SettingsPanel", () => {
       if (cmd === "list_ollama_models") return JSON.stringify([]);
       if (cmd === "check_ollama_status") return true;
       if (cmd === "get_security_status") return JSON.stringify({ enclave: { backend: "mock", hardware_available: false, key_fingerprint: "", platform: "test", details: "" }, audit_chain: { valid: true, entries: 0, message: "" }, sandbox_active: false, hmac_signing: false, wasm_isolation: false, auto_rollback: false, encrypted_storage: false, local_only: true });
+      if (cmd === "audio_sidecar_status") return JSON.stringify({ ready: false, cli_path: null, ffmpeg_path: "/opt/homebrew/bin/ffmpeg", model_path: null, models_dir: "/tmp/m", install_hint: "Install whisper.cpp" });
       if (cmd === "get_domain_profile") return JSON.stringify({ primary_domain: "General", confidence: 0, total_queries: 0, domain_counts: {} });
       return "{}";
     });
@@ -51,6 +52,9 @@ describe("SettingsPanel", () => {
     expect(screen.getByText(/Multi-Device Sync/)).toBeInTheDocument();
     expect(screen.getByText(/Appearance/)).toBeInTheDocument();
     expect(screen.getByText(/Voice Input/)).toBeInTheDocument();
+    expect(screen.getByText(/Audio → Knowledge/)).toBeInTheDocument();
+    expect(screen.getByText(/Answer Receipts/)).toBeInTheDocument();
+    expect(screen.getByText(/Knowledge Conflict Alerts/)).toBeInTheDocument();
     expect(screen.getByText(/Email Summary/)).toBeInTheDocument();
     expect(screen.getByText(/Calendar Integration/)).toBeInTheDocument();
     expect(screen.getByText(/Finance Keeper/)).toBeInTheDocument();
@@ -118,5 +122,14 @@ describe("SettingsPanel", () => {
     await renderSettings();
     fireEvent.click(screen.getByText(/Spectrum Graph/));
     expect(screen.getByText(/not a full backup; recovery may fail/)).toBeInTheDocument();
+  });
+
+  it("shows an honest transcriber status when the section is opened", async () => {
+    await renderSettings();
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === "audio_sidecar_status")).toBe(false); // not fetched until opened
+    screen.getByText(/Audio → Knowledge/).click();
+    await waitFor(() => expect(screen.getByTestId("audio-sidecar-status").textContent).toBe("⛔ Not installed"));
+    expect(screen.getByText(/only wav\/mp3\/flac will work/)).not.toBeNull;
+    expect(screen.getByText("/opt/homebrew/bin/ffmpeg")).toBeInTheDocument();
   });
 });

@@ -670,3 +670,10 @@
 .settings-model-quick-chip:disabled {
   cursor: not-allowed;
 }
+
+/* Inline status value next to a settings label (e.g. Audio → Knowledge sidecar) */
+.settings-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.75));
+}

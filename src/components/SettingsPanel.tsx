@@ -934,6 +934,36 @@ export default function SettingsPanel({
           </>)}
         </div>
 
+        {/* ── Answer Receipts ── */}
+        <div className="settings-group">
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("receipts")}>
+            🧾 Answer Receipts
+            <span className={`settings-group-chevron${expandedSections.has("receipts") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("receipts") && (<>
+          <div className="settings-item">
+            <label>Sign every answer with a verifiable receipt</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.answerReceiptsEnabled ? "active" : ""}`}
+                onClick={() => update("answerReceiptsEnabled", !settings.answerReceiptsEnabled)}
+              >
+                {settings.answerReceiptsEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            Each answer gets a <strong>🧾 receipt</strong>: which model actually ran, which documents and graph
+            nodes were used, SHA-256 digests of the question and answer, and a link into the tamper-evident
+            audit log — all signed with this device's Secure Enclave key (HMAC-SHA256). <strong>Verify</strong>
+            re-checks it any time; <strong>Export</strong> saves the receipt (digests only, never your text) to
+            Downloads. Receipts are issued <em>after</em> the answer appears, so chat speed is unchanged.
+            The key never leaves this device, so a receipt proves <em>this machine</em> produced <em>this
+            answer</em> from <em>these sources</em> — it is not a third-party attestation.
+          </div>
+          </>)}
+        </div>
+
         {/* ── Web Research ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("webresearch")}>

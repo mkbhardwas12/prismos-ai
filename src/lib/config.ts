@@ -61,5 +61,6 @@ export const DEFAULT_SETTINGS = {
   webResearchEnabled: false,
   calendarEnabled: false,
   financeEnabled: false,
+  answerReceiptsEnabled: false,
   defaultView: "chat",
 };

@@ -99,6 +99,7 @@ function App() {
           webResearchEnabled: parsed.webResearchEnabled ?? DEFAULT_SETTINGS.webResearchEnabled,
           calendarEnabled: parsed.calendarEnabled ?? DEFAULT_SETTINGS.calendarEnabled,
           financeEnabled: parsed.financeEnabled ?? DEFAULT_SETTINGS.financeEnabled,
+          answerReceiptsEnabled: parsed.answerReceiptsEnabled ?? DEFAULT_SETTINGS.answerReceiptsEnabled,
           defaultView: parsed.defaultView ?? DEFAULT_SETTINGS.defaultView,
         };
         // Apply saved theme immediately

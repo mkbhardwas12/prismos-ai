@@ -2131,3 +2131,35 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(0.8); }
 }
+
+/* ── Answer receipt (signed local provenance) ── */
+.receipt-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 6px;
+}
+.receipt-chip {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary, rgba(255, 255, 255, 0.75));
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  border-radius: 6px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.receipt-status {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.receipt-status--ok { color: #34d399; background: rgba(52, 211, 153, 0.12); }
+.receipt-status--no { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+[data-theme="light"] .receipt-chip { color: rgba(0, 0, 0, 0.7); background: rgba(5, 150, 105, 0.08); border-color: rgba(5, 150, 105, 0.25); }

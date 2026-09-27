@@ -1113,6 +1113,7 @@ impl WorkflowEngine {
             truncated: llm_truncated,
             intent,
             agent_used,
+            model_used: Some(model_name.clone()),
             context_nodes: context_node_ids.to_vec(),
             edges_reinforced,
             anticipations,

@@ -79,6 +79,10 @@ pub struct RefractiveResult {
     pub truncated: bool,
     pub intent: ParsedIntent,
     pub agent_used: String,
+    /// The model that actually produced `response` after routing (may differ
+    /// from the one the user selected). None only for legacy callers.
+    #[serde(default)]
+    pub model_used: Option<String>,
     pub context_nodes: Vec<String>,      // node IDs from Spectrum Graph context
     pub edges_reinforced: Vec<String>,   // edge IDs that were reinforced
     pub anticipations: Vec<String>,      // anticipated need suggestions

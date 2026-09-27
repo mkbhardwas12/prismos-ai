@@ -5,6 +5,8 @@ import { useState, Fragment } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import { formatBytes } from "../lib/projectReview";
+import { answerTextOf, exportAnswerReceipt, shortReceiptId, verifyAnswerReceipt } from "../lib/receipts";
+import type { Message, ReceiptVerification } from "../types";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import prismosLogo from "../assets/prismos-logo.svg";
@@ -48,6 +50,23 @@ export default function MainView({
   const [checkingConn, setCheckingConn] = useState(false);
   const [expandedRefractions, setExpandedRefractions] = useState<Set<string>>(new Set());
   const [expandedTransparencies, setExpandedTransparencies] = useState<Set<string>>(new Set());
+  const [receiptChecks, setReceiptChecks] = useState<Record<string, ReceiptVerification | "checking">>({});
+
+  const verifyReceipt = (msg: Message) => {
+    if (!msg.receipt) return;
+    setReceiptChecks((prev) => ({ ...prev, [msg.id]: "checking" }));
+    verifyAnswerReceipt(msg.receipt.id, answerTextOf(msg.content))
+      .then((v) => setReceiptChecks((prev) => ({ ...prev, [msg.id]: v })))
+      .catch((e) => setReceiptChecks((prev) => ({
+        ...prev,
+        [msg.id]: { valid: false, receipt_found: false, signature_valid: false, key_matches_device: false, audit_entry_found: false, audit_hash_matches: false, answer_matches: null, message: String(e), receipt: null },
+      })));
+  };
+  const exportReceipt = (id: string) => {
+    exportAnswerReceipt(id)
+      .then((file) => invoke("open_generated_file", { path: file.path, reveal: true }))
+      .catch(() => { /* surfaced by the missing file — nothing else to do */ });
+  };
 
   // Voice output (TTS)
   const voiceOutput = useVoice(() => {}, settings.voiceOutputEnabled ?? false);
@@ -547,6 +566,42 @@ export default function MainView({
                     </button>
                   </div>
                 )}
+                {msg.role === "ai" && msg.receipt && (() => {
+                  const check = receiptChecks[msg.id];
+                  const r = msg.receipt;
+                  return (
+                    <div className="receipt-row" data-testid="answer-receipt">
+                      <span
+                        className="receipt-chip"
+                        title={`Receipt ${r.id}\nIssued ${r.issued_at}\nDevice key ${r.key_fingerprint}\nAudit entry #${r.audit_index}`}
+                      >
+                        🧾 Receipt {shortReceiptId(r.id)} · {r.model}
+                        {r.sources.length > 0 && ` · ${r.sources.length} source${r.sources.length === 1 ? "" : "s"}`}
+                        {r.context_node_ids.length > 0 && ` · ${r.context_node_ids.length} graph node${r.context_node_ids.length === 1 ? "" : "s"}`}
+                      </span>
+                      <button
+                        className="attachment-btn attachment-btn--secondary"
+                        disabled={check === "checking"}
+                        onClick={() => verifyReceipt(msg)}
+                        title="Re-check the signature, device key and audit-chain link on this device"
+                      >
+                        {check === "checking" ? "Verifying…" : "Verify"}
+                      </button>
+                      <button
+                        className="attachment-btn attachment-btn--secondary"
+                        onClick={() => exportReceipt(r.id)}
+                        title="Save the receipt (digests only, never your text) to Downloads"
+                      >
+                        Export
+                      </button>
+                      {check && check !== "checking" && (
+                        <span className={`receipt-status ${check.valid ? "receipt-status--ok" : "receipt-status--no"}`} title={check.message}>
+                          {check.valid ? "✓ Verified on this device" : `✗ ${check.message}`}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="message-meta">
                   {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
                   {msg.timestamp.toLocaleTimeString()}

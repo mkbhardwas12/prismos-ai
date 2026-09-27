@@ -86,6 +86,7 @@ const defaultSettings: AppSettings = {
   voiceOutputEnabled: false,
   emailSummaryEnabled: false,
   webResearchEnabled: false,
+  answerReceiptsEnabled: false,
   calendarEnabled: false,
   financeEnabled: false,
   defaultView: "chat",
@@ -221,5 +222,34 @@ describe("MainView", () => {
     expect(
       screen.getByText(/Response hit the length limit — raise Max Tokens in Settings or ask for a shorter answer\./)
     ).toBeInTheDocument();
+  });
+
+  it("renders the receipt chip and verifies against the signed answer text (footer stripped)", async () => {
+    const { useChat } = await import("../hooks/useChat");
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "verify_answer_receipt") return JSON.stringify({ valid: true, message: "Verified on this device: signature, device key and audit chain all match.", receipt: null });
+      return "{}";
+    });
+    // Persistent (not Once): verification re-renders the view, and the chip must survive it.
+    vi.mocked(useChat).mockReturnValue({
+      messages: [{
+        id: "msg-r", role: "ai", timestamp: new Date(),
+        content: "Paris.\n\n───\n1.0s · local inference · factual claims not independently verified",
+        receipt: { version: 1, id: "abcdef12-0000-0000-0000-000000000000", issued_at: "2026-09-27T00:00:00Z", question_sha256: "q", answer_sha256: "a", answer_chars: 6, model: "qwen3:4b", agent: "reasoner", context_node_ids: ["n1"], sources: ["geo.pdf"], key_fingerprint: "deadbeef", audit_index: 7, audit_hash: "h", signature: "s" },
+      }],
+      isProcessing: false, processingPhase: "", processingElapsed: 0, pendingIntent: "", setPendingIntent: vi.fn(), handleIntent: vi.fn(),
+      clearConversation: vi.fn(), submitFeedback: vi.fn(), selectRefractionAlternative: vi.fn(), approveProjectReview: vi.fn(), declineProjectReview: vi.fn(),
+      conversationRef: { current: null },
+    } as any);
+    await act(async () => { render(<MainView {...defaultProps} />); });
+    const chip = screen.getByTestId("answer-receipt");
+    expect(chip.textContent).toContain("Receipt abcdef12");
+    expect(chip.textContent).toContain("qwen3:4b");
+    expect(chip.textContent).toContain("1 source");
+    expect(chip.textContent).toContain("1 graph node");
+    await act(async () => { screen.getByText("Verify").click(); });
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("verify_answer_receipt", { id: "abcdef12-0000-0000-0000-000000000000", answer: "Paris." });
+    expect(await screen.findByText("✓ Verified on this device")).toBeInTheDocument();
   });
 });

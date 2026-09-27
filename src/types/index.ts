@@ -104,6 +104,8 @@ export interface RefractiveResult {
   truncated?: boolean;
   intent: ParsedIntent;
   agent_used: string;
+  /** Model that actually produced the answer after routing (backend-reported). */
+  model_used?: string;
   context_nodes: string[];
   edges_reinforced: string[];
   anticipations: string[];
@@ -243,6 +245,39 @@ export interface Message {
   attachment?: GeneratedAttachment;
   /** Project review awaiting approval (Gate 1) — renders Approve/Decline card */
   reviewRequest?: ReviewRequest;
+  /** Locally signed provenance record for this answer (opt-in Setting) */
+  receipt?: AnswerReceipt;
+}
+
+/** A locally signed record of what produced an answer. Digests only — never content. */
+export interface AnswerReceipt {
+  version: number;
+  id: string;
+  issued_at: string;
+  question_sha256: string;
+  answer_sha256: string;
+  answer_chars: number;
+  model: string;
+  agent: string;
+  context_node_ids: string[];
+  sources: string[];
+  key_fingerprint: string;
+  audit_index: number;
+  audit_hash: string;
+  /** Hex HMAC-SHA256 over the canonical receipt body, keyed by this device's enclave key. */
+  signature: string;
+}
+
+export interface ReceiptVerification {
+  valid: boolean;
+  receipt_found: boolean;
+  signature_valid: boolean;
+  key_matches_device: boolean;
+  audit_entry_found: boolean;
+  audit_hash_matches: boolean;
+  answer_matches: boolean | null;
+  message: string;
+  receipt: AnswerReceipt | null;
 }
 
 /** A pending project-review scan shown for human approval */
@@ -260,11 +295,11 @@ export interface ReviewRequest {
   status: "pending" | "approved" | "declined";
 }
 
-/** A file generated locally (Word/PowerPoint) and saved to disk */
+/** A file generated locally and saved to disk (docx, pptx, html, csv, json, …) */
 export interface GeneratedAttachment {
   path: string;
   filename: string;
-  kind: "docx" | "pptx";
+  kind: string;
 }
 
 /** A multi-file web-app project generated locally and saved to disk */
@@ -304,6 +339,8 @@ export interface AppSettings {
   webResearchEnabled: boolean;
   calendarEnabled: boolean;
   financeEnabled: boolean;
+  /** Sign every answer with a local, verifiable provenance receipt. */
+  answerReceiptsEnabled: boolean;
   defaultView: string;
 }
 

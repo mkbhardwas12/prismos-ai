@@ -8,6 +8,7 @@ import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 import { buildErrorMessage } from "../lib/errors";
 import { collectArtifactContext } from "../lib/artifactContext";
+import { issueAnswerReceipt, type ReceiptInput } from "../lib/receipts";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -109,6 +110,19 @@ export function useChat({
     setMessages([]);
   }, []);
 
+  // ── Answer receipts (opt-in) ──
+  // Issued after the answer is already displayed and patched onto the message
+  // when the signature comes back, so chat latency is unchanged. Failures are
+  // silent: a missing receipt is visible (no chip), a fake one would not be.
+  const attachReceipt = useCallback((messageId: string, input: ReceiptInput) => {
+    if (!settings.answerReceiptsEnabled) return;
+    issueAnswerReceipt(input)
+      .then((receipt) => {
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, receipt } : m)));
+      })
+      .catch(() => { /* receipt unavailable — nothing to show */ });
+  }, [settings.answerReceiptsEnabled]);
+
   async function handleIntent(input: string, imageData?: string, documentText?: string) {
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -203,6 +217,7 @@ export function useChat({
           agent: "Document Analyst",
         };
         setMessages((prev) => [...prev, aiMsg]);
+        attachReceipt(docMsgId, { question: input, answer: docResponse, model: modelName, agent: "Document Analyst", sources: [sourceName] });
 
         invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
         onIntentProcessed("Document Analyst");
@@ -560,11 +575,18 @@ export function useChat({
               natural_band: result.natural_band || result.agent_used || "default",
               applied_band: result.applied_band || result.agent_used || "default",
               context_nodes_used: result.context_nodes?.length ?? 0,
-              model_used: "local (routing not reported)",
+              model_used: result.model_used || "local (routing not reported)",
               domain_detected: result.domain_detected || "General",
             },
           };
           setMessages((prev) => [...prev, aiMsg]);
+          attachReceipt(aiMsg.id, {
+            question: input,
+            answer: result.response,
+            model: result.model_used || settings.defaultModel || "mistral",
+            agent: result.agent_used,
+            context_node_ids: result.context_nodes ?? [],
+          });
 
           if (voiceEnabled) {
             voiceSpeak(result.response);

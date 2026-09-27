@@ -54,4 +54,39 @@ describe("chat request routing", () => {
     await act(async () => { await result.current.handleIntent("Short one"); });
     expect(result.current.messages[result.current.messages.length - 1]?.truncated).toBe(false);
   });
+
+  it("issues a receipt after the answer renders (opt-in) and reports the model that actually ran", async () => {
+    const refracted = JSON.stringify({
+      response: "Paris.", agent_used: "reasoner", model_used: "qwen3:30b-a3b", context_nodes: ["n1", "n2"], edges_reinforced: [],
+      anticipations: [], processing_time_ms: 10, npu_accelerated: false,
+      intent: { raw: "q", intent_type: "question", entities: [], confidence: 1 },
+    });
+    const receipt = { id: "aaaaaaaa-0000-0000-0000-000000000000", model: "qwen3:30b-a3b", sources: [], context_node_ids: ["n1", "n2"], signature: "ff" };
+    call.mockImplementation(async (command) => {
+      if (command === "refract_intent") return refracted;
+      if (command === "issue_answer_receipt") return JSON.stringify(receipt);
+      return "[]";
+    });
+    const opts = options();
+    const {result} = renderHook(() => useChat({ ...opts, settings: { ...DEFAULT_SETTINGS, answerReceiptsEnabled: true } }));
+    await act(async () => { await result.current.handleIntent("Capital of France?"); });
+    await waitFor(() => expect(result.current.messages[result.current.messages.length - 1]?.receipt?.id).toBe(receipt.id));
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.transparency?.model_used).toBe("qwen3:30b-a3b");
+    const issued = call.mock.calls.find(([command]) => command === "issue_answer_receipt");
+    const input = JSON.parse((issued![1] as { input: string }).input);
+    expect(input).toMatchObject({ question: "Capital of France?", answer: "Paris.", model: "qwen3:30b-a3b", agent: "reasoner", context_node_ids: ["n1", "n2"] });
+    // The receipt request went out only after the message existed — never on the hot path.
+    const order = call.mock.calls.map(([command]) => command);
+    expect(order.indexOf("issue_answer_receipt")).toBeGreaterThan(order.indexOf("refract_intent"));
+  });
+  it("never contacts the receipt signer when the setting is off", async () => {
+    call.mockImplementation(async (command) => command === "refract_intent"
+      ? JSON.stringify({ response: "x", agent_used: "reasoner", context_nodes: [], edges_reinforced: [], anticipations: [], processing_time_ms: 1, npu_accelerated: false, intent: { raw: "q", intent_type: "question", entities: [], confidence: 1 } })
+      : "[]");
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("Hi"); });
+    expect(call.mock.calls.some(([command]) => command === "issue_answer_receipt")).toBe(false);
+    expect(result.current.messages[result.current.messages.length - 1]?.transparency?.model_used).toBe("local (routing not reported)");
+  });
 });

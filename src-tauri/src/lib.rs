@@ -28,6 +28,7 @@ mod app_builder;
 mod doc_generator;
 mod project_reviewer;
 mod web_research;
+mod answer_receipt;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -2174,6 +2175,48 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
+// ─── Answer Receipts — locally signed provenance for an answer ────────
+
+/// Sign + persist a receipt for an answer that is already on screen. Opt-in via
+/// Settings; runs off the async runtime because the first call probes the enclave.
+#[tauri::command]
+async fn issue_answer_receipt(app: tauri::AppHandle, input: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let parsed: answer_receipt::ReceiptInput =
+        serde_json::from_str(&input).map_err(|e| format!("Invalid receipt input: {e}"))?;
+    let receipt = tauri::async_runtime::spawn_blocking(move || answer_receipt::issue(&app_dir, parsed))
+        .await
+        .map_err(|e| e.to_string())??;
+    serde_json::to_string(&receipt).map_err(|e| e.to_string())
+}
+
+/// Re-verify a stored receipt (signature, device key, audit-chain link, and the
+/// answer text when supplied).
+#[tauri::command]
+async fn verify_answer_receipt(
+    app: tauri::AppHandle,
+    id: String,
+    answer: Option<String>,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        answer_receipt::verify(&app_dir, &id, answer.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Export a receipt (digests only, never content) to the Downloads folder.
+#[tauri::command]
+async fn export_answer_receipt(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let file = answer_receipt::export(&app_dir, &id)?;
+    let audit = audit_log::AuditLog::new(&app_dir);
+    let _ = audit.append("export_answer_receipt", "user", &file.filename);
+    serde_json::to_string(&file).map_err(|e| e.to_string())
+}
+
 // ─── Security Commands ─────────────────────────────────────
 
 /// Get the most recent audit log entries (tamper-evident hash chain)
@@ -3405,6 +3448,10 @@ pub fn run() {
             verify_audit_chain,
             verify_model,
             get_security_status,
+            // Answer Receipts — signed local provenance
+            issue_answer_receipt,
+            verify_answer_receipt,
+            export_answer_receipt,
             // Whisper Voice Engine (Phase 4 — Local Voice)
             whisper_status,
             download_whisper_model,

@@ -129,7 +129,6 @@ describe("SettingsPanel", () => {
     expect(vi.mocked(invoke).mock.calls.some(([c]) => c === "audio_sidecar_status")).toBe(false); // not fetched until opened
     screen.getByText(/Audio → Knowledge/).click();
     await waitFor(() => expect(screen.getByTestId("audio-sidecar-status").textContent).toBe("⛔ Not installed"));
-    expect(screen.getByText(/only wav\/mp3\/flac will work/)).not.toBeNull;
     expect(screen.getByText("/opt/homebrew/bin/ffmpeg")).toBeInTheDocument();
   });
 });

@@ -550,7 +550,7 @@ export default function MainView({
                 {msg.attachment && (
                   <div className="attachment-actions">
                     <span className="attachment-chip">
-                      {msg.attachment.kind === "pptx" ? "📊" : "📄"} {msg.attachment.filename}
+                      {msg.attachment.kind === "pptx" ? "📊" : msg.attachment.kind === "html" ? "📈" : "📄"} {msg.attachment.filename}
                     </span>
                     <button
                       className="attachment-btn"

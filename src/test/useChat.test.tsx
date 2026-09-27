@@ -115,4 +115,64 @@ describe("chat request routing", () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith("index_document_chunks", expect.anything()));
     expect(call.mock.calls.some(([command]) => command === "check_knowledge_drift")).toBe(false);
   });
+
+  it("routes a CSV attachment through the data lane: profile → analysis → validated chart → html artifact, no RAG", async () => {
+    const csv = "[File: sales.csv]\nregion,amount\nEMEA,1200\nAPAC,800\n";
+    const profile = { name: "sales.csv", sheet: null, row_count: 2, column_count: 2, truncated: false, sample: [],
+      columns: [{ name: "region", kind: "text", non_empty: 2, unique: 2, numeric: null, top_values: [["EMEA", 1], ["APAC", 1]], example: "EMEA" },
+                { name: "amount", kind: "number", non_empty: 2, unique: 2, numeric: { min: 800, max: 1200, mean: 1000, median: 1000, sum: 2000 }, top_values: [], example: "1200" }] };
+    call.mockImplementation(async (command, args) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "profile_table") return JSON.stringify(profile);
+      if (command === "query_ollama") {
+        const a = args as { format?: unknown; prompt: string };
+        if (a.format) return JSON.stringify({ type: "bar", x: "region", y: "amount", agg: "sum", title: "Amount by region" });
+        expect(a.prompt).toContain("DATA to reason over");
+        expect(a.prompt).not.toContain("EMEA,1200"); // raw rows never reach the model
+        return "EMEA leads with 1,200 of the 2,000 total.";
+      }
+      if (command === "aggregate_table") {
+        expect(JSON.parse((args as { specJson: string }).specJson)).toEqual({ x: "region", y: "amount", agg: "sum", limit: 12, sort_by_label: false });
+        return JSON.stringify({ x_label: "region", y_label: "sum(amount)", points: [["EMEA", 1200], ["APAC", 800]], groups_total: 2, skipped_rows: 0 });
+      }
+      if (command === "create_text_file") {
+        const a = args as { title: string; ext: string; content: string };
+        expect(a.ext).toBe("html");
+        expect(a.content).not.toMatch(/<script/i);
+        return JSON.stringify({ path: "/tmp/sales-bar-chart.html", filename: "sales-bar-chart.html", kind: "html" });
+      }
+      if (command === "index_document_chunks") {
+        expect((args as { text: string }).text).toContain("Dataset: sales.csv");
+        return "[]";
+      }
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("Plot total amount by region", undefined, csv); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Data Analyst");
+    expect(last.content).toContain("EMEA leads");
+    expect(last.content).toContain("📈 bar chart");
+    expect(last.attachment?.filename).toBe("sales-bar-chart.html");
+    const cmds = call.mock.calls.map(([c]) => c);
+    expect(cmds).not.toContain("rag_query");
+    expect(cmds).not.toContain("refract_intent");
+    expect(cmds.indexOf("profile_table")).toBeLessThan(cmds.indexOf("aggregate_table"));
+    await waitFor(() => expect(cmds.includes("index_document_chunks") || call.mock.calls.some(([c]) => c === "index_document_chunks")).toBe(true));
+  });
+  it("answers a plain question about a spreadsheet without producing a chart", async () => {
+    call.mockImplementation(async (command) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "profile_table") return JSON.stringify({ name: "q.xlsx", sheet: "Data", row_count: 9, column_count: 1, truncated: false, sample: [], columns: [{ name: "item", kind: "text", non_empty: 9, unique: 3, numeric: null, top_values: [], example: "A" }] });
+      if (command === "query_ollama") return "There are 3 distinct items.";
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("How many distinct items?", undefined, "[Document: q.xlsx | Type: XLSX | 1 sheets | 9 rows]\n\n── Sheet: Data ──\nitem\nA\n"); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.content).toContain("3 distinct items");
+    expect(last.content).toContain("q.xlsx · Data · 9 rows × 1 cols");
+    expect(last.attachment).toBeUndefined();
+    expect(call.mock.calls.some(([c]) => c === "aggregate_table" || c === "create_text_file")).toBe(false);
+  });
 });

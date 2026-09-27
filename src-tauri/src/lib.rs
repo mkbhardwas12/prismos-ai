@@ -30,6 +30,7 @@ mod project_reviewer;
 mod web_research;
 mod answer_receipt;
 mod knowledge_drift;
+mod data_lane;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -2176,6 +2177,35 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
+// ─── Data Lane — deterministic offline analysis of CSV / XLSX attachments ──
+
+/// Parse an attached table and return its column profile (types, stats, top
+/// values, sample rows). Pure computation; the model only ever sees this summary.
+#[tauri::command]
+async fn profile_table(text: String, name: String) -> Result<String, String> {
+    let profile = tauri::async_runtime::spawn_blocking(move || {
+        data_lane::parse_table(&text, &name).map(|t| data_lane::profile_table(&t))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    serde_json::to_string(&profile).map_err(|e| e.to_string())
+}
+
+/// Group + aggregate one series for a chart. `spec_json` is a validated
+/// `AggregateSpec` (x column, optional numeric y, sum|avg|count|min|max).
+#[tauri::command]
+async fn aggregate_table(text: String, name: String, spec_json: String) -> Result<String, String> {
+    let spec: data_lane::AggregateSpec =
+        serde_json::from_str(&spec_json).map_err(|e| format!("Invalid aggregate spec: {e}"))?;
+    let series = tauri::async_runtime::spawn_blocking(move || {
+        let table = data_lane::parse_table(&text, &name)?;
+        data_lane::aggregate(&table, &spec)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    serde_json::to_string(&series).map_err(|e| e.to_string())
+}
+
 // ─── Knowledge Drift — contradiction alerts for newly indexed documents ──
 
 /// Compare a just-indexed document against the graph and report contradictions.
@@ -3474,6 +3504,9 @@ pub fn run() {
             export_answer_receipt,
             // Knowledge Drift — contradiction alerts
             check_knowledge_drift,
+            // Data Lane — CSV/XLSX profile + aggregate
+            profile_table,
+            aggregate_table,
             // Whisper Voice Engine (Phase 4 — Local Voice)
             whisper_status,
             download_whisper_model,

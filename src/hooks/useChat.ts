@@ -10,6 +10,7 @@ import { buildErrorMessage } from "../lib/errors";
 import { collectArtifactContext } from "../lib/artifactContext";
 import { issueAnswerReceipt, type ReceiptInput } from "../lib/receipts";
 import type { DriftReport } from "../types";
+import { analysisPrompt, chartFileTitle, chooseChartSpec, datasetSummary, detectTabularAttachment, renderChartHtml, toAggregateSpec, wantsChart, type Series, type TableProfile } from "../lib/dataLane";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -171,7 +172,49 @@ export function useChat({
         return;
       }
       // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
-      if (documentText) {
+      const tabular = detectTabularAttachment(documentText);
+      if (documentText && tabular) {
+        // ── Data lane: CSV / XLSX → deterministic profile → explained by the model ──
+        setProcessingPhase("Checking Ollama connection…");
+        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        if (!ollamaOk) {
+          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+        }
+        setProcessingPhase(`Profiling ${tabular.name}…`);
+        const profile = JSON.parse(await invoke<string>("profile_table", { text: documentText, name: tabular.name })) as TableProfile;
+        const modelName = settings.defaultModel || "llama3.2";
+        setProcessingPhase(`Analyzing ${profile.row_count.toLocaleString()} rows × ${profile.column_count} columns with ${modelName}…`);
+        const answer = await invoke<string>("query_ollama", {
+          prompt: analysisPrompt(profile, input),
+          model: modelName,
+          ollamaUrl: settings.ollamaUrl || null,
+          maxTokens: settings.maxTokens || 4096,
+        });
+
+        let attachment: Message["attachment"];
+        let chartNote = "";
+        if (wantsChart(input)) {
+          setProcessingPhase("Choosing a chart…");
+          const spec = await chooseChartSpec(profile, input, { model: modelName, ollamaUrl: settings.ollamaUrl || null });
+          const series = JSON.parse(await invoke<string>("aggregate_table", {
+            text: documentText, name: tabular.name, specJson: JSON.stringify(toAggregateSpec(spec)),
+          })) as Series;
+          const html = renderChartHtml(spec, series, tabular.name);
+          attachment = JSON.parse(await invoke<string>("create_text_file", { title: chartFileTitle(tabular.name, spec), ext: "html", content: html }));
+          chartNote = ` · 📈 ${spec.type} chart (${series.points.length} points, no scripts)`;
+        }
+
+        const shape = `${profile.row_count.toLocaleString()} rows × ${profile.column_count} cols${profile.truncated ? " (first 200,000 read)" : ""}`;
+        const metaLine = `\n\n───\n📊 Data Analysis · ${tabular.name}${profile.sheet ? ` · ${profile.sheet}` : ""} · ${shape} · ${modelName} · 100% local${chartNote}`;
+        const dataMsgId = crypto.randomUUID();
+        const aiMsg: Message = { id: dataMsgId, role: "ai", content: answer + metaLine, timestamp: new Date(), agent: "Data Analyst", attachment };
+        setMessages((prev) => [...prev, aiMsg]);
+        attachReceipt(dataMsgId, { question: input, answer, model: modelName, agent: "Data Analyst", sources: [tabular.name] });
+        // The graph remembers the dataset's shape and statistics — not thousands of raw rows.
+        invoke("index_document_chunks", { text: datasetSummary(profile), source: tabular.name }).catch(() => {});
+        onIntentProcessed("Data Analyst");
+        await refreshSuggestions(input, dataMsgId);
+      } else if (documentText) {
         setProcessingPhase("Checking Ollama connection…");
         const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
         if (!ollamaOk) {

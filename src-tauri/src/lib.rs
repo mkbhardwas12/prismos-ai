@@ -29,6 +29,7 @@ mod doc_generator;
 mod project_reviewer;
 mod web_research;
 mod answer_receipt;
+mod knowledge_drift;
 
 use std::sync::Mutex;
 use std::sync::Arc;
@@ -2175,6 +2176,25 @@ async fn diff_graph(
     serde_json::to_string(&diff).map_err(|e| e.to_string())
 }
 
+// ─── Knowledge Drift — contradiction alerts for newly indexed documents ──
+
+/// Compare a just-indexed document against the graph and report contradictions.
+/// Opt-in via Settings; bounded embeds + LLM judgements; never holds the graph
+/// lock across an await.
+#[tauri::command]
+async fn check_knowledge_drift(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, DbState>,
+    text: String,
+    source: String,
+    model: Option<String>,
+) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let model = model.filter(|m| !m.trim().is_empty()).unwrap_or_else(|| "qwen3:4b".to_string());
+    let report = knowledge_drift::detect(&db.0, Some(&app_dir), &text, &source, &model).await?;
+    serde_json::to_string(&report).map_err(|e| e.to_string())
+}
+
 // ─── Answer Receipts — locally signed provenance for an answer ────────
 
 /// Sign + persist a receipt for an answer that is already on screen. Opt-in via
@@ -3452,6 +3472,8 @@ pub fn run() {
             issue_answer_receipt,
             verify_answer_receipt,
             export_answer_receipt,
+            // Knowledge Drift — contradiction alerts
+            check_knowledge_drift,
             // Whisper Voice Engine (Phase 4 — Local Voice)
             whisper_status,
             download_whisper_model,

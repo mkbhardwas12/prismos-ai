@@ -137,6 +137,13 @@ pub struct SpectrumGraph {
     conn: Connection,
 }
 
+/// Stable id of the `document` node for an imported source. Chunk nodes are
+/// `{document_node_id}-chunk-{index}`. Kept as one function so other modules
+/// (e.g. knowledge-drift detection) never re-derive the formula.
+pub fn document_node_id(source: &str) -> String {
+    format!("docsrc-{:x}", Sha256::digest(source.as_bytes()))
+}
+
 impl SpectrumGraph {
     /// Reconcile one source atomically. IDs are stable across reimports; source
     /// text is evidence, not an instruction or a claim of factual verification.
@@ -171,8 +178,7 @@ impl SpectrumGraph {
         }
         if bytes == 0 { return Err("Document contains no text".into()); }
 
-        let digest = format!("{:x}", Sha256::digest(source.as_bytes()));
-        let document_id = format!("docsrc-{digest}");
+        let document_id = document_node_id(source);
         let chunk_prefix = format!("{document_id}-chunk-");
         let payload_hash = format!("{:x}", Sha256::digest(serde_json::to_vec(chunks)?));
         let excerpt: String = chunks[0].content.chars().take(350).collect();
@@ -1878,6 +1884,15 @@ impl SpectrumGraph {
     }
 
     /// Get a node without incrementing access count (internal use only)
+    /// Read a node without touching `access_count` / `last_accessed` — for
+    /// analysis passes that must not distort the graph's usage signal.
+    pub fn peek_node(
+        &self,
+        id: &str,
+    ) -> Result<Option<SpectrumNode>, Box<dyn std::error::Error + Send + Sync>> {
+        self.get_node_without_access(id)
+    }
+
     fn get_node_without_access(
         &self,
         id: &str,

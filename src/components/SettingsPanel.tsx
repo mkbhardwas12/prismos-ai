@@ -964,6 +964,36 @@ export default function SettingsPanel({
           </>)}
         </div>
 
+        {/* ── Knowledge Conflict Alerts ── */}
+        <div className="settings-group">
+          <h3 className="settings-group-toggle" onClick={() => toggleSection("drift")}>
+            ⚠️ Knowledge Conflict Alerts
+            <span className={`settings-group-chevron${expandedSections.has("drift") ? " settings-group-chevron--open" : ""}`}>▸</span>
+          </h3>
+          {expandedSections.has("drift") && (<>
+          <div className="settings-item">
+            <label>Warn when a new document contradicts existing knowledge</label>
+            <div className="settings-theme-toggle">
+              <button
+                className={`settings-theme-btn ${settings.driftAlertsEnabled ? "active" : ""}`}
+                onClick={() => update("driftAlertsEnabled", !settings.driftAlertsEnabled)}
+              >
+                {settings.driftAlertsEnabled ? "✅ Enabled" : "Off"}
+              </button>
+            </div>
+          </div>
+          <div className="settings-hint">
+            After a document you attach is indexed, PrismOS compares a sample of it against your Spectrum
+            Graph (local embeddings → cosine neighbours → a strict, structured verdict from your local chat
+            model). Confirmed contradictions appear under the answer with <strong>both sides quoted</strong> and
+            are recorded as <code>contradicts</code> links — nothing is deleted or overwritten. Bounded to a
+            handful of local model calls per document, and it runs <em>after</em> the answer appears. Needs the
+            embedding model (<code>ollama pull nomic-embed-text</code>); if it is missing you are told, not
+            shown a false "no conflicts". Off by default.
+          </div>
+          </>)}
+        </div>
+
         {/* ── Web Research ── */}
         <div className="settings-group">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("webresearch")}>

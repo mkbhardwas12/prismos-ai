@@ -602,6 +602,37 @@ export default function MainView({
                     </div>
                   );
                 })()}
+                {msg.role === "ai" && msg.conflicts && (msg.conflicts.conflicts.length > 0 || msg.conflicts.skipped_reason) && (
+                  <div className="conflict-card" data-testid="knowledge-conflicts">
+                    {msg.conflicts.conflicts.length > 0 ? (
+                      <>
+                        <div className="conflict-header">
+                          ⚠️ {msg.conflicts.conflicts.length === 1 ? "Knowledge conflict" : `${msg.conflicts.conflicts.length} knowledge conflicts`} — this document disagrees with what you already know
+                        </div>
+                        {msg.conflicts.conflicts.map((c) => (
+                          <div className="conflict-item" key={`${c.new_node_id}→${c.existing_node_id}`}>
+                            <div className="conflict-side">
+                              <span className="conflict-tag conflict-tag--new">New · {msg.conflicts!.source}</span>
+                              <p>{c.claim_new || c.new_excerpt}</p>
+                            </div>
+                            <div className="conflict-side">
+                              <span className="conflict-tag conflict-tag--old">Existing · {c.existing_label}</span>
+                              <p>{c.claim_existing || c.existing_excerpt}</p>
+                            </div>
+                            <div className="conflict-why">
+                              {c.explanation} · similarity {(c.similarity * 100).toFixed(0)}% · confidence {(c.confidence * 100).toFixed(0)}%
+                            </div>
+                          </div>
+                        ))}
+                        <div className="conflict-note">
+                          Recorded as a <code>contradicts</code> link in your Spectrum Graph. Nothing was deleted or overwritten — you decide which side is right.
+                        </div>
+                      </>
+                    ) : (
+                      <div className="conflict-skipped">Conflict check skipped: {msg.conflicts.skipped_reason}</div>
+                    )}
+                  </div>
+                )}
                 <div className="message-meta">
                   {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
                   {msg.timestamp.toLocaleTimeString()}

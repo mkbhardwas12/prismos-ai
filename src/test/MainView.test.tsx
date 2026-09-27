@@ -87,6 +87,7 @@ const defaultSettings: AppSettings = {
   emailSummaryEnabled: false,
   webResearchEnabled: false,
   answerReceiptsEnabled: false,
+  driftAlertsEnabled: false,
   calendarEnabled: false,
   financeEnabled: false,
   defaultView: "chat",
@@ -251,5 +252,26 @@ describe("MainView", () => {
     await act(async () => { screen.getByText("Verify").click(); });
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("verify_answer_receipt", { id: "abcdef12-0000-0000-0000-000000000000", answer: "Paris." });
     expect(await screen.findByText("✓ Verified on this device")).toBeInTheDocument();
+  });
+
+  it("renders both sides of a knowledge conflict, and the skip reason when the check could not run", async () => {
+    const { useChat } = await import("../hooks/useChat");
+    const base = { isProcessing: false, processingPhase: "", processingElapsed: 0, pendingIntent: "", setPendingIntent: vi.fn(), handleIntent: vi.fn(),
+      clearConversation: vi.fn(), submitFeedback: vi.fn(), selectRefractionAlternative: vi.fn(), approveProjectReview: vi.fn(), declineProjectReview: vi.fn(), conversationRef: { current: null } };
+    const conflict = { new_node_id: "a", new_excerpt: "", existing_node_id: "b", existing_label: "📄 plan.pdf [chunk 2/4]", existing_excerpt: "", similarity: 0.81, claim_new: "The budget is 5M.", claim_existing: "The budget is 3M.", explanation: "Different totals.", confidence: 0.9, edge_recorded: true };
+    vi.mocked(useChat).mockReturnValue({ ...base, messages: [
+      { id: "m1", role: "ai", timestamp: new Date(), content: "x", conflicts: { source: "notes.md", chunks_checked: 1, candidates_considered: 1, judgements: 1, skipped_reason: null, conflicts: [conflict] } },
+      { id: "m2", role: "ai", timestamp: new Date(), content: "y", conflicts: { source: "z.md", chunks_checked: 0, candidates_considered: 0, judgements: 0, skipped_reason: "Embedding model unavailable", conflicts: [] } },
+    ] } as any);
+    await act(async () => { render(<MainView {...defaultProps} />); });
+    const cards = screen.getAllByTestId("knowledge-conflicts");
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain("Knowledge conflict");
+    expect(cards[0].textContent).toContain("New · notes.md");
+    expect(cards[0].textContent).toContain("The budget is 5M.");
+    expect(cards[0].textContent).toContain("Existing · 📄 plan.pdf [chunk 2/4]");
+    expect(cards[0].textContent).toContain("The budget is 3M.");
+    expect(cards[0].textContent).toContain("Nothing was deleted or overwritten");
+    expect(cards[1].textContent).toContain("Conflict check skipped: Embedding model unavailable");
   });
 });

@@ -9,6 +9,7 @@ import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } f
 import { buildErrorMessage } from "../lib/errors";
 import { collectArtifactContext } from "../lib/artifactContext";
 import { issueAnswerReceipt, type ReceiptInput } from "../lib/receipts";
+import type { DriftReport } from "../types";
 
 interface UseChatOptions {
   settings: AppSettings;
@@ -219,7 +220,19 @@ export function useChat({
         setMessages((prev) => [...prev, aiMsg]);
         attachReceipt(docMsgId, { question: input, answer: docResponse, model: modelName, agent: "Document Analyst", sources: [sourceName] });
 
-        invoke("index_document_chunks", { text: documentText, source: sourceName }).catch(() => {});
+        // Index into the graph, then (opt-in) check the new text against what the
+        // graph already believes. Both run after the answer is on screen.
+        invoke("index_document_chunks", { text: documentText, source: sourceName })
+          .then(() => settings.driftAlertsEnabled
+            ? invoke<string>("check_knowledge_drift", { text: documentText, source: sourceName, model: settings.defaultModel || null })
+            : null)
+          .then((json) => {
+            if (!json) return;
+            const report = JSON.parse(json) as DriftReport;
+            if (report.conflicts.length === 0 && !report.skipped_reason) return;
+            setMessages((prev) => prev.map((m) => (m.id === docMsgId ? { ...m, conflicts: report } : m)));
+          })
+          .catch(() => { /* indexing/drift are best-effort enrichments */ });
         onIntentProcessed("Document Analyst");
         await refreshSuggestions(input, docMsgId);
 

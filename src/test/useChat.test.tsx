@@ -89,4 +89,30 @@ describe("chat request routing", () => {
     expect(call.mock.calls.some(([command]) => command === "issue_answer_receipt")).toBe(false);
     expect(result.current.messages[result.current.messages.length - 1]?.transparency?.model_used).toBe("local (routing not reported)");
   });
+
+  it("runs the contradiction check only after indexing and only when enabled, then attaches the report", async () => {
+    const report = { source: "notes.md", chunks_checked: 1, candidates_considered: 1, judgements: 1, skipped_reason: null,
+      conflicts: [{ new_node_id: "docsrc-x-chunk-0", new_excerpt: "Budget is 5M", existing_node_id: "n-old", existing_label: "📄 plan.pdf [chunk 2/4]", existing_excerpt: "Budget is 3M", similarity: 0.81, claim_new: "The budget is 5M.", claim_existing: "The budget is 3M.", explanation: "Different totals for the same budget.", confidence: 0.92, edge_recorded: true }] };
+    call.mockImplementation(async (command) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "rag_query") return JSON.stringify({ context: "Budget is 5M", chunks_used: 1, total_chunks: 1, source: "notes.md", rag_used: false });
+      if (command === "query_ollama") return "The budget is five million.";
+      if (command === "index_document_chunks") return JSON.stringify(["docsrc-x-chunk-0"]);
+      if (command === "check_knowledge_drift") return JSON.stringify(report);
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat({ ...options(), settings: { ...DEFAULT_SETTINGS, driftAlertsEnabled: true } }));
+    await act(async () => { await result.current.handleIntent("What is the budget?", undefined, "[File: notes.md]\nBudget is 5M"); });
+    await waitFor(() => expect(result.current.messages[result.current.messages.length - 1]?.conflicts?.conflicts).toHaveLength(1));
+    const order = call.mock.calls.map(([command]) => command);
+    expect(order.indexOf("check_knowledge_drift")).toBeGreaterThan(order.indexOf("index_document_chunks"));
+    expect(order.indexOf("index_document_chunks")).toBeGreaterThan(order.indexOf("query_ollama"));
+    expect(call).toHaveBeenCalledWith("check_knowledge_drift", { text: "[File: notes.md]\nBudget is 5M", source: "notes.md", model: DEFAULT_SETTINGS.defaultModel });
+
+    call.mockClear();
+    const off = renderHook(() => useChat(options()));
+    await act(async () => { await off.result.current.handleIntent("What is the budget?", undefined, "[File: notes.md]\nBudget is 5M"); });
+    await waitFor(() => expect(call).toHaveBeenCalledWith("index_document_chunks", expect.anything()));
+    expect(call.mock.calls.some(([command]) => command === "check_knowledge_drift")).toBe(false);
+  });
 });

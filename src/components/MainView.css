@@ -2163,3 +2163,43 @@
 .receipt-status--ok { color: #34d399; background: rgba(52, 211, 153, 0.12); }
 .receipt-status--no { color: #f87171; background: rgba(248, 113, 113, 0.12); }
 [data-theme="light"] .receipt-chip { color: rgba(0, 0, 0, 0.7); background: rgba(5, 150, 105, 0.08); border-color: rgba(5, 150, 105, 0.25); }
+
+/* ── Knowledge conflict card (new document vs existing graph knowledge) ── */
+.conflict-card {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.conflict-header { font-size: 13px; font-weight: 700; }
+.conflict-item {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.conflict-side p { margin: 4px 0 0; font-size: 12px; line-height: 1.45; }
+.conflict-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: inline-block;
+}
+.conflict-tag--new { color: #60a5fa; background: rgba(96, 165, 250, 0.12); }
+.conflict-tag--old { color: #a78bfa; background: rgba(167, 139, 250, 0.12); }
+.conflict-why { grid-column: 1 / -1; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.conflict-note, .conflict-skipped { font-size: 11px; font-style: italic; color: var(--text-muted); }
+.conflict-note code { font-style: normal; font-family: var(--font-mono); }
+@media (max-width: 640px) { .conflict-item { grid-template-columns: 1fr; } }
+[data-theme="light"] .conflict-item { border-top-color: rgba(0, 0, 0, 0.08); }

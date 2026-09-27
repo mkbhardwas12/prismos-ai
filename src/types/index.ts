@@ -247,6 +247,32 @@ export interface Message {
   reviewRequest?: ReviewRequest;
   /** Locally signed provenance record for this answer (opt-in Setting) */
   receipt?: AnswerReceipt;
+  /** Contradictions between the attached document and existing knowledge (opt-in Setting) */
+  conflicts?: DriftReport;
+}
+
+/** One confirmed disagreement between new text and an existing graph node. */
+export interface KnowledgeConflict {
+  new_node_id: string;
+  new_excerpt: string;
+  existing_node_id: string;
+  existing_label: string;
+  existing_excerpt: string;
+  similarity: number;
+  claim_new: string;
+  claim_existing: string;
+  explanation: string;
+  confidence: number;
+  edge_recorded: boolean;
+}
+
+export interface DriftReport {
+  source: string;
+  chunks_checked: number;
+  candidates_considered: number;
+  judgements: number;
+  conflicts: KnowledgeConflict[];
+  skipped_reason: string | null;
 }
 
 /** A locally signed record of what produced an answer. Digests only — never content. */
@@ -341,6 +367,8 @@ export interface AppSettings {
   financeEnabled: boolean;
   /** Sign every answer with a local, verifiable provenance receipt. */
   answerReceiptsEnabled: boolean;
+  /** After indexing a document, check it against existing knowledge for contradictions. */
+  driftAlertsEnabled: boolean;
   defaultView: string;
 }
 

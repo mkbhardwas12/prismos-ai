@@ -36,6 +36,10 @@ out in [What stays local](#what-stays-local-and-what-can-use-the-network).
 | **Talks to any local model** | Streaming chat against any Ollama model; curated registry of 18 models with hardware-aware recommendations on first run. Attach an image and it swaps to a vision model, then swaps back. |
 | **Generates documents, decks and small apps** | Ask for a report, a slide deck (5 layouts, speaker notes) or a self-contained HTML app; it writes the file locally and opens it. |
 | **Agent roles debate the answer** | Orchestrator, Reasoner, Memory Keeper, Tool Smith and Sentinel vote on the response before it's shown; operation approvals go through a small wasmtime policy module. |
+| **Signs its answers** | Opt-in **answer receipts**: each reply can carry a locally signed record (HMAC-SHA256, device-bound key) of the model that actually ran, the documents and graph nodes used, digests of question and answer, and a link into the tamper-evident audit log. Verify it later on the same machine; export it as JSON (digests only, never your text). |
+| **Warns when new knowledge contradicts old** | Opt-in **conflict alerts**: after a document is indexed, a bounded local pass (embeddings → cosine neighbours → a strict structured verdict from your chat model) quotes both sides of any contradiction and records a `contradicts` link. Nothing is deleted or overwritten. |
+| **Does the arithmetic on spreadsheets** | Drop a CSV or XLSX: Rust parses, types and profiles every column and aggregates the series; the model only explains the profile. Ask for a chart and you get a self-contained HTML file — inline SVG, no JavaScript, no external resources. |
+| **Turns recordings into knowledge** | Drop a voice memo or meeting recording: transcribed on-device by a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) sidecar spawned only for that job (`brew install whisper-cpp` + a ggml model), summarised by your local model, indexed into the graph. Honest status if the sidecar or model is missing. |
 | **Stays out of your way** | Global hotkey summons it over any app; it minimizes to the tray and the agents stay resident. |
 
 Optional, **off by default**, opt-in: user-directed Web Research (only URLs you
@@ -158,6 +162,14 @@ installed, but PrismOS is not an OS-level network sandbox:
 
 - Installers, model/voice downloads, configured model-management endpoints and
   update checks can access external services.
+- The **Audio → Knowledge** panel in Settings has a one-time, user-initiated
+  "Download base model" button that fetches a whisper.cpp ggml model from
+  Hugging Face. Transcription itself never touches the network; with a model
+  already in the models folder nothing is downloaded.
+- **Answer receipts**, **conflict alerts** and the **data lane** are entirely
+  local: signing uses a device-bound key, contradiction checks and chart specs
+  use the loopback Ollama daemon, and chart files contain no scripts or
+  external resources.
 - The optional **Email Keeper** agent connects to *your* IMAP server if you
   configure it. It is off by default.
 - The optional **Finance Keeper** fetches public market data from Yahoo Finance.
@@ -202,6 +214,7 @@ evidence.
 | Action tags | HMAC tags use public identifiers; they are not trusted code signatures | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
 | 3-tier allow-list | Operation categories and per-role permissions, not an OS permission boundary | [`sandbox_prism.rs`](src-tauri/src/sandbox_prism.rs) |
 | Audit chain | Local SHA-256 chain detects consistency errors; it is neither immutable nor protected against full-file rewriting | [`audit_log.rs`](src-tauri/src/audit_log.rs) |
+| Answer receipts | HMAC-SHA256 over answer/source digests with a key derived from device identifiers; verifiable on the issuing machine only — provenance for you, not a third-party attestation | [`answer_receipt.rs`](src-tauri/src/answer_receipt.rs) |
 | Hardware detection | Detects platform hardware; current software key derivation does not perform protected TPM/Secure Enclave key operations | [`secure_enclave.rs`](src-tauri/src/secure_enclave.rs) |
 | Live storage | Ordinary, unencrypted SQLite in local app data; use OS disk encryption and access controls | [`spectrum_graph.rs`](src-tauri/src/spectrum_graph.rs) |
 | Graph exports | AES-GCM payloads, but legacy identity-derived keys and a fast passphrase derivation need a versioned security upgrade; keep exports private | [`you_port.rs`](src-tauri/src/you_port.rs) |

@@ -121,6 +121,13 @@ function storedSource(node: SpectrumNode): string | null {
   ) {
     source = /^Source: (.+)$/m.exec(header)?.[1];
   } else if (
+    node.node_type === "document" &&
+    /^Source: /m.test(header) &&
+    /^Content SHA-256: [0-9a-f]+$/m.test(header)
+  ) {
+    // Root envelope written by index_document_source.
+    source = /^Source: (.+)$/m.exec(header)?.[1];
+  } else if (
     ["document", "file"].includes(node.node_type) &&
     /^Local file: /m.test(header)
   ) {

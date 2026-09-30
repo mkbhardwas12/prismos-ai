@@ -5,7 +5,7 @@
 // `SyntaxError: JSON Parse error: Expected ']'` surfaced to the user.
 
 import { describe, it, expect } from "vitest";
-import { detectDocRequest, detectFileRequest, extractJson, repairJson, splitFileResponse } from "../lib/docGen";
+import { detectDocRequest, detectFileRequest, extractJson, missingLocalRefs, repairJson, splitFileResponse } from "../lib/docGen";
 
 describe("detectDocRequest", () => {
   it("detects classic phrasings", () => {
@@ -164,5 +164,24 @@ describe("splitFileResponse", () => {
     expect(r.title).toBe("notes");
     expect(r.content.endsWith("```")).toBe(true);
     expect(r.content).toContain("const x = 1;");
+  });
+});
+
+describe("missingLocalRefs", () => {
+  const planned = new Set(["index.html", "styles.css", "app.js", "pages/detail.html"]);
+
+  it("resolves nested-page references against the page directory (review finding)", () => {
+    const html = '<link href="../styles.css"><script src="../app.js"></script><a href="./other.html">';
+    expect(missingLocalRefs(html, planned, "pages/detail.html")).toEqual(["pages/other.html"]);
+  });
+
+  it("never queues a path that escapes the project root", () => {
+    const html = '<script src="../../evil.js"></script><script src="../app.js"></script>';
+    expect(missingLocalRefs(html, planned, "index.html")).toEqual([]);
+  });
+
+  it("keeps root-page behaviour for plain and ./-prefixed refs", () => {
+    const html = '<script src="./data.js"></script><link href="styles.css"><img src="logo.svg">';
+    expect(missingLocalRefs(html, planned, "index.html")).toEqual(["data.js", "logo.svg"]);
   });
 });

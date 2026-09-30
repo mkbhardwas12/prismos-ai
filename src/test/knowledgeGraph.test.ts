@@ -138,6 +138,27 @@ describe("knowledge graph projection", () => {
     );
   });
 
+  it("groups an index_document_source root with its chunks (review finding)", () => {
+    const graph = buildKnowledgeGraph(
+      [
+        node(
+          "root",
+          "document",
+          "Source: /projects/gamma/spec.md\nContent SHA-256: abc123\nChunks: 1\nCharacters: 10\nEvidence: imported source text; not independently verified\n\nexcerpt",
+        ),
+        node(
+          "chunk",
+          "doc_chunk",
+          "Source: /projects/gamma/spec.md\nChunk: 1/1\nChars: 0-10\n\nexcerpt",
+        ),
+      ],
+      [],
+    );
+    const byId = new Map(graph.nodes.map((item) => [item.id, item]));
+    expect(byId.get("root")?.groupId).toBe("source:/projects/gamma/spec.md");
+    expect(byId.get("root")?.groupId).toBe(byId.get("chunk")?.groupId);
+  });
+
   it("uses explicit project membership without converting mentions or ambiguous ownership into provenance", () => {
     const graph = buildKnowledgeGraph(
       [

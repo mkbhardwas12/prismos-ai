@@ -539,14 +539,36 @@ function planOrder(files: AppPlanFile[], entry: string): AppPlanFile[] {
   return [...files].sort((a, b) => rank(a) - rank(b));
 }
 
+/** Resolve a reference found in `pagePath` to a project-relative path.
+ *  Returns null when it escapes the project root (the backend rejects `..`). */
+function resolveProjectRef(pagePath: string, ref: string): string | null {
+  const base = pagePath.split("/").slice(0, -1);
+  const parts = ref.startsWith("/") ? [] : base;
+  const out = [...parts];
+  for (const seg of ref.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (out.length === 0) return null;
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return out.length ? out.join("/") : null;
+}
+
 /** Local files referenced by a written page that the plan forgot to include. */
-function missingLocalRefs(html: string, planned: Set<string>): string[] {
+export function missingLocalRefs(
+  html: string,
+  planned: Set<string>,
+  pagePath: string,
+): string[] {
   const refs = new Set<string>();
   const re = /(?:src|href)\s*=\s*"([^"#?:]+\.(?:js|css|html|svg|json))"/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
-    const p = m[1].replace(/^\.\//, "");
-    if (!planned.has(p.toLowerCase())) refs.add(p);
+    const p = resolveProjectRef(pagePath, m[1]);
+    if (p && !planned.has(p.toLowerCase())) refs.add(p);
   }
   return [...refs];
 }
@@ -669,7 +691,7 @@ export async function generateAppProject(
     written.push({ path: f.path, content });
     // Pages sometimes reference helpers the plan forgot — queue them too.
     if (/\.html?$/i.test(f.path)) {
-      for (const missing of missingLocalRefs(content, plannedPaths)) {
+      for (const missing of missingLocalRefs(content, plannedPaths, f.path)) {
         if (plan.files.length >= MAX_PLAN_FILES) break;
         plannedPaths.add(missing.toLowerCase());
         const extra: AppPlanFile = {

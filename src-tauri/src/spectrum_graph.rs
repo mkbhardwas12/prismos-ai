@@ -3761,7 +3761,6 @@ impl SpectrumGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     /// Create a SpectrumGraph backed by a temp directory (auto-cleaned)
     fn test_graph() -> (SpectrumGraph, tempfile::TempDir) {
@@ -4077,6 +4076,7 @@ mod tests {
         g.add_node("B", "b", "work").unwrap();
         let (nodes, edges) = g.clear_graph().unwrap();
         assert_eq!(nodes, 2);
+        assert_eq!(edges, 0);
         let (remaining, _) = g.stats().unwrap();
         assert_eq!(remaining, 0);
     }

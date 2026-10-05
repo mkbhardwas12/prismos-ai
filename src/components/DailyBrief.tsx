@@ -105,6 +105,18 @@ interface FinanceSummaryData {
 
 interface DailyBriefProps {
   onSuggestionClick?: (intent: string) => void;
+  /** Fold to the one-line summary button (the chat has started). */
+  compact?: boolean;
+}
+
+/** A dismissal lasts for the rest of the day, across relaunches. */
+const dismissKey = () => `prismos.brief.dismissed.${new Date().toISOString().slice(0, 10)}`;
+function readDismissed(): boolean {
+  try {
+    return localStorage.getItem(dismissKey()) === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** Time-aware greeting with appropriate emoji */
@@ -117,10 +129,30 @@ function getGreeting(): { emoji: string; greeting: string; period: string } {
   return { emoji: "🌙", greeting: "Working late", period: "night" };
 }
 
-export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
+export default function DailyBrief({ onSuggestionClick, compact = false }: DailyBriefProps) {
   const [brief, setBrief] = useState<DailyBriefData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(readDismissed);
+  const [expandedWhileCompact, setExpandedWhileCompact] = useState(false);
+  const collapsed = dismissed || (compact && !expandedWhileCompact);
+  const dismissBrief = () => {
+    setDismissed(true);
+    setExpandedWhileCompact(false);
+    try {
+      localStorage.setItem(dismissKey(), "1");
+    } catch {
+      /* storage blocked: the brief just stays dismissed for this session */
+    }
+  };
+  const expandBrief = () => {
+    setDismissed(false);
+    setExpandedWhileCompact(true);
+    try {
+      localStorage.removeItem(dismissKey());
+    } catch {
+      /* nothing to clear */
+    }
+  };
   const [error, setError] = useState(false);
   const [graphSuggestions, setGraphSuggestions] = useState<ProactiveSuggestion[]>([]);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
@@ -248,20 +280,20 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
       <button
         className="daily-summary-btn"
         onClick={() => {
-          if (dismissed) {
-            setDismissed(false);
+          if (collapsed) {
+            expandBrief();
           } else {
             setShowSummaryPanel(v => !v);
           }
         }}
-        title={dismissed ? "Show today's brief" : "Daily Summary"}
+        title={collapsed ? "Show today's brief" : "Daily Summary"}
         aria-label="Daily Summary"
       >
         <span className="daily-summary-btn-icon">📋</span>
         <span className="daily-summary-btn-text">Daily Summary</span>
       </button>
 
-      {showSummaryPanel && !dismissed && (
+      {showSummaryPanel && !collapsed && (
         <div className="daily-summary-panel" role="dialog" aria-label="Daily Summary">
           <div className="daily-summary-panel-header">
             <span className="daily-summary-panel-title">📊 Today at a Glance</span>
@@ -312,7 +344,7 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
   );
 
   // ── Error / loading / dismissed states ──
-  if (error && !dismissed) {
+  if (error && !collapsed) {
     return (
       <div className="daily-brief">
         {summaryButton}
@@ -322,7 +354,7 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
               <h3 className="daily-brief-title">
                 <span className="daily-brief-emoji">{emoji}</span> {greeting}
               </h3>
-              <button className="daily-brief-dismiss" onClick={() => setDismissed(true)} title="Dismiss">✕</button>
+              <button className="daily-brief-dismiss" onClick={dismissBrief} title="Dismiss">✕</button>
             </div>
             <p className="daily-brief-subtitle">Your graph is ready — here are some suggestions to get started</p>
           </div>
@@ -337,8 +369,8 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
       </div>
     );
   }
-  if (dismissed) {
-    return <div className="daily-brief daily-brief--collapsed">{summaryButton}</div>;
+  if (collapsed) {
+    return <div className="daily-brief daily-brief--collapsed" data-testid="daily-brief">{summaryButton}</div>;
   }
   if (loading || !brief) return null;
 
@@ -355,7 +387,7 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
               <h3 className="daily-brief-title">
                 <span className="daily-brief-emoji">{emoji}</span> {greeting}
               </h3>
-              <button className="daily-brief-dismiss" onClick={() => setDismissed(true)} title="Dismiss brief">✕</button>
+              <button className="daily-brief-dismiss" onClick={dismissBrief} title="Dismiss brief">✕</button>
             </div>
             <p className="daily-brief-subtitle">
               Here's your morning brief from the Spectrum Graph
@@ -593,7 +625,7 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
               <h3 className="daily-brief-title">
                 <span className="daily-brief-emoji">{emoji}</span> {greeting}
               </h3>
-              <button className="daily-brief-dismiss" onClick={() => setDismissed(true)} title="Dismiss recap">✕</button>
+              <button className="daily-brief-dismiss" onClick={dismissBrief} title="Dismiss recap">✕</button>
             </div>
             <p className="daily-brief-subtitle">
               {hasActivity
@@ -731,7 +763,7 @@ export default function DailyBrief({ onSuggestionClick }: DailyBriefProps) {
             <h3 className="daily-brief-title">
               <span className="daily-brief-emoji">{emoji}</span> {greeting}
             </h3>
-            <button className="daily-brief-dismiss" onClick={() => setDismissed(true)} title="Dismiss brief">✕</button>
+            <button className="daily-brief-dismiss" onClick={dismissBrief} title="Dismiss brief">✕</button>
           </div>
           <p className="daily-brief-subtitle">
             {hasActivity

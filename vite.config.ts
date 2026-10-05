@@ -4,6 +4,10 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import net from "net";
+import { readFileSync } from "node:fs";
+
+// One source for the version shown in the UI: package.json (bumped with every release).
+const APP_VERSION: string = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 
 const host = process.env.TAURI_DEV_HOST;
 const DEV_PORT = 1420;
@@ -43,6 +47,7 @@ function portPreflightPlugin(port: number): Plugin {
 
 export default defineConfig(async () => ({
   define: {
+    "import.meta.env.VITE_PRISMOS_VERSION": JSON.stringify(APP_VERSION),
     "import.meta.env.VITE_PRISMOS_BUILD": JSON.stringify(
       process.env.VITE_PRISMOS_BUILD || new Date().toISOString(),
     ),

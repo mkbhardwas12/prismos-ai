@@ -9,7 +9,6 @@ import { answerTextOf, exportAnswerReceipt, shortReceiptId, verifyAnswerReceipt 
 import type { Message, ReceiptVerification } from "../types";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import prismosLogo from "../assets/prismos-logo.svg";
 import prismosIcon from "../assets/prismos-icon.svg";
 import IntentInput from "./IntentInput";
 import DailyBrief from "./DailyBrief";
@@ -21,6 +20,20 @@ import { useChat } from "../hooks/useChat";
 import { useSuggestions } from "../hooks/useSuggestions";
 import type { AppSettings, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion, RefractionAlternative } from "../types";
 import "./MainView.css";
+
+/** The welcome screen's starters: one per lane, each a real one-line prompt. */
+const STARTERS = [
+  { icon: "🌊", title: "Build a 3D scene from one line", desc: "A voxel lighthouse in a storm, as one file that works offline.", intent: "/scene a voxel lighthouse on a rocky island in a storm at night" },
+  { icon: "🔎", title: "Investigate a log file", desc: "Attach the logs with + and ask what happened. You get a timeline and next steps.", intent: "Something happened on my server last night. What happened, and what do I do now?" },
+  { icon: "🛡️", title: "Harden a server, step by step", desc: "A plan you can follow for Linux, nginx, Docker, Postgres and more.", intent: "Harden my Linux server: give me a step-by-step plan" },
+  { icon: "🧁", title: "Build a website from one line", desc: "Menu, hours and a pickup form for a bakery, written as plain files.", intent: "Build a website for a neighborhood bakery: menu, opening hours and pickup orders" },
+];
+
+const MORE_IDEAS = [
+  { label: "Summarize my week", intent: "Summarize what I worked on this week and suggest priorities for tomorrow" },
+  { label: "Plan my day in time blocks", intent: "Create a structured daily plan with time blocks for deep work, meetings, and breaks" },
+  { label: "Brainstorm side projects", intent: "Brainstorm 5 creative side-project ideas that combine AI with everyday problems" },
+];
 
 interface MainViewProps {
   ollamaConnected: boolean;
@@ -51,6 +64,8 @@ export default function MainView({
   const [expandedRefractions, setExpandedRefractions] = useState<Set<string>>(new Set());
   const [expandedTransparencies, setExpandedTransparencies] = useState<Set<string>>(new Set());
   const [receiptChecks, setReceiptChecks] = useState<Record<string, ReceiptVerification | "checking">>({});
+  // Memory's ideas stay one quiet line above the input until asked for
+  const [ideasOpen, setIdeasOpen] = useState(false);
 
   const verifyReceipt = (msg: Message) => {
     if (!msg.receipt) return;
@@ -91,7 +106,7 @@ export default function MainView({
   return (
     <>
       <div className="main-header">
-        <h2><img src={prismosIcon} alt="" className="header-icon" /> Intent Console</h2>
+        <h2><img src={prismosIcon} alt="" className="header-icon" /> Chat</h2>
         <div className="header-actions">
           {chat.messages.length > 0 && (
             <button
@@ -99,7 +114,7 @@ export default function MainView({
               onClick={chat.clearConversation}
               title="Clear conversation"
             >
-              🗑️ Clear
+              Clear
             </button>
           )}
           <div className="ollama-status" ref={ollama.modelDropdownRef}>
@@ -233,7 +248,7 @@ export default function MainView({
             title="User Guide"
             aria-label="Open User Guide"
           >
-            📖 Guide
+            Guide
           </button>
         </div>
       </div>
@@ -255,15 +270,16 @@ export default function MainView({
 
       <div className="conversation-area" ref={chat.conversationRef} role="log" aria-label="Conversation history" aria-live="polite">
         {/* ── Morning Brief / Evening Recap ── */}
-        <DailyBrief onSuggestionClick={chat.handleIntent} />
+        {/* The full brief lives on Today; in Chat it stays a one-line pill until opened */}
+        <DailyBrief onSuggestionClick={chat.handleIntent} compact />
 
         {chat.messages.length === 0 ? (
           <div className="welcome-message">
-            <div className="welcome-icon"><img src={prismosLogo} alt="PrismOS-AI" className="welcome-logo-img" /></div>
-            <h1>Welcome to PrismOS-AI</h1>
-            <p>
-              Your local-first agentic AI operating system. All processing
-              happens on your device — your data never leaves.
+            <div className="welcome-icon"><img src={prismosIcon} alt="PrismOS-AI" className="welcome-logo-img" /></div>
+            <h1 className="welcome-title">Ask anything. Attach anything.</h1>
+            <p className="welcome-sub">
+              It all stays on this computer: the model runs here, and nothing
+              you type or attach is uploaded.
             </p>
 
             {/* ── Ollama Setup Wizard ── */}
@@ -409,94 +425,41 @@ export default function MainView({
             {ollama.getSetupStep() === "ready" && (
               <div className="ollama-ready-banner">
                 <span className="ready-icon">✅</span>
-                <span className="ready-text">Ollama connected · <strong>{settings.defaultModel}</strong> ready — start typing below!</span>
+                <span className="ready-text"><strong>{settings.defaultModel}</strong> is ready on this computer</span>
               </div>
             )}
 
-            {/* Quick-start example intents */}
-            <div className="welcome-examples">
-              <div className="welcome-examples-label">Quick-start templates — click to try</div>
-              <div className="welcome-example-chips">
-                <button className="example-chip" onClick={() => chat.setPendingIntent("/scene a voxel lighthouse on a rocky island in a storm at night")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">🌊</span>
-                  <span className="example-chip-text">Build a 3D scene from one line</span>
-                  <span className="example-chip-badge">Creative</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+            {/* Four things PrismOS does well, each one line away */}
+            <div className="starter-grid" role="list" aria-label="Things to try">
+              {STARTERS.map((st) => (
+                <button
+                  key={st.title}
+                  role="listitem"
+                  className="starter-card"
+                  onClick={() => chat.setPendingIntent(st.intent)}
+                  disabled={chat.isProcessing}
+                >
+                  <span className="starter-icon" aria-hidden="true">{st.icon}</span>
+                  <span className="starter-title">{st.title}</span>
+                  <span className="starter-desc">{st.desc}</span>
                 </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Harden my Linux server: give me a step-by-step plan")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">🛡️</span>
-                  <span className="example-chip-text">Harden my Linux server, step by step</span>
-                  <span className="example-chip-badge">Security</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Summarize what I worked on this week and suggest priorities for tomorrow")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">📋</span>
-                  <span className="example-chip-text">Summarize my week &amp; suggest priorities</span>
-                  <span className="example-chip-badge">Productivity</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Create a structured daily plan with time blocks for deep work, meetings, and breaks")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">📅</span>
-                  <span className="example-chip-text">Build a time-blocked daily plan</span>
-                  <span className="example-chip-badge">Productivity</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Draft a short professional bio based on my recent projects")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">✍️</span>
-                  <span className="example-chip-text">Draft a professional bio for me</span>
-                  <span className="example-chip-badge">Creative</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Brainstorm 5 creative side-project ideas that combine AI with everyday problems")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">💡</span>
-                  <span className="example-chip-text">Brainstorm creative side-project ideas</span>
-                  <span className="example-chip-badge">Creative</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("What connections exist in my knowledge graph and what patterns do you see?")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">🔮</span>
-                  <span className="example-chip-text">Analyze my knowledge graph patterns</span>
-                  <span className="example-chip-badge">Knowledge</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Explain the key concepts of retrieval-augmented generation (RAG) and how it improves AI accuracy")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">🧠</span>
-                  <span className="example-chip-text">Explain RAG and how it improves AI</span>
-                  <span className="example-chip-badge">Knowledge</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Help me create a 30-day learning roadmap for Rust programming with milestones")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">🗺️</span>
-                  <span className="example-chip-text">Create a 30-day learning roadmap</span>
-                  <span className="example-chip-badge">Planning</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-                <button className="example-chip" onClick={() => chat.setPendingIntent("Review my recent work and suggest areas where I can improve my workflow efficiency")} disabled={chat.isProcessing}>
-                  <span className="example-chip-icon">📊</span>
-                  <span className="example-chip-text">Review &amp; improve my workflow efficiency</span>
-                  <span className="example-chip-badge">Planning</span>
-                  <span className="example-chip-arrow" aria-hidden="true">→</span>
-                </button>
-              </div>
+              ))}
             </div>
 
-            <div className="welcome-features">
-              <div className="feature-card">
-                <div className="feature-card-icon">🧠</div>
-                <h3>Refractive Core</h3>
-                <p>Multi-agent orchestration with 5 specialized AI agents working in concert</p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-card-icon">🌈</div>
-                <h3>Spectrum Graph</h3>
-                <p>Persistent knowledge graph with SQLite + vector layers for memory</p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-card-icon">🔒</div>
-                <h3>Sandbox Prisms</h3>
-                <p>WASM-based sandboxed execution with cryptographic auto-rollback</p>
-              </div>
+            <div className="welcome-more">
+              <span className="welcome-more-label">More to try</span>
+              {MORE_IDEAS.map((m) => (
+                <button key={m.label} className="welcome-more-chip" onClick={() => chat.setPendingIntent(m.intent)} disabled={chat.isProcessing}>
+                  {m.label}
+                </button>
+              ))}
             </div>
+
+            <ul className="welcome-trust" aria-label="Privacy">
+              <li>Runs on your machine</li>
+              <li>Your files never leave it</li>
+              <li>Open source, MIT</li>
+            </ul>
           </div>
         ) : (
           chat.messages.map((msg) => (
@@ -843,18 +806,28 @@ export default function MainView({
 
       {/* ── Proactive Daily Assistance ── */}
       {suggestions.proactiveSuggestions.length > 0 && !chat.isProcessing && (
-        <div className="proactive-suggestions">
+        <div className={`proactive-suggestions ${ideasOpen ? "is-open" : "is-folded"}`}>
           <div className="proactive-header">
-            <span className="proactive-label">🧠 {chat.messages.length === 0 ? `${dailyGreeting} — here's what your graph noticed` : 'Graph Insights'}</span>
+            <button
+              className="proactive-toggle"
+              onClick={() => setIdeasOpen((v) => !v)}
+              aria-expanded={ideasOpen}
+            >
+              <span className="proactive-label">
+                {Math.min(suggestions.proactiveSuggestions.length, 3)} {suggestions.proactiveSuggestions.length === 1 ? "idea" : "ideas"} from your memory
+              </span>
+              <span className="proactive-toggle-hint">{ideasOpen ? "Hide" : "Show"}</span>
+            </button>
             <button
               className="proactive-dismiss-all"
               onClick={() => suggestions.setProactiveSuggestions([])}
               title="Dismiss all suggestions"
+              aria-label="Dismiss all suggestions"
             >
               ✕
             </button>
           </div>
-          <div className="proactive-cards">
+          {ideasOpen && <div className="proactive-cards">
             <AnimatePresence>
               {suggestions.proactiveSuggestions.slice(0, 3).map((sug, i) => (
                 <SuggestionCard
@@ -867,7 +840,7 @@ export default function MainView({
                 />
               ))}
             </AnimatePresence>
-          </div>
+          </div>}
         </div>
       )}
 

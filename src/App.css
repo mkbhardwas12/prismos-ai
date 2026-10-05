@@ -16,34 +16,43 @@
    =============================================================================== */
 
 :root {
-  /* -- Color System - Prism Dark Theme -- */
-  --bg-primary: #0b0f14;
-  --bg-secondary: #0f1419;
-  --bg-surface: #151b23;
-  --bg-elevated: #1c242e;
+  /* -- Color System - calm graphite with one blue accent -- */
+  --bg-primary: #0d1015;
+  --bg-secondary: #11151b;
+  --bg-surface: #161b22;
+  --bg-elevated: #1d232b;
 
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-accent: #06b6d4;
-  --color-accent-hover: #0891b2;
+  --color-primary: #5b8def;
+  --color-primary-hover: #4a7ddf;
+  --color-accent: #2cc4d6;
+  --color-accent-hover: #1fb0c2;
 
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #e7eaef;
+  --text-secondary: #a4adb9;
+  --text-muted: #727c89;
+
+  /* Soft fills for hover and the active item; one source for both themes */
+  --hover-soft: rgba(255, 255, 255, 0.045);
+  --accent-soft: rgba(91, 141, 239, 0.14);
 
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
 
-  --border-color: #1e293b;
-  --border-active: #2563eb;
+  --border-color: rgba(255, 255, 255, 0.075);
+  --border-active: #5b8def;
+
+  /* -- Shape -- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 
   /* -- Typography -- */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
 
   /* -- Layout -- */
-  --sidebar-width: 280px;
+  --sidebar-width: 260px;
   --header-height: 48px;
 
   /* -- Transitions -- */
@@ -72,26 +81,29 @@
    LIGHT THEME - Activated via data-theme="light" on <html>
    =============================================================================== */
 [data-theme="light"] {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-surface: #f1f5f9;
-  --bg-elevated: #e2e8f0;
+  --bg-primary: #f6f5f2;
+  --bg-secondary: #fbfaf8;
+  --bg-surface: #ffffff;
+  --bg-elevated: #efede8;
 
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-accent: #0891b2;
-  --color-accent-hover: #0e7490;
+  --color-primary: #2f6fe4;
+  --color-primary-hover: #245fd0;
+  --color-accent: #0e8fa3;
+  --color-accent-hover: #0b7a8c;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-primary: #1b1f25;
+  --text-secondary: #525a65;
+  --text-muted: #868e99;
+
+  --hover-soft: rgba(20, 24, 31, 0.045);
+  --accent-soft: rgba(47, 111, 228, 0.1);
 
   --color-success: #059669;
   --color-warning: #d97706;
   --color-error: #dc2626;
 
-  --border-color: #e2e8f0;
-  --border-active: #2563eb;
+  --border-color: rgba(20, 24, 31, 0.1);
+  --border-active: #2f6fe4;
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.04);

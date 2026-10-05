@@ -621,8 +621,8 @@ export default function IntentInput({
           aria-label="Express your intent"
           placeholder={
             voice.isListening
-              ? "🎙️ Listening… speak your intent"
-              : "Ask me anything — I'll process it privately on your device…"
+              ? "🎙️ Listening…"
+              : "Ask anything, or attach a file with +"
           }
           value={voice.isListening && voice.interimTranscript ? voice.interimTranscript : input}
           onChange={(e) => {

@@ -94,6 +94,11 @@ describe("hygiene", () => {
     expect(isPrivateIp("8.8.8.8")).toBe(false);
   });
 
+  it("leaves sudo's working directory readable but still masks a pwd that is a password", () => {
+    expect(maskSecrets("sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/id")).toContain("PWD=/home/deploy");
+    expect(maskSecrets("db_pwd=hunter22 password: 'letmein99'")).toBe("db_pwd=hu**** password: 'le****'");
+  });
+
   it("reads the common timestamp formats", () => {
     expect(parseTimestamp("2026-10-04T09:00:01Z event", 2026)).toBe(Date.UTC(2026, 9, 4, 9, 0, 1));
     expect(parseTimestamp('1.2.3.4 - - [04/Oct/2026:09:00:01 +0200] "GET /"', 2026)).toBe(Date.UTC(2026, 9, 4, 7, 0, 1));
@@ -121,6 +126,26 @@ describe("investigation", () => {
     expect(r.indicators.users).toEqual(expect.arrayContaining(["root", "admin", "deploy", "ops"]));
     // Evidence is defanged: nothing in the report is clickable.
     for (const f of r.findings) for (const e of f.evidence) expect(e).not.toMatch(/https?:\/\//);
+  });
+
+  it("catches group changes and crontab edits in the forms admins actually type", () => {
+    const has = (line: string, id: string) => investigate(line, "x.log", 2026).findings.some((f) => f.id === id);
+    // usermod as typed: -aG, -a -G, --groups=, and the gpasswd / adduser spellings
+    for (const cmd of [
+      "COMMAND=/usr/sbin/usermod -aG sudo svc-backup",
+      "COMMAND=/usr/sbin/usermod -a -G wheel ops2",
+      "COMMAND=/usr/sbin/usermod --append --groups=docker,sudo ops3",
+      "COMMAND=/usr/bin/gpasswd -a ops4 sudo",
+      "COMMAND=/usr/sbin/adduser ops5 admin",
+    ]) expect(has(`Oct  5 01:14:55 web01 sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; ${cmd}`, "admin-group")).toBe(true);
+    // ...but not an ordinary group, and not a user merely named "sudo-docs"
+    expect(has("Oct  5 01:14:55 web01 sudo: deploy : USER=root ; COMMAND=/usr/sbin/usermod -aG docker ops", "admin-group")).toBe(false);
+    // crontab's own syslog lines, and a crontab installed from a pipe
+    expect(has("Oct  5 01:15:40 web01 crontab[22044]: (deploy) REPLACE (deploy)", "persistence-cron")).toBe(true);
+    expect(has("Oct  5 01:15:40 web01 crontab[22045]: (root) BEGIN EDIT (root)", "persistence-cron")).toBe(true);
+    expect(has("Oct  5 01:15:41 web01 bash[22046]: (crontab -l; echo '*/10 * * * * /tmp/.x') | crontab -", "persistence-cron")).toBe(true);
+    // listing a crontab is not a change
+    expect(has("Oct  5 01:15:42 web01 crontab[22047]: (deploy) LIST (deploy)", "persistence-cron")).toBe(false);
   });
 
   it("flags web attacks, and escalates the one that got a 200", () => {

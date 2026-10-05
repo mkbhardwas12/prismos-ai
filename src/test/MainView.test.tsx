@@ -176,11 +176,11 @@ describe("MainView", () => {
     expect(screen.queryByText(/3 nodes/)).not.toBeInTheDocument();
   });
 
-  it("renders Intent Console header", async () => {
+  it("renders the Chat header", async () => {
     await act(async () => {
       render(<MainView {...defaultProps} />);
     });
-    expect(screen.getByText(/Intent Console/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /Chat/ })).toBeInTheDocument();
   });
 
   it("renders DailyBrief component", async () => {

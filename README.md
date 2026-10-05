@@ -63,6 +63,10 @@ type), IMAP Email Keeper, Yahoo Finance Keeper. Full feature history in
 
 The model never writes a renderer. It describes the world against a small scene kit (voxels, moving parts, water, light), and PrismOS fills in what a one-line prompt leaves out: a lighthouse gets its beam, a keeper's cottage and a boat at the jetty; a storm gets rain, lightning and a rough sea. Every reply is parsed and dry-run before you see it, a broken line gets repaired on its own, and the file carries a Content-Security-Policy that blocks all network access.
 
+### Two prompts, one bad night
+
+A made-up bakery's web server has a very bad night ([the staged log](docs/examples/maple-lane/maple-lane-last-night.txt) uses documentation IPs only). Attach it and ask *"Something happened on our bakery's web server last night. What happened, and what do we do now?"*: about a minute later you have 13 findings mapped to MITRE ATT&CK, a timeline in plain words, the next hour's steps and how to harden. PrismOS reads every line itself first; the model only writes up the evidence. [Read the saved report](docs/examples/maple-lane/investigation-report.md), unedited.
+
 ## Try it
 
 > **Installers are unsigned** (one maintainer, no cert yet — it's on the

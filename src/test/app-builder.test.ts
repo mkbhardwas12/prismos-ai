@@ -76,3 +76,39 @@ describe("web design director's notes and the secure-by-default pass", () => {
     expect(r.files[2].content).toBe("a { color: red }");
   });
 });
+
+describe("the plan step survives an unlucky sample", () => {
+  it("reads files from the schema shape and from the shapes models drift into", async () => {
+    const { normalizePlanFiles } = await import("../lib/docGen");
+    expect(normalizePlanFiles({ files: [{ path: "./index.html", purpose: "Home page" }] })).toEqual([{ path: "index.html", purpose: "Home page" }]);
+    // bare strings get a sensible brief from their extension
+    const fromStrings = normalizePlanFiles({ files: ["index.html", "styles.css", "data.js", "app.js"] });
+    expect(fromStrings.map((f) => f.path)).toEqual(["index.html", "styles.css", "data.js", "app.js"]);
+    expect(fromStrings.find((f) => f.path === "data.js")!.purpose).toMatch(/global arrays/);
+    // other keys and nesting
+    expect(normalizePlanFiles({ pages: [{ file: "menu.html", description: "Menu" }] })).toEqual([{ path: "menu.html", purpose: "Menu" }]);
+    expect(normalizePlanFiles({ project: { files: [{ filename: "app.js" }] } })[0].path).toBe("app.js");
+    // junk is dropped, nothing is invented
+    expect(normalizePlanFiles({ files: ["", "not a path", { purpose: "no path" }] })).toEqual([]);
+    expect(normalizePlanFiles({ name: "Maple Lane Bakery", features: ["Browse the menu"] })).toEqual([]);
+    expect(normalizePlanFiles(null)).toEqual([]);
+  });
+
+  it("falls back to the standard layout, carrying the features into the briefs", async () => {
+    const { defaultPlanFiles } = await import("../lib/docGen");
+    const files = defaultPlanFiles(["Browse the menu by category", "Place a pickup order"]);
+    expect(files.map((f) => f.path)).toEqual(["index.html", "data.js", "styles.css", "app.js"]);
+    expect(files[0].purpose).toMatch(/Place a pickup order/);
+    expect(defaultPlanFiles([])[0].purpose).not.toMatch(/Covers:/);
+  });
+
+  it("parses fenced, chatty and truncated replies, and asks for files in the schema", async () => {
+    const { parsePlanReply, APP_PLAN_SCHEMA } = await import("../lib/docGen");
+    expect(parsePlanReply('```json\n{"name":"Bakery","files":[{"path":"index.html","purpose":"p"}]}\n```')?.name).toBe("Bakery");
+    expect(parsePlanReply('Here is the plan: {"name":"Bakery","features":["a","b"')?.name).toBe("Bakery");
+    expect(parsePlanReply("no json at all")).toBeNull();
+    const schema = APP_PLAN_SCHEMA as { required: string[]; properties: { files: { minItems: number } } };
+    expect(schema.required).toContain("files");
+    expect(schema.properties.files.minItems).toBe(1);
+  });
+});

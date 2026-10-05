@@ -7,6 +7,7 @@ import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, Merg
 import DomainInsights from "./DomainInsights";
 import prismosIcon from "../assets/prismos-icon.svg";
 import "./SettingsPanel.css";
+import { APP_VERSION } from "../lib/appVersion";
 
 interface SecurityStatus {
   enclave: {
@@ -1252,7 +1253,7 @@ export default function SettingsPanel({
             <img src={prismosIcon} alt="" className="settings-version-icon" />
             <div className="settings-version-info">
               <span className="settings-version-name">PrismOS-AI</span>
-              <span className="settings-version-number">v0.6.0</span>
+              <span className="settings-version-number">v{APP_VERSION}</span>
             </div>
             <div className="settings-version-badges">
               <span className="settings-badge-local">100% Local</span>

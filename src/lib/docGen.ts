@@ -313,6 +313,108 @@ interface AppPlan {
   files: AppPlanFile[];
 }
 
+/** Structured-output schema for the plan. Ollama constrains decoding to it,
+ *  so a sample can no longer come back as valid JSON with no `files` (seen
+ *  live on qwen3.8:27b: "The app plan contained no files"). */
+export const APP_PLAN_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    description: { type: "string" },
+    entry: { type: "string" },
+    features: { type: "array", items: { type: "string" } },
+    design: {
+      type: "object",
+      properties: Object.fromEntries(
+        ["vibe", "headerLogo", "bg", "surface", "text", "muted", "accent", "accentContrast", "font", "radius"].map((k) => [k, { type: "string" }]),
+      ),
+    },
+    files: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        properties: { path: { type: "string" }, purpose: { type: "string" } },
+        required: ["path", "purpose"],
+      },
+    },
+  },
+  required: ["name", "entry", "features", "design", "files"],
+};
+
+const DEFAULT_PURPOSE: Array<[RegExp, string]> = [
+  [/(^|\/)data[^/]*\.js$/i, "Sample content as global arrays (menu items, entries) that the pages and app.js read."],
+  [/\.html?$/i, "A page of the site: semantic landmarks, the sections the features need, links styles.css and the scripts."],
+  [/\.css$/i, "All styles: the design palette as CSS variables, responsive layout, mobile menu, focus states."],
+  [/\.js$/i, "Behaviour: renders the data, wires the forms with validation and confirmation, toggles the mobile menu."],
+];
+
+function purposeFor(path: string): string {
+  return DEFAULT_PURPOSE.find(([re]) => re.test(path))?.[1] ?? "Supporting file for the site.";
+}
+
+/**
+ * Pull the planned files out of whatever shape the model used: the schema's
+ * `files: [{path, purpose}]`, but also bare path strings, `pages`/`fileList`,
+ * a nested `project`/`plan`, and `file`/`name`/`filename` for the path.
+ */
+export function normalizePlanFiles(parsed: unknown): AppPlanFile[] {
+  if (!parsed || typeof parsed !== "object") return [];
+  const o = parsed as Record<string, unknown>;
+  const nested = (k: string) => (o[k] && typeof o[k] === "object" ? (o[k] as Record<string, unknown>).files : undefined);
+  const list = [o.files, o.pages, o.fileList, nested("project"), nested("plan")].find(Array.isArray) as unknown[] | undefined;
+  if (!list) return [];
+  const out: AppPlanFile[] = [];
+  for (const f of list) {
+    let path = "";
+    let purpose = "";
+    if (typeof f === "string") {
+      path = f;
+    } else if (f && typeof f === "object") {
+      const e = f as Record<string, unknown>;
+      path = String(e.path ?? e.file ?? e.filename ?? e.name ?? "");
+      purpose = String(e.purpose ?? e.description ?? e.role ?? "");
+    }
+    path = path.trim().replace(/^\.\//, "");
+    if (!path || /\s/.test(path) || !/\.[a-z0-9]+$/i.test(path)) continue;
+    out.push({ path, purpose: purpose.trim() || purposeFor(path) });
+  }
+  return out.slice(0, MAX_PLAN_FILES);
+}
+
+/** Last resort when two samples planned no files: the standard static layout,
+ *  with purposes that carry the features so every file still has a brief. */
+export function defaultPlanFiles(features: string[]): AppPlanFile[] {
+  const journey = features.length ? ` Covers: ${features.slice(0, 8).join("; ")}.` : "";
+  return [
+    { path: "index.html", purpose: `The single page: header with logo and mobile menu, one <section> per feature, footer.${journey}` },
+    { path: "data.js", purpose: "Exposes the site's sample content as global arrays (e.g. MENU_ITEMS, HOURS, REVIEWS) of plain objects for app.js to render." },
+    { path: "styles.css", purpose: "All styles from the design palette as CSS variables: responsive grid, cards, forms, focus states, mobile menu." },
+    { path: "app.js", purpose: `Renders the data from data.js into the page, validates and confirms every form, toggles the mobile menu.${journey}` },
+  ];
+}
+
+/** Parse a raw plan reply into an object, repairing truncation; null if hopeless. */
+export function parsePlanReply(raw: string): Partial<AppPlan> | null {
+  let candidate: string;
+  try {
+    candidate = extractJson(raw);
+  } catch {
+    return null;
+  }
+  try {
+    return JSON.parse(candidate) as Partial<AppPlan>;
+  } catch {
+    const repaired = repairJson(candidate);
+    if (!repaired) return null;
+    try {
+      return JSON.parse(repaired) as Partial<AppPlan>;
+    } catch {
+      return null;
+    }
+  }
+}
+
 /** Post-build audit verdict for one planned feature. */
 export interface AppFeatureVerdict {
   name: string;
@@ -621,47 +723,42 @@ export async function generateAppProject(
   input: string,
   opts: GenerateOptions,
 ): Promise<GeneratedAppResult> {
-  const ask = (prompt: string, maxTokens: number) =>
+  const ask = (prompt: string, maxTokens: number, format?: Record<string, unknown>) =>
     invoke<string>("query_ollama", {
       prompt,
       model: opts.model,
       ollamaUrl: opts.ollamaUrl ?? null,
       maxTokens,
+      ...(format ? { format } : {}),
     });
 
   // ── Phase 1: a small, reliable plan (paths + purposes, no source) ──
+  // Structured output keeps the reply on the schema; a second sample and then
+  // the standard layout cover the rare reply that still plans no files, so one
+  // unlucky sample never ends the build.
   opts.onPhase?.(`Planning the app with ${opts.model}…`);
-  const planRaw = await ask(
-    appPlanPrompt(input, opts.context),
-    Math.max(opts.maxTokens ?? 0, PLAN_TOKENS),
-  );
-  const planCandidate = extractJson(planRaw);
-  let planJson: string;
-  try {
-    JSON.parse(planCandidate);
-    planJson = planCandidate;
-  } catch {
-    const repaired = repairJson(planCandidate);
-    if (!repaired) {
-      throw new Error(
-        `The app plan from ${opts.model} came back malformed. Try again or rephrase the request.`,
-      );
-    }
-    planJson = repaired;
-  }
-  const parsedPlan = JSON.parse(planJson) as Partial<AppPlan>;
-  const planFiles = (parsedPlan.files ?? [])
-    .filter(
-      (f): f is AppPlanFile =>
-        !!f && typeof f.path === "string" && f.path.trim() !== "",
-    )
-    .map((f) => ({
-      path: f.path.trim().replace(/^\.\//, ""),
-      purpose: String(f.purpose ?? ""),
-    }))
-    .slice(0, MAX_PLAN_FILES);
+  const planPrompt = appPlanPrompt(input, opts.context);
+  const planBudget = Math.max(opts.maxTokens ?? 0, PLAN_TOKENS);
+  let parsedPlan = parsePlanReply(await ask(planPrompt, planBudget, APP_PLAN_SCHEMA));
+  let planFiles = normalizePlanFiles(parsedPlan);
   if (!planFiles.length) {
-    throw new Error(`The app plan from ${opts.model} contained no files. Try again.`);
+    opts.onPhase?.(`The plan came back without files; asking ${opts.model} again…`);
+    const second = parsePlanReply(await ask(planPrompt, planBudget, APP_PLAN_SCHEMA));
+    const secondFiles = normalizePlanFiles(second);
+    if (secondFiles.length || (!parsedPlan && second)) {
+      parsedPlan = second;
+      planFiles = secondFiles;
+    }
+  }
+  if (!parsedPlan) {
+    throw new Error(
+      `The app plan from ${opts.model} came back malformed twice. Try again or rephrase the request.`,
+    );
+  }
+  if (!planFiles.length) {
+    planFiles = defaultPlanFiles(
+      (parsedPlan.features ?? []).filter((f): f is string => typeof f === "string" && f.trim() !== ""),
+    );
   }
   const s = (v: unknown, fb: string): string =>
     typeof v === "string" && v.trim() !== "" ? v.trim() : fb;

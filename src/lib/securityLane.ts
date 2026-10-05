@@ -200,7 +200,13 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
 export function maskSecrets(s: string): string {
   let out = s;
   for (const { re } of SECRET_PATTERNS) out = out.replace(re, (m) => (m.startsWith("-----") ? "-----BEGIN PRIVATE KEY----- [masked]" : `${m.slice(0, 4)}****`));
-  return out.replace(/((?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key)\s*[=:]\s*)(["']?)([^\s"']{3,})\2/gi, (_m, k: string, q: string, v: string) => `${k}${q}${v.slice(0, 2)}****${q}`);
+  // sudo logs carry `PWD=/home/user` (the working directory, not a password): a
+  // PWD whose value is an absolute path stays readable.
+  return out.replace(
+    /((password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key)\s*[=:]\s*)(["']?)([^\s"']{3,})\3/gi,
+    (m: string, k: string, name: string, q: string, v: string) =>
+      name.toLowerCase() === "pwd" && /^[/~]/.test(v) ? m : `${k}${q}${v.slice(0, 2)}****${q}`,
+  );
 }
 
 /** Secret-shaped strings in any text (names only, never the values). */
@@ -302,12 +308,12 @@ interface LineDetector {
 
 const LINE_DETECTORS: LineDetector[] = [
   { id: "new-account", title: "New account created", severity: "high", attack: ATTACK.createAccount, re: /\b(useradd|adduser)\b|new user: name=|EventID[=: ]+4720\b|A user account was created/i, detail: "An account was created. Confirm it was a planned change." },
-  { id: "admin-group", title: "Account added to an admin group", severity: "high", attack: ATTACK.accountManipulation, re: /usermod\s+(-a\s*)?-G\s*\w*(sudo|wheel|admin)|add(ed)? .{0,40}to group '?(sudo|wheel|admin)|EventID[=: ]+(4728|4732|4756)\b|member was added to a security-enabled (global|local|universal) group/i, detail: "An account was given administrator rights." },
+  { id: "admin-group", title: "Account added to an admin group", severity: "high", attack: ATTACK.accountManipulation, re: /\busermod\b[^\n]*?\s(?:-[a-zA-Z]*G[a-zA-Z]*|--groups)[\s=]+\S*\b(sudo|wheel|admin)\b|\bgpasswd\s+-a\s+\S+\s+(sudo|wheel|admin)\b|\badduser\s+\S+\s+(sudo|wheel|admin)\b|add(ed)? .{0,40}to group '?(sudo|wheel|admin)|EventID[=: ]+(4728|4732|4756)\b|member was added to a security-enabled (global|local|universal) group/i, detail: "An account was given administrator rights." },
   { id: "sudo", title: "Commands run with sudo", severity: "low", attack: ATTACK.sudo, re: /sudo:\s+\S+\s*:.*COMMAND=|\bsu\[\d+\]: .*session opened/i, detail: "Privileged commands were run. Check they match the person and the job." },
   { id: "encoded-powershell", title: "Encoded PowerShell command", severity: "high", attack: ATTACK.powershell, re: /powershell(?:\.exe)?\b.{0,120}\s-(?:e|en|enc|enco|encodedcommand)\s+[A-Za-z0-9+/=]{20,}/i, detail: "PowerShell ran a base64-encoded command, a common way to hide what a script does." },
   { id: "download-cradle", title: "Download-and-run command", severity: "high", attack: ATTACK.toolTransfer, re: /(curl|wget)\s[^|;\n]{0,200}\|\s*(ba|z|da)?sh\b|IEX\s*\(?\s*\(?New-Object\s+Net\.WebClient|Invoke-WebRequest.{0,120}\|\s*iex|DownloadString\(|certutil(\.exe)?\s+.*-urlcache|bitsadmin\s+\/transfer/i, detail: "Something was downloaded and executed in one step." },
   { id: "reverse-shell", title: "Reverse shell pattern", severity: "critical", attack: ATTACK.unixShell, re: /bash\s+-i\s+>&\s*\/dev\/tcp\/|\/dev\/tcp\/\d|\bnc(at)?\s+(-\w+\s+)*-e\s+\/bin\/(ba)?sh|socat\s+.*exec:.*sh|python3?\s+-c\s+["'].*socket.*subprocess/i, detail: "A shell was wired to a network connection, the classic remote-control foothold." },
-  { id: "persistence-cron", title: "Scheduled task or cron change", severity: "medium", attack: ATTACK.scheduledTask, re: /\bcrontab\s+(-e|-l\s*\|)|\/etc\/cron\.|CRON\[\d+\]: .*REPLACE|schtasks(\.exe)?\s+\/create|EventID[=: ]+4698\b|A scheduled task was created/i, detail: "Something set up a recurring job, a common way to survive reboots." },
+  { id: "persistence-cron", title: "Scheduled task or cron change", severity: "medium", attack: ATTACK.scheduledTask, re: /\bcrontab\s+(-e|-l\s*\|)|\|\s*crontab\s+-(?![\w-])|\bcrontab\[\d+\]:.*\b(REPLACE|BEGIN EDIT)\b|\/etc\/cron\.|CRON\[\d+\]: .*REPLACE|schtasks(\.exe)?\s+\/create|EventID[=: ]+4698\b|A scheduled task was created/i, detail: "Something set up a recurring job, a common way to survive reboots." },
   { id: "persistence-service", title: "New service or systemd unit", severity: "medium", attack: ATTACK.service, re: /systemctl\s+(enable|daemon-reload)|\/etc\/systemd\/system\/[^\s]+\.service|EventID[=: ]+7045\b|A service was installed|sc(\.exe)?\s+create\s/i, detail: "A service was installed or enabled." },
   { id: "persistence-runkey", title: "Registry Run key written", severity: "medium", attack: ATTACK.runKeys, re: /\\CurrentVersion\\Run(Once)?\b|\\Start Menu\\Programs\\Startup\\/i, detail: "A program was set to start automatically at logon." },
   { id: "log-clearing", title: "Logs or history cleared", severity: "high", attack: ATTACK.indicatorRemoval, re: /EventID[=: ]+(1102|104)\b|audit log was cleared|wevtutil(\.exe)?\s+cl\b|history\s+-c\b|rm\s+(-\w+\s+)*\/var\/log|>\s*\/var\/log\/\w+|unset\s+HISTFILE|Clear-EventLog/i, detail: "Someone removed records, which usually means they were hiding something." },

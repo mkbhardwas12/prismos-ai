@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **A calmer, chat-first app.** The sidebar now has plain destinations (Chat, Today, Memory, Library, Timeline, then Sandbox and Settings) with line icons, and the suggestions, memory overview and agents fold into one Insights drawer that remembers whether you left it open. The welcome screen leads with what PrismOS is for (*Ask anything. Attach anything.*), four one-line starters (a 3D scene, investigating a log file, hardening a server, a website) and a short privacy line, in place of ten template chips and three feature cards. The daily brief stays a one-line pill in Chat and opens in place; a dismissal lasts for the day. Calmer graphite and warm-paper themes, softer accent, consistent radii and focus rings.
+- The version shown in the sidebar, title bar and settings now comes from `package.json` at build time (it said v0.6.0 and v0.5.2 after the 0.7.0 release).
+
+### Fixed
+- **App Builder: "The app plan contained no files."** The plan step now asks Ollama for schema-constrained JSON, reads file lists in the shapes models drift into (bare paths, `pages`, nested `project.files`), asks once more if a sample still plans nothing, and falls back to the standard index.html, data.js, styles.css and app.js layout rather than ending the build. Only earlier App Builder turns are passed as context, so an unrelated answer (an incident report, a scene) no longer crowds the plan prompt.
+- **Security lane detectors:** `usermod -aG sudo` (and `-a -G`, `--groups=`, `gpasswd -a`, `adduser user sudo`) is now flagged as an admin-group change, and crontab's own `REPLACE` / `BEGIN EDIT` syslog lines and `| crontab -` are flagged as persistence. Both were missed on a real run. The secret masker no longer hides sudo's working directory (`PWD=/home/deploy`) while still masking a `pwd=` that is a password.
+
 ## [0.7.0] - 2026-10-04
 
 ### Added

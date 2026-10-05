@@ -497,7 +497,11 @@ export function useChat({
             throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
           }
 
+          // Only earlier App Builder turns are context for a build: a follow-up
+          // ("make the site darker") needs them, but an unrelated answer (an
+          // incident report, a scene) just crowds the plan prompt.
           const recentContext = messages
+            .filter((m) => m.agent === "App Builder" || (m.role === "user" && detectAppRequest(m.content)))
             .slice(-4)
             .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
             .join("\n")

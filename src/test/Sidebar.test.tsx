@@ -75,10 +75,27 @@ describe("Sidebar", () => {
     expect(statsSection!.textContent).toMatch(/node|edge|knowledge/i);
   });
 
-  it("shows agent activity indicators", async () => {
+  it("keeps agents in the Insights drawer, closed until opened", async () => {
+    localStorage.removeItem("prismos.sidebar.insightsOpen");
     await renderSidebar();
-    // Multiple agents may match — use getAllByText
-    const agents = screen.getAllByText(/Orchestrator|Reasoner/);
-    expect(agents.length).toBeGreaterThan(0);
+    const toggle = screen.getByRole("button", { name: /Insights/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/Orchestrator|Reasoner/)).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText(/Orchestrator|Reasoner/).length).toBeGreaterThan(0);
+    // ...and remembers it was opened
+    expect(localStorage.getItem("prismos.sidebar.insightsOpen")).toBe("1");
+    localStorage.removeItem("prismos.sidebar.insightsOpen");
+  });
+
+  it("uses plain names and shows the real version", async () => {
+    await renderSidebar();
+    for (const name of ["Chat", "Today", "Memory", "Library", "Timeline", "Sandbox", "Settings"]) {
+      expect(screen.getByRole("button", { name: new RegExp(`^${name}`) })).toBeInTheDocument();
+    }
+    expect(document.querySelector(".sidebar-version")!.textContent).toMatch(/^v\d+\.\d+\.\d+/);
   });
 });

@@ -116,8 +116,8 @@ Prefer to click? Grab an installer from the
 | Platform | Asset |
 |---|---|
 | Windows x64 | `.msi` (recommended) or `.exe` |
-| macOS Apple Silicon | `PrismOS-AI_0.6.0_aarch64.dmg` |
-| macOS Intel | `PrismOS-AI_0.6.0_x64.dmg` |
+| macOS Apple Silicon | `PrismOS-AI_<version>_aarch64.dmg` |
+| macOS Intel | `PrismOS-AI_<version>_x64.dmg` |
 | Linux x64 | `.AppImage` or `.deb` |
 | Linux ARM | not published — [build from source](#build-from-source) |
 
@@ -346,8 +346,9 @@ implementation lands.
 
 Being straight about it, because you can check most of this anyway:
 
-- **It works.** v0.6.0 ships CI-built installers for Windows, both Macs, and
-  Linux x64. 176 frontend tests and the Rust suite pass; CI is green.
+- **It works.** v0.7.0 ships CI-built installers for Windows, both Macs, and
+  Linux x64; the Android build in the release workflow is broken for now. 396
+  frontend tests and the Rust library tests pass.
 - **Almost nobody uses it yet.** A few dozen installer downloads. The star and
   fork counts on this repo are not a reliable signal of anything — judge it by
   the release download counts, the issue tracker, and the commit log.

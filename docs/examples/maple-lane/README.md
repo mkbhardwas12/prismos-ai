@@ -1,7 +1,7 @@
 # Maple Lane Bakery: two one-line prompts, run offline
 
-Maple Lane Bakery is made up. Its web server's bad night is staged: 107 lines of
-nginx access log, auth.log and syslog merged in time order, with every IP taken from
+Maple Lane Bakery is made up. Its web server's bad night is staged: a 107-line log of
+nginx access, auth.log and syslog entries merged in time order, with every IP taken from
 the RFC 5737 documentation ranges, so nothing here points at a real host.
 
 | File | What it is |
@@ -40,18 +40,21 @@ PrismOS puts on every page it writes (`connect-src 'none'`).
 
 Checked in a headless browser: a menu of 17 items with category and diet filters and an
 empty state, opening hours with today highlighted, a map card, six reviews, a twelve-tile
-gallery, a mobile menu, and a pickup form that flags every missing field and then
-confirms with a reference number. No console errors.
+gallery, and a pickup form that flags every missing field and then confirms with a
+reference number. No console errors.
 
 ## Honest notes
 
-- The first incident run, on an earlier build, found 11 problems, not 13. It missed
-  `usermod -aG sudo` and crontab's own `REPLACE` line; both detectors are fixed and
-  tested. Two lines of the staged log that a real server would never write were
-  corrected before the re-run.
-- The model treats the SQL injection request that got a 200 as a likely success. That is
-  a judgement, and its "collect next" list starts with the database logs that would
-  settle it.
+- The first incident run, on an earlier build and an earlier draft of the log, found 11
+  problems, not 13. It missed `usermod -aG sudo`, and it missed the cron change: the
+  draft's cron line was in a format crontab never writes, and the detector didn't know
+  crontab's real `REPLACE` line either. Both detectors are fixed and tested, and three
+  log lines a real server would never write (a curl, a crontab change and a chmod) were
+  rewritten before the re-runs.
+- The model calls the SQL injection that got a 200 a success. The log can't show that:
+  the response is exactly the size of the normal menu page. PrismOS's own finding says
+  to check whether it worked, and the report's "collect next" list includes the database
+  logs that would settle it.
 - The website took four tries. The first plan came back with no files; the next two runs
   stopped when `styles.css` ran past the output limit. Plans are now schema-constrained
   with a fallback, and files are written with repetition-resistant sampling and one
@@ -59,7 +62,13 @@ confirms with a reference number. No console errors.
 - The pickup form asks for a party size, which no croissant order needs: every food site
   used to get a table-reservation note in its design brief. Fixed on main: a bakery or a
   pickup request now gets an order form.
+- The mobile menu never opens on a phone: the button turns into an X, but the stylesheet
+  looks for the menu after the button, and the menu sits before it.
 - The App Builder's own end-to-end check said `js/app.js` was missing and the menu was
   unwired. Both were wrong: the check skipped files over its size budget. Fixed on main.
-- Small slips left as they are: the hero says 16 items while the menu has 17, and each
-  menu card prints its category and price with no space between them (`Pastries$4.50`).
+- Small slips left as they are: the hero says 16 items while the menu has 17, Chamomile
+  Honey Tea is tagged vegan, a review wishes the bakery opened on Sundays (the page says
+  seven days a week), and each menu card prints its category and price with no space
+  between them (`Pastries$4.50`).
+- The party-size and self-check fixes have not been tried on a fresh build of this site
+  yet.

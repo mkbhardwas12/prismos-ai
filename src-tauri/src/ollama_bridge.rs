@@ -5,6 +5,7 @@
 // does not attest that the separately managed Ollama daemon is itself offline.
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use futures_util::StreamExt;
 
@@ -310,7 +311,7 @@ struct GenerateRequest {
     format: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct GenerateOptions {
     /// Context window — without this, /api/generate falls back to Ollama's tiny
     /// 2048–4096 default and silently truncates long documents.
@@ -318,6 +319,51 @@ struct GenerateOptions {
     num_ctx: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     num_predict: Option<u32>,
+    // Sampling — unset everywhere except callers that pass GenerationOverrides.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    min_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repeat_penalty: Option<f32>,
+}
+
+/// Per-call overrides for long creative generations (the Scene Builder writes
+/// a whole scene file in one pass). Every field is optional and clamped to a
+/// sane range; `None` keeps PrismOS's defaults. Why it exists: long code at
+/// default sampling can fall into a repetition loop on quantized Qwen models,
+/// and Qwen's own guidance is a presence penalty (~1.5) for that.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GenerationOverrides {
+    pub num_ctx: Option<u32>,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<u32>,
+    pub min_p: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub repeat_penalty: Option<f32>,
+}
+
+impl GenerationOverrides {
+    fn apply(&self, options: &mut GenerateOptions) {
+        let finite = |v: f32| v.is_finite().then_some(v);
+        if let Some(n) = self.num_ctx {
+            options.num_ctx = Some(n.clamp(2048, 131_072));
+        }
+        options.temperature = self.temperature.and_then(finite).map(|v| v.clamp(0.0, 2.0)).or(options.temperature);
+        options.top_p = self.top_p.and_then(finite).map(|v| v.clamp(0.0, 1.0)).or(options.top_p);
+        options.top_k = self.top_k.map(|v| v.clamp(1, 200)).or(options.top_k);
+        options.min_p = self.min_p.and_then(finite).map(|v| v.clamp(0.0, 1.0)).or(options.min_p);
+        options.presence_penalty = self.presence_penalty.and_then(finite).map(|v| v.clamp(-2.0, 2.0)).or(options.presence_penalty);
+        options.repeat_penalty = self.repeat_penalty.and_then(finite).map(|v| v.clamp(0.5, 2.0)).or(options.repeat_penalty);
+    }
 }
 
 // ─── Chat API Types (proper role-based messaging) ──────────────────────────────
@@ -501,6 +547,7 @@ pub async fn generate_with_format(
     let options = Some(GenerateOptions {
         num_ctx: Some(ctx_for(model, thinking)),
         num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(thinking))),
+        ..Default::default()
     });
     let request = GenerateRequest {
         model: model.to_string(),
@@ -801,6 +848,27 @@ pub struct StreamEvent {
     pub truncated: bool,
 }
 
+/// Stop for the in-flight streaming generation. The Scene Builder uses it to
+/// end a run that has fallen into a repetition loop instead of paying for the
+/// rest of its token budget. Epochs, not a bool: a cancel aimed at one stream
+/// can never stop the next one.
+static STREAM_EPOCH: AtomicU64 = AtomicU64::new(0);
+static STREAM_CANCELLED_AT: AtomicU64 = AtomicU64::new(0);
+
+/// Ask the current streaming generation to stop at its next chunk. The stream
+/// then ends normally, flagged `truncated`, with the text received so far.
+pub fn cancel_active_stream() {
+    STREAM_CANCELLED_AT.store(STREAM_EPOCH.load(Ordering::SeqCst), Ordering::SeqCst);
+}
+
+fn begin_stream() -> u64 {
+    STREAM_EPOCH.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+fn stream_cancelled(epoch: u64) -> bool {
+    STREAM_CANCELLED_AT.load(Ordering::SeqCst) == epoch
+}
+
 /// Generate a completion with streaming — sends tokens via a callback
 /// Pass `images` as base64-encoded strings for multimodal vision models.
 pub async fn generate_stream<F>(
@@ -809,6 +877,7 @@ pub async fn generate_stream<F>(
     base_url: Option<&str>,
     max_tokens: Option<u32>,
     images: Option<Vec<String>>,
+    overrides: Option<&GenerationOverrides>,
     mut on_token: F,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -821,10 +890,15 @@ where
     // Always set num_ctx (Ollama's default is far too small for documents); honor
     // the caller's max_tokens (the UI "Response Length" slider) for the response,
     // falling back to a think-aware budget when unset.
-    let options = Some(GenerateOptions {
+    let mut generate_options = GenerateOptions {
         num_ctx: Some(ctx_for(model, thinking)),
         num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(thinking))),
-    });
+        ..Default::default()
+    };
+    if let Some(o) = overrides {
+        o.apply(&mut generate_options);
+    }
+    let options = Some(generate_options);
     let request = GenerateRequest {
         model: model.to_string(),
         prompt,
@@ -856,8 +930,16 @@ where
     let mut buf: Vec<u8> = Vec::new();
     let mut filter = ThinkFilter::new();
     let mut truncated = false;
+    let epoch = begin_stream();
 
     while let Some(chunk_result) = stream.next().await {
+        if stream_cancelled(epoch) {
+            // Dropping the response closes the connection; Ollama stops generating.
+            let tail = filter.finish();
+            full_response.push_str(&tail);
+            on_token(StreamEvent { token: String::new(), done: true, truncated: true });
+            return Ok(strip_think_blocks(&full_response));
+        }
         let chunk_bytes = chunk_result?;
         buf.extend_from_slice(&chunk_bytes);
         while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
@@ -914,6 +996,39 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stream_cancel_targets_only_the_stream_in_flight() {
+        let first = begin_stream();
+        assert!(!stream_cancelled(first));
+        cancel_active_stream();
+        assert!(stream_cancelled(first), "a cancel stops the stream in flight");
+        let second = begin_stream();
+        assert!(!stream_cancelled(second), "an earlier cancel never stops the next stream");
+    }
+
+    #[test]
+    fn generation_overrides_are_clamped_and_only_serialized_when_set() {
+        let mut plain = GenerateOptions { num_ctx: Some(16384), num_predict: Some(8192), ..Default::default() };
+        let v = serde_json::to_value(&plain).unwrap();
+        assert_eq!(v, serde_json::json!({"num_ctx": 16384, "num_predict": 8192}));
+
+        let o: GenerationOverrides = serde_json::from_value(serde_json::json!({
+            "numCtx": 999_999, "temperature": 0.7, "topP": 0.8, "topK": 20,
+            "minP": 0.0, "presencePenalty": 9.0, "repeatPenalty": f64::NAN
+        })).unwrap_or_default();
+        o.apply(&mut plain);
+        let v = serde_json::to_value(&plain).unwrap();
+        assert_eq!(v["num_ctx"], 131_072);
+        assert_eq!(v["num_predict"], 8192);
+        assert_eq!(v["top_k"], 20);
+        assert!((v["presence_penalty"].as_f64().unwrap() - 2.0).abs() < 1e-6);
+        assert!(v.get("repeat_penalty").is_none(), "non-finite values are dropped, not sent");
+
+        let mut untouched = GenerateOptions { num_ctx: Some(16384), ..Default::default() };
+        GenerationOverrides::default().apply(&mut untouched);
+        assert_eq!(serde_json::to_value(&untouched).unwrap(), serde_json::json!({"num_ctx": 16384}));
+    }
 
     #[test]
     fn structured_generation_serializes_schema_without_changing_it() {

@@ -24,6 +24,43 @@ describe("chat request routing", () => {
     expect(call.mock.calls.some(([command]) => command === "refract_intent")).toBe(false);
     expect(result.current.isProcessing).toBe(false);
   });
+  it("investigates attached logs offline: evidence first, model second, report saved", async () => {
+    const log = Array.from({ length: 12 }, (_, i) => `Oct  4 03:10:${String(i).padStart(2, "0")} web01 sshd[1]: Failed password for root from 203.0.113.50 port 5${i} ssh2`)
+      .concat(["Oct  4 03:11:00 web01 sshd[1]: Accepted password for root from 203.0.113.50 port 6000 ssh2"]).join("\n");
+    call.mockImplementation(async (command) => {
+      if (command === "search_spectrum_nodes") return "[]";
+      if (command === "check_ollama_status") return true;
+      if (command === "query_ollama") return "## What happened\nThe attacker guessed root's password.";
+      if (command === "create_text_file") return JSON.stringify({ path: "/tmp/investigation-auth-log.md", filename: "investigation-auth-log.md", kind: "md" });
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("investigate this", undefined, `[File: auth.log]\n${log}`); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Incident Investigator");
+    expect(last.attachment?.filename).toBe("investigation-auth-log.md");
+    expect(last.content).toContain("Login succeeded from a source that was guessing passwords");
+    const sent = call.mock.calls.find(([command]) => command === "query_ollama")![1] as { prompt: string };
+    expect(sent.prompt).toContain("203.0.113[.]50");
+    expect(sent.prompt).not.toContain("Failed password for root from 203.0.113.50 port 50"); // the model gets the analysis, not the raw log
+    expect(call.mock.calls.some(([command]) => command === "rag_query")).toBe(false);
+  });
+
+  it("answers 'harden my postgres' with a grounded plan and no attachment needed", async () => {
+    call.mockImplementation(async (command) => {
+      if (command === "search_spectrum_nodes") return "[]";
+      if (command === "check_ollama_status") return true;
+      if (command === "query_ollama") return "Do today: switch pg_hba.conf to scram-sha-256.";
+      return "[]";
+    });
+    const {result} = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("how do I harden my postgres server?"); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Hardening Advisor");
+    const sent = call.mock.calls.find(([command]) => command === "query_ollama")![1] as { prompt: string };
+    expect(sent.prompt).toContain("pg_hba.conf: scram-sha-256");
+  });
+
   it("does not automatically retry a failed mutating pipeline or switch to a hidden fallback model", async () => {
     call.mockImplementation(async (command) => {
       if (command === "search_spectrum_nodes") return "[]";

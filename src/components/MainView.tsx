@@ -417,6 +417,18 @@ export default function MainView({
             <div className="welcome-examples">
               <div className="welcome-examples-label">Quick-start templates — click to try</div>
               <div className="welcome-example-chips">
+                <button className="example-chip" onClick={() => chat.setPendingIntent("/scene a voxel lighthouse on a rocky island in a storm at night")} disabled={chat.isProcessing}>
+                  <span className="example-chip-icon">🌊</span>
+                  <span className="example-chip-text">Build a 3D scene from one line</span>
+                  <span className="example-chip-badge">Creative</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
+                <button className="example-chip" onClick={() => chat.setPendingIntent("Harden my Linux server: give me a step-by-step plan")} disabled={chat.isProcessing}>
+                  <span className="example-chip-icon">🛡️</span>
+                  <span className="example-chip-text">Harden my Linux server, step by step</span>
+                  <span className="example-chip-badge">Security</span>
+                  <span className="example-chip-arrow" aria-hidden="true">→</span>
+                </button>
                 <button className="example-chip" onClick={() => chat.setPendingIntent("Summarize what I worked on this week and suggest priorities for tomorrow")} disabled={chat.isProcessing}>
                   <span className="example-chip-icon">📋</span>
                   <span className="example-chip-text">Summarize my week &amp; suggest priorities</span>

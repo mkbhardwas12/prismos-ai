@@ -82,7 +82,7 @@ function withinOneEdit(a: string, b: string): boolean {
   return edits + (la - i) + (lb - j) <= 1;
 }
 
-function hasCreateVerb(t: string): boolean {
+export function hasCreateVerb(t: string): boolean {
   if (
     /\b(create|make|generate|build|write|draft|prepare|produce|design|put together|give me)\b/.test(
       t,
@@ -327,6 +327,8 @@ export interface GeneratedAppResult {
   features: AppFeatureVerdict[];
   /** Files the self-fix loop rewrote or added before the project shipped. */
   repairedCount: number;
+  /** The secure-by-default pass: mechanical fixes made, risky patterns left. */
+  security?: { fixed: number; warnings: string[] };
 }
 
 /**
@@ -350,6 +352,39 @@ export function detectAppRequest(input: string): boolean {
   return hasCreateVerb(t);
 }
 
+/**
+ * What a seasoned web designer adds for the words in a request: a one-line
+ * "restaurant site" plans the menu with dietary tags, the reservation form
+ * and opening hours without being told.
+ */
+const WEB_CUES: Array<{ match: RegExp; notes: string[] }> = [
+  { match: /\b(store|shop|e-?commerce|boutique|marketplace|sell)\b/, notes: ["product grid with search, category filters and sort", "product detail with variants (size/colour), stock and reviews", "cart with quantity changes, remove and a running total (persisted in localStorage)", "checkout form with validation, order summary and a confirmation screen", "empty-cart and no-results states, trust badges (free returns, secure checkout)"] },
+  { match: /\b(portfolio|resume|résumé|cv|personal site|freelanc\w*)\b/, notes: ["hero with name, role and a one-line pitch", "3-6 project case studies: problem, approach, result, tools", "skills/services, testimonials, a contact form with validation", "light/dark toggle remembered in localStorage"] },
+  { match: /\b(restaurant|cafe|café|bistro|bakery|bar|pizzeria|food truck)\b/, notes: ["menu by category with prices and dietary tags (V, VG, GF)", "reservation form: date, time, party size, validation and a confirmation", "opening hours with today highlighted, address and an SVG map card", "reviews and a gallery of emoji/SVG food tiles"] },
+  { match: /\b(saas|startup|landing|product launch|waitlist|app landing)\b/, notes: ["hero with a clear value proposition, primary and secondary CTA", "logo strip (SVG wordmarks), features grid, how-it-works steps", "pricing table with a monthly/yearly toggle", "FAQ accordion, testimonial, signup/waitlist form with validation"] },
+  { match: /\b(blog|magazine|news|journal|articles?)\b/, notes: ["article list with tags, dates and reading time", "article page with comfortable typography and a table of contents", "search and tag filters, newsletter signup"] },
+  { match: /\b(dashboard|admin|analytics|crm|kpi)\b/, notes: ["KPI cards with trend arrows, inline SVG charts", "sortable, filterable table with pagination", "date-range picker, loading and empty states, a detail drawer"] },
+  { match: /\b(booking|appointment|clinic|salon|spa|dentist|barber|reservation)\b/, notes: ["services with duration and price, staff selection", "calendar slot picker that hides booked slots", "booking form with validation and a confirmation summary"] },
+  { match: /\b(event|conference|wedding|festival|meetup|summit)\b/, notes: ["countdown, agenda with day tabs, speakers or people cards", "venue and travel details, RSVP/registration form with validation"] },
+  { match: /\b(gym|fitness|yoga|studio|coach)\b/, notes: ["class timetable by day with filters, trainer cards", "membership plans, free-trial signup form"] },
+  { match: /\b(real estate|property|realtor|apartment|rental|homes?)\b/, notes: ["listings with price/beds/area filters, listing detail with an SVG floor-plan card", "mortgage calculator, contact-agent form"] },
+  { match: /\b(travel|hotel|tour|trip|hostel|resort)\b/, notes: ["destination cards, search with dates and guests", "room or tour options with prices, a booking summary"] },
+  { match: /\b(nonprofit|charity|ngo|foundation|donat\w*|volunteer)\b/, notes: ["mission statement, impact numbers, stories", "donation form with preset amounts and a custom amount, volunteer signup"] },
+  { match: /\b(game|puzzle|quiz|arcade)\b/, notes: ["start screen with instructions and controls", "score and high score saved in localStorage, pause and restart", "difficulty levels, keyboard and touch controls, a game-over screen"] },
+  { match: /\b(todo|to-do|tracker|habit|budget|expense|planner|notes?)\b/, notes: ["add, edit, complete and delete items, with undo", "filters and search, totals or streaks", "everything saved in localStorage, export to JSON"] },
+];
+
+/** The web designer's notes for one request (deduplicated, at most 10). */
+export function webDirectorNotes(input: string): string[] {
+  const t = input.toLowerCase();
+  const notes: string[] = [];
+  for (const cue of WEB_CUES) {
+    if (!cue.match.test(t)) continue;
+    for (const n of cue.notes) if (!notes.includes(n)) notes.push(n);
+  }
+  return notes.slice(0, 10);
+}
+
 /** Phase-1 prompt: plan the project — paths and purposes, NO source code. */
 function appPlanPrompt(input: string, context?: string): string {
   const contextBlock = context
@@ -364,6 +399,10 @@ function appPlanPrompt(input: string, context?: string): string {
     "",
     ...contextBlock,
     `User request: "${input}"`,
+    "",
+    "DIRECTOR'S NOTES: the user wrote one line and expects a finished site. Plan these in, plus anything else this kind of site always has:",
+    ...(webDirectorNotes(input).length ? webDirectorNotes(input).map((n) => `- ${n}`) : ["- the sections, real content and complete user journey this kind of site always has"]),
+    "- real copy and plausible names, prices and dates (never lorem ipsum); responsive with a mobile menu; accessible (landmarks, labels, alt text, focus states, good contrast)",
     "",
     "JSON schema:",
     '{"name":"string","description":"string","entry":"index.html","features":["string"],"design":{"vibe":"string","headerLogo":"string","bg":"#hex","surface":"#hex","text":"#hex","muted":"#hex","accent":"#hex","accentContrast":"#hex","font":"css font stack","radius":"e.g. 12px"},"files":[{"path":"string","purpose":"string"}]}',
@@ -429,6 +468,7 @@ function appFilePrompt(
     "- Real, substantive sample data — a store gets 8+ products with names and prices; a tracker gets believable entries.",
     "- Reference only files that exist in the manifest, by their exact relative paths.",
     "- The data file owns the data. Other scripts REFERENCE its globals — NEVER redeclare a const/let/var that another manifest file already defines (duplicate top-level declarations crash every page that loads both scripts).",
+    "- Secure by default: put user input and data on the page with textContent or createElement (never innerHTML with user-typed text), wire events with addEventListener (no inline onclick=), give target=\"_blank\" links rel=\"noopener noreferrer\", validate and length-limit every form field, never store passwords or tokens in localStorage, and never use eval, new Function or document.write.",
     "/no_think",
   ].join("\n");
 }
@@ -858,6 +898,10 @@ export async function generateAppProject(
     }
   }
 
+  // ── Secure-by-default pass: fix what is mechanical, flag the rest ──
+  const security = secureWebFiles(written);
+  for (let i = 0; i < written.length; i++) written[i] = security.files[i];
+
   // ── Phase 4: hand the assembled spec to the backend (validation + CSP) ──
   opts.onPhase?.("Writing project files…");
   const spec = {
@@ -871,7 +915,48 @@ export async function generateAppProject(
   });
   const info = JSON.parse(resultJson) as GeneratedAppInfo;
 
-  return { info, features, repairedCount };
+  return { info, features, repairedCount, security: { fixed: security.fixed, warnings: security.warnings } };
+}
+
+/**
+ * Mechanical web hardening of generated files: target="_blank" links get
+ * rel="noopener noreferrer"; risky patterns are reported (innerHTML built from
+ * variables, inline event handlers, eval / new Function / document.write,
+ * secrets kept in localStorage) so the result card can say so honestly.
+ */
+export function secureWebFiles(files: { path: string; content: string }[]): {
+  files: { path: string; content: string }[];
+  fixed: number;
+  warnings: string[];
+} {
+  let fixed = 0;
+  const warnings: string[] = [];
+  const out = files.map((f) => {
+    let content = f.content;
+    if (/\.(html?|js)$/i.test(f.path)) {
+      content = content.replace(/<a\b([^>]*\btarget\s*=\s*["']_blank["'][^>]*)>/gi, (tag: string, attrs: string) => {
+        if (/\brel\s*=/.test(attrs)) {
+          if (/noopener/.test(attrs)) return tag;
+          fixed++;
+          return tag.replace(/\brel\s*=\s*(["'])([^"']*)\1/i, (_m: string, q: string, v: string) => `rel=${q}${`${v} noopener noreferrer`.trim()}${q}`);
+        }
+        fixed++;
+        return `<a${attrs} rel="noopener noreferrer">`;
+      });
+    }
+    if (/\.html?$/i.test(f.path)) {
+      const inline = (content.match(/\son(click|submit|change|input|load|keyup|keydown|mouseover)\s*=/gi) ?? []).length;
+      if (inline) warnings.push(`${f.path}: ${inline} inline event handler${inline > 1 ? "s" : ""} (prefer addEventListener)`);
+    }
+    if (/\.(js|html?)$/i.test(f.path)) {
+      const risky = (content.match(/\.innerHTML\s*\+?=\s*(`[^`]*\$\{|[^;\n]*\+\s*[A-Za-z_$])/g) ?? []).length;
+      if (risky) warnings.push(`${f.path}: ${risky} innerHTML built from variables (escape text or use textContent)`);
+      if (/\beval\s*\(|new\s+Function\s*\(|document\.write\s*\(/.test(content)) warnings.push(`${f.path}: uses eval, new Function or document.write`);
+      if (/localStorage\.setItem\s*\(\s*["'][^"']*(password|token|secret)/i.test(content)) warnings.push(`${f.path}: stores a password or token in localStorage`);
+    }
+    return { path: f.path, content };
+  });
+  return { files: out, fixed, warnings };
 }
 
 /** Build the system-style prompt that makes the model emit a strict JSON spec. */

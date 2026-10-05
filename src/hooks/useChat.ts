@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
 import { detectAppRequest, detectDocRequest, detectFileRequest, generateAppProject, generateDocument, generateTextFile } from "../lib/docGen";
+import { detectSceneRequest, generateScene } from "../lib/sceneGen";
+import { detectSecurityRequest, genericSecurityPrompt, hardeningGuidePrompt, hardeningReview, hardeningTopic, investigate, renderSecurityMarkdown, reportSlug, securityPrompt, securitySummary, type HardeningReport, type InvestigationReport } from "../lib/securityLane";
 import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 import { buildErrorMessage } from "../lib/errors";
@@ -171,6 +173,71 @@ export function useChat({
         await refreshSuggestions(input, aiMsg.id);
         return;
       }
+      // ── Security lane: investigate logs, harden configs, or a hardening plan ──
+      // Deterministic first (indicators, timeline, ATT&CK patterns, config
+      // checks with exact fixes); the model only explains and prioritises.
+      const securityMode = imageData ? null : detectSecurityRequest(input, documentText || undefined);
+      if (securityMode) {
+        setProcessingPhase("Checking Ollama connection…");
+        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        if (!ollamaOk) {
+          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+        }
+        const modelName = settings.defaultModel || "llama3.2";
+        const named = documentText?.match(/\[(?:Document|File):\s*(.*?)\]/)?.[1];
+        const material = documentText
+          ? documentText.replace(/^\s*\[(?:Document|File|Audio):[^\]]*\]\s*/, "")
+          : input.length > 300 ? input : "";
+        const sourceName = named || (material ? "pasted text" : "");
+        let report: InvestigationReport | HardeningReport | null = null;
+        let prompt: string;
+        let agent: "Incident Investigator" | "Hardening Advisor" = "Hardening Advisor";
+        let label: string;
+        if (securityMode === "investigate" && material) {
+          setProcessingPhase(`Investigating ${sourceName}: indicators, timeline, ATT&CK patterns…`);
+          report = investigate(material, sourceName);
+          prompt = securityPrompt(report, input);
+          agent = "Incident Investigator";
+          label = `🛡️ Incident Investigation · ${sourceName} · ${report.lines.toLocaleString()} lines`;
+        } else if (material) {
+          setProcessingPhase(`Checking ${sourceName} line by line…`);
+          report = hardeningReview(material, sourceName);
+          prompt = report ? securityPrompt(report, input) : genericSecurityPrompt(material, input);
+          label = `🛡️ Hardening Review · ${sourceName}`;
+        } else {
+          const topic = hardeningTopic(input) ?? "linux";
+          prompt = hardeningGuidePrompt(topic, input);
+          label = `🛡️ Hardening Plan · ${topic}`;
+        }
+        setProcessingPhase(`Writing it up with ${modelName}…`);
+        const narrative = await invoke<string>("query_ollama", {
+          prompt,
+          model: modelName,
+          ollamaUrl: settings.ollamaUrl || null,
+          maxTokens: settings.maxTokens || 4096,
+        });
+        let attachment: Message["attachment"];
+        if (report) {
+          const title = report.mode === "investigate" ? `investigation-${reportSlug(sourceName)}` : `hardening-${report.configType}`;
+          attachment = JSON.parse(await invoke<string>("create_text_file", { title, ext: "md", content: renderSecurityMarkdown(report, narrative, modelName) }));
+        }
+        const body = report ? `${securitySummary(report)}\n\n${narrative}` : narrative;
+        const secMsgId = crypto.randomUUID();
+        const aiMsg: Message = {
+          id: secMsgId,
+          role: "ai",
+          content: `${body}\n\n───\n${label} · ${modelName} · analysed on this machine, nothing uploaded${attachment ? " · full report saved" : ""}`,
+          timestamp: new Date(),
+          agent,
+          attachment,
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        attachReceipt(secMsgId, { question: input, answer: narrative, model: modelName, agent, sources: sourceName ? [sourceName] : [] });
+        onIntentProcessed(agent);
+        await refreshSuggestions(input, secMsgId);
+        return;
+      }
+
       // ── Document analysis path: RAG-powered document analysis (Phase 6) ──
       const tabular = detectTabularAttachment(documentText);
       if (documentText && tabular) {
@@ -375,6 +442,53 @@ export function useChat({
           return;
         }
 
+        // ── Scene Builder — one short prompt → one offline 3D scene, opened ──
+        // Before the App Builder: "a voxel pagoda garden" is one scene file on
+        // the PrismOS Scene Kit, not a multi-file site without a graphics library.
+        if (detectSceneRequest(input)) {
+          setProcessingPhase("Checking Ollama connection…");
+          const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+          if (!ollamaOk) {
+            throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+          }
+
+          const sceneModel = settings.defaultModel || "mistral";
+          const scene = await generateScene(input, {
+            model: sceneModel,
+            ollamaUrl: settings.ollamaUrl || null,
+            onPhase: setProcessingPhase,
+          });
+
+          setProcessingPhase("Opening in your browser…");
+          try {
+            await invoke("open_generated_file", { path: scene.attachment.path, reveal: false });
+          } catch {
+            // Opening is a courtesy — the scene is on disk either way.
+          }
+
+          const st = scene.stats;
+          const statsLine = `${st.tokens.toLocaleString()} tokens in ${Math.round(st.seconds)}s (${st.tokensPerSecond.toFixed(0)} tok/s)${st.passes > 1 ? ` across ${st.passes} passes` : ""}`;
+          const caught = scene.fixed.length
+            ? `\n\nSelf-check caught and fixed: ${scene.fixed.slice(0, 3).map((f) => (f.length > 140 ? `${f.slice(0, 137)}…` : f)).join("; ")}.`
+            : "";
+          const adjusted = scene.notes.length ? `\n\nPrismOS adjusted: ${scene.notes.join("; ")}.` : "";
+          const flagged = scene.unresolved.length
+            ? `\n\n⚠️ Still flagged after the fix pass: ${scene.unresolved.join("; ")}. If the page looks wrong, ask again or pick a stronger model in Settings.`
+            : "";
+          const aiMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "ai",
+            content: `🎨 Built **${scene.attachment.filename}** and opened it in your browser.\n\nWritten on this machine by ${sceneModel}: ${statsLine}. The scene kit and three.js are built into the file, so it works with Wi-Fi off.${caught}${adjusted}${flagged}\n\nWant a variation? Describe it in one line, e.g. *"a voxel pagoda garden at night with lanterns"*.\n\n───\n🎨 Scene Builder · generated locally · 100% private`,
+            timestamp: new Date(),
+            agent: "Scene Builder",
+            attachment: scene.attachment,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          onIntentProcessed(aiMsg.agent);
+          await refreshSuggestions(input, aiMsg.id);
+          return;
+        }
+
         // ── App Builder path — multi-file static web apps, built and opened ──
         if (detectAppRequest(input)) {
           setProcessingPhase("Checking Ollama connection…");
@@ -421,12 +535,16 @@ export function useChat({
           const repairedLine = appResult.repairedCount
             ? `\n\n🔧 Self-check caught issues mid-build — auto-fixed ${appResult.repairedCount} file(s) before shipping.`
             : "";
+          const sec = appResult.security;
+          const securityLine = sec && (sec.fixed || sec.warnings.length)
+            ? `\n\n🛡️ Secure-by-default: ${sec.fixed ? `added rel="noopener noreferrer" to ${sec.fixed} external link${sec.fixed > 1 ? "s" : ""}` : "no mechanical fixes needed"}${sec.warnings.length ? `; worth a look: ${sec.warnings.slice(0, 3).join("; ")}` : ""}.`
+            : "";
           const followUp =
             (leftover.length
               ? `\n\n**Left to do:** ${leftover.map((f) => f.name).join(" · ")} — say *"add ${leftover[0].name.toLowerCase()}"* and I'll extend the project.`
               : appResult.features.length
                 ? "\n\nEverything planned made it in."
-                : "") + repairedLine;
+                : "") + repairedLine + securityLine;
           const aiMsg: Message = {
             id: crypto.randomUUID(),
             role: "ai",

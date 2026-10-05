@@ -143,6 +143,7 @@ async fn query_ollama_stream(
     model: Option<String>,
     ollama_url: Option<String>,
     max_tokens: Option<u32>,
+    overrides: Option<ollama_bridge::GenerationOverrides>,
 ) -> Result<String, String> {
     let model = model.unwrap_or_else(|| "mistral".to_string());
     let app_clone = app.clone();
@@ -152,12 +153,21 @@ async fn query_ollama_stream(
         ollama_url.as_deref(),
         max_tokens,
         None,
+        overrides.as_ref(),
         move |event| {
             let _ = app_clone.emit("ollama-stream", &event);
         },
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+/// cancel_ollama_stream — stop the in-flight query_ollama_stream at its next
+/// chunk (the Scene Builder ends looped runs early). Local only; no effect
+/// when nothing is streaming.
+#[tauri::command]
+fn cancel_ollama_stream() {
+    ollama_bridge::cancel_active_stream();
 }
 
 // ─── Local Vision (Phase 5.5) — Multimodal image analysis via llava/llama3.2-vision ──
@@ -3476,6 +3486,7 @@ pub fn run() {
             refract_intent,
             query_ollama,
             query_ollama_stream,
+            cancel_ollama_stream,
             // Spectrum Graph — CRUD
             get_spectrum_nodes,
             get_spectrum_node,

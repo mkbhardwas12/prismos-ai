@@ -9,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Agent, SpectrumNode, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "../types";
 import ActiveAgents from "./ActiveAgents";
 import ProactivePanel from "./ProactivePanel";
-import prismosIcon from "../assets/prismos-icon.svg";
+import PrismosMark from "./PrismosMark";
 import { APP_VERSION } from "../lib/appVersion";
 import "./Sidebar.css";
 
@@ -200,7 +200,7 @@ export default function Sidebar({
       <div className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`} role="complementary" aria-label="Sidebar navigation">
         <div className="sidebar-header">
           <span className="sidebar-logo">
-            <img src={prismosIcon} alt="PrismOS" className="sidebar-logo-img" />
+            <PrismosMark className="sidebar-logo-img" title="PrismOS" />
             <span className="sidebar-wordmark">PrismOS</span>
           </span>
           <span className="sidebar-version" title={`PrismOS-AI ${APP_VERSION}`}>v{APP_VERSION}</span>

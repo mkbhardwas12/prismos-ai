@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import prismosIcon from "../assets/prismos-icon.svg";
+import PrismosMark from "./PrismosMark";
 import "./TitleBar.css";
 import { APP_VERSION } from "../lib/appVersion";
 
@@ -44,7 +44,7 @@ export default function TitleBar() {
     <div className="titlebar" data-tauri-drag-region>
       {/* App identity */}
       <div className="titlebar-brand" data-tauri-drag-region>
-        <img src={prismosIcon} alt="" className="titlebar-icon" />
+        <PrismosMark className="titlebar-icon" />
         <span className="titlebar-title" data-tauri-drag-region>PrismOS-AI</span>
         <span className="titlebar-version">v{APP_VERSION}</span>
       </div>

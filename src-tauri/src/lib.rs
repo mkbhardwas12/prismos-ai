@@ -3435,10 +3435,19 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
-            TrayIconBuilder::new()
-                .icon(app.default_window_icon().cloned().unwrap_or_else(|| {
+            // One tray icon. On macOS it is a template silhouette of the mark,
+            // so the menu bar tints it; elsewhere it is the full-color app icon.
+            // (tauri.conf.json no longer declares a second, icon-less tray.)
+            let tray_icon = if cfg!(target_os = "macos") {
+                tauri::include_image!("./icons/tray-template.png")
+            } else {
+                app.default_window_icon().cloned().unwrap_or_else(|| {
                     tauri::image::Image::new(&[], 0, 0)
-                }))
+                })
+            };
+            TrayIconBuilder::new()
+                .icon(tray_icon)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("PrismOS-AI — Local AI Operating System")
                 .menu(&tray_menu)
                 .on_menu_event(|app, event| {

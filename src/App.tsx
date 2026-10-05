@@ -18,7 +18,7 @@ import OnboardingWizard from "./components/OnboardingWizard";
 import SpotlightOverlay from "./components/SpotlightOverlay";
 import BrainWrapped from "./components/BrainWrapped";
 import { DEFAULT_SETTINGS } from "./lib/config";
-import prismosIcon from "./assets/prismos-icon.svg";
+import PrismosMark from "./components/PrismosMark";
 import type { Agent, SpectrumNode, AppSettings, GraphStats, CollaborationSummary, DebateSummary, AgentActivity, ProactiveSuggestion } from "./types";
 
 type View = "chat" | "settings" | "spectrum" | "sandbox" | "graph" | "timeline" | "dashboard";
@@ -419,7 +419,7 @@ function App() {
   if (!ready) {
     return (
       <div className="app-loading" role="status" aria-label="Loading PrismOS-AI" aria-live="polite">
-        <img src={prismosIcon} alt="PrismOS-AI" className="app-loading-logo" />
+        <PrismosMark className="app-loading-logo" title="PrismOS-AI" />
         <div className="app-loading-text" aria-hidden="true">PrismOS-AI</div>
         <div className="app-loading-bar" role="progressbar" aria-label="Loading progress">
           <div className="app-loading-bar-fill" />

@@ -1,3 +1,5 @@
+<img src="docs/brand/prismos-ai-app-icon.svg" width="96" alt="PrismOS-AI app icon: a P drawn as one beam that opens into three lanes of light" />
+
 # PrismOS-AI
 
 > **Use AI on the documents you're not allowed to paste into ChatGPT.**

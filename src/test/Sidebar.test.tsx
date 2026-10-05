@@ -40,7 +40,7 @@ async function renderSidebar(overrides = {}) {
 describe("Sidebar", () => {
   it("renders the PrismOS-AI logo/icon", async () => {
     await renderSidebar();
-    expect(screen.getByAltText(/prism/i)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /prism/i })).toBeInTheDocument();
   });
 
   it("renders navigation items", async () => {

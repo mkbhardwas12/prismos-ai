@@ -9,7 +9,7 @@ import { answerTextOf, exportAnswerReceipt, shortReceiptId, verifyAnswerReceipt 
 import type { Message, ReceiptVerification } from "../types";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import prismosIcon from "../assets/prismos-icon.svg";
+import PrismosMark from "./PrismosMark";
 import IntentInput from "./IntentInput";
 import DailyBrief from "./DailyBrief";
 import UserGuide from "./UserGuide";
@@ -106,7 +106,7 @@ export default function MainView({
   return (
     <>
       <div className="main-header">
-        <h2><img src={prismosIcon} alt="" className="header-icon" /> Chat</h2>
+        <h2><PrismosMark className="header-icon" /> Chat</h2>
         <div className="header-actions">
           {chat.messages.length > 0 && (
             <button
@@ -275,7 +275,7 @@ export default function MainView({
 
         {chat.messages.length === 0 ? (
           <div className="welcome-message">
-            <div className="welcome-icon"><img src={prismosIcon} alt="PrismOS-AI" className="welcome-logo-img" /></div>
+            <div className="welcome-icon"><PrismosMark className="welcome-logo-img" title="PrismOS-AI" /></div>
             <h1 className="welcome-title">Ask anything. Attach anything.</h1>
             <p className="welcome-sub">
               It all stays on this computer: the model runs here, and nothing
@@ -609,7 +609,7 @@ export default function MainView({
                   </div>
                 )}
                 <div className="message-meta">
-                  {msg.role === "ai" ? <><img src={prismosIcon} alt="" className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
+                  {msg.role === "ai" ? <><PrismosMark className="msg-icon" /> {msg.agent ? `PrismOS-AI · ${msg.agent}` : "PrismOS-AI"}</> : "You"} ·{" "}
                   {msg.timestamp.toLocaleTimeString()}
                   {msg.role === "ai" && (
                     <span className="feedback-buttons">

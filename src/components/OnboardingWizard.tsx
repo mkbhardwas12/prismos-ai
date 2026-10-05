@@ -11,7 +11,7 @@ import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, OllamaModel } from "../types";
 import { MODEL_REGISTRY, getDefaultModel } from "../lib/modelRegistry";
-import prismosIcon from "../assets/prismos-icon.svg";
+import PrismosMark from "./PrismosMark";
 import "./OnboardingWizard.css";
 
 interface OnboardingWizardProps {
@@ -108,7 +108,7 @@ export default function OnboardingWizard({
       <div className="onboarding-card">
         {/* Header */}
         <div className="onboarding-header">
-          <img src={prismosIcon} alt="" className="onboarding-logo" />
+          <PrismosMark className="onboarding-logo" />
           <h1>Welcome to PrismOS-AI</h1>
           <p>Let's get you set up in under a minute</p>
         </div>

@@ -21,12 +21,6 @@
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https://asset.localhost data:; connect-src 'self' http://localhost:11434 http://127.0.0.1:11434; font-src 'self' data:; worker-src 'self' blob:"
-    },
-    "trayIcon": {
-      "id": "prismos-tray",
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "tooltip": "PrismOS-AI — local, offline"
     }
   },
   "bundle": {

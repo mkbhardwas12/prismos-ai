@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppSettings, GraphStats, OllamaModel, CrossDeviceMergeResult, MergeDiff } from "../types";
 import DomainInsights from "./DomainInsights";
-import prismosIcon from "../assets/prismos-icon.svg";
+import PrismosMark from "./PrismosMark";
 import "./SettingsPanel.css";
 import { APP_VERSION } from "../lib/appVersion";
 
@@ -1250,7 +1250,7 @@ export default function SettingsPanel({
           </h3>
           {expandedSections.has("system") && (<>
           <div className="settings-version-banner">
-            <img src={prismosIcon} alt="" className="settings-version-icon" />
+            <PrismosMark className="settings-version-icon" />
             <div className="settings-version-info">
               <span className="settings-version-name">PrismOS-AI</span>
               <span className="settings-version-number">v{APP_VERSION}</span>
@@ -1289,7 +1289,7 @@ export default function SettingsPanel({
         {/* ── About ── */}
         <div className="settings-group settings-about">
           <h3 className="settings-group-toggle" onClick={() => toggleSection("about")}>
-            <img src={prismosIcon} alt="" className="header-icon" /> About PrismOS-AI
+            <PrismosMark className="header-icon" /> About PrismOS-AI
             <span className={`settings-group-chevron${expandedSections.has("about") ? " settings-group-chevron--open" : ""}`}>▸</span>
           </h3>
           {expandedSections.has("about") && (<>

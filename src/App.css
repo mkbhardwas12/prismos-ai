@@ -31,6 +31,12 @@
   --text-secondary: #a4adb9;
   --text-muted: #727c89;
 
+  /* The PrismOS-AI mark (PrismosMark): one beam and three lanes */
+  --brand-beam: #eef1f5;
+  --brand-cyan: #2cc4d6;
+  --brand-blue: #5b8def;
+  --brand-violet: #8b7cf6;
+
   /* Soft fills for hover and the active item; one source for both themes */
   --hover-soft: rgba(255, 255, 255, 0.045);
   --accent-soft: rgba(91, 141, 239, 0.14);
@@ -94,6 +100,11 @@
   --text-primary: #1b1f25;
   --text-secondary: #525a65;
   --text-muted: #868e99;
+
+  --brand-beam: #2f6fe4;
+  --brand-cyan: #0e8fa3;
+  --brand-blue: #2f6fe4;
+  --brand-violet: #6a55e8;
 
   --hover-soft: rgba(20, 24, 31, 0.045);
   --accent-soft: rgba(47, 111, 228, 0.1);

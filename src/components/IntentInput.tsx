@@ -7,13 +7,23 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type DragEvent, type ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useVoice } from "../hooks/useVoice";
+import { cleanHeader } from "../lib/researchLane";
 import "./IntentInput.css";
 
 /** Image extensions we accept for vision analysis */
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif"];
 
 /** Document extensions we accept for text extraction & analysis */
-const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "xls", "txt", "md", "csv", "json", "rtf"];
+const DOCUMENT_EXTENSIONS = [
+  "pdf", "docx", "pptx", "xlsx", "xls", "txt", "md", "csv", "json", "rtf",
+  // Logs and configs for the security lane (SAP instance profiles are often DEFAULT.PFL).
+  "log", "ini", "pfl", "conf", "cfg", "yaml", "yml", "xml", "sql", "tsv",
+];
+
+/** Several sources can be attached at once; the research lane cites each one. */
+const MAX_SOURCES = 8;
+const DOC_PROMPT = "Summarize this document.";
+const MULTI_PROMPT = "Compare these sources: where do they agree and where do they differ?";
 
 /** Maximum file size in bytes (25 MB) — keeps memory & performance safe */
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
@@ -24,6 +34,13 @@ const AUDIO_EXTENSIONS = ["wav", "mp3", "m4a", "flac", "ogg", "aac", "webm", "ai
 /** Recordings are large; the Rust side re-checks its own cap. */
 const MAX_AUDIO_SIZE_BYTES = 200 * 1024 * 1024;
 const AUDIO_PROMPT = "Summarize this recording: key points, decisions, and action items.";
+
+/** One attached source: its extracted text (with its [Document|File|Audio: …] header). */
+interface AttachedDoc {
+  name: string;
+  text: string;
+  meta: string;
+}
 
 /** Check if a filename is a supported audio recording */
 function isAudioFile(name: string): boolean {
@@ -94,11 +111,15 @@ export default function IntentInput({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null); // data URL for preview
   const [imageName, setImageName] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
-  // ── Document state (Phase 5.5) ──
-  const [attachedDocument, setAttachedDocument] = useState<string | null>(null); // extracted text
-  const [documentName, setDocumentName] = useState<string | null>(null);
-  const [documentMeta, setDocumentMeta] = useState<string | null>(null); // e.g. "PDF | 5 pages"
-  const [isExtractingDoc, setIsExtractingDoc] = useState(false);
+  // ── Document state (Phase 5.5); several sources can be attached at once ──
+  const [docs, setDocs] = useState<AttachedDoc[]>([]);
+  const docsRef = useRef<AttachedDoc[]>([]); // synchronous copy for sequential multi-file attaches
+  // Files still being read or transcribed; sending waits until all are in.
+  const [pending, setPending] = useState<{ id: number; name: string; note: string }[]>([]);
+  const pendingRef = useRef(0);
+  const nextPendingId = useRef(0);
+  const isExtractingDoc = pending.length > 0;
+  const attachedDocument = docs.length ? docs.map((d) => d.text).join("\n\n") : null;
   // ── Screen reading state (Phase 7) ──
   const [isReadingScreen, setIsReadingScreen] = useState(false);
   // ── Attach menu state ──
@@ -142,8 +163,8 @@ export default function IntentInput({
 
   function handleSubmit() {
     const trimmed = input.trim();
-    if ((!trimmed && !attachedImage && !attachedDocument) || isProcessing) return;
-    const prompt = trimmed || (attachedImage ? "Describe this image in detail." : "Summarize this document.");
+    if ((!trimmed && !attachedImage && !attachedDocument) || isProcessing || pendingRef.current > 0) return;
+    const prompt = trimmed || (attachedImage ? "Describe this image in detail." : docs.length > 1 ? MULTI_PROMPT : DOC_PROMPT);
     onSubmit(prompt, attachedImage ?? undefined, attachedDocument ?? undefined);
     setInput("");
     clearAttachedImage();
@@ -160,41 +181,74 @@ export default function IntentInput({
     setImageName(null);
   }
 
-  /** Clear attached document state */
+  /** Clear every attached document */
   function clearAttachedDocument() {
-    setAttachedDocument(null);
-    setDocumentName(null);
-    setDocumentMeta(null);
+    docsRef.current = [];
+    setDocs([]);
+  }
+
+  /** Remove one attached source */
+  function removeDocument(index: number) {
+    docsRef.current = docsRef.current.filter((_, i) => i !== index);
+    setDocs(docsRef.current);
+  }
+
+  /** Add a source after the ones already attached. */
+  function addDocument(doc: AttachedDoc) {
+    // Every source keeps a clean header so the research lane can tell them apart.
+    const text = cleanHeader(doc.text, doc.name);
+    docsRef.current = [...docsRef.current, { ...doc, text }];
+    setDocs(docsRef.current);
+  }
+
+  /** Track a file that is being read; returns the id to finish it with. */
+  function beginPending(name: string, note: string): number {
+    const id = nextPendingId.current++;
+    pendingRef.current += 1;
+    setPending((prev) => [...prev, { id, name, note }]);
+    return id;
+  }
+
+  function endPending(id: number) {
+    pendingRef.current = Math.max(0, pendingRef.current - 1);
+    setPending((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  /** Room for one more source (counting files still being read)? Warns in the input when not. */
+  function hasRoomForSource(name: string): boolean {
+    if (docsRef.current.length + pendingRef.current < MAX_SOURCES) return true;
+    setInput((prev) => prev + `\n⚠️ ${name} not attached: ${MAX_SOURCES} sources is the limit for one question.`);
+    return false;
+  }
+
+  /** Fill the input with a sensible request, unless the user already typed one. */
+  function suggestPrompt(single: string) {
+    const next = docsRef.current.length > 1 ? MULTI_PROMPT : single;
+    setInput((prev) => (!prev.trim() || [DOC_PROMPT, AUDIO_PROMPT, MULTI_PROMPT].includes(prev.trim()) ? next : prev));
   }
 
   /** Attach a document by extracting its text via Rust backend */
   async function attachDocumentFromPath(filePath: string, fileName: string) {
-    setIsExtractingDoc(true);
-    setDocumentName(fileName);
-    setDocumentMeta("Extracting...");
+    if (!hasRoomForSource(fileName)) return;
+    const job = beginPending(fileName, "Extracting text...");
     try {
       const text: string = await invoke("extract_file_text", { path: filePath });
-      setAttachedDocument(text);
       // Parse metadata from the header line [Document: ... | Type: ... | ...]
       const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
-      setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${fileName.split('.').pop()?.toUpperCase()} document`);
+      addDocument({ name: fileName, text, meta: metaMatch ? metaMatch[1].trim() : `${fileName.split('.').pop()?.toUpperCase()} document` });
     } catch (err) {
       console.error("Document extraction error:", err);
-      setDocumentMeta(null);
-      setDocumentName(null);
-      setAttachedDocument(null);
       // Show error in input as fallback
       setInput((prev) => prev + `\n⚠️ Could not extract text from ${fileName}: ${err}`);
     } finally {
-      setIsExtractingDoc(false);
+      endPending(job);
     }
   }
 
   /** Attach a document from a File object — sends binary files to Rust for proper extraction */
   async function attachDocumentFromFile(file: File) {
-    setIsExtractingDoc(true);
-    setDocumentName(file.name);
-    setDocumentMeta("Extracting...");
+    if (!hasRoomForSource(file.name)) return;
+    const job = beginPending(file.name, "Extracting text...");
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || "";
       const binaryFormats = ["pdf", "docx", "pptx", "xlsx", "xls"];
@@ -206,22 +260,18 @@ export default function IntentInput({
           data: base64,
           fileName: file.name,
         });
-        setAttachedDocument(text);
         const metaMatch = text.match(/\[Document:.*?\|(.+?)\]/);
-        setDocumentMeta(metaMatch ? metaMatch[1].trim() : `${ext.toUpperCase()} document`);
+        addDocument({ name: file.name, text, meta: metaMatch ? metaMatch[1].trim() : `${ext.toUpperCase()} document` });
       } else {
         // Text formats: read as UTF-8 text directly
         const text = await file.text();
-        const prefixed = `[File: ${file.name}]\n${text}`;
-        setAttachedDocument(prefixed);
-        setDocumentMeta(`${ext.toUpperCase()} | ${Math.round(text.length / 1024)}KB`);
+        addDocument({ name: file.name, text: `[File: ${file.name}]\n${text}`, meta: `${ext.toUpperCase()} | ${Math.round(text.length / 1024)}KB` });
       }
     } catch (err) {
       console.error("Document extraction error:", err);
-      clearAttachedDocument();
       setInput((prev) => prev + `\n⚠️ Could not extract text from ${file.name}: ${err}`);
     } finally {
-      setIsExtractingDoc(false);
+      endPending(job);
     }
   }
 
@@ -232,9 +282,8 @@ export default function IntentInput({
       setInput((prev) => prev + `\n⚠️ ${file.name} is larger than 200 MB — trim the recording first.`);
       return;
     }
-    setIsExtractingDoc(true);
-    setDocumentName(file.name);
-    setDocumentMeta("Transcribing locally…");
+    if (!hasRoomForSource(file.name)) return;
+    const job = beginPending(file.name, "Transcribing locally…");
     try {
       // Honest pre-flight: fail with the install hint instead of a cryptic error.
       const status = JSON.parse(await invoke<string>("audio_sidecar_status")) as {
@@ -248,14 +297,16 @@ export default function IntentInput({
         text: string; engine: string; audio_seconds: number | null;
       };
       const secs = result.audio_seconds ? `${Math.round(result.audio_seconds)}s` : "";
-      setAttachedDocument(`[Audio: ${file.name}${secs ? ` | ${secs}` : ""} | transcribed offline by ${result.engine}]\n\n${result.text}`);
-      setDocumentMeta(`Transcript${secs ? ` · ${secs}` : ""} · ${result.engine}`);
+      addDocument({
+        name: file.name,
+        text: `[Audio: ${file.name}${secs ? ` | ${secs}` : ""} | transcribed offline by ${result.engine}]\n\n${result.text}`,
+        meta: `Transcript${secs ? ` · ${secs}` : ""} · ${result.engine}`,
+      });
     } catch (err) {
       console.error("Audio transcription error:", err);
-      clearAttachedDocument();
       setInput((prev) => prev + `\n⚠️ Could not transcribe ${file.name}: ${err instanceof Error ? err.message : err}`);
     } finally {
-      setIsExtractingDoc(false);
+      endPending(job);
     }
   }
 
@@ -368,27 +419,32 @@ export default function IntentInput({
     e.target.value = "";
   }
 
-  /** Handle document file selection via hidden file input */
-  async function handleDocFileSelect(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  /** Attach one document or recording (picker or drop). */
+  async function attachSourceFile(file: File) {
     if (isAudioFile(file.name)) {
       await attachAudioFromFile(file);
-      if (!input.trim()) setInput(AUDIO_PROMPT);
-      e.target.value = "";
+      suggestPrompt(AUDIO_PROMPT);
       return;
     }
-    if (!checkFileSize(file)) { e.target.value = ""; return; }
+    if (!checkFileSize(file)) return;
     const filePath = (file as File & { path?: string }).path;
     if (filePath) {
       await attachDocumentFromPath(filePath, file.name);
     } else {
       await attachDocumentFromFile(file);
     }
-    if (!input.trim()) {
-      setInput("Summarize this document.");
+    suggestPrompt(DOC_PROMPT);
+  }
+
+  /** Handle document file selection via hidden file input (several files allowed) */
+  async function handleDocFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const target = e.target;
+    const files = Array.from(target.files ?? []);
+    // Reset first so the same file can be picked again later
+    target.value = "";
+    for (const file of files) {
+      await attachSourceFile(file);
     }
-    e.target.value = "";
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -419,21 +475,26 @@ export default function IntentInput({
     setIsDragOver(false);
   }, []);
 
-  const handleDrop = useCallback(async (e: DragEvent) => {
+  // A plain function (not memoised) so it always sees the current input.
+  async function handleDrop(e: DragEvent) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
 
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    // Several files: each one is attached in turn (documents become separate sources).
+    for (const file of files) {
+      await attachDroppedFile(file);
+    }
+  }
 
-    const file = files[0];
+  async function attachDroppedFile(file: File) {
     const fileName = file.name;
 
-    // ── Audio recordings → offline transcript (own, larger size cap) ──
+    // ── Audio recordings and documents → attached sources ──
     if (isAudioFile(fileName)) {
-      await attachAudioFromFile(file);
-      if (!input.trim()) setInput(AUDIO_PROMPT);
+      await attachSourceFile(file);
       return;
     }
 
@@ -459,23 +520,13 @@ export default function IntentInput({
         // Browser fallback: read via FileReader
         attachImageFromFile(file);
       }
-      if (!input.trim()) {
-        setInput("Describe this image in detail.");
-      }
+      setInput((prev) => (prev.trim() ? prev : "Describe this image in detail."));
       return;
     }
 
     // ── Document files → attach for analysis (Phase 5.5) ──
     if (isDocumentFile(fileName)) {
-      const filePath = (file as File & { path?: string }).path;
-      if (filePath) {
-        await attachDocumentFromPath(filePath, fileName);
-      } else {
-        await attachDocumentFromFile(file);
-      }
-      if (!input.trim()) {
-        setInput("Summarize this document.");
-      }
+      await attachSourceFile(file);
       return;
     }
 
@@ -487,22 +538,14 @@ export default function IntentInput({
 
       if (filePath) {
         const text: string = await invoke("extract_file_text", { path: filePath });
-        const currentInput = input.trim();
-        const newInput = currentInput
-          ? `${currentInput}\n\n${text}`
-          : text;
-        setInput(newInput);
+        setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
         autoResize();
       } else {
         const reader = new FileReader();
         reader.onload = () => {
           const text = reader.result as string;
           const prefixed = `[File: ${fileName}]\n${text}`;
-          const currentInput = input.trim();
-          const newInput = currentInput
-            ? `${currentInput}\n\n${prefixed}`
-            : prefixed;
-          setInput(newInput);
+          setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${prefixed}` : prefixed));
           autoResize();
         };
         reader.readAsText(file);
@@ -513,7 +556,7 @@ export default function IntentInput({
     }
 
     setTimeout(() => setDroppedFileName(null), 4000);
-  }, [input]);
+  }
 
   return (
     <div
@@ -558,24 +601,40 @@ export default function IntentInput({
       )}
 
       {/* ── Attached Document Preview (Phase 5.5 — Document Analysis) ── */}
-      {documentName && (
-        <div className="doc-preview" role="status">
-          <span className="doc-preview-icon">{getDocIcon(documentName)}</span>
-          <div className="doc-preview-info">
-            <span className="doc-preview-name">{documentName}</span>
-            <span className="doc-preview-hint">
-              {isExtractingDoc ? "⏳ Extracting text..." : documentMeta ?? "Ready for analysis"}
-            </span>
-          </div>
-          {!isExtractingDoc && (
-            <button
-              className="doc-preview-remove"
-              onClick={clearAttachedDocument}
-              aria-label="Remove attached document"
-              title="Remove document"
-            >
-              ×
-            </button>
+      {(docs.length > 0 || pending.length > 0) && (
+        <div className={`doc-preview-list ${docs.length + pending.length > 1 ? "doc-preview-list-multi" : ""}`}>
+          {docs.map((doc, index) => (
+            <div className="doc-preview" role="status" key={`${doc.name}-${index}`}>
+              <span className="doc-preview-icon">{getDocIcon(doc.name)}</span>
+              <div className="doc-preview-info">
+                <span className="doc-preview-name">{doc.name}</span>
+                <span className="doc-preview-hint">{doc.meta || "Ready for analysis"}</span>
+              </div>
+              {!isExtractingDoc && (
+                <button
+                  className="doc-preview-remove"
+                  onClick={() => removeDocument(index)}
+                  aria-label={docs.length > 1 ? `Remove ${doc.name}` : "Remove attached document"}
+                  title="Remove document"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          {pending.map((job) => (
+            <div className="doc-preview" role="status" key={`pending-${job.id}`}>
+              <span className="doc-preview-icon">{getDocIcon(job.name)}</span>
+              <div className="doc-preview-info">
+                <span className="doc-preview-name">{job.name}</span>
+                <span className="doc-preview-hint">⏳ {job.note}</span>
+              </div>
+            </div>
+          ))}
+          {docs.length > 1 && pending.length === 0 && (
+            <div className="doc-preview-sources">
+              {docs.length} sources · the answer cites the passages it uses
+            </div>
           )}
         </div>
       )}
@@ -609,7 +668,8 @@ export default function IntentInput({
       <input
         ref={docFileInputRef}
         type="file"
-        accept=".pdf,.docx,.pptx,.xlsx,.xls,.txt,.md,.csv,.json,.rtf,.wav,.mp3,.m4a,.flac,.ogg,.aac,.webm,.aiff,.aif,.opus"
+        accept=".pdf,.docx,.pptx,.xlsx,.xls,.txt,.md,.csv,.tsv,.json,.rtf,.log,.ini,.pfl,.conf,.cfg,.yaml,.yml,.xml,.sql,.wav,.mp3,.m4a,.flac,.ogg,.aac,.webm,.aiff,.aif,.opus"
+        multiple
         style={{ display: "none" }}
         onChange={handleDocFileSelect}
       />
@@ -698,7 +758,7 @@ export default function IntentInput({
                 <span className="attach-menu-icon">📄</span>
                 <div className="attach-menu-label">
                   <span className="attach-menu-title">Document</span>
-                  <span className="attach-menu-hint">PDF, DOCX, PPTX, XLSX, CSV</span>
+                  <span className="attach-menu-hint">PDF, DOCX, XLSX, CSV, logs · pick several to compare</span>
                 </div>
               </button>
               <button
@@ -743,7 +803,7 @@ export default function IntentInput({
         <button
           className="intent-send-btn"
           onClick={handleSubmit}
-          disabled={(!input.trim() && !attachedImage && !attachedDocument) || isProcessing}
+          disabled={(!input.trim() && !attachedImage && !attachedDocument) || isProcessing || isExtractingDoc}
           title="Send intent"
           aria-label="Send intent"
         >

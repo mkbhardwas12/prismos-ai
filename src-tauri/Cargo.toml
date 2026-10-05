@@ -21,6 +21,11 @@ path = "src/bin/prismos_cli.rs"
 name = "prismos-knowledge"
 path = "src/bin/prismos_knowledge.rs"
 
+# Before/after check for knowledge packs: local Ollama only, scores answers by expected keywords.
+[[bin]]
+name = "prismos-eval"
+path = "src/bin/prismos_eval.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

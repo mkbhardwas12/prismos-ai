@@ -101,4 +101,71 @@ describe("IntentInput", () => {
     await waitFor(() => expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain("whisper.cpp is not installed"));
     expect(vi.mocked(invoke).mock.calls.some(([c]) => c === "transcribe_audio_bytes")).toBe(false);
   });
+
+  it("attaches several dropped documents as separate sources and submits them together", async () => {
+    const onSubmit = vi.fn();
+    const { container } = render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
+    const a = new File(["Alpha notes"], "a.md", { type: "text/markdown" });
+    const b = new File(["Beta notes"], "b.log", { type: "text/plain" });
+    fireEvent.drop(container.firstElementChild!, { dataTransfer: { files: [a, b], types: ["Files"] } });
+    await waitFor(() => expect(screen.getByText(/2 sources · the answer cites the passages it uses/)).toBeInTheDocument());
+    expect(screen.getByRole("textbox")).toHaveValue("Compare these sources: where do they agree and where do they differ?");
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith(
+      "Compare these sources: where do they agree and where do they differ?",
+      undefined,
+      "[File: a.md]\nAlpha notes\n\n[File: b.log]\nBeta notes",
+    );
+  });
+
+  it("removes one source and keeps the rest", async () => {
+    const onSubmit = vi.fn();
+    const { container } = render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
+    const files = [new File(["One"], "one.txt"), new File(["Two"], "two.txt"), new File(["Three"], "three.txt")];
+    fireEvent.drop(container.firstElementChild!, { dataTransfer: { files, types: ["Files"] } });
+    await waitFor(() => expect(screen.getByText(/3 sources/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Remove two.txt" }));
+    await userEvent.clear(screen.getByRole("textbox"));
+    await userEvent.type(screen.getByRole("textbox"), "What differs?{enter}");
+    expect(onSubmit).toHaveBeenCalledWith("What differs?", undefined, "[File: one.txt]\nOne\n\n[File: three.txt]\nThree");
+  });
+
+  it("lets the picker choose several files, including logs and SAP profiles", () => {
+    const { container } = render(<IntentInput onSubmit={vi.fn()} isProcessing={false} />);
+    const picker = container.querySelector('input[type="file"][multiple]') as HTMLInputElement;
+    expect(picker).not.toBeNull();
+    expect(picker.accept).toContain(".log");
+    expect(picker.accept).toContain(".pfl");
+    expect(picker.accept).toContain(".ini");
+  });
+
+  it("waits for every file to finish before sending", async () => {
+    const onSubmit = vi.fn();
+    let finish: (value: string) => void = () => {};
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === "audio_sidecar_status") return JSON.stringify({ ready: true, cli_path: "/w", ffmpeg_path: null, model_path: "/m", models_dir: "/m", install_hint: "" });
+      if (cmd === "transcribe_audio_bytes") return new Promise<string>((resolve) => { finish = resolve; });
+      return "{}";
+    });
+    const { container } = render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
+    fireEvent.drop(container.firstElementChild!, { dataTransfer: { files: [new File(["notes"], "notes.md"), new File(["x"], "call.m4a")], types: ["Files"] } });
+    await waitFor(() => expect(screen.getByText(/Transcribing locally/)).toBeInTheDocument());
+    await userEvent.type(screen.getByRole("textbox"), "{enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /send intent/i })).toBeDisabled();
+    finish(JSON.stringify({ text: "We agreed.", engine: "whisper.cpp", audio_seconds: 5 }));
+    await waitFor(() => expect(screen.getByText(/2 sources/)).toBeInTheDocument());
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][2]).toContain("[Audio: call.m4a | 5s | transcribed offline by whisper.cpp]");
+  });
+
+  it("cleans brackets out of file names so sources stay separate", async () => {
+    const onSubmit = vi.fn();
+    const { container } = render(<IntentInput onSubmit={onSubmit} isProcessing={false} />);
+    fireEvent.drop(container.firstElementChild!, { dataTransfer: { files: [new File(["Plan"], "plan.md"), new File(["Budget"], "budget [final].md")], types: ["Files"] } });
+    await waitFor(() => expect(screen.getByText(/2 sources/)).toBeInTheDocument());
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(onSubmit.mock.calls[0][2]).toBe("[File: plan.md]\nPlan\n\n[File: budget final .md]\nBudget");
+  });
 });

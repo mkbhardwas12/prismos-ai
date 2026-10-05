@@ -269,3 +269,163 @@ describe("hardening configs", () => {
     expect(genericSecurityPrompt("const key = 'AKIAABCDEFGHIJKLMNOP';", "review this for security")).not.toContain("ABCDEFGHIJKLMNOP");
   });
 });
+
+// ── SAP: NetWeaver, Security Audit Log, SAP HANA ─────────────────────────────
+
+const SAP_LOG = [
+  '203.0.113.47 - - [05/Oct/2026:01:03:12 +0000] "POST /developmentserver/metadatauploader?CONTENTTYPE=MODEL&CLIENT=1 HTTP/1.1" 200 312 "-" "python-requests/2.31"',
+  '203.0.113.47 - - [05/Oct/2026:01:04:00 +0000] "GET /irj/helper.jsp?cmd=whoami HTTP/1.1" 200 64 "-" "curl/8"',
+  "Oct  5 01:05:10 sapjava01 bash[4410]: cat /usr/sap/PRD/SYS/global/security/data/SecStore.properties",
+  "Oct  5 01:05:20 sapjava01 find[4411]: /usr/sap/PRD/J00/j2ee/cluster/apps/sap.com/irj/servlet_jsp/irj/root/cglswdjp.jsp",
+  "2026-10-05 01:06:00;indexserver;hana01;PRD;00;30015;PRD;10.0.0.5;app01;4242;51000;_SAP_user administration;INFO;CREATE USER;ADMIN2;;;;;;;SUCCESSFUL;;;;;;;CREATE USER BACKDOOR PASSWORD Winter2026x NO FORCE_FIRST_PASSWORD_CHANGE;400123;",
+  "2026-10-05 01:06:30;indexserver;hana01;PRD;00;30015;PRD;10.0.0.5;app01;4242;51000;_SAP_authorizations;INFO;GRANT PRIVILEGE;ADMIN2;;;;;;;SUCCESSFUL;;;;;;;GRANT USER ADMIN, ROLE ADMIN TO BACKDOOR WITH ADMIN OPTION;400124;",
+  "2026-10-05 01:07:00;nameserver;hana01;PRD;00;30013;SYSTEMDB;10.0.0.5;app01;4242;51000;_SAP_configuration changes;INFO;SYSTEM CONFIGURATION CHANGE;ADMIN2;;;;;;;SUCCESSFUL;;;;;;;ALTER SYSTEM ALTER CONFIGURATION ('global.ini','SYSTEM') SET ('auditing configuration','global_auditing_state') = 'false' WITH RECONFIGURE;400125;",
+  "2026-10-05 01:07:30;indexserver;hana01;PRD;00;30015;PRD;10.0.0.5;app01;4242;51000;_SAP_user administration;INFO;ALTER USER;ADMIN2;;;;;;;SUCCESSFUL;;;;;;;ALTER USER SYSTEM ACTIVATE USER NOW;400126;",
+  "2026-10-05 01:08:00;indexserver;hana01;PRD;00;30015;PRD;10.0.0.5;app01;4242;51000;_SAP_recover database;INFO;BACKUP CATALOG DELETE;ADMIN2;;;;;;;SUCCESSFUL;;;;;;;BACKUP CATALOG DELETE ALL BEFORE BACKUP_ID 1790000000000 WITH FILE;400127;",
+  "05.10.2026 01:09:00 AU7 ADMIN2 SU01 User HACKER created",
+  "05.10.2026 01:09:30 AUB ADMIN2 SU01 Authorizations for user HACKER changed",
+  "05.10.2026 01:10:00 AUE ADMIN2 RSAU_CONFIG Audit configuration changed",
+  "05.10.2026 01:11:00 CUL ADMIN2 SE38 Field content changed in the debugger: SY-SUBRC",
+  "05.10.2026 01:12:00 DU9 ADMIN2 SE16N Generic table access: tables USR02",
+].join("\n");
+
+const PROFILE = [
+  "SAPSYSTEMNAME = PRD",
+  "SAPGLOBALHOST = sapprd01",
+  "login/min_password_lng = 6",
+  "login/no_automatic_user_sapstar = 0",
+  "login/fails_to_user_lock = 10",
+  "login/password_downwards_compatibility = 1",
+  "auth/rfc_authority_check = 0",
+  "gw/acl_mode = 0",
+  "gw/sim_mode = 1",
+  "gw/reg_no_conn_info = 1",
+  "ms/admin_port = 3901",
+  "rdisp/gui_auto_logout = 0",
+  "icm/server_port_0 = PROT=HTTP,PORT=8000",
+].join("\n");
+
+const HANA_INI = [
+  "[auditing configuration]",
+  "global_auditing_state = false",
+  "default_audit_trail_type = CSVTEXTFILE",
+  "",
+  "[password policy]",
+  "minimal_password_length = 6",
+  "maximum_invalid_connect_attempts = 20",
+  "password_lock_time = 0",
+  "force_first_password_change = false",
+  "password_lock_for_system_user = false",
+  "",
+  "[persistence]",
+  "log_mode = overwrite",
+  "enable_auto_log_backup = no",
+].join("\n");
+
+describe("SAP", () => {
+  it("finds the Visual Composer path, portal webshells, SecStore reads and SAP HANA audit evidence", () => {
+    const r = investigate(SAP_LOG, "sap-night.log", 2026);
+    const ids = r.findings.map((f) => f.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      "sap-vc-uploader", "sap-irj-webshell", "sap-secstore", "db-new-user", "db-powerful-grant",
+      "db-audit-weakened", "hana-system-activated", "db-backup-delete",
+      "sap-sal-user-created", "sap-sal-auth-changed", "sap-sal-audit-changed", "sap-sal-debug", "sap-sal-table-access",
+    ]));
+    const byId = (id: string) => r.findings.find((f) => f.id === id)!;
+    expect(byId("sap-vc-uploader").severity).toBe("critical");
+    expect(byId("sap-vc-uploader").attack?.id).toBe("T1190");
+    expect(byId("sap-irj-webshell").attack?.id).toBe("T1505.003");
+    expect(byId("sap-irj-webshell").count).toBe(2); // the request and the file on disk
+    expect(byId("db-audit-weakened").attack?.tactic).toBe("Defense Impairment");
+    // the password in CREATE USER never reaches the report
+    const evidence = r.findings.flatMap((f) => f.evidence).join("\n");
+    expect(evidence).not.toContain("Winter2026x");
+    expect(evidence).toContain("PASSWORD Wi****");
+  });
+
+  it("stays quiet on ordinary logs and keeps everyday words readable", () => {
+    const ids = investigate(AUTH_LOG, "auth.log", 2026).findings.map((f) => f.id);
+    expect(ids.some((id) => /^(sap|db|hana)-/.test(id))).toBe(false);
+    expect(maskSecrets("Failed password for root from 203.0.113.5")).toBe("Failed password for root from 203.0.113.5");
+    expect(maskSecrets("ALTER USER BOB DISABLE PASSWORD LIFETIME")).toBe("ALTER USER BOB DISABLE PASSWORD LIFETIME");
+    expect(maskSecrets("CREATE USER 'bob'@'%' IDENTIFIED BY 'hunter22'")).not.toContain("hunter22");
+  });
+
+  it("checks an SAP instance profile against the baseline, with exact fixes", () => {
+    expect(detectConfigType(PROFILE, "DEFAULT.PFL")).toBe("sap-profile");
+    expect(detectConfigType(PROFILE)).toBe("sap-profile");
+    expect(detectConfigType(PROFILE, "PRD_D00_sapapp1")).toBe("sap-profile");
+    const r = hardeningReview(PROFILE, "DEFAULT.PFL")!;
+    const ids = r.findings.map((f) => f.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      "sap-pw-length", "sap-sapstar", "sap-lock-attempts", "sap-pw-legacy", "sap-rfc-auth", "sap-gw-acl",
+      "sap-gw-sim", "sap-gw-bits", "sap-ms-admin-port", "sap-gui-timeout", "sap-sal-off", "sap-snc",
+    ]));
+    const fix = (id: string) => r.findings.find((f) => f.id === id)!.fix;
+    expect(fix("sap-gw-bits")).toBe("gw/reg_no_conn_info = 15");
+    expect(fix("sap-sapstar")).toBe("login/no_automatic_user_sapstar = 1");
+    expect(r.findings[0].severity).toBe("high");
+    expect(ids).not.toContain("sap-sal-integrity"); // only once the audit log is on
+    const good = hardeningReview("SAPSYSTEMNAME = PRD\nlogin/min_password_lng = 12\nrsau/enable = 1\nrsau/integrity = 1\nrsau/log_peer_address = 1\nsnc/enable = 1\ngw/acl_mode = 1", "DEFAULT.PFL")!;
+    expect(good.findings).toEqual([]);
+    const sal = hardeningReview("SAPSYSTEMNAME = PRD\nrsau/enable = 1\nsnc/enable = 1\nlogin/min_password_lng = 8", "DEFAULT.PFL")!;
+    expect(sal.findings.map((f) => f.id)).toEqual(expect.arrayContaining(["sap-sal-integrity", "sap-sal-peer"]));
+  });
+
+  it("checks SAP HANA ini files: auditing, password policy, recovery", () => {
+    expect(detectConfigType(HANA_INI, "global.ini")).toBe("hana-ini");
+    expect(detectConfigType(HANA_INI)).toBe("hana-ini");
+    const r = hardeningReview(HANA_INI, "global.ini")!;
+    expect(r.findings.map((f) => f.id)).toEqual(expect.arrayContaining([
+      "hana-audit-off", "hana-csv-trail-default_audit_trail_type", "hana-pw-length", "hana-lock-attempts", "hana-lock-time",
+      "hana-first-change", "hana-system-lock", "hana-log-overwrite", "hana-log-backup-off",
+    ]));
+    expect(r.findings.find((f) => f.id === "hana-audit-off")!.fix).toBe("[auditing configuration]\nglobal_auditing_state = true");
+    expect(hardeningReview("[password policy]\nminimal_password_length = 12\n[auditing configuration]\nglobal_auditing_state = true", "indexserver.ini")!.findings).toEqual([]);
+  });
+
+  it("routes SAP files and plans, and grounds SAP, HANA and BTP hardening plans", () => {
+    expect(detectSecurityRequest("review this profile", PROFILE)).toBe("harden");
+    expect(detectSecurityRequest("what happened on our SAP system last night?", SAP_LOG)).toBe("investigate");
+    expect(hardeningTopic("harden my SAP HANA database")).toBe("hana");
+    expect(hardeningTopic("harden our S/4HANA system")).toBe("sap");
+    expect(hardeningTopic("secure my sap btp subaccount")).toBe("btp");
+    expect(hardeningTopic("harden my sap system")).toBe("sap");
+    expect(hardeningTopic("harden my postgres server")).toBe("postgres");
+    expect(hardeningGuidePrompt("sap", "harden my sap system")).toContain("rsau/enable = 1");
+    expect(hardeningGuidePrompt("hana", "harden hana")).toContain("SAP Note 2493657");
+    expect(hardeningGuidePrompt("btp", "harden btp")).toContain("principal propagation");
+  });
+
+  it("masks quoted passwords that contain spaces or punctuation", () => {
+    const sql = maskSecrets(`CREATE USER bob PASSWORD "Secr3t,Pass" NO FORCE_FIRST_PASSWORD_CHANGE;`);
+    expect(sql).not.toContain("Secr3t,Pass");
+    expect(sql).toContain(`PASSWORD "Se****"`);
+    expect(maskSecrets(`password: "my secret pass"`)).toBe(`password: "my****"`);
+    expect(maskSecrets("IDENTIFIED BY 'a b;c'")).toBe("IDENTIFIED BY 'a ****'");
+    expect(maskSecrets("password=hunter22 user=bob")).toBe("password=hu**** user=bob");
+  });
+
+  it("stays fast on long hostile lines", () => {
+    const started = Date.now();
+    investigate(`ALTER SYSTEM ALTER CONFIGURATION SET global_auditing_state${" ".repeat(40_000)}x`, "audit.log");
+    investigate(`CREATE USER ${"a@".repeat(20_000)}`, "audit.log");
+    maskSecrets(`password="${"x".repeat(50_000)}`);
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  it("needs SAP content before it treats a file as an SAP profile or a HANA ini", () => {
+    const yaml = "server:\n  port: 8080\nlogging:\n  level: info\n";
+    expect(detectConfigType(yaml, "prd_app01_settings.yaml")).not.toBe("sap-profile");
+    expect(detectConfigType("[core]\ntheme = dark\n", "global.ini")).toBeNull();
+    expect(detectConfigType("rdisp/gui_auto_logout = 3600\n", "PRD_D00_sapapp1")).toBe("sap-profile");
+  });
+
+  it("treats a parameter missing from an instance profile as a hint, and from DEFAULT.PFL as a finding", () => {
+    const text = "SAPSYSTEMNAME = PRD\nINSTANCE_NAME = D00\nrdisp/gui_auto_logout = 3600\n";
+    const instance = hardeningReview(text, "PRD_D00_sapapp1")!.findings.find((f) => f.id === "sap-sal-off")!;
+    expect(instance.severity).toBe("low");
+    expect(instance.title).toContain("unless DEFAULT.PFL sets it");
+    expect(hardeningReview(text, "DEFAULT.PFL")!.findings.find((f) => f.id === "sap-sal-off")!.severity).toBe("high");
+  });
+});

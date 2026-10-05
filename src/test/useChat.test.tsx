@@ -231,3 +231,132 @@ describe("chat request routing", () => {
     expect(call).toHaveBeenCalledWith("index_document_chunks", expect.objectContaining({ source: expect.stringContaining("standup.m4a") }));
   });
 });
+
+describe("research lane routing", () => {
+  beforeEach(() => { call.mockReset(); });
+  const two = "[File: ovens.md]\nThe deck ovens run at 220 degrees for sourdough.\n\n[Document: proofing.pdf | Type: PDF | 1 pages]\nThe cold proof takes 12 hours at 4 degrees.";
+
+  it("answers a question over several attachments with a cited synthesis, a saved report and no RAG", async () => {
+    call.mockImplementation(async (command, args) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "query_ollama") return "Sourdough bakes at 220 degrees [S1.1] after a 12 hour cold proof [S2.1].\n\nOpen questions: rye is not covered.";
+      if (command === "create_text_file") {
+        const a = args as { title: string; ext: string; content: string };
+        expect(a.title).toBe("research-where-do-the-two-notes-differ");
+        expect(a.content).toContain("## Passages used");
+        return JSON.stringify({ path: "/tmp/research.md", filename: "research-where-do-the-two-notes-differ.md", kind: "md" });
+      }
+      return "[]";
+    });
+    const { result } = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("Where do the two notes differ?", undefined, two); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Researcher");
+    expect(last.attachment?.filename).toBe("research-where-do-the-two-notes-differ.md");
+    expect(last.content).toContain("Sources: **S1** ovens.md · **S2** proofing.pdf");
+    expect(last.content).toContain("🔎 Research · 2 sources · 1 of 1 factual sentence cites a passage");
+    expect(result.current.messages[result.current.messages.length - 2]!.content).toContain("📄 [2 sources attached]");
+    const sent = call.mock.calls.find(([command]) => command === "query_ollama")![1] as { prompt: string };
+    expect(sent.prompt).toContain("[S1.1] (from ovens.md)");
+    expect(sent.prompt).toContain("[S2.1] (from proofing.pdf)");
+    const cmds = call.mock.calls.map(([c]) => c);
+    expect(cmds).not.toContain("rag_query");
+    expect(cmds).not.toContain("refract_intent");
+    await waitFor(() => expect(call.mock.calls.filter(([c]) => c === "index_document_chunks")).toHaveLength(2));
+  });
+
+  it("researches the local library when asked to, and never indexes library hits again", async () => {
+    const hit = { id: "h1", label: "📄 knowledge-pack://demo/ovens.md [chunk 1/1]", content: "Source: knowledge-pack://demo/ovens.md\nChunk: 1/1\nChars: 0-40\n\nThe deck ovens run at 220 degrees.", node_type: "doc_chunk" };
+    call.mockImplementation(async (command, args) => {
+      if (command === "search_library_passages") {
+        expect(args).toEqual({ query: "how hot do the ovens run?", limit: 24 });
+        return JSON.stringify([hit]);
+      }
+      if (command === "check_ollama_status") return true;
+      if (command === "query_ollama") return "The ovens run at 220 degrees [S1.1].";
+      if (command === "create_text_file") return JSON.stringify({ path: "/tmp/r.md", filename: "r.md", kind: "md" });
+      return "[]";
+    });
+    const { result } = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("research: how hot do the ovens run?"); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Researcher");
+    expect(last.content).toContain("**S1** ovens.md (knowledge pack demo)");
+    const sent = call.mock.calls.find(([command]) => command === "query_ollama")![1] as { prompt: string };
+    expect(sent.prompt).toContain("S1: ovens.md (knowledge pack demo) (local library)");
+    expect(sent.prompt).toContain("Question: how hot do the ovens run?");
+    expect(call.mock.calls.some(([c]) => c === "index_document_chunks")).toBe(false);
+  });
+
+  it("answers normally when the library holds nothing on the question", async () => {
+    call.mockImplementation(async (command) => {
+      if (command === "refract_intent") return JSON.stringify({ response: "Photosynthesis turns light into sugar.", agent_used: "reasoner", context_nodes: [], edges_reinforced: [], anticipations: [], processing_time_ms: 1, npu_accelerated: false, intent: { raw: "q", intent_type: "question", entities: [], confidence: 1 } });
+      return "[]";
+    });
+    const { result } = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("Research how photosynthesis works"); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).not.toBe("Researcher");
+    expect(last.content).toContain("Photosynthesis turns light into sugar.");
+    expect(call.mock.calls.some(([c]) => c === "search_library_passages")).toBe(true);
+    expect(call.mock.calls.some(([c]) => c === "query_ollama")).toBe(false);
+  });
+
+  it("reviews several config files one by one instead of as one file", async () => {
+    const prompts: string[] = [];
+    call.mockImplementation(async (command, args) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "query_ollama") {
+        prompts.push((args as { prompt: string }).prompt);
+        return `Notes ${prompts.length}.`;
+      }
+      if (command === "create_text_file") {
+        expect((args as { title: string }).title).toBe("hardening-2-files");
+        return JSON.stringify({ path: "/tmp/h.md", filename: "hardening-2-files.md", kind: "md" });
+      }
+      return "[]";
+    });
+    const { result } = renderHook(() => useChat(options()));
+    const configs = "[File: web1_sshd_config]\nPermitRootLogin no\nPasswordAuthentication no\n\n[File: web2_sshd_config]\nPermitRootLogin yes\nPasswordAuthentication yes\n";
+    await act(async () => { await result.current.handleIntent("review these configs", undefined, configs); });
+    const last = result.current.messages[result.current.messages.length - 1]!;
+    expect(last.agent).toBe("Hardening Advisor");
+    expect(prompts).toHaveLength(2);
+    expect(last.content).toContain("### web1_sshd_config");
+    expect(last.content).toContain("### web2_sshd_config");
+    expect(last.content).toContain("🛡️ Hardening Review · 2 files");
+    expect(prompts[1]).toContain("PermitRootLogin");
+    expect(prompts.join("\n")).not.toContain("[File: web2_sshd_config]");
+  });
+
+  it("keeps a single spreadsheet in the data lane even when the question mentions citations", async () => {
+    call.mockImplementation(async (command) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "profile_table") return JSON.stringify({ name: "publications.csv", sheet: null, row_count: 2, column_count: 2, truncated: false, sample: [], columns: [] });
+      if (command === "query_ollama") return "Author A has the most citations.";
+      return "[]";
+    });
+    const { result } = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("Which author has the most citations?", undefined, "[File: publications.csv]\nauthor,citations\nA,3\nB,1\n"); });
+    expect(result.current.messages[result.current.messages.length - 1]!.agent).toBe("Data Analyst");
+  });
+
+  it("leaves 'research … online' to the web lane and logs to the security lane unless research is asked for", async () => {
+    call.mockImplementation(async (command) => {
+      if (command === "check_ollama_status") return true;
+      if (command === "query_ollama") return "Notes.";
+      if (command === "create_text_file") return JSON.stringify({ path: "/tmp/x.md", filename: "x.md", kind: "md" });
+      return "[]";
+    });
+    const { result } = renderHook(() => useChat(options()));
+    await act(async () => { await result.current.handleIntent("research online about sourdough ovens"); });
+    expect(result.current.messages[result.current.messages.length - 1]!.agent).toBe("Web Researcher");
+
+    const log = (host: string) => Array.from({ length: 12 }, (_, i) => `Oct  4 03:10:${String(i).padStart(2, "0")} ${host} sshd[1]: Failed password for root from 203.0.113.50 port 5${i} ssh2`).join("\n");
+    const logs = `[File: web01.log]\n${log("web01")}\n\n[File: web02.log]\n${log("web02")}`;
+    await act(async () => { await result.current.handleIntent("investigate these logs", undefined, logs); });
+    expect(result.current.messages[result.current.messages.length - 1]!.agent).toBe("Incident Investigator");
+    await act(async () => { await result.current.handleIntent("compare these files and cite the differences", undefined, logs); });
+    expect(result.current.messages[result.current.messages.length - 1]!.agent).toBe("Researcher");
+  });
+});

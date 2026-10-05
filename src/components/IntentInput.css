@@ -674,6 +674,22 @@
   content: "";
 }
 
+/* Several attached sources (research lane): compact rows */
+.doc-preview-list-multi .doc-preview {
+  padding: 6px 12px;
+  margin-bottom: 4px;
+}
+
+.doc-preview-list-multi .doc-preview-icon {
+  font-size: 18px;
+}
+
+.doc-preview-sources {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 2px 2px 8px;
+}
+
 /* ── Light theme overrides for documents ── */
 [data-theme="light"] .doc-preview {
   background: rgba(249, 115, 22, 0.04);

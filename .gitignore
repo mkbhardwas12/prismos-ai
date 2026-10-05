@@ -45,13 +45,17 @@ docs/screenshots/live/
 # Personal project knowledge can be ingested locally, but must not be committed.
 # ─────────────────────────────────────────────────────────────────────────────
 knowledge/
-# Public, reviewed reference pack only. Personal knowledge/ remains ignored.
+# Public, reviewed reference packs only. Personal knowledge/ remains ignored.
 !/resources/knowledge/
 /resources/knowledge/*
 !/resources/knowledge/reliable-local-assistant/
 /resources/knowledge/reliable-local-assistant/*
 !/resources/knowledge/reliable-local-assistant/*.md
 !/resources/knowledge/reliable-local-assistant/manifest.json
+!/resources/knowledge/sap-and-security/
+/resources/knowledge/sap-and-security/*
+!/resources/knowledge/sap-and-security/*.md
+!/resources/knowledge/sap-and-security/manifest.json
 PrismDocs/
 .prismos-private-terms
 

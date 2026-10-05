@@ -8,17 +8,21 @@
 //     MITRE ATT&CK (brute force, success-after-failure, new admins, encoded
 //     PowerShell, download cradles, persistence, log clearing, web attacks,
 //     reverse shells, credential dumping, lateral movement).
+//   • SAP: the NetWeaver Visual Composer exploit path and portal webshells,
+//     reads of SAP secure storage, Security Audit Log events, and SAP HANA /
+//     SQL audit entries (new users, reactivated SYSTEM, powerful grants,
+//     auditing or encryption switched off, backups deleted).
 //   • Harden a config: sshd_config, nginx, Dockerfile, docker-compose,
-//     Kubernetes, .env, package.json and GitHub Actions are checked line by
-//     line, each finding with a severity and the exact fix (and a fully
-//     patched sshd_config).
+//     Kubernetes, .env, package.json, GitHub Actions, SAP instance profiles
+//     and SAP HANA .ini files are checked line by line, each finding with a
+//     severity and the exact fix (and a fully patched sshd_config).
 //   • Harden a platform: a curated checklist grounds the model's plan.
 // Logs and configs never leave the machine, which is the point for incident
 // data. Defensive use only: findings, containment and hardening.
 
 export type SecurityMode = "investigate" | "harden";
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
-export type ConfigType = "sshd" | "nginx" | "dockerfile" | "compose" | "kubernetes" | "dotenv" | "npm" | "github-actions";
+export type ConfigType = "sshd" | "nginx" | "dockerfile" | "compose" | "kubernetes" | "dotenv" | "npm" | "github-actions" | "sap-profile" | "hana-ini";
 
 export interface AttackRef {
   id: string;
@@ -76,6 +80,8 @@ export const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low", 
 const SEVERITY_ICON: Record<Severity, string> = { critical: "🟥", high: "🟧", medium: "🟨", low: "🟦", info: "⬜" };
 
 // ─── MITRE ATT&CK techniques the detectors map to ────────────────────────────
+// Tactic names follow ATT&CK v19 (April 2026), which split Defense Evasion
+// into Stealth and Defense Impairment.
 
 const ATTACK: Record<string, AttackRef> = {
   bruteForce: { id: "T1110.001", name: "Brute Force: Password Guessing", tactic: "Credential Access" },
@@ -84,13 +90,18 @@ const ATTACK: Record<string, AttackRef> = {
   accountManipulation: { id: "T1098", name: "Account Manipulation", tactic: "Persistence / Privilege Escalation" },
   sudo: { id: "T1548.003", name: "Abuse Elevation Control: Sudo", tactic: "Privilege Escalation" },
   powershell: { id: "T1059.001", name: "Command and Scripting Interpreter: PowerShell", tactic: "Execution" },
-  obfuscation: { id: "T1027", name: "Obfuscated Files or Information", tactic: "Defense Evasion" },
+  obfuscation: { id: "T1027", name: "Obfuscated Files or Information", tactic: "Stealth" },
   toolTransfer: { id: "T1105", name: "Ingress Tool Transfer", tactic: "Command and Control" },
   unixShell: { id: "T1059.004", name: "Command and Scripting Interpreter: Unix Shell", tactic: "Execution" },
   scheduledTask: { id: "T1053", name: "Scheduled Task/Job", tactic: "Persistence / Execution" },
   service: { id: "T1543", name: "Create or Modify System Process", tactic: "Persistence" },
   runKeys: { id: "T1547.001", name: "Registry Run Keys / Startup Folder", tactic: "Persistence" },
-  indicatorRemoval: { id: "T1070", name: "Indicator Removal", tactic: "Defense Evasion" },
+  indicatorRemoval: { id: "T1070", name: "Indicator Removal", tactic: "Stealth" },
+  impairDefenses: { id: "T1685", name: "Disable or Modify Tools", tactic: "Defense Impairment" },
+  webShell: { id: "T1505.003", name: "Server Software Component: Web Shell", tactic: "Persistence" },
+  credsInFiles: { id: "T1552.001", name: "Unsecured Credentials: Credentials In Files", tactic: "Credential Access" },
+  inhibitRecovery: { id: "T1490", name: "Inhibit System Recovery", tactic: "Impact" },
+  dataRepos: { id: "T1213", name: "Data from Information Repositories", tactic: "Collection" },
   exploitPublic: { id: "T1190", name: "Exploit Public-Facing Application", tactic: "Initial Access" },
   activeScanning: { id: "T1595", name: "Active Scanning", tactic: "Reconnaissance" },
   credentialDump: { id: "T1003.001", name: "OS Credential Dumping: LSASS Memory", tactic: "Credential Access" },
@@ -162,6 +173,16 @@ export function detectConfigType(text: string, name = ""): ConfigType | null {
   if (/(^|\/)\.env(\.|$)/.test(n)) return "dotenv";
   if (/package\.json$/.test(n)) return "npm";
   const s = text.slice(0, 60_000);
+  const base = name.split(/[\\/]/).pop() ?? "";
+  const hanaSection = /^[ \t]*\[(auditing configuration|password policy|persistence|communication|authentication|system_replication)\][ \t]*$/im.test(s);
+  const hanaKey = /^[ \t]*(global_auditing_state|minimal_password_length|maximum_invalid_connect_attempts|log_mode|enable_auto_log_backup|basepath_\w+)[ \t]*=/im.test(s);
+  const sapParams = s.match(/^[ \t]*(login|rdisp|gw|ms|rsau|auth|icm|icf|snc|ssl|rfc|ucon|is|system|rec)\/[\w/.-]+[ \t]*=/gim)?.length ?? 0;
+  // A name alone is not enough: plenty of tools keep a global.ini, and
+  // "prd_app01_settings.yaml" looks like an SAP profile name.
+  if (/(^|\/)(global|indexserver|nameserver|xsengine|daemon)\.ini$/.test(n) && (hanaSection || hanaKey)) return "hana-ini";
+  if (/\.pfl$/i.test(base) || (/^[A-Z][A-Z0-9]{2}_[A-Z]+\d{2}_[\w.-]+$/.test(base) && sapParams >= 1)) return "sap-profile";
+  if (hanaSection) return "hana-ini";
+  if (sapParams >= 2 || (sapParams >= 1 && /^[ \t]*(SAPSYSTEMNAME|SAPGLOBALHOST|SAPSYSTEM|INSTANCE_NAME)[ \t]*=/m.test(s))) return "sap-profile";
   if (/^\s*(PermitRootLogin|PasswordAuthentication|ChallengeResponseAuthentication|KbdInteractiveAuthentication|PubkeyAuthentication|Subsystem\s+sftp)\b/im.test(s)) return "sshd";
   if (/^\s*FROM\s+\S+/im.test(s) && /^\s*(RUN|COPY|ADD|CMD|ENTRYPOINT|USER|WORKDIR)\b/im.test(s)) return "dockerfile";
   if (/^\s*apiVersion:\s*\S+/m.test(s) && /^\s*kind:\s*\S+/m.test(s)) return "kubernetes";
@@ -202,11 +223,26 @@ export function maskSecrets(s: string): string {
   for (const { re } of SECRET_PATTERNS) out = out.replace(re, (m) => (m.startsWith("-----") ? "-----BEGIN PRIVATE KEY----- [masked]" : `${m.slice(0, 4)}****`));
   // sudo logs carry `PWD=/home/user` (the working directory, not a password): a
   // PWD whose value is an absolute path stays readable.
-  return out.replace(
-    /((password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key)\s*[=:]\s*)(["']?)([^\s"']{3,})\3/gi,
-    (m: string, k: string, name: string, q: string, v: string) =>
-      name.toLowerCase() === "pwd" && /^[/~]/.test(v) ? m : `${k}${q}${v.slice(0, 2)}****${q}`,
+  // A quoted value may hold spaces and punctuation ("Secr3t, Pass"); a bare one ends at them.
+  const masked = (k: string, q: string | undefined, v: string) => (q ? `${k}${q}${v.slice(0, 2)}****${q}` : `${k}${v.slice(0, 2)}****`);
+  out = out.replace(
+    /((password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key)\s*[=:]\s*)(?:(["'])([^"'\n]{3,}?)\3|([^\s"']{3,}))/gi,
+    (m: string, k: string, name: string, q: string | undefined, quoted: string | undefined, bare: string | undefined) => {
+      const v = quoted ?? bare ?? "";
+      return name.toLowerCase() === "pwd" && /^[/~]/.test(v) ? m : masked(k, q, v);
+    },
   );
+  // SQL puts the password after a keyword, not an equals sign. Only these
+  // statement shapes, so "Failed password for root" stays readable:
+  // CREATE/ALTER USER u PASSWORD pw, IDENTIFIED BY 'pw', BACKUP PASSWORD pw.
+  const sqlSecret = (m: string, k: string, q: string | undefined, quoted: string | undefined, bare: string | undefined) => {
+    const v = quoted ?? bare ?? "";
+    return /^(LIFETIME|CHANGE|NULL)$/i.test(v) ? m : masked(k, q, v);
+  };
+  return out
+    .replace(/(\b(?:CREATE|ALTER)\s+(?:RESTRICTED\s+)?USER\s+["'`]?[\w$#.@-]+["'`]?\s+PASSWORD\s+)(?:(["'])([^"'\n]{3,}?)\2|([^\s"';,)]{3,}))/gi, sqlSecret)
+    .replace(/(\bIDENTIFIED\s+BY\s+)(?:(["'])([^"'\n]{3,}?)\2|([^\s"';,)]{3,}))/gi, sqlSecret)
+    .replace(/(\bBACKUP\s+PASSWORD\s+)(?:(["'])([^"'\n]{3,}?)\2|([^\s"';,)]{3,}))/gi, sqlSecret);
 }
 
 /** Secret-shaped strings in any text (names only, never the values). */
@@ -301,10 +337,35 @@ interface LineDetector {
   id: string;
   title: string;
   severity: Severity;
-  attack: AttackRef;
+  attack?: AttackRef;
   re: RegExp;
   detail: string;
 }
+
+/**
+ * SAP and SAP HANA evidence. Paths, file names and statements come from the
+ * 2025 Visual Composer incident reports (Onapsis, Unit 42, ReliaQuest,
+ * EclecticIQ, Rapid7), SAP's HANA SQL and audit documentation, and the
+ * published Security Audit Log message list. Each one needs both the
+ * identifier and its context on the line, to keep ordinary text out.
+ */
+const SAP_DETECTORS: LineDetector[] = [
+  { id: "sap-vc-uploader", title: "Request to SAP Visual Composer's metadata uploader", severity: "critical", attack: ATTACK.exploitPublic, re: /\/developmentserver\/metadatauploader\b/i, detail: "This is the path abused in CVE-2025-31324, exploited since early 2025 and fixed by SAP Note 3594142 (Note 3604119 fixes the related CVE-2025-42999). Check the response code, look for new .jsp files under irj/root, irj/work and irj/work/sync, and patch or disable Visual Composer." },
+  { id: "sap-irj-webshell", title: "Possible webshell in the SAP NetWeaver portal (irj)", severity: "critical", attack: ATTACK.webShell, re: /\/irj\/(?:[\w.-]+\/)*(?:helper|cache|shell|ran|usage|rrx|rrxx|rrxx1|rrr141|dyceorp|forwardsap|\.webhelper|404_error|\.h)\.jsp\b|\/irj\/[^\s"?]*\.jsp\?[^\s"]*\b(?:cmd|exec|command)=|servlet_jsp[/\\]irj[/\\](?:root|work)(?:[/\\]sync)?[/\\][^\s"'/\\]+\.(?:jsp|java|class)\b/i, detail: "A JSP name or location reported in the 2025 Visual Composer intrusions (for example helper.jsp or cache.jsp under irj/root). Compare the files with a clean system, check their timestamps, and treat the host as compromised until ruled out." },
+  { id: "sap-secstore", title: "SAP secure storage files read or copied", severity: "high", attack: ATTACK.credsInFiles, re: /\b(?:cat|cp|scp|tar|zip|base64|less|more|head|tail|strings|xxd|grep|curl|wget|nc)\b[^\n]{0,160}(?:SecStore\.(?:properties|key)\b|\/global\/security\/rsecssfs\b)/i, detail: "SecStore and rsecssfs hold the SAP system's keys and stored credentials. Reading them by hand was part of the 2025 NetWeaver intrusions. If this wasn't an administrator, rotate what they protect." },
+  { id: "db-new-user", title: "Database user created", severity: "high", attack: ATTACK.createAccount, re: /\bCREATE\s+(?:RESTRICTED\s+)?USER\s+["'`]?[\w$#.@-]+["'`]?(?:@[^\s@]+)?\s+(?:PASSWORD|WITH\s+IDENTITY|IDENTIFIED\s+(?:BY|WITH)|NO\s+FORCE_FIRST_PASSWORD_CHANGE)\b|;\s*CREATE USER\s*;/i, detail: "A database account was created (an SQL statement or a SAP HANA audit entry). Confirm it was a planned change." },
+  { id: "hana-system-activated", title: "SAP HANA SYSTEM user reactivated", severity: "high", attack: ATTACK.validAccounts, re: /\bALTER\s+USER\s+["']?SYSTEM["']?\s+ACTIVATE\s+USER\s+NOW\b/i, detail: "SAP recommends keeping SYSTEM deactivated once named administrators exist (SAP Note 2493657). Find out who reactivated it and why." },
+  { id: "db-powerful-grant", title: "Powerful database privilege granted", severity: "high", attack: ATTACK.accountManipulation, re: /\bGRANT\s+(?:[^;\n]*?,\s*)?(?:USER ADMIN|ROLE ADMIN|DATA ADMIN|INIFILE ADMIN|AUDIT ADMIN|AUDIT OPERATOR|DATABASE ADMIN|TRUST ADMIN|CREDENTIAL ADMIN)\b[^;\n]*?\bTO\b/i, detail: "An administration privilege (users, roles, all data, configuration or auditing) was granted. Check the grantee and whether WITH ADMIN OPTION was used." },
+  { id: "db-audit-weakened", title: "Database auditing turned off, disabled or cleared", severity: "high", attack: ATTACK.impairDefenses, re: /global_auditing_state['"]?\s*(?:\)\s*)?=\s*['"]?false\b|\bALTER\s+AUDIT\s+POLICY\s+["']?[^"'\s]+["']?\s+DISABLE\b|\bDROP\s+AUDIT\s+POLICY\b|\bALTER\s+SYSTEM\s+CLEAR\s+AUDIT\s+LOG\b/i, detail: "Auditing was switched off, an audit policy disabled or dropped, or the audit log cleared. SAP HANA always audits these actions, so find who did it." },
+  { id: "db-encryption-off", title: "Database encryption turned off", severity: "high", attack: ATTACK.impairDefenses, re: /\bALTER\s+SYSTEM\s+(?:PERSISTENCE|LOG)\s+ENCRYPTION\s+OFF\b/i, detail: "Data volume or redo log encryption was switched off." },
+  { id: "db-backup-delete", title: "Backups deleted from the SAP HANA backup catalog", severity: "medium", attack: ATTACK.inhibitRecovery, re: /\bBACKUP\s+CATALOG\s+DELETE\b/i, detail: "Routine housekeeping uses this too, but WITH FILE also removes the backups themselves. Check who ran it and that a recent full backup still exists." },
+  { id: "sap-sal-user-created", title: "SAP user created (Security Audit Log AU7)", severity: "high", attack: ATTACK.createAccount, re: /\bAU7\b[^\n]{0,160}\bcreated\b/i, detail: "A user master record was created. Confirm it was a planned change, especially if it got SAP_ALL or similar profiles." },
+  { id: "sap-sal-auth-changed", title: "SAP user's authorizations changed (AUB)", severity: "high", attack: ATTACK.accountManipulation, re: /\bAUB\b[^\n]{0,160}\bauthori[sz]ations?\b/i, detail: "Authorizations of a user were changed. Check which profiles or roles were added." },
+  { id: "sap-sal-audit-changed", title: "SAP audit configuration changed (AUE)", severity: "high", attack: ATTACK.impairDefenses, re: /\bAUE\b[^\n]{0,160}\baudit\b|\bAudit configuration changed\b/i, detail: "Someone changed what the Security Audit Log records. Compare the filters with your baseline." },
+  { id: "sap-sal-debug", title: "ABAP debugger used to change values, or C debugging switched on (CUL/CUK)", severity: "high", re: /\bCUL\b[^\n]{0,160}\b(?:field|debug)|\bCUK\b[^\n]{0,160}\bdebug/i, detail: "Changing values in the debugger bypasses application checks. In production this should only happen under a documented emergency." },
+  { id: "sap-sal-user-locked", title: "SAP user locked after failed passwords (AUM)", severity: "medium", attack: ATTACK.bruteForce, re: /\bAUM\b[^\n]{0,160}\block/i, detail: "Repeated wrong passwords locked a user. Several of these close together suggest password guessing." },
+  { id: "sap-sal-table-access", title: "Generic table access (DU9 / CUZ)", severity: "low", attack: ATTACK.dataRepos, re: /\b(?:DU9|CUZ)\b[^\n]{0,160}\btables?\b/i, detail: "Tables were read through generic access such as SE16N or RFC. Check that the user and tables fit their job." },
+];
 
 const LINE_DETECTORS: LineDetector[] = [
   { id: "new-account", title: "New account created", severity: "high", attack: ATTACK.createAccount, re: /\b(useradd|adduser)\b|new user: name=|EventID[=: ]+4720\b|A user account was created/i, detail: "An account was created. Confirm it was a planned change." },
@@ -386,6 +447,9 @@ export function investigate(text: string, source: string, yearHint = new Date().
     if (okIp && (failedByIp.get(okIp)?.n ?? 0) >= 5) successAfterFail.push(line);
 
     for (const d of LINE_DETECTORS) {
+      if (d.re.test(line)) add(d.id, { id: d.id, title: d.title, severity: d.severity, detail: d.detail, attack: d.attack }, line);
+    }
+    for (const d of SAP_DETECTORS) {
       if (d.re.test(line)) add(d.id, { id: d.id, title: d.title, severity: d.severity, detail: d.detail, attack: d.attack }, line);
     }
 
@@ -491,7 +555,7 @@ export function decodePowerShell(b64: string): string | null {
 
 // ─── Hardening: configs ───────────────────────────────────────────────────────
 
-type Check = (text: string) => SecurityFinding[];
+type Check = (text: string, source?: string) => SecurityFinding[];
 
 const finding = (id: string, title: string, severity: Severity, detail: string, fix?: string, evidence: string[] = []): SecurityFinding => ({ id, title, severity, detail, fix, evidence: evidence.map(evidenceLine) });
 
@@ -716,6 +780,143 @@ const checkGithubActions: Check = (text) => {
   return out;
 };
 
+/** SAP profile parameters (`name = value`); the last occurrence wins, as in SAP. */
+function sapProfileParams(text: string): Map<string, { value: string; line: string }> {
+  const map = new Map<string, { value: string; line: string }>();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const m = line.match(/^([A-Za-z][\w/.$-]*)\s*=\s*(.*?)\s*$/);
+    if (m) map.set(m[1].toLowerCase(), { value: m[2], line });
+  }
+  return map;
+}
+
+const num = (v: string | undefined) => (v !== undefined && /^-?\d+$/.test(v.trim()) ? Number(v.trim()) : NaN);
+
+/** rdisp/gui_auto_logout style durations: seconds, or a number with H/M/S. */
+function seconds(v: string | undefined): number {
+  const m = v?.trim().match(/^(\d+)\s*([hms])?$/i);
+  if (!m) return NaN;
+  const n = Number(m[1]);
+  const unit = (m[2] ?? "s").toLowerCase();
+  return unit === "h" ? n * 3600 : unit === "m" ? n * 60 : n;
+}
+
+interface ParamRule {
+  key: string;
+  bad: (v: string) => boolean;
+  id: string;
+  title: string;
+  severity: Severity;
+  detail: (v: string) => string;
+  fix: string | ((v: string) => string);
+  /** Flag the parameter when it isn't set, because its default is the weak value. */
+  missing?: { severity: Severity; detail: string };
+}
+
+// Values follow SAP's EarlyWatch Alert security checks and the SAP Security
+// Baseline Template as published; the knowledge pack cites both.
+const SAP_PROFILE_RULES: ParamRule[] = [
+  { key: "login/min_password_lng", bad: (v) => num(v) < 8, id: "sap-pw-length", title: "Short passwords allowed", severity: "high", detail: (v) => `login/min_password_lng is ${v}. SAP's security baseline asks for at least 8.`, fix: "login/min_password_lng = 8", missing: { severity: "medium", detail: "login/min_password_lng is not set, so the default of 6 applies." } },
+  { key: "login/no_automatic_user_sapstar", bad: (v) => v.trim() === "0", id: "sap-sapstar", title: "SAP* can log on with its built-in password", severity: "high", detail: () => "With 0, SAP* logs on with its well-known built-in password whenever its user record is deleted. SAP's EarlyWatch Alert flags this.", fix: "login/no_automatic_user_sapstar = 1" },
+  { key: "login/fails_to_user_lock", bad: (v) => num(v) > 5, id: "sap-lock-attempts", title: "Many wrong passwords before a lock", severity: "medium", detail: (v) => `Users lock only after ${v} failed logons.`, fix: "login/fails_to_user_lock = 5" },
+  { key: "login/failed_user_auto_unlock", bad: (v) => v.trim() === "1", id: "sap-auto-unlock", title: "Locked users unlock themselves at midnight", severity: "medium", detail: () => "Users locked by wrong passwords are unlocked every night, so password guessing can resume daily.", fix: "login/failed_user_auto_unlock = 0" },
+  { key: "login/password_downwards_compatibility", bad: (v) => num(v) > 0, id: "sap-pw-legacy", title: "Weak legacy password hashes kept", severity: "medium", detail: (v) => `login/password_downwards_compatibility is ${v}, so old, easily cracked hash formats are still created or accepted.`, fix: "login/password_downwards_compatibility = 0" },
+  { key: "login/password_hash_algorithm", bad: (v) => !/issha-512/i.test(v), id: "sap-pw-hash", title: "Password hashes weaker than iSSHA-512", severity: "medium", detail: () => "Stored password hashes don't use iSSHA-512, which makes offline cracking easier.", fix: "login/password_hash_algorithm = encoding=RFC2307, algorithm=iSSHA-512, iterations=15000, saltsize=256" },
+  { key: "login/show_detailed_errors", bad: (v) => v.trim() === "1", id: "sap-logon-errors", title: "Logon errors reveal which users exist", severity: "low", detail: () => "Detailed logon errors tell an attacker whether a user name exists.", fix: "login/show_detailed_errors = 0" },
+  { key: "login/disable_cpic", bad: (v) => v.trim() === "0", id: "sap-cpic", title: "Incoming CPIC logons allowed", severity: "low", detail: () => "Old-style CPIC logons are accepted. Check legacy interfaces before switching them off.", fix: "login/disable_cpic = 1" },
+  { key: "rdisp/gui_auto_logout", bad: (v) => seconds(v) === 0 || seconds(v) > 7200, id: "sap-gui-timeout", title: "SAP GUI sessions stay open too long", severity: "low", detail: (v) => (seconds(v) === 0 ? "rdisp/gui_auto_logout is 0, so idle SAP GUI sessions never end." : `Idle SAP GUI sessions end only after ${v}; the baseline asks for 2 hours or less.`), fix: "rdisp/gui_auto_logout = 3600" },
+  { key: "auth/rfc_authority_check", bad: (v) => v.trim() === "0", id: "sap-rfc-auth", title: "RFC calls skip the authorization check", severity: "high", detail: () => "Remote function calls run without checking S_RFC, so any user can call any remote-enabled function module.", fix: "auth/rfc_authority_check = 1" },
+  { key: "auth/object_disabling_active", bad: (v) => /^y/i.test(v.trim()), id: "sap-auth-disabling", title: "Authorization checks can be switched off system-wide", severity: "medium", detail: () => "Authorization objects can be deactivated for the whole system.", fix: "auth/object_disabling_active = N" },
+  { key: "rfc/callback_security_method", bad: (v) => num(v) < 3, id: "sap-rfc-callback", title: "RFC callbacks not limited to an allow-list", severity: "medium", detail: (v) => `rfc/callback_security_method is ${v}; a called system can call back into this one beyond what you allowed.`, fix: "rfc/callback_security_method = 3" },
+  { key: "rfc/selftrust", bad: (v) => v.trim() === "1", id: "sap-rfc-selftrust", title: "Implicit trusted RFC to the same system", severity: "medium", detail: () => "Every RFC from this system to itself is trusted without a logon.", fix: "rfc/selftrust = 0" },
+  { key: "gw/acl_mode", bad: (v) => v.trim() === "0", id: "sap-gw-acl", title: "RFC gateway accepts any external program", severity: "high", detail: () => "With gw/acl_mode 0 and no reginfo/secinfo files, anyone who can reach the gateway can register or start external RFC programs. SAP's EarlyWatch Alert flags this.", fix: "gw/acl_mode = 1   # and maintain reginfo / secinfo in SMGW" },
+  { key: "gw/sim_mode", bad: (v) => v.trim() === "1", id: "sap-gw-sim", title: "Gateway ACLs only log, they don't block", severity: "high", detail: () => "Simulation mode is on, so reginfo/secinfo violations are logged but allowed.", fix: "gw/sim_mode = 0" },
+  { key: "gw/reg_no_conn_info", bad: (v) => !Number.isNaN(num(v)) && (num(v) & 15) !== 15, id: "sap-gw-bits", title: "Gateway security bits missing", severity: "medium", detail: (v) => `gw/reg_no_conn_info is ${v}; bits 1 to 4 should all be set to close known gateway bypasses. SAP's EarlyWatch Alert checks these bits.`, fix: (v) => `gw/reg_no_conn_info = ${num(v) | 15}` },
+  { key: "gw/monitor", bad: (v) => v.trim() === "2", id: "sap-gw-monitor", title: "Gateway can be administered remotely", severity: "medium", detail: () => "gw/monitor 2 allows remote gateway monitor commands.", fix: "gw/monitor = 1" },
+  { key: "ms/monitor", bad: (v) => v.trim() === "1", id: "sap-ms-monitor", title: "Message server accepts external administration", severity: "medium", detail: () => "External programs can monitor and administer the message server.", fix: "ms/monitor = 0" },
+  { key: "ms/admin_port", bad: (v) => num(v) > 0, id: "sap-ms-admin-port", title: "Message server admin port open", severity: "medium", detail: (v) => `An administration port (${v}) is open on the message server.`, fix: "ms/admin_port = 0   # or remove the line" },
+  { key: "rsau/enable", bad: (v) => v.trim() === "0", id: "sap-sal-off", title: "Security Audit Log is off", severity: "high", detail: () => "rsau/enable is 0, so logons, user changes and RFC calls leave no audit trail.", fix: "rsau/enable = 1   # then define filters for all clients in RSAU_CONFIG", missing: { severity: "high", detail: "rsau/enable is not set and the Security Audit Log is off by default, so logons, user changes and RFC calls leave no audit trail." } },
+  { key: "system/secure_communication", bad: (v) => /^off$/i.test(v.trim()), id: "sap-secure-comm", title: "Internal system communication not encrypted", severity: "medium", detail: () => "TLS is off for internal communication between SAP components.", fix: "system/secure_communication = ON" },
+  { key: "snc/enable", bad: (v) => v.trim() === "0", id: "sap-snc", title: "SNC encryption not enabled", severity: "low", detail: () => "SAP GUI and RFC traffic, including passwords, crosses the network unencrypted.", fix: "snc/enable = 1   # needs an SNC library and certificates", missing: { severity: "low", detail: "snc/enable is not set, so SAP GUI and RFC traffic, including passwords, crosses the network unencrypted." } },
+  { key: "is/http/show_detailed_errors", bad: (v) => /^true$/i.test(v.trim()), id: "sap-http-errors", title: "Detailed HTTP error pages", severity: "low", detail: () => "Error pages reveal internal details to anyone on the network.", fix: "is/HTTP/show_detailed_errors = FALSE" },
+  { key: "icf/reject_expired_passwd", bad: (v) => v.trim() === "0", id: "sap-icf-expired", title: "HTTP logons work with expired passwords", severity: "low", detail: () => "Web (ICF) logons are accepted with initial or expired passwords.", fix: "icf/reject_expired_passwd = 1" },
+  { key: "ucon/rfc/active", bad: (v) => v.trim() === "0", id: "sap-ucon", title: "RFC calls not limited by UCON", severity: "low", detail: () => "Remote-enabled function modules aren't restricted to an allow-list.", fix: "ucon/rfc/active = 1   # run the logging and evaluation phases in UCONCOCKPIT first" },
+];
+
+const checkSapProfile: Check = (text, source = "") => {
+  const p = sapProfileParams(text);
+  const out: SecurityFinding[] = [];
+  // Instance profiles usually leave system-wide settings to DEFAULT.PFL, so a
+  // parameter missing from another profile is only a hint to check there.
+  const isDefaultProfile = /(^|[\\/])default\.pfl$/i.test(source.trim());
+  for (const r of SAP_PROFILE_RULES) {
+    const v = p.get(r.key);
+    const fix = (value: string) => (typeof r.fix === "function" ? r.fix(value) : r.fix);
+    if (v && r.bad(v.value)) out.push(finding(r.id, r.title, r.severity, r.detail(v.value), fix(v.value), [v.line]));
+    else if (!v && r.missing) {
+      out.push(isDefaultProfile
+        ? finding(r.id, r.title, r.missing.severity, r.missing.detail, fix(""))
+        : finding(r.id, `${r.title} (unless DEFAULT.PFL sets it)`, "low", `${r.key} is not set in this file; check DEFAULT.PFL or RZ11. If it is not set anywhere: ${r.missing.detail}`, fix("")));
+    }
+  }
+  // Integrity protection and peer addresses matter once the audit log is on.
+  const salOn = p.get("rsau/enable")?.value.trim() === "1";
+  if (salOn && p.get("rsau/integrity")?.value.trim() !== "1") out.push(finding("sap-sal-integrity", "Audit files not integrity-protected", "low", "Without rsau/integrity, audit files can be changed without detection. Create the HMAC key in RSAU_ADMIN.", "rsau/integrity = 1"));
+  if (salOn && p.get("rsau/log_peer_address")?.value.trim() !== "1") out.push(finding("sap-sal-peer", "Audit entries miss the client IP address", "low", "Entries record the terminal name, which is easy to fake, instead of the IP address.", "rsau/log_peer_address = 1"));
+  return out;
+};
+
+/** INI sections and keys, lowercased; the last value wins. */
+function iniSections(text: string): Map<string, Map<string, { value: string; line: string }>> {
+  const sections = new Map<string, Map<string, { value: string; line: string }>>();
+  let current = "";
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#") || line.startsWith(";")) continue;
+    const head = line.match(/^\[([^\]]+)\]$/);
+    if (head) {
+      current = head[1].trim().toLowerCase();
+      continue;
+    }
+    const kv = line.match(/^([^=]+?)\s*=\s*(.*)$/);
+    if (!kv) continue;
+    if (!sections.has(current)) sections.set(current, new Map());
+    sections.get(current)!.set(kv[1].trim().toLowerCase(), { value: kv[2].trim(), line });
+  }
+  return sections;
+}
+
+const checkHanaIni: Check = (text) => {
+  const s = iniSections(text);
+  const get = (section: string, key: string) => s.get(section)?.get(key);
+  const out: SecurityFinding[] = [];
+  const audit = get("auditing configuration", "global_auditing_state");
+  if (audit && /^false$/i.test(audit.value)) out.push(finding("hana-audit-off", "Auditing is off", "high", "global_auditing_state is false, so logons, grants and configuration changes leave no audit trail. Turn it on and enable SAP's recommended audit policies (SAP Note 3016478).", "[auditing configuration]\nglobal_auditing_state = true", [audit.line]));
+  for (const [key, v] of s.get("auditing configuration") ?? []) {
+    if (/_audit_trail_type$/.test(key) && /csvtextfile/i.test(v.value)) out.push(finding(`hana-csv-trail-${key}`, "CSV audit trail in use", "medium", `${key} writes audit entries to a CSV text file, which SAP describes as for testing only, not for production.`, `${key} = CSTABLE   # or SYSLOGPROTOCOL`, [v.line]));
+  }
+  const pw = (key: string) => get("password policy", key);
+  const len = pw("minimal_password_length");
+  if (len && num(len.value) < 8) out.push(finding("hana-pw-length", "Short passwords allowed", "high", `minimal_password_length is ${len.value}, below the default of 8.`, "minimal_password_length = 8", [len.line]));
+  const attempts = pw("maximum_invalid_connect_attempts");
+  if (attempts && num(attempts.value) > 6) out.push(finding("hana-lock-attempts", "Many wrong passwords before a lock", "medium", `Users lock only after ${attempts.value} failed logons; the default is 6.`, "maximum_invalid_connect_attempts = 6", [attempts.line]));
+  const lockTime = pw("password_lock_time");
+  if (lockTime && num(lockTime.value) === 0) out.push(finding("hana-lock-time", "Locked users unlock immediately", "medium", "password_lock_time 0 unlocks a user straight away, so failed logons never slow an attacker down.", "password_lock_time = 1440", [lockTime.line]));
+  const first = pw("force_first_password_change");
+  if (first && /^false$/i.test(first.value)) out.push(finding("hana-first-change", "Initial passwords never have to change", "medium", "Users can keep the password an administrator set for them.", "force_first_password_change = true", [first.line]));
+  const history = pw("last_used_passwords");
+  if (history && num(history.value) < 5) out.push(finding("hana-pw-history", "Old passwords can be reused soon", "low", `Only the last ${history.value} passwords are remembered; the default is 5.`, "last_used_passwords = 5", [history.line]));
+  const systemLock = pw("password_lock_for_system_user");
+  if (systemLock && /^false$/i.test(systemLock.value)) out.push(finding("hana-system-lock", "SYSTEM can never be locked", "medium", "Failed logons never lock the SYSTEM superuser, so it can be guessed at indefinitely. Deactivate SYSTEM once named administrators exist.", "password_lock_for_system_user = true", [systemLock.line]));
+  const logMode = get("persistence", "log_mode");
+  if (logMode && /^overwrite$/i.test(logMode.value)) out.push(finding("hana-log-overwrite", "No point-in-time recovery (log_mode overwrite)", "high", "Log segments are overwritten instead of backed up. SAP documents overwrite mode as not for production.", "log_mode = normal   # then take a full data backup", [logMode.line]));
+  const autoLog = get("persistence", "enable_auto_log_backup");
+  if (autoLog && /^(no|false)$/i.test(autoLog.value)) out.push(finding("hana-log-backup-off", "Automatic log backups are off", "high", "Without log backups you can only restore to the last full backup.", "enable_auto_log_backup = yes", [autoLog.line]));
+  return out;
+};
+
 const CHECKS: Record<ConfigType, Check> = {
   sshd: checkSshd,
   nginx: checkNginx,
@@ -725,6 +926,8 @@ const CHECKS: Record<ConfigType, Check> = {
   dotenv: checkDotenv,
   npm: checkNpm,
   "github-actions": checkGithubActions,
+  "sap-profile": checkSapProfile,
+  "hana-ini": checkHanaIni,
 };
 
 export const CONFIG_LABEL: Record<ConfigType, string> = {
@@ -736,13 +939,15 @@ export const CONFIG_LABEL: Record<ConfigType, string> = {
   dotenv: ".env file",
   npm: "package.json",
   "github-actions": "GitHub Actions workflow",
+  "sap-profile": "SAP instance profile",
+  "hana-ini": "SAP HANA configuration (.ini)",
 };
 
 /** Check one config. Secrets anywhere in it are always a finding. */
 export function hardeningReview(text: string, source: string, type?: ConfigType | null): HardeningReport | null {
   const configType = type ?? detectConfigType(text, source);
   if (!configType) return null;
-  const findings = CHECKS[configType](text);
+  const findings = CHECKS[configType](text, source);
   if (configType !== "dotenv") {
     const kinds = findSecrets(text);
     if (kinds.length) findings.unshift(finding("secrets", `Credentials in the file (${kinds.join(", ")})`, "critical", "Rotate them and move them to a secret store; anyone with this file has them.", "Replace with a reference (env var, secret manager), then rotate the old values."));
@@ -755,6 +960,9 @@ export function hardeningReview(text: string, source: string, type?: ConfigType 
 
 // Most specific first: "harden my postgres server" is about postgres, not the server.
 const TOPIC_MATCH: Array<[string, RegExp]> = [
+  ["hana", /(?<!\bs\/?4\s?)\bhana\b/],
+  ["btp", /\bbtp\b|business technology platform|cloud connector|\bsap build\b|integration suite/],
+  ["sap", /\bsap\b|\bs\/?4\s?hana\b|\bnetweaver\b|\babap\b|\bsaprouter\b|web dispatcher/],
   ["ssh", /\bssh\b|sshd/],
   ["nginx", /\bnginx\b/],
   ["apache", /\bapache|httpd\b/],
@@ -779,6 +987,9 @@ const TOPIC_MATCH: Array<[string, RegExp]> = [
 
 /** What a seasoned hardening checklist covers for each platform; the model expands it into steps. */
 export const HARDENING_CHECKLISTS: Record<string, string[]> = {
+  sap: ["apply SAP Security Notes every Patch Day (second Tuesday), Critical and HotNews first; kernel and Web Dispatcher too", "Security Audit Log on (rsau/enable = 1) with filters for all clients, integrity protection and client IPs", "RFC gateway: gw/acl_mode = 1, maintained reginfo and secinfo, gw/sim_mode = 0, gw/reg_no_conn_info bits 1-4", "no default passwords for SAP*, DDIC, SAPCPIC, EARLYWATCH and TMSADM (report RSUSR003); login/no_automatic_user_sapstar = 1", "passwords: login/min_password_lng 8 or more, iSSHA-512 hashes, login/fails_to_user_lock 5 or less, no downwards compatibility", "least privilege: few SAP_ALL and debug/replace users, S_RFC scoped, UCON for remote-enabled function modules", "encryption: SNC for SAP GUI and RFC, TLS for HTTP, message server ACL and no external monitor", "Web Dispatcher in a DMZ, admin UI never on the internet, only needed paths exposed, unused ICF services off", "Java systems: Visual Composer patched or disabled (SAP Notes 3594142 and 2501341), P4 ports reachable only from trusted hosts"],
+  hana: ["deactivate SYSTEM once named administrators exist (SAP Note 2493657)", "auditing on: global_auditing_state = true with SAP's recommended policies (SAP Note 3016478), no CSV audit trail in production", "password policy: minimal_password_length 8 or more, lock after failed logons, force first password change", "data volume, redo log and backup encryption on; back up the root keys and keep the backup password safe", "log_mode = normal with automatic log backups, and a restore you have tested", "few holders of USER ADMIN, ROLE ADMIN, DATA ADMIN, INIFILE ADMIN and AUDIT OPERATOR", "TLS for SQL clients; stay on a maintained SPS (07 or 08) at the latest revision"],
+  btp: ["a custom SAP Cloud Identity Services tenant for platform and business users, MFA for administrators", "few global account administrators; know the 'Add Me as Admin' emergency path", "audit log: download and archive it regularly, send it to your SIEM through the Audit Log APIs, and check the retention period of your plan", "destinations: no passwords in production; OAuth or SAML-based flows, client certificates (mTLS) or principal propagation", "Cloud Connector on a supported version, only the paths you need exposed, HTTPS, LDAPS and SNC, audit logging on", "keep @sap/approuter and CAP packages patched; pin and audit npm dependencies after SAP Note 3747787"],
   ssh: ["keys only: PasswordAuthentication no, PermitRootLogin no", "AllowGroups for the people who need SSH", "fail2ban or sshguard on the auth log", "modern Ciphers/MACs/KexAlgorithms", "MaxAuthTries 3, LoginGraceTime 30, idle timeouts", "verify with: sshd -t, then ssh -v from a second session before closing the first"],
   linux: ["automatic security updates (unattended-upgrades / dnf-automatic)", "firewall default deny inbound (ufw / firewalld), only needed ports", "SSH keys only, no root login, fail2ban", "remove unused packages and services (ss -tulpn)", "sudo with named users, no shared accounts", "auditd or journald persistent logs shipped off the box", "file integrity (AIDE) and a backup you have restored once", "sysctl network hardening (rp_filter, no ICMP redirects, syncookies)"],
   nginx: ["TLS 1.2/1.3 only, modern ciphers, HSTS", "server_tokens off", "security headers: CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy", "deny dotfiles, autoindex off", "rate limits on login and API routes", "run workers as an unprivileged user, keep nginx patched"],

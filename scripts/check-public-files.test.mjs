@@ -33,6 +33,17 @@ test("permits only direct safe filenames in the reviewed public knowledge pack",
   for (const filename of ["manifest.json", "reasoning.md", "artifact-quality.md", "model-capabilities.md"]) {
     assert.equal(privatePathReason(prefix + filename), null, filename);
   }
+  const sapPrefix = "resources/knowledge/sap-and-security/";
+  for (const filename of ["manifest.json", "sap-hana-security.md", "sap-threats-2025-2026.md", "about-this-pack.md"]) {
+    assert.equal(privatePathReason(sapPrefix + filename), null, filename);
+  }
+  for (const filename of [
+    "resources/knowledge/sap-and-security-copy/sap-hana-security.md", "resources/knowledge/sap-and-security/nested/notes.md",
+    sapPrefix + "Private.md", sapPrefix + "notes.txt", sapPrefix + "CLAUDE.md", sapPrefix + "papers.prismos",
+    "resources/knowledge/sap/sap-hana-security.md", "resources/knowledge/my-papers/draft.md",
+  ]) {
+    assert.ok(privatePathReason(filename), filename);
+  }
   for (const filename of [
     "knowledge/reasoning.md", "resources/knowledge/personal/reasoning.md",
     "resources/knowledge/reliable-local-assistant-copy/reasoning.md",

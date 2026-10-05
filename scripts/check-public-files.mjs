@@ -13,9 +13,10 @@ export function privatePathReason(filename) {
   if ((leaf === ".env" || leaf.startsWith(".env.")) && !SAFE_ENV_EXAMPLES.has(leaf)) {
     return "environment configuration (only reviewed placeholder examples are public)";
   }
-  // One reviewed, public starter pack ships with the app. This is deliberately
-  // not a general exception for resources/knowledge or nested/user-added packs.
-  const reviewedBundledPack = /^resources\/knowledge\/reliable-local-assistant\/(?:[a-z0-9][a-z0-9_-]*\.md|manifest\.json)$/.test(normalized);
+  // Two reviewed, public packs ship in the repository: the starter pack and the
+  // cited SAP and security reference pack. This is deliberately not a general
+  // exception for resources/knowledge or nested/user-added packs.
+  const reviewedBundledPack = /^resources\/knowledge\/(?:reliable-local-assistant|sap-and-security)\/(?:[a-z0-9][a-z0-9_-]*\.md|manifest\.json)$/.test(normalized);
   if (!reviewedBundledPack && parts.some((part) => ["knowledge", "prismdocs", ".claude", "com.prismos.app", "private", "backups"].includes(part))) {
     return "private knowledge, app data, or backup directory";
   }

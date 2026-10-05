@@ -1,0 +1,61 @@
+{
+  "format": "prismos-knowledge-pack-v1",
+  "pack_id": "sap-and-security",
+  "documents": [
+    {
+      "file": "about-this-pack.md",
+      "reviewed": true,
+      "sha256": "0a68fdd4b3670c1bfa59e350136288698f907e35daaced2e66d1435d2b8bc369"
+    },
+    {
+      "file": "prismos-sap-checks.md",
+      "reviewed": true,
+      "sha256": "9b87043a0df66f91b3b4ea87c055ffc8803d6a5ec4118e72a0b8481fe3732bdf"
+    },
+    {
+      "file": "sap-basis-landscape.md",
+      "reviewed": true,
+      "sha256": "811c515f1121550c277ddc5b3ecdaba3e6388a8ba1fe6046c4b2f8a91138f0bf"
+    },
+    {
+      "file": "sap-basis-releases-2026.md",
+      "reviewed": true,
+      "sha256": "89252d6dd63ffa7feab052bd63619f3b48cfa4fd3ca2230f0447ebfe5e48a7ea"
+    },
+    {
+      "file": "sap-basis-security.md",
+      "reviewed": true,
+      "sha256": "f85db9af8a4ca9d6158994d63a090595e4d4c54ab3582b2e2f9f71dd21e6dfff"
+    },
+    {
+      "file": "sap-btp-2026.md",
+      "reviewed": true,
+      "sha256": "6a73cc9aa406ced87a6609336c527d169ef38d887be93b586a19a32ac1a3ee34"
+    },
+    {
+      "file": "sap-btp-security.md",
+      "reviewed": true,
+      "sha256": "225ca363fa11b76927d52d06c2d25c50d92c74cea9a07c1c7ba20bee830877ec"
+    },
+    {
+      "file": "sap-hana-2026.md",
+      "reviewed": true,
+      "sha256": "65de9d75e30a03ea1c3fa5b8fff90a852bebb81edd584fc06858309ac9748965"
+    },
+    {
+      "file": "sap-hana-security.md",
+      "reviewed": true,
+      "sha256": "fe3646dfd7d56cec6e9f3fe902a7bc5a0615223f75549e8f57e578ceb5fc2a25"
+    },
+    {
+      "file": "sap-threats-2025-2026.md",
+      "reviewed": true,
+      "sha256": "7e93f77378316b2d56d5dcf9cb5acb15d025f9c4d16c85ae28651b553713255d"
+    },
+    {
+      "file": "security-landscape-2026.md",
+      "reviewed": true,
+      "sha256": "00f12b9e8019bf468334395128c221fee1ec130e312a16aa489de58eec616b30"
+    }
+  ]
+}

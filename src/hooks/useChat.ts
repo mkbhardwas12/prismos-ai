@@ -5,8 +5,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, Message, RefractiveResult, RefractionAlternative, CollaborationSummary, DebateSummary, IntentTransparency, ReviewRequest } from "../types";
 import { detectAppRequest, detectDocRequest, detectFileRequest, generateAppProject, generateDocument, generateTextFile } from "../lib/docGen";
 import { detectSceneRequest, generateScene } from "../lib/sceneGen";
-import { detectSecurityRequest, genericSecurityPrompt, hardeningGuidePrompt, hardeningReview, hardeningTopic, investigate, renderSecurityMarkdown, reportSlug, securityPrompt, securitySummary, type HardeningReport, type InvestigationReport } from "../lib/securityLane";
+import { detectSecurityRequest, genericSecurityPrompt, hardeningGuidePrompt, hardeningReview, hardeningTopic, investigate, maskSecrets, renderSecurityMarkdown, reportSlug, securityPrompt, securitySummary, type HardeningReport, type InvestigationReport } from "../lib/securityLane";
 import { detectResearchRequest, runWebResearch, MAX_RESEARCH_URLS } from "../lib/research";
+import { checkCitations, citationSummary, detectSourceResearch, explicitResearch, librarySources, rankPassages, renderResearchMarkdown, researchPrompt, researchQuestion, splitSources, type LibraryNode, type Passage, type ResearchSource } from "../lib/researchLane";
 import { detectReviewRequest, formatReportMarkdown, type ReviewReportPayload } from "../lib/projectReview";
 import { buildErrorMessage } from "../lib/errors";
 import { collectArtifactContext } from "../lib/artifactContext";
@@ -21,6 +22,15 @@ interface UseChatOptions {
   voiceEnabled: boolean;
   voiceSpeak: (text: string) => void;
   refreshSuggestions: (input: string, msgId: string) => Promise<void>;
+}
+
+/** Logs and config files can hold passwords and keys; mask them before anything is stored. */
+const CONFIG_LIKE = /\.(?:log|ini|pfl|conf|cfg|ya?ml|xml|sql|env|properties|json)\b/i;
+
+/** "Document" for one attachment, "3 sources" for several. */
+function attachedLabel(documentText: string): string {
+  const n = splitSources(documentText).length;
+  return n > 1 ? `${n} sources` : "Document";
 }
 
 export function useChat({
@@ -132,7 +142,7 @@ export function useChat({
       id: crypto.randomUUID(),
       role: "user",
       content: documentText
-        ? `📄 [Document attached]\n${input}`
+        ? `📄 [${attachedLabel(documentText)} attached]\n${input}`
         : imageData
           ? `🖼️ [Image attached]\n${input}`
           : input,
@@ -173,10 +183,15 @@ export function useChat({
         await refreshSuggestions(input, aiMsg.id);
         return;
       }
+      // Research over the user's own sources (several attachments, or the local
+      // library). "research … online" stays with the web lane further down.
+      const sourceResearch = imageData ? null : detectSourceResearch(input, documentText || undefined);
+      const researchMode = sourceResearch === "library" && detectResearchRequest(input) ? null : sourceResearch;
       // ── Security lane: investigate logs, harden configs, or a hardening plan ──
       // Deterministic first (indicators, timeline, ATT&CK patterns, config
       // checks with exact fixes); the model only explains and prioritises.
-      const securityMode = imageData ? null : detectSecurityRequest(input, documentText || undefined);
+      // Logs and configs come here unless research is asked for by name.
+      const securityMode = imageData || (researchMode && explicitResearch(input)) ? null : detectSecurityRequest(input, documentText || undefined);
       if (securityMode) {
         setProcessingPhase("Checking Ollama connection…");
         const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
@@ -184,44 +199,72 @@ export function useChat({
           throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
         }
         const modelName = settings.defaultModel || "llama3.2";
-        const named = documentText?.match(/\[(?:Document|File):\s*(.*?)\]/)?.[1];
-        const material = documentText
-          ? documentText.replace(/^\s*\[(?:Document|File|Audio):[^\]]*\]\s*/, "")
-          : input.length > 300 ? input : "";
-        const sourceName = named || (material ? "pasted text" : "");
-        let report: InvestigationReport | HardeningReport | null = null;
-        let prompt: string;
-        let agent: "Incident Investigator" | "Hardening Advisor" = "Hardening Advisor";
-        let label: string;
-        if (securityMode === "investigate" && material) {
-          setProcessingPhase(`Investigating ${sourceName}: indicators, timeline, ATT&CK patterns…`);
-          report = investigate(material, sourceName);
-          prompt = securityPrompt(report, input);
-          agent = "Incident Investigator";
-          label = `🛡️ Incident Investigation · ${sourceName} · ${report.lines.toLocaleString()} lines`;
-        } else if (material) {
-          setProcessingPhase(`Checking ${sourceName} line by line…`);
-          report = hardeningReview(material, sourceName);
-          prompt = report ? securityPrompt(report, input) : genericSecurityPrompt(material, input);
-          label = `🛡️ Hardening Review · ${sourceName}`;
-        } else {
-          const topic = hardeningTopic(input) ?? "linux";
-          prompt = hardeningGuidePrompt(topic, input);
-          label = `🛡️ Hardening Plan · ${topic}`;
-        }
-        setProcessingPhase(`Writing it up with ${modelName}…`);
-        const narrative = await invoke<string>("query_ollama", {
+        const ask = (prompt: string) => invoke<string>("query_ollama", {
           prompt,
           model: modelName,
           ollamaUrl: settings.ollamaUrl || null,
           maxTokens: settings.maxTokens || 4096,
         });
+        const parts = documentText ? splitSources(documentText) : [];
+        let agent: "Incident Investigator" | "Hardening Advisor" = "Hardening Advisor";
         let attachment: Message["attachment"];
-        if (report) {
-          const title = report.mode === "investigate" ? `investigation-${reportSlug(sourceName)}` : `hardening-${report.configType}`;
-          attachment = JSON.parse(await invoke<string>("create_text_file", { title, ext: "md", content: renderSecurityMarkdown(report, narrative, modelName) }));
+        let body: string;
+        let narrative: string;
+        let label: string;
+        let sourceNames: string[];
+        if (securityMode === "harden" && parts.length > 1) {
+          // Several config files: one review each, so a setting in one file never
+          // shadows or duplicates another's.
+          const sections: string[] = [];
+          const narratives: string[] = [];
+          const reports: string[] = [];
+          for (const part of parts) {
+            setProcessingPhase(`Checking ${part.name} line by line…`);
+            const report = hardeningReview(part.text, part.name);
+            setProcessingPhase(`Writing up ${part.name} with ${modelName}…`);
+            const text = await ask(report ? securityPrompt(report, input) : genericSecurityPrompt(part.text, input));
+            narratives.push(text);
+            sections.push(`### ${part.name}\n\n${report ? `${securitySummary(report)}\n\n` : ""}${text}`);
+            if (report) reports.push(renderSecurityMarkdown(report, text, modelName));
+          }
+          if (reports.length) {
+            attachment = JSON.parse(await invoke<string>("create_text_file", { title: `hardening-${parts.length}-files`, ext: "md", content: reports.join("\n\n---\n\n") }));
+          }
+          body = sections.join("\n\n");
+          narrative = narratives.join("\n\n");
+          label = `🛡️ Hardening Review · ${parts.length} files`;
+          sourceNames = parts.map((part) => part.name);
+        } else {
+          // Several logs are investigated together, so one timeline spans them all.
+          const material = parts.length ? parts.map((part) => part.text).join("\n") : input.length > 300 ? input : "";
+          const sourceName = parts.length === 1 ? parts[0].name : parts.length > 1 ? `${parts.length} logs` : material ? "pasted text" : "";
+          let report: InvestigationReport | HardeningReport | null = null;
+          let prompt: string;
+          if (securityMode === "investigate" && material) {
+            setProcessingPhase(`Investigating ${sourceName}: indicators, timeline, ATT&CK patterns…`);
+            report = investigate(material, sourceName);
+            prompt = securityPrompt(report, input);
+            agent = "Incident Investigator";
+            label = `🛡️ Incident Investigation · ${sourceName} · ${report.lines.toLocaleString()} lines`;
+          } else if (material) {
+            setProcessingPhase(`Checking ${sourceName} line by line…`);
+            report = hardeningReview(material, sourceName);
+            prompt = report ? securityPrompt(report, input) : genericSecurityPrompt(material, input);
+            label = `🛡️ Hardening Review · ${sourceName}`;
+          } else {
+            const topic = hardeningTopic(input) ?? "linux";
+            prompt = hardeningGuidePrompt(topic, input);
+            label = `🛡️ Hardening Plan · ${topic}`;
+          }
+          setProcessingPhase(`Writing it up with ${modelName}…`);
+          narrative = await ask(prompt);
+          if (report) {
+            const title = report.mode === "investigate" ? `investigation-${reportSlug(sourceName)}` : `hardening-${report.configType}`;
+            attachment = JSON.parse(await invoke<string>("create_text_file", { title, ext: "md", content: renderSecurityMarkdown(report, narrative, modelName) }));
+          }
+          body = report ? `${securitySummary(report)}\n\n${narrative}` : narrative;
+          sourceNames = parts.length ? parts.map((part) => part.name) : sourceName ? [sourceName] : [];
         }
-        const body = report ? `${securitySummary(report)}\n\n${narrative}` : narrative;
         const secMsgId = crypto.randomUUID();
         const aiMsg: Message = {
           id: secMsgId,
@@ -232,9 +275,86 @@ export function useChat({
           attachment,
         };
         setMessages((prev) => [...prev, aiMsg]);
-        attachReceipt(secMsgId, { question: input, answer: narrative, model: modelName, agent, sources: sourceName ? [sourceName] : [] });
+        attachReceipt(secMsgId, { question: input, answer: narrative, model: modelName, agent, sources: sourceNames });
         onIntentProcessed(agent);
         await refreshSuggestions(input, secMsgId);
+        return;
+      }
+
+      // ── Research lane: several sources in, one cited synthesis out ──
+      // Passages are chosen per source (BM25), the model must cite a passage
+      // tag after every fact, and the answer is checked against them.
+      let research: { question: string; sources: ResearchSource[]; passages: Passage[] } | null = null;
+      if (researchMode) {
+        const question = researchQuestion(input);
+        let sources: ResearchSource[];
+        // Secrets in attached configs or logs never reach the report or the graph.
+        if (researchMode === "attachments") {
+          sources = splitSources(documentText).map((s, i) => ({ id: `S${i + 1}`, name: s.name, text: maskSecrets(s.text), origin: "attachment" as const }));
+        } else {
+          setProcessingPhase("Searching your local library…");
+          let nodes: LibraryNode[] = [];
+          try {
+            const parsed: unknown = JSON.parse(await invoke<string>("search_library_passages", { query: question, limit: 24 }));
+            nodes = Array.isArray(parsed) ? (parsed as LibraryNode[]) : [];
+          } catch {
+            nodes = [];
+          }
+          sources = librarySources(nodes).map((s) => ({ ...s, text: maskSecrets(s.text) }));
+        }
+        const passages = rankPassages(question, sources);
+        // The library has to hold real evidence; otherwise the question gets a normal answer below.
+        const usable = researchMode === "attachments" ? passages.length > 0 : passages.some((p) => p.score > 0);
+        if (usable) research = { question, sources, passages };
+      }
+      if (research) {
+        const { question, sources, passages } = research;
+        setProcessingPhase("Checking Ollama connection…");
+        const ollamaOk = await invoke<boolean>("check_ollama_status", { ollamaUrl: settings.ollamaUrl || null });
+        if (!ollamaOk) {
+          throw new Error("Ollama is not running. Please start Ollama first: ollama serve");
+        }
+        const modelName = settings.defaultModel || "llama3.2";
+        const resMsgId = crypto.randomUUID();
+        const used = new Set(passages.map((p) => p.sourceId));
+        setProcessingPhase(`Reading ${passages.length} passages from ${used.size} of ${sources.length} source${sources.length === 1 ? "" : "s"} with ${modelName}…`);
+        const answer = await invoke<string>("query_ollama", {
+          prompt: researchPrompt(question, sources, passages),
+          model: modelName,
+          ollamaUrl: settings.ollamaUrl || null,
+          maxTokens: settings.maxTokens || 4096,
+        });
+        const check = checkCitations(answer, passages, sources);
+        let attachment: Message["attachment"];
+        try {
+          attachment = JSON.parse(await invoke<string>("create_text_file", {
+            title: `research-${reportSlug(question)}`,
+            ext: "md",
+            content: renderResearchMarkdown(question, answer, sources, passages, check, modelName),
+          }));
+        } catch {
+          attachment = undefined; // the answer still stands without the saved report
+        }
+        const sourceLine = sources.map((s) => `**${s.id}** ${s.name}`).join(" · ");
+        const aiMsg: Message = {
+          id: resMsgId,
+          role: "ai",
+          content: `${answer.trim()}\n\nSources: ${sourceLine}\n\n───\n🔎 Research · ${sources.length} source${sources.length === 1 ? "" : "s"} · ${citationSummary(check)} · ${modelName} · on this machine, nothing uploaded${attachment ? " · full report saved" : ""}`,
+          timestamp: new Date(),
+          agent: "Researcher",
+          attachment,
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        attachReceipt(resMsgId, { question: input, answer, model: modelName, agent: "Researcher", sources: sources.map((s) => s.name) });
+        if (sources.every((s) => s.origin === "attachment")) {
+          // Remember the attachments for later questions (best-effort, one at a time: the graph is behind a mutex).
+          sources.reduce<Promise<unknown>>(
+            (chain, s) => chain.then(() => invoke("index_document_chunks", { text: s.text, source: s.name })).catch(() => {}),
+            Promise.resolve(),
+          );
+        }
+        onIntentProcessed("Researcher");
+        await refreshSuggestions(input, resMsgId);
         return;
       }
 
@@ -333,9 +453,10 @@ export function useChat({
 
         // Index into the graph, then (opt-in) check the new text against what the
         // graph already believes. Both run after the answer is on screen.
-        invoke("index_document_chunks", { text: documentText, source: sourceName })
+        const storedText = CONFIG_LIKE.test(sourceName) ? maskSecrets(documentText) : documentText;
+        invoke("index_document_chunks", { text: storedText, source: sourceName })
           .then(() => settings.driftAlertsEnabled
-            ? invoke<string>("check_knowledge_drift", { text: documentText, source: sourceName, model: settings.defaultModel || null })
+            ? invoke<string>("check_knowledge_drift", { text: storedText, source: sourceName, model: settings.defaultModel || null })
             : null)
           .then((json) => {
             if (!json) return;

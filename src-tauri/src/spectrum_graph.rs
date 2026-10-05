@@ -1058,7 +1058,11 @@ impl SpectrumGraph {
             "time", "turn", "under", "upon", "used", "using", "went", "work",
         ];
         for word in raw_input.split_whitespace() {
-            let lower = word.to_lowercase();
+            // Drop punctuation around a word ("CVE-2025-31324?", "(rsau/enable)")
+            // so the last word of a question still matches; inner characters stay.
+            let lower = word
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
             // Require minimum 4 chars AND not a stop word
             if lower.len() >= 4
                 && !stop_words.contains(&lower.as_str())
@@ -1069,20 +1073,30 @@ impl SpectrumGraph {
         }
 
         // Phase 1: Direct text match scoring
-        let mut results: Vec<IntentQueryResult> = Vec::new();
-        let mut seen_ids: Vec<String> = Vec::new();
-
+        // Up to 200 matches per term are read, newest first, so text indexed
+        // later is not cut off by insertion order. Terms are weighted by how
+        // rare they are: a word found in most nodes ("2026", "security") says
+        // little, a rare one ("cve-2025-31324", "rsau/enable") says a lot.
+        // With equally rare terms this keeps the old scale: 0.5 for the first
+        // matching term, +0.2 for each further one.
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes WHERE (label LIKE ?1 OR content LIKE ?1)
+               AND node_type NOT IN ('suggestion', 'doc_chunk_retired')
+             ORDER BY updated_at DESC
+             LIMIT 200",
+        )?;
+        // A pasted page can hold hundreds of words; the longest 24 carry the
+        // most specific meaning and keep the scan and memory bounded.
+        if search_terms.len() > 24 {
+            search_terms.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()));
+            search_terms.truncate(24);
+        }
+        let mut term_hits: Vec<Vec<SpectrumNode>> = Vec::with_capacity(search_terms.len());
         for term in &search_terms {
             let pattern = format!("%{}%", term);
-            let mut stmt = self.conn.prepare(
-                "SELECT id, label, content, node_type,
-                        COALESCE(layer, 'context'), COALESCE(access_count, 0),
-                        COALESCE(last_accessed, updated_at), created_at, updated_at
-                 FROM nodes WHERE (label LIKE ?1 OR content LIKE ?1)
-                   AND node_type NOT IN ('suggestion', 'doc_chunk_retired')
-                 LIMIT 30",
-            )?;
-
             let nodes: Vec<SpectrumNode> = stmt
                 .query_map(params![pattern], |row| {
                     Ok(SpectrumNode {
@@ -1099,22 +1113,38 @@ impl SpectrumGraph {
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
+            term_hits.push(nodes);
+        }
+        drop(stmt);
+        let total_nodes = self.conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE node_type NOT IN ('suggestion', 'doc_chunk_retired')",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as f64;
+        let idf: Vec<f64> = term_hits
+            .iter()
+            .map(|hits| {
+                let df = hits.len() as f64;
+                (1.0 + (total_nodes - df + 0.5).max(0.0) / (df + 0.5)).ln()
+            })
+            .collect();
+        let max_idf = idf.iter().cloned().fold(0.0_f64, f64::max);
 
+        let mut results: Vec<IntentQueryResult> = Vec::new();
+        let mut index_of: HashMap<String, usize> = HashMap::new();
+        for (nodes, term_idf) in term_hits.into_iter().zip(idf) {
+            let weight = if max_idf > 0.0 { term_idf / max_idf } else { 1.0 };
             for node in nodes {
-                if seen_ids.contains(&node.id) {
+                if let Some(&i) = index_of.get(&node.id) {
                     // Boost existing result for multi-term match
-                    if let Some(r) = results.iter_mut().find(|r| r.node.id == node.id) {
-                        r.relevance_score += 0.2;
-                    }
+                    results[i].relevance_score += 0.2 * weight;
                     continue;
                 }
-                seen_ids.push(node.id.clone());
-
                 let temporal_boost = self.calculate_temporal_boost(&node.updated_at);
                 let access_boost = (node.access_count as f64).ln().max(0.0) * 0.05;
-
+                index_of.insert(node.id.clone(), results.len());
                 results.push(IntentQueryResult {
-                    relevance_score: 0.5 + access_boost,
+                    relevance_score: 0.3 + 0.2 * weight + access_boost,
                     path_strength: 0.0,
                     temporal_boost,
                     node,
@@ -1122,8 +1152,11 @@ impl SpectrumGraph {
             }
         }
 
-        // Phase 2: Graph traversal — boost nodes connected to matched nodes via strong edges
-        let matched_ids: Vec<String> = results.iter().map(|r| r.node.id.clone()).collect();
+        // Phase 2: Graph traversal — boost nodes connected to matched nodes via strong edges.
+        // Start from the strongest keyword matches only; there can be hundreds.
+        let mut ranked: Vec<(f64, String)> = results.iter().map(|r| (r.relevance_score, r.node.id.clone())).collect();
+        ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let matched_ids: Vec<String> = ranked.into_iter().take(60).map(|(_, id)| id).collect();
         for mid in &matched_ids {
             let edges = self.get_connections(mid)?;
             for edge in &edges {
@@ -1136,14 +1169,20 @@ impl SpectrumGraph {
                 // Apply temporal decay to edge weight
                 let decay = self.calculate_temporal_decay(&edge.last_reinforced);
                 let effective_weight = edge.weight * decay;
+                // Edges between a document and its chunks only record where text
+                // sits. Full strength let a long document whose chunks share
+                // common words lift itself over a precise match elsewhere.
+                let structural = matches!(edge.relation.as_str(), "has_chunk" | "next_chunk");
+                let factor = if structural { 0.05 } else { 0.3 };
 
-                if let Some(r) = results.iter_mut().find(|r| r.node.id == *neighbor_id) {
-                    r.path_strength += effective_weight * 0.3;
-                } else if effective_weight > 0.3 {
+                if let Some(&i) = index_of.get(neighbor_id) {
+                    results[i].path_strength += effective_weight * factor;
+                } else if effective_weight > 0.3 && !structural {
                     // Pull in strongly connected neighbors not yet in results
                     if let Ok(Some(neighbor)) = self.get_node_without_access(neighbor_id) {
                         if matches!(neighbor.node_type.as_str(), "suggestion" | "doc_chunk_retired") { continue; }
                         let temporal_boost = self.calculate_temporal_boost(&neighbor.updated_at);
+                        index_of.insert(neighbor.id.clone(), results.len());
                         results.push(IntentQueryResult {
                             relevance_score: 0.2,
                             path_strength: effective_weight * 0.3,
@@ -4055,6 +4094,65 @@ mod tests {
     }
 
     // ─── Query Intent ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_query_intent_ignores_punctuation_around_terms() {
+        let (g, _dir) = test_graph();
+        g.add_node("Visual Composer", "SAP Note 3594142 fixes CVE-2025-31324 in the metadata uploader.", "doc_chunk").unwrap();
+        g.add_node("Cooking Pasta", "Italian pasta recipe with fresh tomatoes", "note").unwrap();
+        // Every other word is a stop word or too short: only the CVE id can match.
+        let results = g.query_intent("Tell me about CVE-2025-31324?", "Query", &[]).unwrap();
+        assert!(results.iter().any(|r| r.node.content.contains("3594142")));
+        let quoted = g.query_intent("what about \"(rsau/enable)\"", "Query", &[]).unwrap();
+        assert!(quoted.is_empty(), "no node mentions rsau/enable");
+    }
+
+    #[test]
+    fn test_query_intent_finds_late_nodes_and_prefers_rare_terms() {
+        let (g, _dir) = test_graph();
+        // Many earlier nodes share the common words; the answer is added last.
+        for i in 0..60 {
+            g.add_node(&format!("Patch note {i}"), "security patch notes for 2026 and the release calendar", "doc_chunk").unwrap();
+        }
+        g.add_node("Approuter", "Keep @sap/approuter at 23.0.0 or later after the 2026 security patch", "doc_chunk").unwrap();
+        let results = g.query_intent("Which @sap/approuter version after the 2026 security patch?", "Query", &[]).unwrap();
+        assert_eq!(results[0].node.label, "Approuter", "a rare term outweighs common ones");
+        // The 62nd node matches both words; reading only 30 rows per word missed that.
+        g.add_node("Patch Day", "SAP security notes ship on the second tuesday", "doc_chunk").unwrap();
+        let late = g.query_intent("security tuesday", "Query", &[]).unwrap();
+        assert_eq!(late[0].node.label, "Patch Day", "a late node matching every term ranks first");
+    }
+
+    #[test]
+    fn test_query_intent_does_not_let_chunk_neighbours_outvote_a_precise_match() {
+        let (g, _dir) = test_graph();
+        let spans = |texts: Vec<String>| {
+            let mut at = 0;
+            texts.into_iter().map(|content| {
+                let n = content.chars().count();
+                let chunk = SourceDocumentChunk { content, char_start: at, char_end: at + n };
+                at += n;
+                chunk
+            }).collect::<Vec<_>>()
+        };
+        let long = spans((0..6).map(|i| format!("security release planning notes, part {i}")).collect());
+        g.index_document_source("long-guide.md", &long).unwrap();
+        let precise = spans(vec!["security: keep approuter at 23.0.0".to_string()]);
+        g.index_document_source("advisory.md", &precise).unwrap();
+        let results = g.query_intent("security approuter", "Query", &[]).unwrap();
+        let first_chunk = results.iter().find(|r| r.node.node_type == "doc_chunk").unwrap();
+        assert!(first_chunk.node.label.contains("advisory.md"), "got {}", first_chunk.node.label);
+    }
+
+    #[test]
+    fn test_query_intent_bounds_long_pasted_queries() {
+        let (g, _dir) = test_graph();
+        g.add_node("Gateway", "gw/reg_no_conn_info should have bits one to four set", "doc_chunk").unwrap();
+        let mut query: Vec<String> = (0..80).map(|i| format!("word{i:02}")).collect();
+        query.push("gw/reg_no_conn_info".into());
+        let results = g.query_intent(&query.join(" "), "Query", &[]).unwrap();
+        assert_eq!(results.first().map(|r| r.node.label.as_str()), Some("Gateway"), "the longest, most specific term survives the cap");
+    }
 
     #[test]
     fn test_query_intent_matches_nodes() {

@@ -1180,6 +1180,21 @@ async fn search_spectrum_nodes(db: tauri::State<'_, DbState>, query: String) -> 
     serde_json::to_string(&nodes).map_err(|e| e.to_string())
 }
 
+/// Document chunks for a research question, ranked by the keyword retrieval
+/// the chat uses (rare words count most). Reads the local graph only.
+#[tauri::command]
+async fn search_library_passages(db: tauri::State<'_, DbState>, query: String, limit: Option<usize>) -> Result<String, String> {
+    let graph = db.0.lock().map_err(|e| e.to_string())?;
+    let hits = graph.query_intent(&query, "research", &[]).map_err(|e| e.to_string())?;
+    let nodes: Vec<_> = hits
+        .into_iter()
+        .filter(|hit| hit.node.node_type == "doc_chunk")
+        .take(limit.unwrap_or(24).clamp(1, 60))
+        .map(|hit| hit.node)
+        .collect();
+    serde_json::to_string(&nodes).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn delete_spectrum_node(db: tauri::State<'_, DbState>, id: String) -> Result<(), String> {
     let graph = db.0.lock().map_err(|e| e.to_string())?;
@@ -2709,7 +2724,7 @@ async fn extract_file_text(path: String) -> Result<String, String> {
     // Text-based extensions we support
     let text_exts = [
         "txt", "md", "markdown", "json", "csv", "tsv", "xml", "html", "htm",
-        "yaml", "yml", "toml", "ini", "cfg", "conf", "log",
+        "yaml", "yml", "toml", "ini", "cfg", "conf", "log", "pfl",
         "rs", "py", "js", "ts", "tsx", "jsx", "java", "c", "cpp", "h", "hpp",
         "go", "rb", "php", "swift", "kt", "scala", "sh", "bash", "zsh",
         "sql", "r", "lua", "dart", "css", "scss", "sass", "less",
@@ -3492,6 +3507,7 @@ pub fn run() {
             get_spectrum_node,
             add_spectrum_node,
             search_spectrum_nodes,
+            search_library_passages,
             delete_spectrum_node,
             add_spectrum_edge,
             get_node_connections,

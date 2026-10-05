@@ -329,6 +329,21 @@ pub struct RefractiveEngine {
     scorer: NpuScorer,
 }
 
+/// Most characters of retrieved text put into one prompt (about 4.5k tokens).
+const CONTEXT_BUDGET_CHARS: usize = 18_000;
+
+/// Indexed document chunks start with "Source: ...\nChunk: i/n\nChars: a-b";
+/// the node label already names the source, so keep only the text.
+fn strip_chunk_header(content: &str) -> &str {
+    let mut body = content;
+    for prefix in ["Source:", "Chunk:", "Chars:"] {
+        if body.starts_with(prefix) {
+            body = body.split_once('\n').map_or("", |(_, rest)| rest);
+        }
+    }
+    body.trim_start()
+}
+
 impl RefractiveEngine {
     pub fn new() -> Self {
         Self {
@@ -627,6 +642,7 @@ impl RefractiveEngine {
 
         let mut entries: Vec<String> = Vec::new();
         let mut conversation_count = 0u32;
+        let mut used = 0usize;
 
         for r in results.iter().take(20) {
             // Skip suggestion nodes
@@ -644,19 +660,31 @@ impl RefractiveEngine {
                 }
                 conversation_count += 1;
             }
-            if entries.len() >= 12 {
+            if entries.len() >= 12 || used >= CONTEXT_BUDGET_CHARS {
                 break;
             }
             // Generous per-node budget: dense knowledge nodes (project/user
             // facts) run 600–1200 chars; the old 400-char cap truncated them
-            // mid-sentence. 12 × 1200 chars ≈ 4k tokens — comfortable inside
-            // the 16k num_ctx window with room for history and the answer.
-            let content: String = r.node.content.chars().take(1200).collect();
+            // mid-sentence. Document chunks are up to 2,000 characters, so they
+            // get room for the whole chunk, minus the "Source/Chunk/Chars"
+            // header the label already carries; otherwise a fact in the second
+            // half of a chunk never reached the model. The total stays under
+            // ~4.5k tokens, comfortable inside the 16k num_ctx window with room
+            // for history and the answer.
+            let (text, cap) = if r.node.node_type == "doc_chunk" {
+                (strip_chunk_header(&r.node.content), 2000)
+            } else {
+                (r.node.content.as_str(), 1200)
+            };
+            let cap = cap.min(CONTEXT_BUDGET_CHARS - used);
+            let content: String = text.chars().take(cap).collect();
+            let content = content.trim();
+            used += content.chars().count();
             entries.push(format!(
                 "**{}** ({}): {}",
                 r.node.label,
                 r.node.node_type,
-                content.trim()
+                content
             ));
         }
 
@@ -1104,6 +1132,27 @@ mod tests {
         // Should include at most 2 conversation nodes
         let conv_count = summary.matches("(conversation)").count();
         assert!(conv_count <= 2, "should limit conversation nodes to 2, got {}", conv_count);
+    }
+
+    #[test]
+    fn test_build_context_summary_keeps_whole_document_chunks_without_header() {
+        let engine = RefractiveEngine::new();
+        let body = format!("{} The answer is SAP Note 3594142.", "Background sentence. ".repeat(80));
+        assert!(body.len() > 1200 && body.len() < 2000);
+        let results = vec![crate::spectrum_graph::IntentQueryResult {
+            node: crate::spectrum_graph::SpectrumNode {
+                id: "c1".into(), label: "📄 knowledge-pack://p/a.md [chunk 1/2]".into(),
+                content: format!("Source: knowledge-pack://p/a.md\nChunk: 1/2\nChars: 0-1900\n\n{body}"),
+                node_type: "doc_chunk".into(), layer: "knowledge".into(),
+                access_count: 0, last_accessed: String::new(),
+                created_at: String::new(), updated_at: String::new(),
+                connections: vec![],
+            },
+            relevance_score: 0.9, path_strength: 0.0, temporal_boost: 0.0,
+        }];
+        let summary = engine.build_context_summary(&results);
+        assert!(summary.contains("SAP Note 3594142"), "the end of the chunk reaches the model");
+        assert!(!summary.contains("Chars: 0-1900"));
     }
 
     #[test]

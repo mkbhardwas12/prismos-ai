@@ -228,6 +228,13 @@ and the [reviewed public knowledge pack](resources/knowledge/reliable-local-assi
 (public reference guidance only; your personal knowledge database stays outside
 this repository, and ingestion is not model training).
 
+A second reviewed pack, [SAP and security](resources/knowledge/sap-and-security/about-this-pack.md),
+holds dated, cited notes on SAP Basis, SAP HANA, SAP BTP and the 2025 to 2026 threat
+picture, plus what the security lane checks in SAP profiles, HANA .ini files and SAP
+logs. Import it with the same `prismos-knowledge` tool. It is searchable reference
+text with its sources listed, not training, and it goes stale: every document says
+what it knew on 2026-10-05.
+
 ---
 
 ## Security model

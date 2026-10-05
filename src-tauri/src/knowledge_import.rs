@@ -289,6 +289,47 @@ pub fn import_pack(
     Ok(report)
 }
 
+/// A passage found in the local graph for a question.
+#[derive(Debug, Serialize)]
+pub struct RetrievedPassage {
+    pub label: String,
+    pub content: String,
+    pub score: f64,
+}
+
+/// Keyword retrieval over indexed source text (document chunks), through the
+/// same `query_intent` path the app uses for chat context. Used to check that
+/// an imported pack can actually be found. It never creates a database, never
+/// contacts a model or the network, and only reads nodes; the graph itself
+/// records the query in its local intent log, as it does for every chat.
+pub fn retrieve_passages(
+    app_dir: &Path,
+    question: &str,
+    limit: usize,
+) -> Result<Vec<RetrievedPassage>, String> {
+    let app_dir = existing_directory(app_dir, "App directory")?;
+    validate_database_targets(&app_dir)?;
+    let database = app_dir.join("spectrum_graph.db");
+    if !database.is_file() {
+        return Err("No knowledge graph in that app directory; import a pack first".into());
+    }
+    let graph = SpectrumGraph::new(&app_dir)
+        .map_err(|error| format!("Cannot open local knowledge graph: {error}"))?;
+    let hits = graph
+        .query_intent(question, "query", &[])
+        .map_err(|error| format!("Retrieval failed: {error}"))?;
+    Ok(hits
+        .into_iter()
+        .filter(|hit| hit.node.node_type == "doc_chunk")
+        .take(limit)
+        .map(|hit| RetrievedPassage {
+            label: hit.node.label,
+            content: hit.node.content,
+            score: hit.relevance_score,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,6 +347,23 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn imported_pack_text_is_retrievable_and_missing_graphs_are_refused() {
+        let app = tempfile::tempdir().unwrap();
+        let pack = tempfile::tempdir().unwrap();
+        write_pack(
+            pack.path(),
+            &[("sap-threats.md", "# SAP threats\nSAP Note 3594142 fixes CVE-2025-31324 in Visual Composer.")],
+        );
+        assert!(retrieve_passages(app.path(), "CVE-2025-31324", 5).is_err());
+        import_pack(app.path(), pack.path(), ImportMode::Apply).unwrap();
+        let hits = retrieve_passages(app.path(), "Which note fixes CVE-2025-31324?", 5).unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits[0].label.contains("knowledge-pack://test-pack/sap-threats.md"));
+        assert!(hits[0].content.contains("3594142"));
+        assert!(retrieve_passages(app.path(), "pasta recipes", 5).unwrap().is_empty());
     }
 
     #[test]

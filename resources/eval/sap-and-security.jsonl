@@ -1,0 +1,41 @@
+// Holdout questions for the sap-and-security knowledge pack. Each answer is in the pack; expect terms are
+// matched as whole terms, case-insensitive, and "a|b" accepts either spelling. Run: prismos-eval --questions this file.
+{"id": "vc-note", "question": "Which SAP Note fixes CVE-2025-31324 in SAP NetWeaver Visual Composer?", "expect": ["3594142"], "source": "sap-threats-2025-2026.md"}
+{"id": "vc-path", "question": "Which URL path is abused when attackers exploit CVE-2025-31324?", "expect": ["/developmentserver/metadatauploader"], "source": "sap-threats-2025-2026.md"}
+{"id": "vc-kev", "question": "On what date was CVE-2025-31324 added to CISA's Known Exploited Vulnerabilities catalog?", "expect": ["2025-04-29|April 29, 2025|29 April 2025|April 29 2025"], "source": "sap-threats-2025-2026.md"}
+{"id": "vc-chain", "question": "Which second Visual Composer vulnerability was chained with CVE-2025-31324, and which SAP Note fixes it?", "expect": ["CVE-2025-42999", "3604119"], "source": "sap-threats-2025-2026.md"}
+{"id": "overpass", "question": "Which SAP Note fixes the OVERPASS kernel vulnerability CVE-2026-44756, and which kernel feature is affected?", "expect": ["3747649", "Extended Passport|EPP"], "source": "sap-threats-2025-2026.md"}
+{"id": "s4get", "question": "Which SAP component is affected by CVE-2026-58240 (S4GET), and which SAP Note fixes it?", "expect": ["message server", "3759472"], "source": "sap-threats-2025-2026.md"}
+{"id": "commerce", "question": "Which SAP product does CVE-2026-58231 affect, and on what date were the first exploitation attempts seen?", "expect": ["Commerce Cloud", "2026-08-14|August 14, 2026|14 August 2026|August 14 2026"], "source": "sap-threats-2025-2026.md"}
+{"id": "s4-rfc", "question": "For CVE-2025-42957 in SAP S/4HANA, which authorization object does SecurityBridge advise restricting?", "expect": ["S_DMIS"], "source": "sap-threats-2025-2026.md"}
+{"id": "p4-port", "question": "What port pattern does the SAP NetWeaver AS Java P4 protocol use, relevant to CVE-2025-42944?", "expect": ["5NN04|50004"], "source": "sap-threats-2025-2026.md"}
+{"id": "patch-day", "question": "On which day of the month does SAP Security Patch Day take place?", "expect": ["second Tuesday"], "source": "sap-basis-security.md"}
+{"id": "npm-note", "question": "Which SAP Note covers the malicious CAP and MTA npm packages found in April 2026?", "expect": ["3747787"], "source": "sap-btp-security.md"}
+{"id": "sal-param", "question": "Which SAP profile parameter switches on the Security Audit Log?", "expect": ["rsau/enable"], "source": "sap-basis-security.md"}
+{"id": "sal-tx", "question": "Which transaction replaces SM19 for configuring the SAP Security Audit Log?", "expect": ["RSAU_CONFIG"], "source": "sap-basis-security.md"}
+{"id": "gw-sim", "question": "Which RFC gateway profile parameter must be 0 so that the reginfo and secinfo access lists block instead of only logging?", "expect": ["gw/sim_mode"], "source": "sap-basis-security.md"}
+{"id": "sapstar", "question": "Which SAP profile parameter removes the built-in emergency logon of user SAP*?", "expect": ["login/no_automatic_user_sapstar"], "source": "sap-basis-security.md"}
+{"id": "ucon", "question": "Which SAP profile parameter turns on Unified Connectivity (UCON) runtime checks for RFC?", "expect": ["ucon/rfc/active"], "source": "sap-basis-security.md"}
+{"id": "saprouter", "question": "What is the default port of SAProuter?", "expect": ["3299"], "source": "sap-basis-security.md"}
+{"id": "bs7-end", "question": "In which year does mainstream maintenance for SAP Business Suite 7 core applications end?", "expect": ["2027"], "source": "sap-basis-releases-2026.md"}
+{"id": "s4-cycle", "question": "Starting with SAP S/4HANA 2023, how often does SAP ship a new on-premise release, and how many years of mainstream maintenance does each release get?", "expect": ["two years|2 years|two-year|2-year|every two|every 2", "seven years|7 years|seven-year|7-year"], "source": "sap-basis-releases-2026.md"}
+{"id": "gui-810", "question": "When did SAP GUI for Windows 8.10 become generally available?", "expect": ["2026-07-16|July 16, 2026|16 July 2026|16th of July 2026|July 16 2026"], "source": "sap-basis-releases-2026.md"}
+{"id": "sum-sps47", "question": "Which Software Update Manager version is in Software Logistics Toolset 1.0 SPS 47?", "expect": ["SP 26|SP26"], "source": "sap-basis-releases-2026.md"}
+{"id": "clean-core", "question": "In SAP's clean core levels introduced in August 2025, which level covers only publicly released, stable interfaces?", "expect": ["Level A"], "source": "sap-basis-landscape.md"}
+{"id": "hana-system", "question": "Which SAP Note recommends deactivating the SAP HANA SYSTEM user?", "expect": ["2493657"], "source": "sap-hana-security.md"}
+{"id": "hana-audit", "question": "Which ini parameter turns SAP HANA auditing on?", "expect": ["global_auditing_state"], "source": "sap-hana-security.md"}
+{"id": "hana-policies", "question": "Which SAP Note describes SAP's mandatory default SAP HANA audit policies?", "expect": ["3016478"], "source": "sap-hana-security.md"}
+{"id": "hana-lock", "question": "What is the default value of maximum_invalid_connect_attempts in SAP HANA?", "expect": ["6|six"], "source": "sap-hana-security.md"}
+{"id": "hana-sps", "question": "Which SAP HANA 2.0 support package stacks are still in maintenance in October 2026?", "expect": ["SPS 07|SPS07|SPS 7", "SPS 08|SPS08|SPS 8"], "source": "sap-hana-2026.md"}
+{"id": "hana-cve", "question": "Which January 2026 SAP HANA vulnerability lets a user with valid credentials switch to another user, and which SAP Note fixes it?", "expect": ["CVE-2026-0492", "3691059"], "source": "sap-hana-security.md"}
+{"id": "hana-logmode", "question": "Which SAP HANA log_mode setting is required for point-in-time recovery?", "expect": ["normal"], "source": "sap-hana-2026.md"}
+{"id": "neo-eol", "question": "When does the SAP BTP Neo environment reach end of life?", "expect": ["2028"], "source": "sap-btp-2026.md"}
+{"id": "cc-version", "question": "What was the latest SAP Cloud Connector version on SAP Development Tools in October 2026?", "expect": ["2.19.1"], "source": "sap-btp-security.md"}
+{"id": "approuter", "question": "Which minimum @sap/approuter version should run after the August 2026 SAP Patch Day?", "expect": ["23.0.0"], "source": "sap-btp-security.md"}
+{"id": "agent-hub", "question": "When is SAP AI Agent Hub planned to become generally available?", "expect": ["Q3 2026|third quarter of 2026"], "source": "sap-btp-2026.md"}
+{"id": "attack-v19", "question": "In MITRE ATT&CK v19, which two tactics replaced Defense Evasion?", "expect": ["Stealth", "Defense Impairment"], "source": "security-landscape-2026.md"}
+{"id": "t1685", "question": "What is the name of MITRE ATT&CK technique T1685?", "expect": ["Disable or Modify Tools"], "source": "security-landscape-2026.md"}
+{"id": "llm01", "question": "What is LLM01 in the OWASP Top 10 for LLM Applications 2025?", "expect": ["Prompt Injection"], "source": "security-landscape-2026.md"}
+{"id": "asi01", "question": "What is ASI01 in the OWASP Top 10 for Agentic Applications for 2026?", "expect": ["Goal Hijack"], "source": "security-landscape-2026.md"}
+{"id": "llm08-2026", "question": "What is LLM08 in the OWASP Top 10 for LLM Applications 2026?", "expect": ["Hidden Context Exposure"], "source": "security-landscape-2026.md"}
+{"id": "prismos-au7", "question": "Which SAP Security Audit Log message ID means a user was created?", "expect": ["AU7"], "source": "sap-basis-security.md"}

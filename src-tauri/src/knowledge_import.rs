@@ -316,18 +316,32 @@ pub fn retrieve_passages(
     let graph = SpectrumGraph::new(&app_dir)
         .map_err(|error| format!("Cannot open local knowledge graph: {error}"))?;
     let hits = graph
-        .query_intent(question, "query", &[])
+        .query_doc_chunks(question, limit)
         .map_err(|error| format!("Retrieval failed: {error}"))?;
     Ok(hits
         .into_iter()
-        .filter(|hit| hit.node.node_type == "doc_chunk")
-        .take(limit)
         .map(|hit| RetrievedPassage {
             label: hit.node.label,
             content: hit.node.content,
             score: hit.relevance_score,
         })
         .collect())
+}
+
+/// Labels of what an ordinary chat turn would put in front of the model for
+/// this question: the general top 20 across every kind of node.
+pub fn chat_context_labels(app_dir: &Path, question: &str) -> Result<Vec<String>, String> {
+    let app_dir = existing_directory(app_dir, "App directory")?;
+    validate_database_targets(&app_dir)?;
+    if !app_dir.join("spectrum_graph.db").is_file() {
+        return Err("No knowledge graph in that app directory; import a pack first".into());
+    }
+    let graph = SpectrumGraph::new(&app_dir)
+        .map_err(|error| format!("Cannot open local knowledge graph: {error}"))?;
+    let hits = graph
+        .query_intent(question, "query", &[])
+        .map_err(|error| format!("Retrieval failed: {error}"))?;
+    Ok(hits.into_iter().map(|hit| hit.node.label).collect())
 }
 
 #[cfg(test)]
@@ -364,6 +378,19 @@ mod tests {
         assert!(hits[0].label.contains("knowledge-pack://test-pack/sap-threats.md"));
         assert!(hits[0].content.contains("3594142"));
         assert!(retrieve_passages(app.path(), "pasta recipes", 5).unwrap().is_empty());
+        // Many newer notes share the common words; the passage still leads both
+        // the passage search and an ordinary chat turn.
+        {
+            let graph = SpectrumGraph::new(app.path()).unwrap();
+            for i in 0..120 {
+                graph.add_node(&format!("Note {i}"), "which note fixes the visual composer issue", "learning").unwrap();
+            }
+        }
+        let hits = retrieve_passages(app.path(), "Which note fixes CVE-2025-31324?", 5).unwrap();
+        assert!(hits[0].content.contains("3594142"));
+        let chat = chat_context_labels(app.path(), "Which note fixes CVE-2025-31324?").unwrap();
+        assert!(chat[0].contains("knowledge-pack://test-pack/sap-threats.md"), "got {:?}", chat.first());
+        assert!(chat_context_labels(tempfile::tempdir().unwrap().path(), "anything").is_err());
     }
 
     #[test]

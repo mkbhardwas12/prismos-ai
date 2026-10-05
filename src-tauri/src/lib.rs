@@ -1185,13 +1185,12 @@ async fn search_spectrum_nodes(db: tauri::State<'_, DbState>, query: String) -> 
 #[tauri::command]
 async fn search_library_passages(db: tauri::State<'_, DbState>, query: String, limit: Option<usize>) -> Result<String, String> {
     let graph = db.0.lock().map_err(|e| e.to_string())?;
-    let hits = graph.query_intent(&query, "research", &[]).map_err(|e| e.to_string())?;
-    let nodes: Vec<_> = hits
-        .into_iter()
-        .filter(|hit| hit.node.node_type == "doc_chunk")
-        .take(limit.unwrap_or(24).clamp(1, 60))
-        .map(|hit| hit.node)
-        .collect();
+    // Passages only, ranked among passages: in a large graph the general
+    // top 20 can hold no document passages at all.
+    let hits = graph
+        .query_doc_chunks(&query, limit.unwrap_or(24).clamp(1, 60))
+        .map_err(|e| e.to_string())?;
+    let nodes: Vec<_> = hits.into_iter().map(|hit| hit.node).collect();
     serde_json::to_string(&nodes).map_err(|e| e.to_string())
 }
 

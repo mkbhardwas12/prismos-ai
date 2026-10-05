@@ -10,7 +10,7 @@
 //!   prismos-eval --questions resources/eval/sap-and-security.jsonl \
 //!     --app-dir /tmp/prismos-eval-app --model qwen3.8:27b --out results.json
 
-use prismos_lib::knowledge_import::retrieve_passages;
+use prismos_lib::knowledge_import::{chat_context_labels, retrieve_passages};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -79,6 +79,8 @@ struct Row {
     passages: Vec<String>,
     /// Share of the expected terms present in the retrieved passages themselves.
     context_recall: Option<f64>,
+    /// What an ordinary chat turn would retrieve: the general top 20 labels.
+    chat_context: Vec<String>,
     before: Option<Answer>,
     after: Option<Answer>,
 }
@@ -97,6 +99,8 @@ struct Report {
     source_found: Option<usize>,
     /// Mean share of expected terms present in the retrieved passages.
     context_recall: Option<f64>,
+    /// Questions whose expected source was in an ordinary chat turn's top 20.
+    chat_found: Option<usize>,
     rows: Vec<Row>,
 }
 
@@ -370,7 +374,7 @@ async fn main() -> ExitCode {
     println!("prismos-eval · model {} · {} questions · mode {:?}", args.model, questions.len(), args.mode);
     let mut rows = Vec::new();
     for q in &questions {
-        let mut row = Row { id: q.id.clone(), question: q.question.clone(), source: q.source.clone(), passages: Vec::new(), context_recall: None, before: None, after: None };
+        let mut row = Row { id: q.id.clone(), question: q.question.clone(), source: q.source.clone(), passages: Vec::new(), context_recall: None, chat_context: Vec::new(), before: None, after: None };
         if matches!(args.mode, Mode::Before | Mode::Both) {
             let started = Instant::now();
             match generate(&http, &args.model, &prompt_before(&q.question), args.max_tokens).await {
@@ -385,6 +389,13 @@ async fn main() -> ExitCode {
             let app_dir = args.app_dir.as_ref().expect("checked in parse_args");
             let passages = match retrieve_passages(app_dir, &q.question, args.k) {
                 Ok(p) => p,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            row.chat_context = match chat_context_labels(app_dir, &q.question) {
+                Ok(labels) => labels,
                 Err(e) => {
                     eprintln!("error: {e}");
                     return ExitCode::from(1);
@@ -431,13 +442,18 @@ async fn main() -> ExitCode {
                 .filter(|r| r.source.as_ref().map_or(false, |s| r.passages.iter().any(|p| p.contains(s.as_str()))))
                 .count()
         }),
+        chat_found: (args.mode != Mode::Before).then(|| {
+            rows.iter()
+                .filter(|r| r.source.as_ref().map_or(false, |s| r.chat_context.iter().any(|p| p.contains(s.as_str()))))
+                .count()
+        }),
         rows,
     };
     let pct = |v: Option<f64>| v.map_or("-".to_string(), |v| format!("{:.0}%", v * 100.0));
     let count = |v: Option<usize>| v.map_or("-".to_string(), |v| format!("{v}/{}", report.questions));
     println!(
-        "\nkeyword score  before {}  after {}\nfully correct  before {}  after {}\nretrieval      passages found for {}; expected document among them for {}; expected terms in the passages {}",
-        pct(report.before_mean), pct(report.after_mean), count(report.before_full), count(report.after_full), count(report.retrieved), count(report.source_found), pct(report.context_recall)
+        "\nkeyword score  before {}  after {}\nfully correct  before {}  after {}\nretrieval      passages found for {}; expected document among them for {}; expected terms in the passages {}\nchat context   expected document in an ordinary chat turn's top 20 for {}",
+        pct(report.before_mean), pct(report.after_mean), count(report.before_full), count(report.after_full), count(report.retrieved), count(report.source_found), pct(report.context_recall), count(report.chat_found)
     );
     if let Some(path) = &args.out {
         match serde_json::to_string_pretty(&report) {

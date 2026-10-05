@@ -1039,38 +1039,7 @@ impl SpectrumGraph {
             params![log_id, raw_input, intent_type, now],
         )?;
 
-        // Build search terms from entities and raw input words
-        let mut search_terms: Vec<String> = entities.to_vec();
-        // Filter: only words ≥ 4 chars and not in stop list (avoids noisy matches)
-        let stop_words: &[&str] = &[
-            "what", "when", "where", "which", "whom", "whose", "that", "this",
-            "these", "those", "there", "their", "about", "after", "again",
-            "been", "before", "being", "between", "both", "could", "does",
-            "doing", "down", "each", "from", "have", "here", "just", "know",
-            "like", "make", "many", "more", "most", "much", "must", "need",
-            "only", "other", "over", "same", "should", "some", "such", "take",
-            "tell", "than", "them", "then", "they", "very", "want", "well",
-            "were", "will", "with", "would", "your", "also", "been", "came",
-            "come", "even", "ever", "every", "give", "goes", "going", "gone",
-            "good", "great", "help", "into", "keep", "last", "long", "look",
-            "made", "might", "move", "next", "once", "open", "part", "play",
-            "please", "point", "right", "show", "still", "think", "thought",
-            "time", "turn", "under", "upon", "used", "using", "went", "work",
-        ];
-        for word in raw_input.split_whitespace() {
-            // Drop punctuation around a word ("CVE-2025-31324?", "(rsau/enable)")
-            // so the last word of a question still matches; inner characters stay.
-            let lower = word
-                .trim_matches(|c: char| !c.is_alphanumeric())
-                .to_lowercase();
-            // Require minimum 4 chars AND not a stop word
-            if lower.len() >= 4
-                && !stop_words.contains(&lower.as_str())
-                && !search_terms.contains(&lower)
-            {
-                search_terms.push(lower);
-            }
-        }
+        let search_terms = Self::search_terms(raw_input, entities);
 
         // Phase 1: Direct text match scoring
         // Up to 200 matches per term are read, newest first, so text indexed
@@ -1088,30 +1057,11 @@ impl SpectrumGraph {
              ORDER BY updated_at DESC
              LIMIT 200",
         )?;
-        // A pasted page can hold hundreds of words; the longest 24 carry the
-        // most specific meaning and keep the scan and memory bounded.
-        if search_terms.len() > 24 {
-            search_terms.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()));
-            search_terms.truncate(24);
-        }
         let mut term_hits: Vec<Vec<SpectrumNode>> = Vec::with_capacity(search_terms.len());
         for term in &search_terms {
             let pattern = format!("%{}%", term);
             let nodes: Vec<SpectrumNode> = stmt
-                .query_map(params![pattern], |row| {
-                    Ok(SpectrumNode {
-                        id: row.get(0)?,
-                        label: row.get(1)?,
-                        content: row.get(2)?,
-                        node_type: row.get(3)?,
-                        layer: row.get(4)?,
-                        access_count: row.get(5)?,
-                        last_accessed: row.get(6)?,
-                        created_at: row.get(7)?,
-                        updated_at: row.get(8)?,
-                        connections: vec![],
-                    })
-                })?
+                .query_map(params![pattern], Self::search_row_to_node)?
                 .collect::<Result<Vec<_>, _>>()?;
             term_hits.push(nodes);
         }
@@ -1121,12 +1071,33 @@ impl SpectrumGraph {
             [],
             |row| row.get::<_, i64>(0),
         )? as f64;
-        let idf: Vec<f64> = term_hits
+        // A term that filled all 200 rows may match far more nodes: count it
+        // (up to 20,000) so a word found almost everywhere weighs as common.
+        let mut count_stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM (SELECT 1 FROM nodes WHERE (label LIKE ?1 OR content LIKE ?1)
+               AND node_type NOT IN ('suggestion', 'doc_chunk_retired') LIMIT 20000)",
+        )?;
+        let mut dfs: Vec<f64> = Vec::with_capacity(term_hits.len());
+        for (term, hits) in search_terms.iter().zip(&term_hits) {
+            let df = if hits.len() >= 200 {
+                count_stmt.query_row(params![format!("%{}%", term)], |row| row.get::<_, i64>(0))? as f64
+            } else {
+                hits.len() as f64
+            };
+            dfs.push(df);
+        }
+        drop(count_stmt);
+        let idf: Vec<f64> = dfs
             .iter()
-            .map(|hits| {
-                let df = hits.len() as f64;
-                (1.0 + (total_nodes - df + 0.5).max(0.0) / (df + 0.5)).ln()
-            })
+            .map(|&df| (1.0 + (total_nodes - df + 0.5).max(0.0) / (df + 0.5)).ln())
+            .collect();
+        // Terms that are rare across the whole graph: in at most 5% of nodes.
+        let rare_limit = (total_nodes * 0.05).max(3.0);
+        let rare_terms: Vec<String> = search_terms
+            .iter()
+            .zip(&dfs)
+            .filter(|(_, &df)| df > 0.0 && df <= rare_limit)
+            .map(|(term, _)| term.to_lowercase())
             .collect();
         let max_idf = idf.iter().cloned().fold(0.0_f64, f64::max);
 
@@ -1203,6 +1174,40 @@ impl SpectrumGraph {
                 .partial_cmp(&a.relevance_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // Phase 4: in a large graph, notes linked to each other can outrank the
+        // one document passage that holds the rare term a question is about
+        // ("cve-2025-31324", "rsau/enable"). Those passages are the evidence,
+        // so the best few go first, before the cut to 20.
+        if !rare_terms.is_empty() {
+            let pinned: Vec<IntentQueryResult> = self
+                .query_doc_chunks(raw_input, 12)?
+                .into_iter()
+                .filter(|p| {
+                    let text = format!("{}\n{}", p.node.label, p.node.content).to_lowercase();
+                    rare_terms.iter().any(|term| text.contains(term.as_str()))
+                })
+                .take(4)
+                .collect();
+            if !pinned.is_empty() {
+                let top = results.first().map(|r| r.relevance_score).unwrap_or(0.0);
+                let n = pinned.len();
+                for (rank, mut passage) in pinned.into_iter().enumerate() {
+                    let score = top + 0.05 * (n - rank) as f64;
+                    if let Some(existing) = results.iter_mut().find(|r| r.node.id == passage.node.id) {
+                        existing.relevance_score = existing.relevance_score.max(score);
+                    } else {
+                        passage.relevance_score = passage.relevance_score.max(score);
+                        results.push(passage);
+                    }
+                }
+                results.sort_by(|a, b| {
+                    b.relevance_score
+                        .partial_cmp(&a.relevance_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+        }
         results.truncate(20);
 
         // Update intent log with matched node IDs
@@ -1218,6 +1223,138 @@ impl SpectrumGraph {
             params![matched_json, avg_conf, log_id],
         )?;
 
+        Ok(results)
+    }
+
+    /// The words of a question worth searching for: entities first, then words
+    /// of four characters or more that are not stop words, with punctuation
+    /// trimmed from both ends. A pasted page can hold hundreds of words; the
+    /// longest 24 carry the most specific meaning and keep the scan bounded.
+    fn search_terms(raw_input: &str, entities: &[String]) -> Vec<String> {
+        let mut search_terms: Vec<String> = entities.to_vec();
+        // Filter: only words ≥ 4 chars and not in stop list (avoids noisy matches)
+        let stop_words: &[&str] = &[
+            "what", "when", "where", "which", "whom", "whose", "that", "this",
+            "these", "those", "there", "their", "about", "after", "again",
+            "been", "before", "being", "between", "both", "could", "does",
+            "doing", "down", "each", "from", "have", "here", "just", "know",
+            "like", "make", "many", "more", "most", "much", "must", "need",
+            "only", "other", "over", "same", "should", "some", "such", "take",
+            "tell", "than", "them", "then", "they", "very", "want", "well",
+            "were", "will", "with", "would", "your", "also", "been", "came",
+            "come", "even", "ever", "every", "give", "goes", "going", "gone",
+            "good", "great", "help", "into", "keep", "last", "long", "look",
+            "made", "might", "move", "next", "once", "open", "part", "play",
+            "please", "point", "right", "show", "still", "think", "thought",
+            "time", "turn", "under", "upon", "used", "using", "went", "work",
+        ];
+        for word in raw_input.split_whitespace() {
+            // Drop punctuation around a word ("CVE-2025-31324?", "(rsau/enable)")
+            // so the last word of a question still matches; inner characters stay.
+            let lower = word
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
+            // Require minimum 4 chars AND not a stop word
+            if lower.len() >= 4
+                && !stop_words.contains(&lower.as_str())
+                && !search_terms.contains(&lower)
+            {
+                search_terms.push(lower);
+            }
+        }
+        if search_terms.len() > 24 {
+            search_terms.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()));
+            search_terms.truncate(24);
+        }
+        search_terms
+    }
+
+    fn search_row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpectrumNode> {
+        Ok(SpectrumNode {
+            id: row.get(0)?,
+            label: row.get(1)?,
+            content: row.get(2)?,
+            node_type: row.get(3)?,
+            layer: row.get(4)?,
+            access_count: row.get(5)?,
+            last_accessed: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
+            connections: vec![],
+        })
+    }
+
+    /// Document passages (doc_chunk nodes) ranked for a question. The term
+    /// weighting matches `query_intent`, but only passages are searched and
+    /// rarity is measured among passages, so a large graph of notes, entities
+    /// and suggestions cannot push them out before they are ranked.
+    pub fn query_doc_chunks(
+        &self,
+        raw_input: &str,
+        limit: usize,
+    ) -> Result<Vec<IntentQueryResult>, Box<dyn std::error::Error + Send + Sync>> {
+        let terms = Self::search_terms(raw_input, &[]);
+        if terms.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let total = self.conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE node_type = 'doc_chunk'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as f64;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, content, node_type,
+                    COALESCE(layer, 'context'), COALESCE(access_count, 0),
+                    COALESCE(last_accessed, updated_at), created_at, updated_at
+             FROM nodes WHERE node_type = 'doc_chunk' AND (label LIKE ?1 OR content LIKE ?1)
+             ORDER BY updated_at DESC
+             LIMIT 400",
+        )?;
+        let mut term_hits: Vec<Vec<SpectrumNode>> = Vec::with_capacity(terms.len());
+        for term in &terms {
+            let nodes: Vec<SpectrumNode> = stmt
+                .query_map(params![format!("%{}%", term)], Self::search_row_to_node)?
+                .collect::<Result<Vec<_>, _>>()?;
+            term_hits.push(nodes);
+        }
+        drop(stmt);
+        let idf: Vec<f64> = term_hits
+            .iter()
+            .map(|hits| {
+                let df = hits.len() as f64;
+                (1.0 + (total - df + 0.5).max(0.0) / (df + 0.5)).ln()
+            })
+            .collect();
+        let max_idf = idf.iter().cloned().fold(0.0_f64, f64::max);
+        let mut results: Vec<IntentQueryResult> = Vec::new();
+        let mut index_of: HashMap<String, usize> = HashMap::new();
+        for (nodes, term_idf) in term_hits.into_iter().zip(idf) {
+            let weight = if max_idf > 0.0 { term_idf / max_idf } else { 1.0 };
+            for node in nodes {
+                if let Some(&i) = index_of.get(&node.id) {
+                    results[i].relevance_score += 0.2 * weight;
+                    continue;
+                }
+                let temporal_boost = self.calculate_temporal_boost(&node.updated_at);
+                let access_boost = (node.access_count as f64).ln().max(0.0) * 0.05;
+                index_of.insert(node.id.clone(), results.len());
+                results.push(IntentQueryResult {
+                    relevance_score: 0.3 + 0.2 * weight + access_boost,
+                    path_strength: 0.0,
+                    temporal_boost,
+                    node,
+                });
+            }
+        }
+        for r in &mut results {
+            r.relevance_score += r.temporal_boost * 0.1;
+        }
+        results.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(limit);
         Ok(results)
     }
 
@@ -4142,6 +4279,61 @@ mod tests {
         let results = g.query_intent("security approuter", "Query", &[]).unwrap();
         let first_chunk = results.iter().find(|r| r.node.node_type == "doc_chunk").unwrap();
         assert!(first_chunk.node.label.contains("advisory.md"), "got {}", first_chunk.node.label);
+    }
+
+    fn chunk_spans(texts: Vec<String>) -> Vec<SourceDocumentChunk> {
+        let mut at = 0;
+        texts
+            .into_iter()
+            .map(|content| {
+                let n = content.chars().count();
+                let chunk = SourceDocumentChunk { content, char_start: at, char_end: at + n };
+                at += n;
+                chunk
+            })
+            .collect()
+    }
+
+    /// A personal graph: hundreds of newer, densely linked notes that share
+    /// the common words of a question, and one older passage with the answer.
+    fn crowded_graph() -> (SpectrumGraph, tempfile::TempDir) {
+        let (g, dir) = test_graph();
+        let mut texts: Vec<String> = (0..4).map(|i| format!("Basis checklist part {i}: review the logs and the security notes")).collect();
+        texts.insert(2, "SAP Note 3594142 fixes CVE-2025-31324 in the Visual Composer metadata uploader.".to_string());
+        g.index_document_source("sap-threats.md", &chunk_spans(texts)).unwrap();
+        let mut ids = Vec::new();
+        for i in 0..240 {
+            let node = g
+                .add_node(&format!("SAP learning {i}"), "SAP note fixes: check the logs, security patches and system notes", "learning")
+                .unwrap();
+            ids.push(node.id);
+        }
+        for i in 0..ids.len() {
+            for j in 1..=4 {
+                g.add_edge(&ids[i], &ids[(i + j * 7) % ids.len()], "related_to", 1.0).unwrap();
+            }
+        }
+        (g, dir)
+    }
+
+    #[test]
+    fn test_query_doc_chunks_finds_the_passage_in_a_crowded_graph() {
+        let (g, _dir) = crowded_graph();
+        let passages = g.query_doc_chunks("Which SAP Note fixes CVE-2025-31324?", 8).unwrap();
+        assert!(passages.iter().all(|p| p.node.node_type == "doc_chunk"));
+        assert!(passages[0].node.content.contains("3594142"), "got {}", passages[0].node.label);
+        assert!(g.query_doc_chunks("hello there", 8).unwrap().is_empty(), "no term, no passages");
+    }
+
+    #[test]
+    fn test_query_intent_puts_a_rare_term_passage_first_in_a_crowded_graph() {
+        let (g, _dir) = crowded_graph();
+        let results = g.query_intent("Which SAP Note fixes CVE-2025-31324?", "Query", &[]).unwrap();
+        assert!(results.len() <= 20);
+        assert!(results[0].node.content.contains("3594142"), "got {}", results[0].node.label);
+        // Only common words: no passage is pinned, the linked notes still lead.
+        let common = g.query_intent("security notes logs", "Query", &[]).unwrap();
+        assert_eq!(common[0].node.node_type, "learning");
     }
 
     #[test]

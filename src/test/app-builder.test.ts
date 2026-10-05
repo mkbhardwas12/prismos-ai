@@ -58,6 +58,19 @@ describe("web design director's notes and the secure-by-default pass", () => {
     expect(webDirectorNotes("build me something")).toEqual([]);
   });
 
+  it("plans an order form for a bakery taking pickup orders, not a table booking", async () => {
+    const { webDirectorNotes } = await import("../lib/docGen");
+    const bakery = webDirectorNotes("Build a new website for Maple Lane Bakery: menu, opening hours and pickup orders").join(" | ");
+    expect(bakery).toMatch(/pickup order form/);
+    expect(bakery).not.toMatch(/reservation form/);
+    expect(bakery).toMatch(/no party size/);
+    // a bakery takes orders even when the request doesn't say so
+    expect(webDirectorNotes("create a website for my bakery").join(" | ")).toMatch(/pickup order form/);
+    // a restaurant with takeaway orders too; a plain restaurant still books tables
+    expect(webDirectorNotes("make a site for our pizzeria with takeaway orders").join(" | ")).toMatch(/pickup order form/);
+    expect(webDirectorNotes("build a website for my bistro").join(" | ")).toMatch(/reservation form/);
+  });
+
   it("fixes target=_blank links and flags risky patterns without touching good code", async () => {
     const { secureWebFiles } = await import("../lib/docGen");
     const r = secureWebFiles([
@@ -110,5 +123,59 @@ describe("the plan step survives an unlucky sample", () => {
     const schema = APP_PLAN_SCHEMA as { required: string[]; properties: { files: { minItems: number } } };
     expect(schema.required).toContain("files");
     expect(schema.properties.files.minItems).toBe(1);
+  });
+});
+
+describe("a file that runs past the length limit", () => {
+  it("is recognised from the bridge's refusal, and retried with a compact brief", async () => {
+    const { isLengthLimitError, COMPACT_RETRY } = await import("../lib/docGen");
+    expect(isLengthLimitError(new Error("Ollama reached the output token limit; the response is incomplete and was not accepted."))).toBe(true);
+    expect(isLengthLimitError("Ollama reached the output token limit")).toBe(true);
+    expect(isLengthLimitError(new Error("Ollama is not running"))).toBe(false);
+    expect(COMPACT_RETRY).toMatch(/no repeated or duplicate rules/);
+  });
+});
+
+describe("the self-check sees the code that decides whether a feature works", () => {
+  // Sizes from the real Maple Lane build: the old loop skipped js/app.js once
+  // styles.css had used up the budget, and the check called app.js missing.
+  const line = (n: number, text: string) => Array.from({ length: n }, () => `    ${text}`).join("\n\n");
+  const files = [
+    { path: "js/data.js", content: line(80, "{ id: 'croissant', name: 'Butter Croissant', price: 4.5 },") },
+    { path: "index.html", content: line(160, '<section id="menu" class="menu-grid" aria-live="polite"></section>') },
+    { path: "styles.css", content: line(500, ".menu-card { display: grid; gap: 12px; padding: 16px; }") },
+    { path: "js/app.js", content: line(260, "document.querySelector('#menu').addEventListener('click', onFilter);") },
+  ];
+
+  it("shows every HTML and JS file whole and names the stylesheet it had to leave out", async () => {
+    const { auditSources, AUDIT_SOURCE_CHARS } = await import("../lib/docGen");
+    const parts = auditSources(files, AUDIT_SOURCE_CHARS);
+    expect(parts).toHaveLength(4);
+    expect(parts.map((p) => p.split(/[:\n]/)[0])).toEqual(["FILE js/data.js", "FILE index.html", "FILE styles.css", "FILE js/app.js"]);
+    expect(parts[3]).toContain("addEventListener('click', onFilter)");
+    expect(parts[1]).toContain('<section id="menu"');
+    expect(parts[2]).toMatch(/^FILE styles\.css: \(\d+ characters; it exists, not shown here for length\)$/);
+    // compacted: no indentation, no blank lines
+    expect(parts[3]).not.toMatch(/\n\s|\n\n/);
+    expect(parts.join("\n").length).toBeLessThan(AUDIT_SOURCE_CHARS + 1000);
+  });
+
+  it("counts only behaviour files, and widens the window only when they need it", async () => {
+    const { behaviourChars, compactSource, AUDIT_SOURCE_CHARS, AUDIT_WIDE_CTX } = await import("../lib/docGen");
+    expect(compactSource("  a\n\n    b  \n")).toBe("a\nb");
+    const n = behaviourChars(files);
+    expect(n).toBe(["js/data.js", "index.html", "js/app.js"].reduce((s, p) => s + compactSource(files.find((f) => f.path === p)!.content).length, 0));
+    expect(n).toBeLessThan(AUDIT_SOURCE_CHARS);
+    expect(behaviourChars([...files, { path: "checkout.js", content: "x".repeat(AUDIT_SOURCE_CHARS) }])).toBeGreaterThan(AUDIT_SOURCE_CHARS);
+    expect(AUDIT_WIDE_CTX).toBe(32768);
+  });
+});
+
+describe("sampling for app files", () => {
+  it("uses Qwen's settings with a presence penalty, stronger on the compact retry", async () => {
+    const { APP_FILE_TUNING, APP_FILE_RETRY_TUNING } = await import("../lib/docGen");
+    expect(APP_FILE_TUNING).toMatchObject({ temperature: 0.7, topP: 0.8, topK: 20 });
+    expect(APP_FILE_TUNING.presencePenalty).toBeGreaterThan(0);
+    expect(APP_FILE_RETRY_TUNING.presencePenalty).toBeGreaterThan(APP_FILE_TUNING.presencePenalty);
   });
 });

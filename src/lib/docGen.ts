@@ -394,6 +394,23 @@ export function defaultPlanFiles(features: string[]): AppPlanFile[] {
   ];
 }
 
+/** The bridge refuses a reply that hit num_predict ("output token limit"). */
+export function isLengthLimitError(e: unknown): boolean {
+  return /output token limit/i.test(String(e instanceof Error ? e.message : e));
+}
+
+/** Sampling for writing app files: Qwen's non-thinking settings plus a presence
+ *  penalty against repetition loops (the Scene Builder's remedy, a little
+ *  gentler because stylesheets repeat property names legitimately). Seen live:
+ *  styles.css for a bakery site ran past 12,288 tokens twice at default sampling. */
+export const APP_FILE_TUNING = { temperature: 0.7, topP: 0.8, topK: 20, minP: 0, presencePenalty: 1.0 };
+/** The compact retry after a length-limit failure leans harder against repeats. */
+export const APP_FILE_RETRY_TUNING = { ...APP_FILE_TUNING, presencePenalty: 1.3 };
+
+/** Appended to a file prompt after a length-limit failure. */
+export const COMPACT_RETRY =
+  "\n\nYour previous attempt at this file ran past the length limit, which usually means rules, markup or data were repeated. Write the file again, complete but compact: no repeated or duplicate rules, selectors or sections, and at most about 350 lines.";
+
 /** Parse a raw plan reply into an object, repairing truncation; null if hopeless. */
 export function parsePlanReply(raw: string): Partial<AppPlan> | null {
   let candidate: string;
@@ -454,15 +471,28 @@ export function detectAppRequest(input: string): boolean {
   return hasCreateVerb(t);
 }
 
+/** Words that mean a food place takes orders rather than table bookings. */
+const FOOD_ORDER_WORDS = /\b(pick-?ups?|takeaway|take-?out|to-?go|orders?|ordering|pre-?orders?|delivery|collection)\b/;
+
+/**
+ * A bakery taking pickup orders needs an order form, not a table booking:
+ * the first Maple Lane site asked for a party size on a croissant order.
+ */
+export function foodBookingNote(t: string): string {
+  return FOOD_ORDER_WORDS.test(t) || /\b(bakery|food truck)\b/.test(t)
+    ? "pickup order form: items and quantities from the menu, pickup date and a time inside opening hours, name and phone, validation and a confirmation with an order number (no party size, no table booking)"
+    : "reservation form: date, time, party size, validation and a confirmation";
+}
+
 /**
  * What a seasoned web designer adds for the words in a request: a one-line
  * "restaurant site" plans the menu with dietary tags, the reservation form
  * and opening hours without being told.
  */
-const WEB_CUES: Array<{ match: RegExp; notes: string[] }> = [
+const WEB_CUES: Array<{ match: RegExp; notes: string[] | ((t: string) => string[]) }> = [
   { match: /\b(store|shop|e-?commerce|boutique|marketplace|sell)\b/, notes: ["product grid with search, category filters and sort", "product detail with variants (size/colour), stock and reviews", "cart with quantity changes, remove and a running total (persisted in localStorage)", "checkout form with validation, order summary and a confirmation screen", "empty-cart and no-results states, trust badges (free returns, secure checkout)"] },
   { match: /\b(portfolio|resume|résumé|cv|personal site|freelanc\w*)\b/, notes: ["hero with name, role and a one-line pitch", "3-6 project case studies: problem, approach, result, tools", "skills/services, testimonials, a contact form with validation", "light/dark toggle remembered in localStorage"] },
-  { match: /\b(restaurant|cafe|café|bistro|bakery|bar|pizzeria|food truck)\b/, notes: ["menu by category with prices and dietary tags (V, VG, GF)", "reservation form: date, time, party size, validation and a confirmation", "opening hours with today highlighted, address and an SVG map card", "reviews and a gallery of emoji/SVG food tiles"] },
+  { match: /\b(restaurant|cafe|café|bistro|bakery|bar|pizzeria|food truck)\b/, notes: (t) => ["menu by category with prices and dietary tags (V, VG, GF)", foodBookingNote(t), "opening hours with today highlighted, address and an SVG map card", "reviews and a gallery of emoji/SVG food tiles"] },
   { match: /\b(saas|startup|landing|product launch|waitlist|app landing)\b/, notes: ["hero with a clear value proposition, primary and secondary CTA", "logo strip (SVG wordmarks), features grid, how-it-works steps", "pricing table with a monthly/yearly toggle", "FAQ accordion, testimonial, signup/waitlist form with validation"] },
   { match: /\b(blog|magazine|news|journal|articles?)\b/, notes: ["article list with tags, dates and reading time", "article page with comfortable typography and a table of contents", "search and tag filters, newsletter signup"] },
   { match: /\b(dashboard|admin|analytics|crm|kpi)\b/, notes: ["KPI cards with trend arrows, inline SVG charts", "sortable, filterable table with pagination", "date-range picker, loading and empty states, a detail drawer"] },
@@ -482,7 +512,8 @@ export function webDirectorNotes(input: string): string[] {
   const notes: string[] = [];
   for (const cue of WEB_CUES) {
     if (!cue.match.test(t)) continue;
-    for (const n of cue.notes) if (!notes.includes(n)) notes.push(n);
+    const list = typeof cue.notes === "function" ? cue.notes(t) : cue.notes;
+    for (const n of list) if (!notes.includes(n)) notes.push(n);
   }
   return notes.slice(0, 10);
 }
@@ -575,19 +606,71 @@ function appFilePrompt(
   ].join("\n");
 }
 
+/** Source characters the self-check reads inside the default 16k window,
+ *  leaving room for the instructions and the 4k answer. */
+export const AUDIT_SOURCE_CHARS = 34_000;
+/** When the behaviour files alone need more, the check gets a 32k window. */
+export const AUDIT_WIDE_SOURCE_CHARS = 80_000;
+export const AUDIT_WIDE_CTX = 32_768;
+
+/** Indentation and blank lines cost tokens and tell a reviewer nothing. */
+export function compactSource(content: string): string {
+  return content
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "")
+    .join("\n");
+}
+
+/** HTML and JS decide whether a feature works; data next; styling last. */
+function auditRank(path: string): number {
+  if (/\.(html?|js)$/i.test(path)) return 0;
+  if (/\.(json|svg)$/i.test(path)) return 1;
+  return 2;
+}
+
+/** Characters of the files that carry behaviour, as the self-check sees them. */
+export function behaviourChars(written: { path: string; content: string }[]): number {
+  return written
+    .filter((w) => auditRank(w.path) === 0)
+    .reduce((n, w) => n + compactSource(w.content).length, 0);
+}
+
+/**
+ * The files as the self-check and the repair planner read them. Behaviour is
+ * shown first and styling only if room is left; a file that does not fit is
+ * still named with its size. The Maple Lane build showed why: the old loop
+ * skipped any file over the remaining budget, so js/app.js went unseen and the
+ * check reported it missing, pointing the repair rounds at working features.
+ */
+export function auditSources(written: { path: string; content: string }[], budget: number): string[] {
+  const compact = written.map((w) => ({ path: w.path, content: compactSource(w.content) }));
+  const order = compact
+    .map((w, i) => ({ w, i }))
+    .sort((a, b) => auditRank(a.w.path) - auditRank(b.w.path) || a.i - b.i);
+  const shown = new Set<number>();
+  let left = budget;
+  for (const { w, i } of order) {
+    if (w.content.length <= left) {
+      shown.add(i);
+      left -= w.content.length;
+    }
+  }
+  return compact.map((w, i) =>
+    shown.has(i)
+      ? `FILE ${w.path}:\n${w.content}`
+      : `FILE ${w.path}: (${written[i].content.length} characters; it exists, not shown here for length)`,
+  );
+}
+
 /** Post-build audit prompt: strict done/partial/missing verdict per feature,
  *  judged against the actual shipped sources. */
 function appAuditPrompt(
   plan: AppPlan,
   written: { path: string; content: string }[],
+  budget = AUDIT_SOURCE_CHARS,
 ): string {
-  const parts: string[] = [];
-  let budget = 30_000;
-  for (const w of written) {
-    if (w.content.length > budget) continue;
-    parts.push(`FILE ${w.path}:\n${w.content}`);
-    budget -= w.content.length;
-  }
+  const parts = auditSources(written, budget);
   return [
     `You are auditing the static web project "${plan.name}" that was just written. Output ONLY a single valid minified JSON object — no markdown, no commentary.`,
     "",
@@ -602,6 +685,7 @@ function appAuditPrompt(
     "",
     "Rules:",
     "- One entry per planned feature, same order, same name.",
+    "- Every file listed above exists. A file marked \"not shown here for length\" exists too: never report it as missing.",
     "- A feature is done ONLY if a user can actually complete it in these files: the buttons are wired, the pages are linked, the data flows. partial = UI present but the flow breaks or is incomplete. missing = not implemented at all.",
     '- "note" is one short sentence; for done features an empty string is fine.',
     "- Be strict and honest — do NOT mark things done to be agreeable.",
@@ -615,14 +699,9 @@ function appRepairPrompt(
   plan: AppPlan,
   written: { path: string; content: string }[],
   issues: AppFeatureVerdict[],
+  budget = AUDIT_SOURCE_CHARS,
 ): string {
-  const parts: string[] = [];
-  let budget = 24_000;
-  for (const w of written) {
-    if (w.content.length > budget) continue;
-    parts.push(`FILE ${w.path}:\n${w.content}`);
-    budget -= w.content.length;
-  }
+  const parts = auditSources(written, budget);
   return [
     `You are fixing specific defects in the static web project "${plan.name}". Output ONLY a single valid minified JSON object — no markdown, no commentary, no file contents.`,
     "",
@@ -723,13 +802,14 @@ export async function generateAppProject(
   input: string,
   opts: GenerateOptions,
 ): Promise<GeneratedAppResult> {
-  const ask = (prompt: string, maxTokens: number, format?: Record<string, unknown>) =>
+  const ask = (prompt: string, maxTokens: number, format?: Record<string, unknown>, overrides?: Record<string, number>) =>
     invoke<string>("query_ollama", {
       prompt,
       model: opts.model,
       ollamaUrl: opts.ollamaUrl ?? null,
       maxTokens,
       ...(format ? { format } : {}),
+      ...(overrides ? { overrides } : {}),
     });
 
   // ── Phase 1: a small, reliable plan (paths + purposes, no source) ──
@@ -806,9 +886,16 @@ export async function generateAppProject(
   for (let i = 0; i < queue.length; i++) {
     const f = queue[i];
     opts.onPhase?.(`Writing ${f.path} (${i + 1}/${queue.length}) with ${opts.model}…`);
-    let content = stripModelChrome(
-      await ask(appFilePrompt(input, plan, f, written), fileBudget),
-    );
+    // One file that runs past the output ceiling (usually a loop of repeated
+    // rules or sections) gets one compact retry instead of ending the build.
+    let content: string;
+    try {
+      content = stripModelChrome(await ask(appFilePrompt(input, plan, f, written), fileBudget, undefined, APP_FILE_TUNING));
+    } catch (e) {
+      if (!isLengthLimitError(e)) throw e;
+      opts.onPhase?.(`${f.path} ran past the length limit; asking ${opts.model} for a compact version…`);
+      content = stripModelChrome(await ask(appFilePrompt(input, plan, f, written) + COMPACT_RETRY, fileBudget, undefined, APP_FILE_RETRY_TUNING));
+    }
     // Classic-script sanity: parse without executing; one repair round.
     if (/\.js$/i.test(f.path)) {
       const err = jsSyntaxError(content);
@@ -863,6 +950,8 @@ export async function generateAppProject(
             appFilePrompt(input, plan, planFile, others) +
               `\n\nCROSS-FILE CONFLICT — loading this project's scripts together fails with:\n${comboErr}\nRewrite the COMPLETE file so it only REFERENCES globals defined in the other files and never redeclares them. Raw contents only.`,
             fileBudget,
+            undefined,
+            APP_FILE_TUNING,
           ),
         );
         if (!jsSyntaxError(scripts.filter((s) => s.path !== last.path).map((w) => w.content).concat(fixed).join("\n;\n"))) {
@@ -875,10 +964,17 @@ export async function generateAppProject(
   // ── Phase 3: self-check & repair — audit in memory, fix, re-audit ──
   // Best-effort throughout: a failed audit or repair never fails the build,
   // it only means fewer guarantees in the reply.
+  // The check reads every HTML and JS file whole; a project whose behaviour
+  // files outgrow the default window gets a wider one for these calls only.
+  const auditWindow = () =>
+    behaviourChars(written) > AUDIT_SOURCE_CHARS
+      ? { budget: AUDIT_WIDE_SOURCE_CHARS, overrides: { numCtx: AUDIT_WIDE_CTX } }
+      : { budget: AUDIT_SOURCE_CHARS, overrides: undefined };
   const runAudit = async (): Promise<AppFeatureVerdict[]> => {
     if (!plan.features.length) return [];
     try {
-      const auditRaw = await ask(appAuditPrompt(plan, written), PLAN_TOKENS);
+      const win = auditWindow();
+      const auditRaw = await ask(appAuditPrompt(plan, written, win.budget), PLAN_TOKENS, undefined, win.overrides);
       const cand = extractJson(auditRaw);
       let auditJson: string | null;
       try {
@@ -924,7 +1020,8 @@ export async function generateAppProject(
       `Self-check found ${issues.length} issue(s) — repairing (round ${round}/${MAX_REPAIR_ROUNDS})…`,
     );
     try {
-      const repairRaw = await ask(appRepairPrompt(plan, written, issues), PLAN_TOKENS);
+      const win = auditWindow();
+      const repairRaw = await ask(appRepairPrompt(plan, written, issues, win.budget), PLAN_TOKENS, undefined, win.overrides);
       const cand = extractJson(repairRaw);
       let repairPlanJson: string | null;
       try {
@@ -967,7 +1064,7 @@ export async function generateAppProject(
           (previous
             ? `\n\nPREVIOUS VERSION (defective — rewrite it completely, keeping what already works):\n${previous}`
             : "");
-        let content = stripModelChrome(await ask(prompt, fileBudget));
+        let content = stripModelChrome(await ask(prompt, fileBudget, undefined, APP_FILE_TUNING));
         if (/\.js$/i.test(target.path)) {
           const err = jsSyntaxError(content);
           if (err) {

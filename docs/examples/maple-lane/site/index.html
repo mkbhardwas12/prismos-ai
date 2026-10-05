@@ -1,0 +1,288 @@
+<!doctype html>
+<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob: file:; connect-src 'none'; form-action 'none'; base-uri 'none'"></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maple Lane Bakery — Fresh Pastries, Cakes &amp; Coffee</title>
+<meta name="description" content="A warm little patisserie on Maple Lane. Browse the menu, check opening hours, and place a pickup order for croissants, cakes, breads and coffee.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="wordmark" href="#top" aria-label="Maple Lane Bakery — home">
+      <span class="wordmark-mark" aria-hidden="true">🧁</span>
+      <span class="wordmark-text">Maple&nbsp;Lane&nbsp;Bakery</span>
+    </a>
+
+    <nav id="mobile-menu" class="mobile-menu" aria-label="Primary">
+      <a href="#menu">Menu</a>
+      <a href="#hours">Hours</a>
+      <a href="#reviews">Reviews</a>
+      <a href="#gallery">Gallery</a>
+      <a href="#pickup" class="btn btn-primary menu-cta">Order pickup</a>
+    </nav>
+
+    <button id="hamburger-btn" class="hamburger" type="button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open menu">
+      <span class="hamburger-box" aria-hidden="true">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </span>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- HERO -->
+  <section id="top" class="hero">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow">Est. 2016 · Riverside, Oregon</p>
+        <h1>Baked fresh each morning,<br>with a little extra butter.</h1>
+        <p class="lede">A warm little patisserie tucked down Maple Lane. Flaky croissants, slow-fermented sourdough, and coffee poured by people who genuinely love what they do.</p>
+        <div class="hero-actions">
+          <a href="#menu" class="btn btn-primary">Browse the menu</a>
+          <a href="#pickup" class="btn btn-ghost">Order a pickup</a>
+        </div>
+        <ul class="hero-stats" aria-label="At a glance">
+          <li><strong>16</strong><span>items on the board</span></li>
+          <li><strong>4.8★</strong><span>from local regulars</span></li>
+          <li><strong>7:30</strong><span>first batch out of the oven</span></li>
+        </ul>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <svg class="hero-blob" viewBox="0 0 420 420" role="img" aria-label="Decorative amber blob behind the featured pastries">
+          <path d="M210 12c70-6 150 34 184 96s30 150-24 206-150 78-222 52S14 322 20 236 62 44 138 24c24-6 50-14 72-12z" fill="var(--accent)" opacity="0.14"/>
+          <circle cx="330" cy="120" r="26" fill="var(--accent)" opacity="0.28"/>
+          <circle cx="96" cy="330" r="16" fill="var(--accent)" opacity="0.22"/>
+        </svg>
+        <div class="hero-tiles">
+          <span class="hero-tile t1">🥐</span>
+          <span class="hero-tile t2">☕</span>
+          <span class="hero-tile t3">🍋</span>
+          <span class="hero-tile t4">🥖</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MENU -->
+  <section id="menu" class="section">
+    <div class="section-head">
+      <p class="eyebrow">The board</p>
+      <h2>Today's menu</h2>
+      <p class="section-sub">Everything is made in-house, most days by the same two pairs of hands. Tap a filter to see what suits your day.</p>
+    </div>
+
+    <div class="menu-controls" role="group" aria-label="Menu filters">
+      <div class="cat-tabs" role="tablist" aria-label="Menu category">
+        <button type="button" class="cat-tab is-active" data-cat="all" role="tab" aria-selected="true">All</button>
+        <button type="button" class="cat-tab" data-cat="Pastries" role="tab" aria-selected="false">Pastries</button>
+        <button type="button" class="cat-tab" data-cat="Cakes" role="tab" aria-selected="false">Cakes</button>
+        <button type="button" class="cat-tab" data-cat="Coffee" role="tab" aria-selected="false">Coffee</button>
+        <button type="button" class="cat-tab" data-cat="Breads" role="tab" aria-selected="false">Breads</button>
+      </div>
+
+      <div class="diet-tabs" role="group" aria-label="Dietary filter">
+        <button type="button" class="diet-btn is-active" data-diet="all">All</button>
+        <button type="button" class="diet-btn" data-diet="v">Vegetarian</button>
+        <button type="button" class="diet-btn" data-diet="vg">Vegan</button>
+        <button type="button" class="diet-btn" data-diet="gf">Gluten-free</button>
+      </div>
+    </div>
+
+    <p class="menu-count" id="menu-count" role="status" aria-live="polite"></p>
+    <div id="menu-grid" class="grid"></div>
+  </section>
+
+  <!-- HOURS + MAP -->
+  <section id="hours" class="section section-tint">
+    <div class="section-head">
+      <p class="eyebrow">Visit us</p>
+      <h2>Opening hours &amp; where to find us</h2>
+      <p class="section-sub">We're open seven days a week. Today's hours are highlighted below.</p>
+    </div>
+
+    <div class="hours-layout">
+      <div class="hours-card">
+        <ul id="hours-list" class="hours-list"></ul>
+        <p class="hours-note">🕰️ Pickup orders can be placed any day, 9:00&nbsp;AM&nbsp;–&nbsp;3:30&nbsp;PM.</p>
+      </div>
+
+      <div class="map-card">
+        <svg id="map-card" class="map" viewBox="0 0 400 280" role="img" aria-label="Stylized map showing Maple Lane Bakery at the corner of Maple Lane and Riverside Road, near the river.">
+          <!-- water -->
+          <path d="M0 150 C70 130 120 190 200 168 C280 148 340 200 400 176 L400 280 L0 280 Z" fill="var(--accent)" opacity="0.12"/>
+          <path d="M0 165 C70 145 120 205 200 183 C280 163 340 215 400 191" fill="none" stroke="var(--accent)" stroke-width="3" opacity="0.28"/>
+          <!-- river label -->
+          <text x="18" y="250" class="map-label">Riverside</text>
+
+          <!-- streets -->
+          <g stroke="#d9cfc2" stroke-width="14" stroke-linecap="round" fill="none">
+            <path d="M-10 60 L410 60"/>
+            <path d="M-10 120 L410 120"/>
+            <path d="M90 -10 L90 300"/>
+            <path d="M250 -10 L250 300"/>
+          </g>
+          <!-- street names -->
+          <text x="26" y="54" class="map-street">Riverside Rd</text>
+          <text x="286" y="114" class="map-street">Maple Ln</text>
+
+          <!-- little blocks -->
+          <g fill="#e9e0d3">
+            <rect x="112" y="76" width="52" height="30" rx="4"/>
+            <rect x="272" y="76" width="46" height="30" rx="4"/>
+            <rect x="112" y="138" width="52" height="30" rx="4"/>
+            <rect x="18" y="76" width="52" height="30" rx="4"/>
+          </g>
+
+          <!-- pin -->
+          <g class="map-pin">
+            <circle cx="250" cy="96" r="26" fill="var(--accent)" opacity="0.18"/>
+            <path d="M250 74c-13 0-23 10-23 22 0 16 23 34 23 34s23-18 23-34c0-12-10-22-23-22z" fill="var(--accent)"/>
+            <circle cx="250" cy="96" r="9" fill="var(--surface)"/>
+          </g>
+          <text x="250" y="150" class="map-pin-label" text-anchor="middle">Maple Lane Bakery</text>
+        </svg>
+
+        <div class="address">
+          <h3>Find the shop</h3>
+          <p id="address-lines"></p>
+          <ul class="contact-list">
+            <li><span aria-hidden="true">📞</span> <a id="contact-phone" href="#">(503) 555-0142</a></li>
+            <li><span aria-hidden="true">✉️</span> <a id="contact-email" href="#">hello@maplelanebakery.example</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REVIEWS -->
+  <section id="reviews" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Word of mouth</p>
+      <h2>What regulars are saying</h2>
+      <p class="section-sub">Real notes from the little notebook we keep behind the counter.</p>
+    </div>
+    <div id="reviews-grid" class="grid reviews-grid"></div>
+  </section>
+
+  <!-- GALLERY -->
+  <section id="gallery" class="section section-tint">
+    <div class="section-head">
+      <p class="eyebrow">A peek at the case</p>
+      <h2>From the counter</h2>
+      <p class="section-sub">A few of our favourites, as they come out of the oven.</p>
+    </div>
+    <div id="gallery-grid" class="grid gallery-grid"></div>
+  </section>
+
+  <!-- PICKUP -->
+  <section id="pickup" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Skip the line</p>
+      <h2>Order a pickup</h2>
+      <p class="section-sub">Tell us what you'd like and when — we'll have it boxed and waiting at the counter.</p>
+    </div>
+
+    <div class="pickup-layout">
+      <form id="pickup-form" class="pickup-form" novalidate>
+        <div class="field">
+          <label for="pickup-date">Pickup date</label>
+          <input type="date" id="pickup-date" name="pickup-date" required aria-describedby="pickup-err-date">
+          <p class="field-error" id="pickup-err-date"></p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="pickup-time">Pickup time</label>
+            <input type="time" id="pickup-time" name="pickup-time" min="09:00" max="15:30" required aria-describedby="pickup-err-time">
+            <p class="field-error" id="pickup-err-time"></p>
+          </div>
+          <div class="field">
+            <label for="pickup-party">Party size</label>
+            <input type="number" id="pickup-party" name="pickup-party" min="1" max="20" value="1" inputmode="numeric" required aria-describedby="pickup-err-party">
+            <p class="field-error" id="pickup-err-party"></p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="pickup-name">Name on the order</label>
+          <input type="text" id="pickup-name" name="pickup-name" maxlength="60" autocomplete="name" required aria-describedby="pickup-err-name">
+          <p class="field-error" id="pickup-err-name"></p>
+        </div>
+
+        <div class="field">
+          <label for="pickup-items">What would you like? <span class="hint">(optional)</span></label>
+          <textarea id="pickup-items" name="pickup-items" rows="4" maxlength="500" placeholder="e.g. 2 butter croissants, 1 oat-milk latte, 1 lemon drizzle slice" aria-describedby="pickup-err-items"></textarea>
+          <p class="field-hint" id="pickup-items-count">0 / 500</p>
+          <p class="field-error" id="pickup-err-items"></p>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Place pickup order</button>
+      </form>
+
+      <aside class="pickup-side">
+        <div id="pickup-confirmation" class="confirmation" hidden aria-live="polite"></div>
+
+        <div class="side-card">
+          <h3>Good to know</h3>
+          <ul class="tips">
+            <li>🕰️ Pickup window is <strong>9:00 AM – 3:30 PM</strong>.</li>
+            <li>📦 Orders are boxed and labelled with your name.</li>
+            <li>🌾 Tell us about allergies — we're happy to help.</li>
+            <li>☕ Cakes &amp; breads can be reserved up to 7 days ahead.</li>
+          </ul>
+        </div>
+
+        <div class="side-card">
+          <h3>Need it sooner?</h3>
+          <p>Call the counter and we'll squeeze you in. <a id="call-link" href="#">(503) 555-0142</a></p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <p class="wordmark"><span class="wordmark-mark" aria-hidden="true">🧁</span> Maple Lane Bakery</p>
+      <p class="footer-tag">Warm, hand-made baking on the corner of Maple Lane &amp; Riverside Road.</p>
+    </div>
+
+    <nav class="footer-nav" aria-label="Footer">
+      <h3>Explore</h3>
+      <a href="#menu">Menu</a>
+      <a href="#hours">Hours</a>
+      <a href="#reviews">Reviews</a>
+      <a href="#gallery">Gallery</a>
+      <a href="#pickup">Order pickup</a>
+    </nav>
+
+    <div class="footer-contact">
+      <h3>Say hello</h3>
+      <p id="footer-address"></p>
+      <a id="footer-phone" href="#">(503) 555-0142</a>
+      <a id="footer-email" href="#">hello@maplelanebakery.example</a>
+    </div>
+  </div>
+  <div class="footer-base">
+    <p>© <span id="year"></span> Maple Lane Bakery · Baked with care in Riverside, OR.</p>
+    <p class="footer-fine">Demo site — no real orders are placed.</p>
+  </div>
+</footer>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

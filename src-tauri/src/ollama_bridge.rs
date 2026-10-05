@@ -537,6 +537,34 @@ pub async fn generate_with_format(
     images: Option<Vec<String>>,
     format: Option<serde_json::Value>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    generate_with_options(model, prompt, base_url, max_tokens, images, format, None).await
+}
+
+/// Build the options for a one-shot generation: a context window and an output
+/// ceiling always, then any per-call overrides (sampling for long files, e.g.
+/// the App Builder's presence penalty against repetition loops).
+fn one_shot_options(model: &str, thinking: bool, max_tokens: Option<u32>, overrides: Option<&GenerationOverrides>) -> GenerateOptions {
+    let mut options = GenerateOptions {
+        num_ctx: Some(ctx_for(model, thinking)),
+        num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(thinking))),
+        ..Default::default()
+    };
+    if let Some(o) = overrides {
+        o.apply(&mut options);
+    }
+    options
+}
+
+/// `generate_with_format` plus optional sampling overrides.
+pub async fn generate_with_options(
+    model: &str,
+    prompt: &str,
+    base_url: Option<&str>,
+    max_tokens: Option<u32>,
+    images: Option<Vec<String>>,
+    format: Option<serde_json::Value>,
+    overrides: Option<&GenerationOverrides>,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let url = private_inference_base_url(base_url);
     let client = private_inference_client()?;
     let (think, prompt) = resolve_think(model, prompt);
@@ -544,11 +572,7 @@ pub async fn generate_with_format(
     // Always set num_ctx (Ollama's default is far too small for documents); honor
     // the caller's max_tokens (the UI "Response Length" slider) for the response,
     // falling back to a think-aware budget when unset.
-    let options = Some(GenerateOptions {
-        num_ctx: Some(ctx_for(model, thinking)),
-        num_predict: Some(max_tokens.unwrap_or_else(|| output_tokens_for(thinking))),
-        ..Default::default()
-    });
+    let options = Some(one_shot_options(model, thinking, max_tokens, overrides));
     let request = GenerateRequest {
         model: model.to_string(),
         prompt,
@@ -996,6 +1020,30 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_shot_options_carry_the_overrides_and_keep_the_ceiling() {
+        // No overrides: a window and a ceiling, sampling left to the model.
+        let plain = one_shot_options("qwen3.8:27b", false, Some(12_288), None);
+        assert_eq!(plain.num_predict, Some(12_288));
+        assert!(plain.num_ctx.is_some());
+        assert!(plain.presence_penalty.is_none() && plain.temperature.is_none());
+
+        // App Builder file writes: Qwen's sampling plus a presence penalty
+        // against repetition loops; out-of-range values are clamped.
+        let tuned = GenerationOverrides {
+            temperature: Some(0.7),
+            top_p: Some(0.8),
+            top_k: Some(20),
+            presence_penalty: Some(9.0),
+            ..Default::default()
+        };
+        let o = one_shot_options("qwen3.8:27b", false, Some(12_288), Some(&tuned));
+        assert_eq!(o.num_predict, Some(12_288), "overrides never lift the output ceiling");
+        assert_eq!(o.temperature, Some(0.7));
+        assert_eq!(o.top_k, Some(20));
+        assert_eq!(o.presence_penalty, Some(2.0), "clamped to the API's range");
+    }
 
     #[test]
     fn stream_cancel_targets_only_the_stream_in_flight() {

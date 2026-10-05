@@ -14,6 +14,7 @@ Client files, contracts, internal specs: drop them in and ask. A local [Ollama](
   <sub>
     <a href="docs/media/prismos-demo.mp4">▶ 1280×720 MP4 (with voiceover)</a> ·
     <a href="docs/media/stream-demo.mp4">live Ollama stream</a> ·
+    <a href="docs/media/prismos-one-app-three-jobs.mp4">one app, three one-line jobs (66 s)</a> ·
     <a href="docs/screenshots/">stills</a>
   </sub>
 </p>
@@ -65,7 +66,14 @@ The model never writes a renderer. It describes the world against a small scene 
 
 ### Two prompts, one bad night
 
+<p align="center">
+  <img src="docs/media/prismos-security-investigation.gif" width="420" alt="PrismOS investigating a staged break-in on a made-up bakery's web server from one question" />
+  <img src="docs/media/prismos-bakery-website.gif" width="420" alt="The bakery website PrismOS built from one line: a filterable menu, today's hours and a pickup form" />
+</p>
+
 A made-up bakery's web server has a very bad night ([the staged log](docs/examples/maple-lane/maple-lane-last-night.txt) uses documentation IPs only). Attach it and ask *"Something happened on our bakery's web server last night. What happened, and what do we do now?"*: about a minute later you have 13 findings mapped to MITRE ATT&CK, a timeline in plain words, the next hour's steps and how to harden. PrismOS reads every line itself first; the model only writes up the evidence. [Read the saved report](docs/examples/maple-lane/investigation-report.md), unedited.
+
+Then one more line: *"Build a new website for Maple Lane Bakery: menu, opening hours and pickup orders"*. The App Builder plans the site, writes four plain files one at a time and checks the journey: a filterable menu, today's hours, a map card, reviews and a pickup form that checks itself before it confirms. It took about 21 minutes on the same laptop. [The site is in the repo](docs/examples/maple-lane/site/), unedited, with [honest notes](docs/examples/maple-lane/README.md#honest-notes) on what it got wrong.
 
 ## Try it
 

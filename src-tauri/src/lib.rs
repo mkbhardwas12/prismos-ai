@@ -129,9 +129,9 @@ async fn refract_intent(app: tauri::AppHandle, input: String, model: Option<Stri
 }
 
 #[tauri::command]
-async fn query_ollama(prompt: String, model: Option<String>, ollama_url: Option<String>, max_tokens: Option<u32>, format: Option<serde_json::Value>) -> Result<String, String> {
+async fn query_ollama(prompt: String, model: Option<String>, ollama_url: Option<String>, max_tokens: Option<u32>, format: Option<serde_json::Value>, overrides: Option<ollama_bridge::GenerationOverrides>) -> Result<String, String> {
     let model = model.unwrap_or_else(|| "mistral".to_string());
-    ollama_bridge::generate_with_format(&model, &prompt, ollama_url.as_deref(), max_tokens, None, format)
+    ollama_bridge::generate_with_options(&model, &prompt, ollama_url.as_deref(), max_tokens, None, format, overrides.as_ref())
         .await
         .map_err(|e| e.to_string())
 }

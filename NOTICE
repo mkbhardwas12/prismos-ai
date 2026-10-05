@@ -31,3 +31,5 @@ PrismOS incorporates the following open-source components:
   • rusqlite — MIT License — https://github.com/rusqlite/rusqlite
   • aes-gcm — MIT/Apache-2.0 — https://github.com/RustCrypto/AEADs
   • react-force-graph-2d — MIT License — https://github.com/vasturiano/react-force-graph
+  • three.js — MIT License — https://threejs.org (also embedded, with its
+    copyright notice intact, in scene files the Scene Builder writes)

@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Scene Builder** (`src/lib/sceneGen.ts`, `src/lib/sceneKit.js`): one short prompt such as *"a voxel pagoda garden"* becomes one real-time 3D scene file that opens in the browser and works with Wi-Fi off.
+  - The local model only builds the world, on the **PrismOS Scene Kit**: renderer, mood lighting with fitted soft shadows and a rim light, world-space sky, fog, ground, instanced voxels with hidden-voxel culling, bloom, title card, and a camera framed on what was actually built (projected, centred, tall towers keep their tops).
+  - Only what really moves moves. Buildings, terrain and the camera stay still (a turntable is opt-in); moving pieces go in `world.part()` groups (windmill sails, a rocking boat), `world.beam()` sweeps lighthouse or searchlight shafts sized to the scene that light what they pass and flare when they face the viewer, `world.lightning()` adds bolts, flashes and a drifting cloud deck, and rain falls as streaks.
+  - `world.water()` is a GPU ocean: Gerstner swells travel across the whole surface with the wind, ripples shimmer between them, whitecaps form along the crests, foam rolls outward from every shoreline, the surface reflects the sky, and a sea that spans the scene runs on to the horizon.
+  - The scene fills in its own detail. Director's notes turn the words of a one-line request into kit-level suggestions (a lighthouse gets its beam, the keeper's cottage and a boat at the jetty; a storm gets rain, lightning and a rough sea), the model plans hero, setting, details, motion, light and palette as comments before building, and `world.weather()` guarantees the weather the request named.
+  - The kit and PrismOS's own copy of three.js (MIT) are inlined as `data:` URLs in an import map: no CDN, no server.
+  - Self-checks before shipping: cut-off output, repetition loops, `const x.y` declarations, duplicate top-level names, the InstancedMesh-capacity bug, online resources and unknown modules, a scene or camera moved every frame when nobody asked for it, a browser-grade syntax probe, and a dry run of the scene's own code in a throwaway worker (three.js and the kit stubbed, nothing rendered). Hex colours a model split with spaces are rejoined, a line the browser can't parse is repaired on its own, and anything else gets one fix pass (or a compact rewrite). The result card says what was caught and fixed.
+  - Every scene file carries a Content-Security-Policy that blocks all network access, so it stays offline even if the model wrote a URL.
+  - Honest stats in the result card (tokens, seconds, tok/s, passes).
+  - `/scene <idea>` always routes to the Scene Builder, and a "Build a 3D scene from one line" quick-start card sits on the welcome screen.
+- **Security lane** (`src/lib/securityLane.ts`): cyber investigation and hardening, fully offline.
+  - Investigate: drop in logs (or paste them) and ask what happened. PrismOS extracts indicators (IPs, domains, URLs, hashes, emails, accounts, CVEs, paths), builds a timeline with activity peaks, and runs detectors mapped to MITRE ATT&CK: password guessing and a success that followed it, new accounts and admin grants, encoded PowerShell (decoded for you), download-and-run commands, reverse shells, persistence, log clearing, credential dumping, lateral movement and web attacks (SQL injection, traversal, Log4Shell, scanners), escalating any attack that got a 200. The local model writes the story, containment, recovery and hardening from that evidence only.
+  - Harden a config: sshd_config, nginx, Dockerfile, Docker Compose, Kubernetes, .env, package.json and GitHub Actions are checked line by line, each finding with a severity and the exact fix; sshd_config also comes back fully patched.
+  - Harden a platform: "harden my postgres" (Linux, SSH, nginx, Apache, Docker, Kubernetes, MySQL, Redis, MongoDB, Windows, macOS, WordPress, web apps, AWS, Azure, GCP, GitHub, home routers, personal accounts) gets a prioritised plan grounded in a curated checklist.
+  - Indicators are defanged and secrets masked in everything shown or saved; the full report is saved as Markdown.
+- **App Builder: web design director's notes.** A one-line request now plans what that kind of site always has (a restaurant gets the menu with dietary tags, reservations and opening hours; a store gets filters, cart, checkout and empty states), with real copy, a mobile menu and accessibility. Generated code is secure by default: `target="_blank"` links get `rel="noopener noreferrer"`, and innerHTML built from variables, inline handlers, eval and tokens in localStorage are flagged in the result card.
+- `query_ollama_stream` accepts optional `GenerationOverrides` (context window and sampling, clamped). The Scene Builder uses it for Qwen's recommended presence penalty against repetition loops.
+- `cancel_ollama_stream` stops the in-flight stream at its next chunk. The Scene Builder uses it to end a pass that has started looping instead of spending its whole token budget.
+
 ## [0.6.0] — 2026-08-12
 
 ### 🎯 Highlights

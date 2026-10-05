@@ -1,8 +1,10 @@
 # PrismOS-AI
 
-> **A desktop AI that reads your files, answers offline, and remembers — in a knowledge graph that lives on your disk, not someone's server.**
+> **Use AI on the documents you're not allowed to paste into ChatGPT.**
 
-Drop a PDF and ask. A local [Ollama](https://ollama.com) model answers, and what it learns lands in a SQLite knowledge graph you can explore in 3D and that the *next* conversation can use. Works with Wi-Fi off.
+Mac, Windows or Linux · runs on your own laptop · free and open source
+
+Client files, contracts, internal specs: drop them in and ask. A local [Ollama](https://ollama.com) model answers, and what it learns goes into a knowledge graph on your own disk that the *next* conversation can use. Your documents never leave your machine, and you don't have to take that on trust: turn off Wi-Fi and it keeps working.
 
 <p align="center">
   <a href="https://github.com/mkbhardwas12/prismos-ai/releases/latest">
@@ -35,6 +37,8 @@ out in [What stays local](#what-stays-local-and-what-can-use-the-network).
 | **Reads your documents** | PDF, DOCX, PPTX, XLSX. Text is extracted on-device, chunked, and retrieved with TF-IDF instead of naively truncated. |
 | **Talks to any local model** | Streaming chat against any Ollama model; curated registry of 18 models with hardware-aware recommendations on first run. Attach an image and it swaps to a vision model, then swaps back. |
 | **Generates documents, decks and small apps** | Ask for a report, a slide deck (5 layouts, speaker notes) or a self-contained HTML app; it writes the file locally and opens it. |
+| **Builds a living 3D scene from one line** | `/scene a voxel lighthouse on a rocky island in a storm at night` and a local model writes a real-time scene that opens in the browser: a GPU ocean, sweeping beams, rain and lightning, and only the things that really move are moving. One HTML file with three.js inlined, so it works with Wi-Fi off. |
+| **Investigates incidents and hardens configs** | Drop in logs and ask what happened: indicators, a timeline and findings mapped to MITRE ATT&CK, then containment and next steps. Drop in an sshd_config, nginx, Dockerfile, Compose, Kubernetes or .env file and get each problem with the exact fix. Nothing is uploaded. |
 | **Agent roles debate the answer** | Orchestrator, Reasoner, Memory Keeper, Tool Smith and Sentinel vote on the response before it's shown; operation approvals go through a small wasmtime policy module. |
 | **Signs its answers** | Opt-in **answer receipts**: each reply can carry a locally signed record (HMAC-SHA256, device-bound key) of the model that actually ran, the documents and graph nodes used, digests of question and answer, and a link into the tamper-evident audit log. Verify it later on the same machine; export it as JSON (digests only, never your text). |
 | **Warns when new knowledge contradicts old** | Opt-in **conflict alerts**: after a document is indexed, a bounded local pass (embeddings → cosine neighbours → a strict structured verdict from your chat model) quotes both sides of any contradiction and records a `contradicts` link. Nothing is deleted or overwritten. |
@@ -47,6 +51,17 @@ type), IMAP Email Keeper, Yahoo Finance Keeper. Full feature history in
 [CHANGELOG.md](CHANGELOG.md).
 
 ---
+
+
+### One line in, a living world out
+
+<p align="center">
+  <img src="docs/media/scene-builder-demo.gif" width="640" alt="A voxel lighthouse on a rocky island in a storm at night, written by a local model from one line" />
+  <br/>
+  <sub><a href="docs/media/scene-builder-demo.mp4">12 s MP4</a> · <a href="docs/examples/storm-lighthouse-island.html">open the scene file</a> · prompt: <code>/scene a voxel lighthouse on a rocky island in a storm at night</code> · qwen3.8:27b on a MacBook</sub>
+</p>
+
+The model never writes a renderer. It describes the world against a small scene kit (voxels, moving parts, water, light), and PrismOS fills in what a one-line prompt leaves out: a lighthouse gets its beam, a keeper's cottage and a boat at the jetty; a storm gets rain, lightning and a rough sea. Every reply is parsed and dry-run before you see it, a broken line gets repaired on its own, and the file carries a Content-Security-Policy that blocks all network access.
 
 ## Try it
 

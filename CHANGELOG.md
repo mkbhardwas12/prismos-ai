@@ -10,7 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-04
+
 ### Added
+- **Answer receipts** (opt-in): every answer can carry a locally signed, verifiable receipt of the question, model and sources.
+- **Contradiction alerts** (opt-in): a new document that disagrees with what the knowledge graph already holds is flagged.
+- **Data lane**: CSV and XLSX attachments get a deterministic profile and offline charts, explained by the model.
+- **Audio to knowledge**: offline transcription through a whisper.cpp sidecar (the speech model is downloaded once).
 
 - **Scene Builder** (`src/lib/sceneGen.ts`, `src/lib/sceneKit.js`): one short prompt such as *"a voxel pagoda garden"* becomes one real-time 3D scene file that opens in the browser and works with Wi-Fi off.
   - The local model only builds the world, on the **PrismOS Scene Kit**: renderer, mood lighting with fitted soft shadows and a rim light, world-space sky, fog, ground, instanced voxels with hidden-voxel culling, bloom, title card, and a camera framed on what was actually built (projected, centred, tall towers keep their tops).

@@ -98,9 +98,15 @@ jobs:
           tagName: ${{ github.ref_name || inputs.version || 'draft' }}
           releaseName: "PrismOS-AI ${{ github.ref_name || inputs.version || 'draft' }}"
           releaseBody: |
-            ## PrismOS-AI v0.6.0
+            ## PrismOS-AI ${{ github.ref_name }}
 
             Desktop AI that runs on your laptop. Drop a file, ask a question, it remembers. Nothing leaves the machine.
+
+            New in this release:
+            - Scene Builder: one line becomes a real-time 3D scene file that works with Wi-Fi off, for example `/scene a voxel lighthouse on a rocky island in a storm at night`.
+            - Security lane: investigate logs offline (indicators, timeline, MITRE ATT&CK) and harden configs with exact fixes.
+            - App Builder: web design notes and secure-by-default output.
+            - Answer receipts, contradiction alerts, the data lane and offline audio transcription.
 
             ### Downloads
 

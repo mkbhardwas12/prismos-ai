@@ -1,7 +1,7 @@
 {
   "name": "prismos",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Local-first AI desktop app - ask a local Ollama model about your own files, offline. Tauri 2 + React + Rust.",
   "type": "module",
   "scripts": {

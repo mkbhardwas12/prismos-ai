@@ -31,7 +31,7 @@
   --text-secondary: #a4adb9;
   --text-muted: #727c89;
 
-  /* The PrismOS-AI mark (PrismosMark): one beam and three lanes */
+  /* The PrismOS-AI mark (PrismosMark): the stem and its three slices */
   --brand-beam: #eef1f5;
   --brand-cyan: #2cc4d6;
   --brand-blue: #5b8def;
@@ -101,7 +101,7 @@
   --text-secondary: #525a65;
   --text-muted: #868e99;
 
-  --brand-beam: #2f6fe4;
+  --brand-beam: #1b1f25;
   --brand-cyan: #0e8fa3;
   --brand-blue: #2f6fe4;
   --brand-violet: #6a55e8;

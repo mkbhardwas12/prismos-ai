@@ -1,4 +1,4 @@
-<img src="docs/brand/prismos-ai-app-icon.svg" width="96" alt="PrismOS-AI app icon: a P drawn as one beam that opens into three lanes of light" />
+<img src="docs/brand/prismos-ai-app-icon.svg" width="96" alt="PrismOS-AI app icon: a P whose stem is one beam of light and whose bowl splits it into three slices of cyan, blue and violet" />
 
 # PrismOS-AI
 

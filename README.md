@@ -358,9 +358,9 @@ Being straight about it, because you can check most of this anyway:
 - **It works.** v0.7.0 ships CI-built installers for Windows, both Macs, and
   Linux x64; the Android build in the release workflow is broken for now. 396
   frontend tests and the Rust library tests pass.
-- **Almost nobody uses it yet.** A few dozen installer downloads. The star and
-  fork counts on this repo are not a reliable signal of anything — judge it by
-  the release download counts, the issue tracker, and the commit log.
+- **Almost nobody uses it yet.** A few dozen installer downloads. Stars and
+  forks indicate interest, not active usage — release download counts, the
+  issue tracker, and the commit log are better indicators of actual use.
 - **The auto-updater is not wired up.** The plugin is compiled in but update
   signing isn't configured, so it does nothing. Update by downloading the new
   installer.

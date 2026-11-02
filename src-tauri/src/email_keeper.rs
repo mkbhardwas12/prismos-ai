@@ -95,12 +95,11 @@ pub fn fetch_unread_envelopes(config: &EmailConfig) -> Result<EmailSummary, Stri
         .map_err(|e| format!("TLS initialization failed: {}", e))?;
 
     let client = if config.use_tls {
-        imap::connect(
-            (config.imap_server.as_str(), config.imap_port),
-            &config.imap_server,
-            &tls,
-        )
-        .map_err(|e| format!("IMAP connection failed: {}. Check your server and port.", e))?
+        imap::ClientBuilder::new(&config.imap_server, config.imap_port)
+            .mode(imap::ConnectionMode::Tls)
+            .tls_kind(imap::TlsKind::Native)
+            .connect()
+            .map_err(|e| format!("IMAP connection failed: {}. Check your server and port.", e))?
     } else {
         // For non-TLS (port 143), connect plain then upgrade via STARTTLS
         let tcp = std::net::TcpStream::connect((config.imap_server.as_str(), config.imap_port))
@@ -108,7 +107,7 @@ pub fn fetch_unread_envelopes(config: &EmailConfig) -> Result<EmailSummary, Stri
         let tls_stream = tls
             .connect(&config.imap_server, tcp)
             .map_err(|e| format!("STARTTLS upgrade failed: {}", e))?;
-        let mut c = imap::Client::new(tls_stream);
+        let mut c = imap::Client::new(Box::new(tls_stream) as Box<dyn imap::Read + Send>);
         c.read_greeting()
             .map_err(|e| format!("IMAP greeting failed: {}", e))?;
         c
